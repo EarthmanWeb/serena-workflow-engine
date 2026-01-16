@@ -228,7 +228,7 @@ Serena Workflow Engine initialized successfully.
   [x] Gitignore: Configured
 
 Next steps:
-  1. Run /onboard-feature [KEY] to register your first feature
+  1. Run /swe-onboard-feature [KEY] to register your first feature
   2. Or start working - workflow will guide you
 
 Type any message to begin. Workflow starts at WF_START.

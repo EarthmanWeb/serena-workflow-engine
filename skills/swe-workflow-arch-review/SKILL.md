@@ -1,5 +1,5 @@
 ---
-name: workflow-arch-review
+name: swe-workflow-arch-review
 version: 1.0.0
 description: Review architecture compliance before execution
 workflow:
@@ -42,7 +42,7 @@ Review proposed changes against architecture standards.
 
 ```markdown
 ## Skill Return
-- **Skill**: workflow-arch-review
+- **Skill**: swe-workflow-arch-review
 - **Status**: [success|success_with_findings|blocked]
 - **Findings Summary**: [architecture compliance assessment]
 - **Artifacts**: [patterns checked, issues found]
@@ -51,5 +51,5 @@ Review proposed changes against architecture standards.
 
 ## Exit
 
-On approval: `> **Skill /workflow-arch-review passed** - returning to WF_ASK_PERMISSION`
-On revision needed: `> **Skill /workflow-arch-review needs revision** - returning to WF_PLAN_ARCHITECTURE`
+On approval: `> **Skill /swe-workflow-arch-review passed** - returning to WF_ASK_PERMISSION`
+On revision needed: `> **Skill /swe-workflow-arch-review needs revision** - returning to WF_PLAN_ARCHITECTURE`

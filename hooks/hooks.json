@@ -12,20 +12,48 @@
         "command": "${CLAUDE_PLUGIN_ROOT}/hooks/user-prompt-swarm.sh"
       }]
     }],
-    "PreToolUse": [{
-      "matcher": "Write|Edit|MultiEdit|mcp__serena__replace_symbol_body|mcp__serena__insert_after_symbol|mcp__serena__insert_before_symbol",
-      "hooks": [{
-        "type": "command",
-        "command": "${CLAUDE_PLUGIN_ROOT}/hooks/pre-edit-validate.sh"
-      }]
-    }],
-    "PostToolUse": [
+    "PreToolUse": [
       {
-        "matcher": "Write|Edit|MultiEdit|mcp__serena__replace_symbol_body|mcp__serena__insert_after_symbol|mcp__serena__insert_before_symbol",
+        "matcher": "Bash",
         "hooks": [{
           "type": "command",
-          "command": "${CLAUDE_PLUGIN_ROOT}/hooks/post-edit-checkpoint.sh"
+          "command": "${CLAUDE_PLUGIN_ROOT}/hooks/claude-flow-pre-bash.sh"
         }]
+      },
+      {
+        "matcher": "Write|Edit|MultiEdit|mcp__serena__replace_symbol_body|mcp__serena__insert_after_symbol|mcp__serena__insert_before_symbol",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/pre-edit-validate.sh"
+          },
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/claude-flow-pre-edit.sh"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [{
+          "type": "command",
+          "command": "${CLAUDE_PLUGIN_ROOT}/hooks/claude-flow-post-bash.sh"
+        }]
+      },
+      {
+        "matcher": "Write|Edit|MultiEdit|mcp__serena__replace_symbol_body|mcp__serena__insert_after_symbol|mcp__serena__insert_before_symbol",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/post-edit-checkpoint.sh"
+          },
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/claude-flow-post-edit.sh"
+          }
+        ]
       },
       {
         "matcher": "mcp__serena__read_memory",

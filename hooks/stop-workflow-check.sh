@@ -11,6 +11,20 @@ LEARNING_CONFIG="$CWD/.claude/learning.json"
 [ ! -f "$STATE_FILE" ] && exit 0
 
 IS_SWARM=$(jq -r '.is_swarm_agent // false' "$STATE_FILE" 2>/dev/null)
+IS_CLAUDE_FLOW=$(jq -r '.is_claude_flow_agent // false' "$STATE_FILE" 2>/dev/null)
+
+# If claude-flow agent, run session-end hook before exiting
+if [ "$IS_CLAUDE_FLOW" = "true" ]; then
+    if command -v npx &> /dev/null; then
+        echo "claude-flow: Ending session..." >&2
+        npx claude-flow@alpha hooks session-end \
+            --generate-summary true \
+            --persist-state true \
+            --export-metrics true 2>&1 || true
+    fi
+    exit 0
+fi
+
 [ "$IS_SWARM" = "true" ] && exit 0
 
 CURRENT_STATE=$(jq -r '.current_state // "UNINITIALIZED"' "$STATE_FILE" 2>/dev/null)

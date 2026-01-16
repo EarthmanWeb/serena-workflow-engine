@@ -1,5 +1,5 @@
 ---
-name: swarm-orchestrate
+name: swe-swarm-orchestrate
 version: 1.0.0
 description: Multi-agent swarm coordination for large tasks
 workflow:
@@ -54,4 +54,4 @@ Coordinate multi-agent swarm for complex tasks.
 
 ## Exit
 
-`> **Skill /swarm-orchestrate complete** - returning to WF_EXECUTE`
+`> **Skill /swe-swarm-orchestrate complete** - returning to WF_EXECUTE`

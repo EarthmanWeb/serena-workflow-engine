@@ -1,5 +1,5 @@
 ---
-name: onboard-quick
+name: swe-onboard-quick
 version: 1.0.0
 description: Fast feature setup without swarm analysis. Use for quick feature registration when full DAA analysis is not needed.
 workflow:
@@ -57,7 +57,7 @@ Create `FEATURE_[KEY]` with:
 
 ```markdown
 ## Skill Return
-- **Skill**: onboard-quick
+- **Skill**: swe-onboard-quick
 - **Status**: [success|needs_clarification]
 - **Feature Key**: [KEY]
 - **Memories Created**: FEATURE_[KEY]
@@ -66,11 +66,11 @@ Create `FEATURE_[KEY]` with:
 
 ## Exit
 
-`> **Skill /onboard-quick complete** - Feature [KEY] registered (quick mode)`
+`> **Skill /swe-onboard-quick complete** - Feature [KEY] registered (quick mode)`
 
-## Comparison with /onboard-feature
+## Comparison with /swe-onboard-feature
 
-| Aspect | onboard-quick | onboard-feature |
+| Aspect | swe-onboard-quick | swe-onboard-feature |
 |--------|---------------|-----------------|
 | Time | ~30 sec | 2-5 min |
 | Swarm | No | Optional (10 agents) |

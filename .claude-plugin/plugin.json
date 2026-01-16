@@ -4,12 +4,7 @@
   "description": "Enforces WF_* state machine workflow with Serena memory persistence, RLVR learning, and auto plan mode switching",
   "author": {
     "name": "Claude Workflow Starter",
-    "url": "https://github.com/your-org/claude-workflow-starter"
+    "email": "local@localhost"
   },
-  "license": "MIT",
-  "hooks": "../hooks/hooks.json",
-  "mcpServers": "../.mcp.json",
-  "skills": "../skills/",
-  "commands": "../commands/",
-  "agents": "../agents/"
+  "license": "MIT"
 }

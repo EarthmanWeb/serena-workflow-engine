@@ -1,5 +1,5 @@
 ---
-name: onboard-feature
+name: swe-onboard-feature
 version: 1.0.0
 description: Interactive 5-stage feature onboarding wizard
 workflow:
@@ -46,4 +46,4 @@ Interactive wizard for registering new features in the workflow system.
 
 ## Exit
 
-`> **Skill /onboard-feature complete** - Feature [KEY] registered`
+`> **Skill /swe-onboard-feature complete** - Feature [KEY] registered`

@@ -1,5 +1,5 @@
 ---
-name: workflow-verify
+name: swe-workflow-verify
 version: 1.0.0
 description: Verify implementation against requirements and standards
 workflow:
@@ -42,7 +42,7 @@ Verify implementation completeness and quality.
 
 ```markdown
 ## Skill Return
-- **Skill**: workflow-verify
+- **Skill**: swe-workflow-verify
 - **Status**: [success|success_with_findings|blocked]
 - **Findings Summary**: [verification results]
 - **Artifacts**: [test results, lint output]
@@ -51,5 +51,5 @@ Verify implementation completeness and quality.
 
 ## Exit
 
-On success: `> **Skill /workflow-verify complete** - returning to WF_DONE`
-On failure: `> **Skill /workflow-verify failed** - returning to WF_EXECUTE for fixes`
+On success: `> **Skill /swe-workflow-verify complete** - returning to WF_DONE`
+On failure: `> **Skill /swe-workflow-verify failed** - returning to WF_EXECUTE for fixes`

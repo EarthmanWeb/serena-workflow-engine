@@ -3,7 +3,7 @@ name: swe-scaffold
 description: Initialize workflow for new empty projects
 ---
 
-# /scaffold-project
+# /swe-scaffold
 
 Initialize workflow system for new or empty projects.
 
@@ -63,11 +63,11 @@ Create from templates:
 # INDEX_FEATURES
 
 ## Registered Features
-(none yet - run /onboard-feature to add)
+(none yet - run /swe-onboard-feature to add)
 
 ## Quick Start
-1. `/onboard-feature [KEY]` - Full wizard
-2. `/onboard-quick [KEY]` - Fast setup
+1. `/swe-onboard-feature [KEY]` - Full wizard
+2. `/swe-onboard-quick [KEY]` - Fast setup
 ```
 
 **ARCH_INDEX.md** - Basic architecture placeholder
@@ -84,7 +84,7 @@ Create from templates:
 [Detected or none]
 
 ## Structure
-(Run /onboard-feature to populate)
+(Run /swe-onboard-feature to populate)
 ```
 
 ### Stage 4: First Feature Prompt
@@ -106,8 +106,8 @@ What is the main codebase?
 - Key: [e.g., "BACKEND"]
 - Path: [e.g., "src/"]
 
-[A] Set up now with /onboard-feature (recommended)
-[B] Quick setup with /onboard-quick
+[A] Set up now with /swe-onboard-feature (recommended)
+[B] Quick setup with /swe-onboard-quick
 [C] Skip - add features later (research-only mode)
 ================================================================================
 ```
@@ -147,8 +147,8 @@ Memories Created:
   [x] ARCH_INDEX
 
 Next Steps:
-  1. Run /onboard-feature [KEY] to add your first feature
-  2. Or /onboard-quick [KEY] for fast setup
+  1. Run /swe-onboard-feature [KEY] to add your first feature
+  2. Or /swe-onboard-quick [KEY] for fast setup
 
 Workflow Mode: [full|minimal]
 ================================================================================

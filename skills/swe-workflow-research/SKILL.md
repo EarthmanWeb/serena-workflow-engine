@@ -1,5 +1,5 @@
 ---
-name: workflow-research
+name: swe-workflow-research
 version: 1.0.0
 description: Code exploration and research without making changes
 workflow:
@@ -41,7 +41,7 @@ Explore and analyze codebase without making any changes.
 
 ```markdown
 ## Skill Return
-- **Skill**: workflow-research
+- **Skill**: swe-workflow-research
 - **Status**: [success|success_with_findings|needs_clarification]
 - **Findings Summary**: [2-3 sentences describing what was found]
 - **Artifacts**: [list of relevant files, patterns discovered]
@@ -50,4 +50,4 @@ Explore and analyze codebase without making any changes.
 
 ## Exit
 
-Output: `> **Skill /workflow-research complete** - returning to WF_DETECT_REQ`
+Output: `> **Skill /swe-workflow-research complete** - returning to WF_DETECT_REQ`

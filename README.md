@@ -15,30 +15,37 @@ git submodule add https://github.com/anthropics/serena-workflow-engine .claude/p
 chmod +x .claude/plugins/serena-workflow-engine/hooks/*.sh
 ```
 
-### 2. Enable the plugin
+### 2. Install the plugin
 
-Run these commands from your terminal:
-
-**Option A: Add as marketplace then install**
+**CLI or VSCode** - Run these commands in your terminal:
 
 ```bash
-# Add local plugin as a marketplace
-claude plugin marketplace add .claude/plugins/serena-workflow-engine
+# Add the plugin directory as a marketplace (use ABSOLUTE path)
+claude plugin marketplace add /full/path/to/your/project/.claude/plugins/serena-workflow-engine
 
-# Install from that marketplace
-claude plugin install serena-workflow-engine --scope project
+# Install the plugin (local scope = project-specific, gitignored)
+claude plugin install serena-workflow-engine@serena-workflow-engine --scope local
+
+# Enable the plugin
+claude plugin enable serena-workflow-engine@serena-workflow-engine --scope local
 ```
 
-**Option B: Load directly with --plugin-dir**
+**Note:** Relative paths are interpreted as GitHub repos. Always use absolute paths for local directories.
+
+### 3. Verify installation
 
 ```bash
-# Load plugin for this session only
-claude --plugin-dir .claude/plugins/serena-workflow-engine
+claude plugin list
 ```
 
-After installing, **restart Claude Code** for the plugin to load.
+Should show: `serena-workflow-engine@serena-workflow-engine` with status `✔ enabled`
 
-### 3. Initialize the plugin
+### 4. Restart Claude Code
+
+- **CLI**: Start a new `claude` session
+- **VSCode**: Reload the window (`Cmd+Shift+P` → "Developer: Reload Window")
+
+### 5. Initialize the plugin
 
 After restart, paste this prompt into Claude Code:
 
@@ -53,9 +60,25 @@ This will:
 - Create core memories
 - Configure .gitignore
 
-### 4. Start working
+### 6. Start working
 
 After setup, the workflow guides you automatically. Type any task to begin.
+
+---
+
+## How It Works (CLI + VSCode)
+
+Claude Code CLI and VSCode extension **share the same configuration files**:
+
+| Scope | Settings File | Use Case |
+|-------|---------------|----------|
+| `user` | `~/.claude/settings.json` | Personal plugins across all projects |
+| `project` | `.claude/settings.json` | Team plugins shared via version control |
+| `local` | `.claude/settings.local.json` | Project-specific, gitignored |
+
+When you install a plugin via CLI, it writes to these settings files. The VSCode extension reads the same files, so plugins are automatically available in both interfaces.
+
+**Recommended scope**: `local` for development plugins (keeps them out of version control)
 
 ---
 
@@ -110,6 +133,59 @@ Fast registration without wizard:
 ```
 
 Example: `/swe-onboard-quick AUTH "Authentication" src/auth/`
+
+---
+
+## Troubleshooting
+
+### Plugin not appearing after installation
+
+1. **Verify installation:**
+   ```bash
+   claude plugin list
+   ```
+   Plugin should show `✔ enabled`
+
+2. **If disabled, enable it:**
+   ```bash
+   claude plugin enable serena-workflow-engine@serena-workflow-engine --scope local
+   ```
+
+3. **Restart Claude Code:**
+   - CLI: Start new session
+   - VSCode: Reload window
+
+### Marketplace not loading
+
+```bash
+# Verify marketplace is registered
+claude plugin marketplace list
+
+# If not listed, add it again
+claude plugin marketplace add /absolute/path/to/.claude/plugins/serena-workflow-engine
+```
+
+### Commands not appearing
+
+1. Verify plugin directory structure has `commands/` at root (not inside `.claude-plugin/`)
+2. Check that `.md` files exist in `commands/` directory
+3. Run with debug: `claude --debug`
+
+### Hook scripts not executing
+
+```bash
+# Ensure scripts are executable
+chmod +x .claude/plugins/serena-workflow-engine/hooks/*.sh
+```
+
+### Debug mode
+
+Run Claude with debug output:
+```bash
+claude --debug
+```
+
+Shows plugin loading details, manifest validation errors, and hook registration.
 
 ---
 

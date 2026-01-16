@@ -1,5 +1,5 @@
 ---
-name: workflow-detect-req
+name: swe-workflow-detect-req
 version: 1.0.0
 description: Detect implicit requirements from user request
 workflow:
@@ -40,7 +40,7 @@ Extract explicit and implicit requirements from user request.
 
 ```markdown
 ## Skill Return
-- **Skill**: workflow-detect-req
+- **Skill**: swe-workflow-detect-req
 - **Status**: [success|needs_clarification]
 - **Findings Summary**: [requirements discovered]
 - **Artifacts**: [requirement list]
@@ -49,4 +49,4 @@ Extract explicit and implicit requirements from user request.
 
 ## Exit
 
-`> **Skill /workflow-detect-req complete** - returning to WF_LOAD_FEATURE`
+`> **Skill /swe-workflow-detect-req complete** - returning to WF_LOAD_FEATURE`

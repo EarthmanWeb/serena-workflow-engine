@@ -1,5 +1,5 @@
 ---
-name: scaffold-project
+name: swe-scaffold-project
 version: 1.0.0
 description: Initialize workflow for new empty projects. Creates core memories and directory structure.
 workflow:
@@ -90,11 +90,11 @@ Create from templates:
 # INDEX_FEATURES
 
 ## Registered Features
-(none yet - run /onboard-feature to add)
+(none yet - run /swe-onboard-feature to add)
 
 ## Quick Start
-1. `/onboard-feature [KEY]` - Full wizard
-2. `/onboard-quick [KEY]` - Fast setup
+1. `/swe-onboard-feature [KEY]` - Full wizard
+2. `/swe-onboard-quick [KEY]` - Fast setup
 ```
 
 3. **ARCH_INDEX** - Basic architecture placeholder
@@ -111,7 +111,7 @@ Create from templates:
 [Detected or none]
 
 ## Structure
-(Run /onboard-feature to populate)
+(Run /swe-onboard-feature to populate)
 ```
 
 ### Stage 4: First Feature Prompt
@@ -133,8 +133,8 @@ What is the main codebase?
 - Key: [e.g., "BACKEND"]
 - Path: [e.g., "src/"]
 
-[A] Set up now with /onboard-feature (recommended)
-[B] Quick setup with /onboard-quick
+[A] Set up now with /swe-onboard-feature (recommended)
+[B] Quick setup with /swe-onboard-quick
 [C] Skip - add features later (research-only mode)
 ================================================================================
 ```
@@ -167,15 +167,15 @@ If user skips feature setup, enable minimal mode:
 
 ```markdown
 ## Skill Return
-- **Skill**: scaffold-project
+- **Skill**: swe-scaffold-project
 - **Status**: [success|needs_clarification]
 - **Project Root**: [path]
 - **Language**: [detected]
 - **Framework**: [detected or none]
 - **Memories Created**: _INDEX, INDEX_FEATURES, ARCH_INDEX
-- **Next Step Hint**: WF_START or /onboard-feature
+- **Next Step Hint**: WF_START or /swe-onboard-feature
 ```
 
 ## Exit
 
-`> **Skill /scaffold-project complete** - Project scaffolded, run /onboard-feature to add first feature`
+`> **Skill /swe-scaffold-project complete** - Project scaffolded, run /swe-onboard-feature to add first feature`

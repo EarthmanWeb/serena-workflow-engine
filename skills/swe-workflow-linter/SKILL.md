@@ -1,5 +1,5 @@
 ---
-name: workflow-linter
+name: swe-workflow-linter
 version: 1.0.0
 description: Run code linting and formatting checks
 workflow:
@@ -43,7 +43,7 @@ Run code quality checks and linting.
 
 ```markdown
 ## Skill Return
-- **Skill**: workflow-linter
+- **Skill**: swe-workflow-linter
 - **Status**: [success|success_with_findings|blocked]
 - **Findings Summary**: [lint results summary]
 - **Artifacts**: [issues found, files checked]
@@ -52,4 +52,4 @@ Run code quality checks and linting.
 
 ## Exit
 
-`> **Skill /workflow-linter complete** - returning to WF_DONE`
+`> **Skill /swe-workflow-linter complete** - returning to WF_DONE`

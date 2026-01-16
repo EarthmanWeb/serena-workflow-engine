@@ -1,5 +1,5 @@
 ---
-name: workflow-debug-tdd
+name: swe-workflow-debug-tdd
 version: 1.0.0
 description: Test-driven debugging for failing tests or bugs
 workflow:
@@ -42,7 +42,7 @@ Test-driven debugging workflow for rapid iteration.
 
 ```markdown
 ## Skill Return
-- **Skill**: workflow-debug-tdd
+- **Skill**: swe-workflow-debug-tdd
 - **Status**: [success|needs_clarification|blocked]
 - **Findings Summary**: [bug description and fix applied]
 - **Artifacts**: [files changed, tests affected]
@@ -51,4 +51,4 @@ Test-driven debugging workflow for rapid iteration.
 
 ## Exit
 
-`> **Skill /workflow-debug-tdd complete** - bug fixed, returning to WF_EXECUTE`
+`> **Skill /swe-workflow-debug-tdd complete** - bug fixed, returning to WF_EXECUTE`

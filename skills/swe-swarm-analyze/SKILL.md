@@ -1,5 +1,5 @@
 ---
-name: swarm-analyze
+name: swe-swarm-analyze
 version: 1.0.0
 description: DAA-powered codebase analysis using swarm agents. Use for deep analysis of large codebases.
 workflow:
@@ -183,7 +183,7 @@ DAA Learning:
 
 ```markdown
 ## Skill Return
-- **Skill**: swarm-analyze
+- **Skill**: swe-swarm-analyze
 - **Status**: [success|success_with_findings|blocked]
 - **Agents Used**: [count]
 - **Memories Created**: [list]
@@ -209,4 +209,4 @@ Progress:
 
 ## Exit
 
-`> **Skill /swarm-analyze complete** - [count] memories created via DAA analysis`
+`> **Skill /swe-swarm-analyze complete** - [count] memories created via DAA analysis`
