@@ -13,7 +13,7 @@ First-time setup command for the serena-workflow-engine plugin. Run this when in
 - After cloning a repo with the plugin
 - When `session-start.sh` reports "INITIAL SETUP REQUIRED"
 
-## Setup Steps (7 total)
+## Setup Steps (8 total)
 
 ### Step 1: Detect Environment
 
@@ -103,7 +103,53 @@ if (!status.performed) {
 }
 ```
 
-### Step 5: Create Core Memories
+### Step 5: Initialize Claude-Flow
+
+Run claude-flow init with CLAUDE.md protection:
+
+**Before init - backup existing CLAUDE.md:**
+```bash
+# Check if CLAUDE.md exists
+if [ -f "CLAUDE.md" ]; then
+  cp CLAUDE.md CLAUDE.md.backup
+  echo "Backed up existing CLAUDE.md"
+fi
+```
+
+**Run claude-flow init:**
+```bash
+npx claude-flow@alpha init
+```
+
+**After init - handle CLAUDE.md:**
+```
+================================================================================
+CLAUDE.md HANDLING
+================================================================================
+Claude-flow created/modified CLAUDE.md.
+
+[A] Keep claude-flow version (recommended for new projects)
+[B] Restore original CLAUDE.md, save claude-flow version as CLAUDE_FLOW.md
+[C] Merge: Keep original, append claude-flow content
+[D] Discard claude-flow version, restore original
+================================================================================
+```
+
+**Option B (typical for existing projects):**
+```bash
+mv CLAUDE.md CLAUDE_FLOW.md
+mv CLAUDE.md.backup CLAUDE.md
+echo "Original CLAUDE.md restored. Claude-flow config saved to CLAUDE_FLOW.md"
+```
+
+**Option C (merge):**
+```bash
+cat CLAUDE.md >> CLAUDE.md.backup
+mv CLAUDE.md.backup CLAUDE.md
+echo "Merged claude-flow content into existing CLAUDE.md"
+```
+
+### Step 6: Create Core Memories
 
 If missing, create from templates:
 
@@ -111,7 +157,7 @@ If missing, create from templates:
 **INDEX_FEATURES.md** (empty feature registry)
 **ARCH_INDEX.md** (architecture placeholder)
 
-### Step 6: Configure Gitignore
+### Step 7: Configure Gitignore
 
 Add plugin entries to .gitignore:
 ```
@@ -132,7 +178,7 @@ CLAUDE.local.md
 .serena/archive-specs/
 ```
 
-### Step 7: Mark Setup Complete
+### Step 8: Mark Setup Complete
 
 Create `.claude/setup-complete.json`:
 ```json
@@ -154,6 +200,7 @@ Serena Workflow Engine initialized successfully.
 
   [x] MCP Servers: serena, claude-flow, ruv-swarm
   [x] Serena Onboarding: Complete
+  [x] Claude-Flow Initialized
   [x] Core Memories: Created
   [x] Gitignore: Configured
 
