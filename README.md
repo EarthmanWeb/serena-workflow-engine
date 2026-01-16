@@ -17,23 +17,26 @@ chmod +x .claude/plugins/serena-workflow-engine/hooks/*.sh
 
 ### 2. Enable the plugin
 
-Open Claude Code in your project directory. Run these slash commands **inside
-Claude Code** (not in terminal):
+Run these commands from your terminal:
 
-**Option A: Via marketplace (if published)**
-
-```bash
-claude /plugin marketplace add .claude/plugins/serena-workflow-engine
-claude /plugin install serena-workflow-engine@serena-workflow-engine --scope project
-```
-
-**Option B: Local path (unpublished)**
+**Option A: Add as marketplace then install**
 
 ```bash
-claude /plugin install --path .claude/plugins/serena-workflow-engine --scope project
+# Add local plugin as a marketplace
+claude plugin marketplace add .claude/plugins/serena-workflow-engine
+
+# Install from that marketplace
+claude plugin install serena-workflow-engine --scope project
 ```
 
-After running, **restart Claude Code** for the plugin to load.
+**Option B: Load directly with --plugin-dir**
+
+```bash
+# Load plugin for this session only
+claude --plugin-dir .claude/plugins/serena-workflow-engine
+```
+
+After installing, **restart Claude Code** for the plugin to load.
 
 ### 3. Initialize the plugin
 
