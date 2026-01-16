@@ -1,78 +1,78 @@
 # Serena Workflow Engine
 
-Claude Code plugin that codifies the WF_* state machine workflow system with RLVR learning.
+21-state workflow engine for Claude Code with RLVR learning, swarm coordination, and Serena memory persistence.
 
-## Features
+---
 
-- **21 Workflow States** - Complete state machine for software engineering tasks
-- **RLVR Learning** - Reinforcement Learning with Verifiable Rewards
-- **Auto Plan Mode** - Automatic switching between Plan and Agent modes
-- **Swarm Coordination** - Multi-agent support via Claude-Flow and RUV-Swarm
-- **Serena Integration** - Memory persistence and symbolic code tools
+## Quickstart
 
-## Requirements (ALL MANDATORY)
+### 1. Add to your project
 
-| Dependency | Purpose |
-|------------|---------|
-| Serena MCP | Memory persistence, symbolic tools |
-| Claude Flow MCP | Swarm orchestration, SONA learning |
-| RUV-Swarm MCP | DAA learning agents, cognitive adaptation |
-| jq CLI | JSON parsing in hooks |
-
-## Installation
-
-### Via Git Submodule
 ```bash
-cd /path/to/project
-git submodule add https://github.com/your-org/serena-workflow-engine .claude/plugins/serena-workflow-engine
-git submodule update --init --recursive
+cd your-project
+git submodule add https://github.com/anthropics/serena-workflow-engine .claude/plugins/serena-workflow-engine
 chmod +x .claude/plugins/serena-workflow-engine/hooks/*.sh
 ```
 
-### Manual Integration
-Add hooks to `.claude/settings.local.json` (see SPEC_SWE_INSTALLATION).
+### 2. Initialize the plugin
 
-## State Categories
+Open Claude Code in your project. Copy and paste this prompt:
 
-| Category | States |
-|----------|--------|
-| Setup | WF_INITIAL_SETUP, WF_ONBOARD |
-| Entry | WF_START, WF_CLASSIFY, WF_CONTINUE |
-| Analysis | WF_RESEARCH, WF_DETECT_REQ, WF_REQUIREMENT |
-| Planning | WF_PLAN_ARCHITECTURE, WF_ARCH_REVIEW, WF_SWARM_ORCHESTRATE |
-| Gates | WF_CLARIFY, WF_ASK_PERMISSION |
-| Execution | WF_LOAD_FEATURE, WF_UPDATE_MEMORY, WF_EXECUTE, WF_CHECKPOINT, WF_DEBUG_TDD |
-| Completion | WF_VERIFY, WF_DONE, WF_CLEANUP |
+```
+Read the file .claude/plugins/serena-workflow-engine/commands/swe-init.md and execute the setup steps it describes. Install any missing MCP servers to ~/.claude.json and complete the 7-step initialization.
+```
+
+This will:
+- Detect and install required MCPs (serena, claude-flow, ruv-swarm)
+- Run Serena onboarding
+- Create core memories
+- Configure .gitignore
+
+### 3. Start working
+
+After setup, the workflow guides you automatically. Type any task to begin.
+
+---
 
 ## Commands
 
-- `/swe-init` - First-time plugin setup
-- `/swe-status` - Display current state
-- `/swe-reset` - Reset workflow (requires confirmation)
-- `/swe-goto [STATE]` - Force state transition
-- `/swe-memory [action]` - Manage WORKING_MEMORY
-- `/swe-migrate` - Convert from CLAUDE.md-based workflow
-- `/swe-scaffold` - Initialize workflow for new projects
-- `/swe-cleanup` - Archive completed work
+| Command | Description |
+|---------|-------------|
+| `/swe-init` | First-time setup |
+| `/swe-status` | Show current state |
+| `/swe-reset` | Reset workflow |
+| `/swe-goto [STATE]` | Force transition |
+| `/swe-memory` | Manage WORKING_MEMORY |
+| `/swe-cleanup` | Archive completed work |
 
-## Skills
+---
 
-- `workflow-research` - Code exploration
-- `workflow-verify` - Implementation verification
-- `workflow-arch-review` - Architecture compliance
-- `workflow-debug-tdd` - Test-driven debugging
-- `workflow-detect-req` - Requirement detection
-- `workflow-linter` - Code quality checks
-- `onboard-feature` - Feature registration wizard
-- `swarm-orchestrate` - Multi-agent coordination
+## Requirements
 
-## Exit Codes
+- **Serena MCP** - Memory persistence
+- **Claude-Flow MCP** - Swarm orchestration
+- **RUV-Swarm MCP** - DAA learning
+- **jq** - JSON parsing (`brew install jq`)
 
-| Code | Behavior |
-|------|----------|
-| 0 | Allow silently |
-| 1 | Allow with message |
-| 2 | Block operation |
+---
+
+## How It Works
+
+The engine enforces a 21-state workflow:
+
+```
+START → CLASSIFY → PLAN → EXECUTE → VERIFY → DONE → CLEANUP
+           ↓
+       RESEARCH / DEBUG / CLARIFY (as needed)
+```
+
+Key features:
+- Auto plan mode for medium+ complexity
+- Checkpoint every 3 edits
+- RLVR learning at task completion
+- Swarm agents for large tasks
+
+---
 
 ## License
 
