@@ -1,0 +1,51 @@
+{
+  "hooks": {
+    "SessionStart": [{
+      "hooks": [{
+        "type": "command",
+        "command": "${CLAUDE_PLUGIN_ROOT}/hooks/session-start.sh"
+      }]
+    }],
+    "UserPromptSubmit": [{
+      "hooks": [{
+        "type": "command",
+        "command": "${CLAUDE_PLUGIN_ROOT}/hooks/user-prompt-swarm.sh"
+      }]
+    }],
+    "PreToolUse": [{
+      "matcher": "Write|Edit|MultiEdit|mcp__serena__replace_symbol_body|mcp__serena__insert_after_symbol|mcp__serena__insert_before_symbol",
+      "hooks": [{
+        "type": "command",
+        "command": "${CLAUDE_PLUGIN_ROOT}/hooks/pre-edit-validate.sh"
+      }]
+    }],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit|mcp__serena__replace_symbol_body|mcp__serena__insert_after_symbol|mcp__serena__insert_before_symbol",
+        "hooks": [{
+          "type": "command",
+          "command": "${CLAUDE_PLUGIN_ROOT}/hooks/post-edit-checkpoint.sh"
+        }]
+      },
+      {
+        "matcher": "mcp__serena__read_memory",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/post-read-state.sh"
+          },
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/post-task-learn.sh"
+          }
+        ]
+      }
+    ],
+    "Stop": [{
+      "hooks": [{
+        "type": "command",
+        "command": "${CLAUDE_PLUGIN_ROOT}/hooks/stop-workflow-check.sh"
+      }]
+    }]
+  }
+}

@@ -1,0 +1,599 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "version": "1.0.0",
+  "description": "Serena Workflow Engine - 21 State Machine with RLVR and Plan Mode",
+
+  "planModeTriggers": {
+    "always": ["WF_PLAN_ARCHITECTURE", "WF_ARCH_REVIEW", "WF_SWARM_ORCHESTRATE"],
+    "conditional": {
+      "WF_CLASSIFY": {
+        "condition": "complexity >= 'medium' OR task_type == 'new_feature'",
+        "action": "enter_plan_mode"
+      },
+      "WF_DETECT_REQ": {
+        "condition": "requirement_type == 'architectural' OR scope == 'cross_cutting'",
+        "action": "enter_plan_mode"
+      }
+    },
+    "never": ["WF_DEBUG_TDD", "WF_CHECKPOINT", "WF_VERIFY", "WF_DONE", "WF_CLEANUP", "WF_RESEARCH", "WF_EXECUTE"]
+  },
+
+  "complexityThresholds": {
+    "simple": { "files": [1, 2], "layers": 1, "expectedTransitions": 8 },
+    "medium": { "files": [2, 5], "layers": [2, 3], "expectedTransitions": 12 },
+    "large": { "files": [6, 999], "layers": [3, 999], "expectedTransitions": 18 }
+  },
+
+  "states": {
+    "WF_INITIAL_SETUP": {
+      "id": "WF_INITIAL_SETUP",
+      "category": "setup",
+      "icon": "🔧",
+      "description": "First-time plugin setup - install MCPs, configure environment",
+      "planMode": "never",
+      "allowEdit": false,
+      "allowWrite": false,
+      "rlvr": { "signalType": "setup", "rewardImpact": "neutral" },
+      "entryConditions": {
+        "fromStates": ["SessionStart"],
+        "triggers": ["missing_mcp", "first_install", "setup_incomplete"]
+      },
+      "requiredActions": [
+        "detect_missing_mcps",
+        "install_mcp_servers",
+        "prompt_restart",
+        "verify_installation",
+        "run_serena_onboard",
+        "run_claude_flow_init",
+        "handle_claude_md",
+        "configure_gitignore"
+      ],
+      "transitions": {
+        "complete": "WF_START",
+        "issues": "WF_CLARIFY"
+      }
+    },
+
+    "WF_ONBOARD": {
+      "id": "WF_ONBOARD",
+      "category": "setup",
+      "icon": "📝",
+      "description": "Feature onboarding wizard",
+      "planMode": "never",
+      "allowEdit": true,
+      "allowWrite": true,
+      "rlvr": { "signalType": "onboard", "rewardImpact": "neutral" },
+      "entryConditions": {
+        "fromStates": ["WF_START"],
+        "triggers": ["onboard_feature_command", "new_feature_detected"]
+      },
+      "requiredActions": [
+        "collect_feature_info",
+        "analyze_codebase",
+        "create_memories",
+        "update_index"
+      ],
+      "transitions": {
+        "complete": "WF_START"
+      }
+    },
+
+    "WF_START": {
+      "id": "WF_START",
+      "category": "entry",
+      "icon": "🚀",
+      "description": "Mandatory entry point - read context, determine path",
+      "planMode": "never",
+      "allowEdit": false,
+      "allowWrite": false,
+      "rlvr": { "signalType": "trajectory_init", "rewardImpact": "baseline" },
+      "entryConditions": {
+        "fromStates": ["SessionStart", "WF_INITIAL_SETUP", "WF_ONBOARD"],
+        "triggers": ["session_start", "workflow_reset"]
+      },
+      "requiredActions": [
+        "read_index_features",
+        "check_working_memory",
+        "determine_task_type"
+      ],
+      "transitions": {
+        "new_task": "WF_CLASSIFY",
+        "continue_task": "WF_CONTINUE",
+        "research_only": "WF_RESEARCH",
+        "onboard_needed": "WF_ONBOARD"
+      }
+    },
+
+    "WF_CLASSIFY": {
+      "id": "WF_CLASSIFY",
+      "category": "entry",
+      "icon": "🔍",
+      "description": "Classify task complexity and route appropriately",
+      "planMode": "conditional",
+      "planModeCondition": "complexity >= 'medium' OR task_type == 'new_feature'",
+      "allowEdit": false,
+      "allowWrite": false,
+      "rlvr": { "signalType": "routing_decision", "rewardImpact": "neutral" },
+      "entryConditions": {
+        "fromStates": ["WF_START", "WF_CONTINUE"],
+        "triggers": ["new_task", "reclassify"]
+      },
+      "requiredActions": [
+        "analyze_task_scope",
+        "count_affected_files",
+        "identify_layers",
+        "determine_complexity"
+      ],
+      "transitions": {
+        "simple": "WF_DETECT_REQ",
+        "medium": "WF_PLAN_ARCHITECTURE",
+        "large": "WF_SWARM_ORCHESTRATE",
+        "research_needed": "WF_RESEARCH",
+        "debug_needed": "WF_DEBUG_TDD",
+        "needs_clarification": "WF_CLARIFY"
+      }
+    },
+
+    "WF_CONTINUE": {
+      "id": "WF_CONTINUE",
+      "category": "entry",
+      "icon": "▶️",
+      "description": "Resume from existing WORKING_MEMORY",
+      "planMode": "never",
+      "allowEdit": false,
+      "allowWrite": false,
+      "rlvr": { "signalType": "resume", "rewardImpact": "neutral" },
+      "entryConditions": {
+        "fromStates": ["WF_START"],
+        "triggers": ["working_memory_exists"]
+      },
+      "requiredActions": [
+        "read_working_memory",
+        "restore_context",
+        "determine_next_step"
+      ],
+      "transitions": {
+        "arch_review": "WF_ARCH_REVIEW",
+        "execute": "WF_EXECUTE",
+        "needs_clarification": "WF_CLARIFY",
+        "reclassify": "WF_CLASSIFY"
+      }
+    },
+
+    "WF_RESEARCH": {
+      "id": "WF_RESEARCH",
+      "category": "analysis",
+      "icon": "🔬",
+      "description": "Code exploration without changes",
+      "planMode": "never",
+      "allowEdit": false,
+      "allowWrite": false,
+      "rlvr": { "signalType": "research_step", "rewardImpact": "neutral" },
+      "entryConditions": {
+        "fromStates": ["WF_START", "WF_CLASSIFY"],
+        "triggers": ["research_needed", "exploration_request"]
+      },
+      "requiredActions": [
+        "explore_codebase",
+        "analyze_patterns",
+        "document_findings"
+      ],
+      "transitions": {
+        "complete": "WF_DETECT_REQ"
+      }
+    },
+
+    "WF_DETECT_REQ": {
+      "id": "WF_DETECT_REQ",
+      "category": "analysis",
+      "icon": "📋",
+      "description": "Detect implicit requirements from user request",
+      "planMode": "conditional",
+      "planModeCondition": "requirement_type == 'architectural'",
+      "allowEdit": false,
+      "allowWrite": false,
+      "rlvr": { "signalType": "requirement_detection", "rewardImpact": "neutral" },
+      "entryConditions": {
+        "fromStates": ["WF_CLASSIFY", "WF_RESEARCH"],
+        "triggers": ["analysis_complete"]
+      },
+      "requiredActions": [
+        "extract_explicit_requirements",
+        "infer_implicit_requirements",
+        "identify_edge_cases",
+        "document_requirements"
+      ],
+      "transitions": {
+        "requirements_found": "WF_REQUIREMENT",
+        "simple_task": "WF_LOAD_FEATURE"
+      }
+    },
+
+    "WF_REQUIREMENT": {
+      "id": "WF_REQUIREMENT",
+      "category": "analysis",
+      "icon": "📝",
+      "description": "Document and confirm requirements",
+      "planMode": "never",
+      "allowEdit": false,
+      "allowWrite": false,
+      "rlvr": { "signalType": "requirement_doc", "rewardImpact": "neutral" },
+      "entryConditions": {
+        "fromStates": ["WF_DETECT_REQ"],
+        "triggers": ["requirements_detected"]
+      },
+      "requiredActions": [
+        "format_requirements",
+        "confirm_with_user",
+        "update_working_memory"
+      ],
+      "transitions": {
+        "confirmed": "WF_LOAD_FEATURE",
+        "needs_clarification": "WF_CLARIFY",
+        "update_memory": "WF_UPDATE_MEMORY"
+      }
+    },
+
+    "WF_PLAN_ARCHITECTURE": {
+      "id": "WF_PLAN_ARCHITECTURE",
+      "category": "planning",
+      "icon": "🏗️",
+      "description": "Design implementation approach for medium+ complexity",
+      "planMode": "always",
+      "planModeReason": "Architecture decisions require user approval before implementation",
+      "allowEdit": false,
+      "allowWrite": false,
+      "rlvr": { "signalType": "architecture_plan", "rewardImpact": "neutral" },
+      "entryConditions": {
+        "fromStates": ["WF_CLASSIFY"],
+        "triggers": ["complexity_medium_plus", "new_feature", "cross_cutting_change"]
+      },
+      "onEntry": [
+        "call_EnterPlanMode",
+        "write_plan_to_plan_file",
+        "present_architecture_options"
+      ],
+      "requiredActions": [
+        "analyze_codebase_structure",
+        "identify_affected_components",
+        "design_implementation_approach",
+        "document_trade_offs",
+        "request_user_approval"
+      ],
+      "transitions": {
+        "approved": "WF_SWARM_ORCHESTRATE",
+        "simple_enough": "WF_DETECT_REQ",
+        "needs_revision": "WF_PLAN_ARCHITECTURE",
+        "needs_clarification": "WF_CLARIFY"
+      }
+    },
+
+    "WF_ARCH_REVIEW": {
+      "id": "WF_ARCH_REVIEW",
+      "category": "planning",
+      "icon": "🔎",
+      "description": "Review architecture compliance before execution",
+      "planMode": "always",
+      "planModeReason": "Design review before execution",
+      "allowEdit": false,
+      "allowWrite": false,
+      "rlvr": { "signalType": "arch_review", "rewardImpact": "bonus", "bonus": 0.1 },
+      "entryConditions": {
+        "fromStates": ["WF_LOAD_FEATURE", "WF_CONTINUE"],
+        "triggers": ["feature_loaded", "ready_for_review"]
+      },
+      "requiredActions": [
+        "verify_against_standards",
+        "check_pattern_compliance",
+        "validate_approach"
+      ],
+      "transitions": {
+        "approved": "WF_ASK_PERMISSION",
+        "needs_revision": "WF_PLAN_ARCHITECTURE"
+      }
+    },
+
+    "WF_SWARM_ORCHESTRATE": {
+      "id": "WF_SWARM_ORCHESTRATE",
+      "category": "planning",
+      "icon": "🐝",
+      "description": "Multi-agent swarm coordination for large tasks",
+      "planMode": "always",
+      "planModeReason": "Multi-agent coordination needs planning",
+      "allowEdit": false,
+      "allowWrite": false,
+      "rlvr": { "signalType": "swarm_coordination", "rewardImpact": "neutral" },
+      "entryConditions": {
+        "fromStates": ["WF_CLASSIFY", "WF_PLAN_ARCHITECTURE"],
+        "triggers": ["large_complexity", "architecture_approved"]
+      },
+      "requiredActions": [
+        "select_swarm_system",
+        "decompose_into_subtasks",
+        "spawn_agents",
+        "coordinate_execution",
+        "synthesize_results"
+      ],
+      "transitions": {
+        "complete": "WF_EXECUTE"
+      }
+    },
+
+    "WF_CLARIFY": {
+      "id": "WF_CLARIFY",
+      "category": "gates",
+      "icon": "❓",
+      "description": "Request clarification from user",
+      "planMode": "never",
+      "allowEdit": false,
+      "allowWrite": false,
+      "rlvr": { "signalType": "clarify_visit", "rewardImpact": "penalty", "penalty": -0.1 },
+      "entryConditions": {
+        "fromStates": ["*"],
+        "triggers": ["ambiguity_detected", "missing_information"]
+      },
+      "requiredActions": [
+        "formulate_question",
+        "present_options",
+        "await_response"
+      ],
+      "transitions": {
+        "clarified": "(return_to_caller)"
+      }
+    },
+
+    "WF_ASK_PERMISSION": {
+      "id": "WF_ASK_PERMISSION",
+      "category": "gates",
+      "icon": "🔐",
+      "description": "Request permission for significant changes",
+      "planMode": "never",
+      "allowEdit": false,
+      "allowWrite": false,
+      "rlvr": { "signalType": "permission_gate", "rewardImpact": "neutral" },
+      "entryConditions": {
+        "fromStates": ["WF_ARCH_REVIEW"],
+        "triggers": ["architecture_approved"]
+      },
+      "requiredActions": [
+        "summarize_planned_changes",
+        "list_affected_files",
+        "request_confirmation"
+      ],
+      "transitions": {
+        "approved": "WF_EXECUTE",
+        "denied": "WF_CLARIFY"
+      }
+    },
+
+    "WF_LOAD_FEATURE": {
+      "id": "WF_LOAD_FEATURE",
+      "category": "execution",
+      "icon": "📦",
+      "description": "Load feature context from memories",
+      "planMode": "never",
+      "allowEdit": false,
+      "allowWrite": false,
+      "rlvr": { "signalType": "feature_load", "rewardImpact": "neutral" },
+      "entryConditions": {
+        "fromStates": ["WF_DETECT_REQ", "WF_REQUIREMENT", "WF_UPDATE_MEMORY"],
+        "triggers": ["requirements_confirmed"]
+      },
+      "requiredActions": [
+        "read_feature_memory",
+        "read_domain_memories",
+        "read_system_memories",
+        "build_context"
+      ],
+      "transitions": {
+        "loaded": "WF_ARCH_REVIEW"
+      }
+    },
+
+    "WF_UPDATE_MEMORY": {
+      "id": "WF_UPDATE_MEMORY",
+      "category": "execution",
+      "icon": "💾",
+      "description": "Update WORKING_MEMORY with progress",
+      "planMode": "never",
+      "allowEdit": true,
+      "allowWrite": true,
+      "rlvr": { "signalType": "memory_update", "rewardImpact": "neutral" },
+      "entryConditions": {
+        "fromStates": ["WF_REQUIREMENT"],
+        "triggers": ["checkpoint_required", "state_change"]
+      },
+      "requiredActions": [
+        "update_working_memory",
+        "reset_edit_counter"
+      ],
+      "transitions": {
+        "complete": "WF_LOAD_FEATURE"
+      }
+    },
+
+    "WF_EXECUTE": {
+      "id": "WF_EXECUTE",
+      "category": "execution",
+      "icon": "⚡",
+      "description": "Execute implementation changes",
+      "planMode": "never",
+      "allowEdit": true,
+      "allowWrite": true,
+      "rlvr": { "signalType": "execution_step", "rewardImpact": "neutral" },
+      "entryConditions": {
+        "fromStates": ["WF_ASK_PERMISSION", "WF_SWARM_ORCHESTRATE", "WF_DEBUG_TDD", "WF_CHECKPOINT"],
+        "triggers": ["permission_granted", "swarm_complete", "debug_fixed"]
+      },
+      "requiredActions": [
+        "implement_changes",
+        "follow_standards",
+        "track_edits"
+      ],
+      "transitions": {
+        "checkpoint_needed": "WF_CHECKPOINT",
+        "complete": "WF_VERIFY"
+      }
+    },
+
+    "WF_CHECKPOINT": {
+      "id": "WF_CHECKPOINT",
+      "category": "execution",
+      "icon": "💾",
+      "description": "Save progress checkpoint",
+      "planMode": "never",
+      "allowEdit": true,
+      "allowWrite": true,
+      "rlvr": { "signalType": "checkpoint", "rewardImpact": "penalty_if_forced", "penalty": -0.05 },
+      "entryConditions": {
+        "fromStates": ["WF_EXECUTE"],
+        "triggers": ["edits_threshold", "manual_checkpoint"]
+      },
+      "requiredActions": [
+        "update_working_memory",
+        "reset_edit_counter",
+        "summarize_progress"
+      ],
+      "transitions": {
+        "continue": "WF_EXECUTE",
+        "complete": "WF_VERIFY"
+      }
+    },
+
+    "WF_DEBUG_TDD": {
+      "id": "WF_DEBUG_TDD",
+      "category": "execution",
+      "icon": "🐛",
+      "description": "Test-driven debugging workflow",
+      "planMode": "never",
+      "planModeReason": "Debugging requires rapid iteration, not upfront planning",
+      "allowEdit": true,
+      "allowWrite": true,
+      "rlvr": { "signalType": "debug_iteration", "rewardImpact": "neutral" },
+      "entryConditions": {
+        "fromStates": ["WF_CLASSIFY"],
+        "triggers": ["test_failure", "bug_report", "behavior_mismatch"]
+      },
+      "requiredActions": [
+        "reproduce_issue",
+        "identify_root_cause",
+        "implement_fix",
+        "verify_fix"
+      ],
+      "transitions": {
+        "fixed": "WF_EXECUTE",
+        "needs_help": "WF_CLARIFY"
+      }
+    },
+
+    "WF_VERIFY": {
+      "id": "WF_VERIFY",
+      "category": "completion",
+      "icon": "✔️",
+      "description": "Verify implementation against requirements",
+      "planMode": "never",
+      "allowEdit": false,
+      "allowWrite": false,
+      "rlvr": { "signalType": "verify_check", "rewardImpact": "bonus_if_first_try", "bonus": 0.1 },
+      "entryConditions": {
+        "fromStates": ["WF_EXECUTE", "WF_CHECKPOINT"],
+        "triggers": ["implementation_complete"]
+      },
+      "requiredActions": [
+        "run_tests",
+        "verify_requirements",
+        "check_standards"
+      ],
+      "transitions": {
+        "passed": "WF_DONE",
+        "failed": "WF_EXECUTE"
+      }
+    },
+
+    "WF_DONE": {
+      "id": "WF_DONE",
+      "category": "completion",
+      "icon": "✅",
+      "description": "Task complete - execute RLVR learning",
+      "planMode": "never",
+      "allowEdit": false,
+      "allowWrite": false,
+      "rlvr": {
+        "signalType": "learning_checkpoint",
+        "rewardImpact": "mandatory",
+        "blocksCompletion": true,
+        "requiredActions": [
+          "trajectory_end",
+          "sona_learn",
+          "pattern_store",
+          "agent_adapt",
+          "knowledge_share"
+        ]
+      },
+      "entryConditions": {
+        "fromStates": ["WF_VERIFY"],
+        "requires": ["WF_VERIFY passed"]
+      },
+      "requiredActions": [
+        "execute_rlvr_pipeline",
+        "mark_learning_complete",
+        "update_working_memory",
+        "final_summary"
+      ],
+      "transitions": {
+        "learning_complete": "WF_CLEANUP",
+        "learning_incomplete": "BLOCKED"
+      }
+    },
+
+    "WF_CLEANUP": {
+      "id": "WF_CLEANUP",
+      "category": "completion",
+      "icon": "🧹",
+      "description": "Archive completed work",
+      "planMode": "never",
+      "allowEdit": false,
+      "allowWrite": false,
+      "terminal": true,
+      "rlvr": { "signalType": "cleanup", "rewardImpact": "neutral" },
+      "entryConditions": {
+        "fromStates": ["WF_DONE"],
+        "triggers": ["learning_complete", "user_confirms_complete"]
+      },
+      "requiredActions": [
+        "identify_archivable_files",
+        "confirm_with_user",
+        "move_to_archive",
+        "update_indexes"
+      ],
+      "transitions": {
+        "complete": null
+      }
+    }
+  },
+
+  "transitionMatrix": {
+    "SessionStart": ["WF_INITIAL_SETUP", "WF_START"],
+    "WF_INITIAL_SETUP": ["WF_START", "WF_CLARIFY"],
+    "WF_START": ["WF_CLASSIFY", "WF_CONTINUE", "WF_RESEARCH", "WF_ONBOARD"],
+    "WF_CLASSIFY": ["WF_CLARIFY", "WF_RESEARCH", "WF_DETECT_REQ", "WF_PLAN_ARCHITECTURE", "WF_SWARM_ORCHESTRATE", "WF_DEBUG_TDD"],
+    "WF_CONTINUE": ["WF_ARCH_REVIEW", "WF_EXECUTE", "WF_CLARIFY", "WF_CLASSIFY"],
+    "WF_RESEARCH": ["WF_DETECT_REQ"],
+    "WF_DETECT_REQ": ["WF_REQUIREMENT", "WF_LOAD_FEATURE"],
+    "WF_REQUIREMENT": ["WF_UPDATE_MEMORY", "WF_CLARIFY", "WF_LOAD_FEATURE"],
+    "WF_PLAN_ARCHITECTURE": ["WF_SWARM_ORCHESTRATE", "WF_DETECT_REQ", "WF_CLARIFY"],
+    "WF_ARCH_REVIEW": ["WF_ASK_PERMISSION", "WF_PLAN_ARCHITECTURE"],
+    "WF_SWARM_ORCHESTRATE": ["WF_EXECUTE"],
+    "WF_CLARIFY": ["(return_to_caller)"],
+    "WF_ASK_PERMISSION": ["WF_EXECUTE", "WF_CLARIFY"],
+    "WF_LOAD_FEATURE": ["WF_ARCH_REVIEW"],
+    "WF_UPDATE_MEMORY": ["WF_LOAD_FEATURE"],
+    "WF_EXECUTE": ["WF_CHECKPOINT", "WF_VERIFY"],
+    "WF_CHECKPOINT": ["WF_EXECUTE", "WF_VERIFY"],
+    "WF_DEBUG_TDD": ["WF_EXECUTE", "WF_CLARIFY"],
+    "WF_VERIFY": ["WF_DONE", "WF_EXECUTE"],
+    "WF_DONE": ["WF_CLEANUP"],
+    "WF_CLEANUP": [null],
+    "WF_ONBOARD": ["WF_START"]
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "serena": {
+      "command": "uvx",
+      "args": ["--from", "git+https://github.com/oraios/serena", "serena", "start-mcp-server", "--project", "./"]
+    },
+    "claude-flow": {
+      "command": "npx",
+      "args": ["claude-flow@alpha", "mcp", "start"]
+    },
+    "ruv-swarm": {
+      "command": "npx",
+      "args": ["ruv-swarm", "mcp", "start"]
+    }
+  }
+}

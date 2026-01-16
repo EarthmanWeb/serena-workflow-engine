@@ -1,0 +1,17 @@
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor files
+*.swp
+*.swo
+*~
+
+# Runtime state (not for distribution)
+workflow-state.json
+setup-state.json
+setup-complete.json
+
+# Local settings
+*.local.json
+*.local.md
