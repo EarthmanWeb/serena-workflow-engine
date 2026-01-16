@@ -14,13 +14,39 @@ git submodule add https://github.com/anthropics/serena-workflow-engine .claude/p
 chmod +x .claude/plugins/serena-workflow-engine/hooks/*.sh
 ```
 
-### 2. Install the plugin
+### 2. Enable the plugin
 
-Open Claude Code and run:
-
+**Option A: Via marketplace (if published)**
 ```
 /plugin marketplace add .claude/plugins/serena-workflow-engine
 /plugin install serena-workflow-engine@serena-workflow-engine --scope project
+```
+
+**Option B: Manual settings.json (local/unpublished)**
+
+Add to `.claude/settings.json`:
+
+```json
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/plugins/serena-workflow-engine/hooks/session-start.sh"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+**Option C: CLI flag (testing)**
+```bash
+claude --plugin-dir .claude/plugins/serena-workflow-engine
 ```
 
 ### 3. Initialize the plugin
