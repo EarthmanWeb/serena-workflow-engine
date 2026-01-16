@@ -12,24 +12,14 @@ if PLUGIN_ROOT:
         sys.path.insert(0, hooks_dir)
 
 try:
-    from swe_hooks.core.config import load_setup_complete, get_paths
+    from swe_hooks.core.config import load_setup_complete
     from swe_hooks.core.state_manager import StateManager
 except ImportError as e:
     print(json.dumps({"systemMessage": f"SWE import error: {e}"}), file=sys.stdout)
     sys.exit(0)
 
 
-def read_instruction_file(cwd: str, state_name: str) -> str:
-    """Read the instruction file for a workflow state."""
-    paths = get_paths(cwd)
-    instruction_file = os.path.join(paths["instructions_dir"], f"{state_name}.md")
-    if os.path.exists(instruction_file):
-        try:
-            with open(instruction_file, 'r') as f:
-                return f.read()
-        except IOError:
-            return None
-    return None
+
 
 
 def main():
@@ -71,15 +61,11 @@ def main():
         # Get working memory
         wm_file = state_mgr.get_working_memory()
         
-        # Read instructions for current state
-        instructions = read_instruction_file(cwd, current_state)
-        
         context = f"""📋 WORKFLOW STATE: {current_state}
 Working Memory: {wm_file or 'None'}
 
 Follow the {current_state} instructions:
-
-{instructions or f'Read: .claude/plugins/serena-workflow-engine/state-machine/instructions/{current_state}.md'}
+Use: mcp__serena__read_memory("{current_state}")
 """
         
         output = {
