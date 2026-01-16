@@ -13,7 +13,7 @@ First-time setup command for the serena-workflow-engine plugin. Run this when in
 - After cloning a repo with the plugin
 - When `session-start.sh` reports "INITIAL SETUP REQUIRED"
 
-## Setup Steps (8 total)
+## Setup Steps (9 total)
 
 ### Step 1: Detect Environment
 
@@ -149,7 +149,29 @@ mv CLAUDE.md.backup CLAUDE.md
 echo "Merged claude-flow content into existing CLAUDE.md"
 ```
 
-### Step 6: Create Core Memories
+### Step 6: Install Workflow Instructions
+
+Copy instruction files from plugin to Serena memories using dynamic discovery:
+
+```
+PLUGIN_INSTRUCTIONS = ".claude/plugins/serena-workflow-engine/state-machine/instructions"
+
+# Discover all WF_*.md files (no hardcoded list)
+for each file in glob(PLUGIN_INSTRUCTIONS + "/WF_*.md"):
+    memory_name = basename(file).replace('.md', '')
+    content = read(file)
+    mcp__serena__write_memory(memory_name, content)
+    echo "  Installed: " + memory_name
+
+# Verify
+memories = mcp__serena__list_memories()
+wf_count = count(memories starting with "WF_")
+echo "Workflow instructions: " + wf_count + " installed"
+```
+
+**Expected**: All WF_* instruction files copied to Serena memories
+
+### Step 7: Create Core Memories
 
 If missing, create from templates:
 
@@ -157,7 +179,7 @@ If missing, create from templates:
 **INDEX_FEATURES.md** (empty feature registry)
 **ARCH_INDEX.md** (architecture placeholder)
 
-### Step 7: Configure Gitignore
+### Step 8: Configure Gitignore
 
 Add plugin entries to .gitignore:
 ```
@@ -178,7 +200,7 @@ CLAUDE.local.md
 .serena/archive-specs/
 ```
 
-### Step 8: Mark Setup Complete
+### Step 9: Mark Setup Complete
 
 Create `.claude/setup-complete.json`:
 ```json
@@ -201,6 +223,7 @@ Serena Workflow Engine initialized successfully.
   [x] MCP Servers: serena, claude-flow, ruv-swarm
   [x] Serena Onboarding: Complete
   [x] Claude-Flow Initialized
+  [x] Workflow Instructions: Installed
   [x] Core Memories: Created
   [x] Gitignore: Configured
 

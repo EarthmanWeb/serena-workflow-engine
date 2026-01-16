@@ -58,14 +58,55 @@ After setup, the workflow guides you automatically. Type any task to begin.
 
 ## Commands
 
-| Command             | Description            |
-| ------------------- | ---------------------- |
-| `/swe-init`         | First-time setup       |
-| `/swe-status`       | Show current state     |
-| `/swe-reset`        | Reset workflow         |
-| `/swe-goto [STATE]` | Force transition       |
-| `/swe-memory`       | Manage WORKING_MEMORY  |
-| `/swe-cleanup`      | Archive completed work |
+| Command              | Description                   |
+| -------------------- | ----------------------------- |
+| `/swe-init`          | First-time setup              |
+| `/swe-status`        | Show current state            |
+| `/swe-reset`         | Reset workflow                |
+| `/swe-goto [STATE]`  | Force transition              |
+| `/swe-memory`        | Manage WORKING_MEMORY         |
+| `/swe-scaffold`      | Scaffold new project          |
+| `/swe-onboard [KEY]` | Register existing feature     |
+| `/swe-onboard-quick` | Quick feature registration    |
+| `/swe-cleanup`       | Archive completed work        |
+
+---
+
+## Onboarding Features / Scaffolding New Apps
+
+### Scaffolding a New Project
+
+For empty or new projects:
+
+```
+/swe-scaffold
+```
+
+8-stage wizard: app type → platform config → goals → assets → recommendations → architecture → memories → analysis.
+
+Creates: `.serena/memories/`, core memories, architecture folders.
+
+### Onboarding an Existing Feature
+
+To register an existing codebase feature:
+
+```
+/swe-onboard [KEY]
+```
+
+5-stage wizard: identifier → name → folders → dependencies → analysis mode.
+
+Creates: `FEATURE_[KEY]`, updates `INDEX_FEATURES`, optionally `DOM_*` and `SYS_*` memories.
+
+### Quick Onboarding
+
+Fast registration without wizard:
+
+```
+/swe-onboard-quick [KEY] [NAME] [PATH]
+```
+
+Example: `/swe-onboard-quick AUTH "Authentication" src/auth/`
 
 ---
 
