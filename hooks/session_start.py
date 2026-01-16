@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""SessionStart hook - Initialize WF_START workflow and working memory."""
+"""SessionStart hook - Initialize WF_INIT workflow and working memory."""
 
 import os
 import sys
@@ -64,10 +64,10 @@ def main():
         state_mgr = StateManager(cwd)
         current_state = state_mgr.get_current_state()
         
-        # Transition to WF_START if uninitialized or completed
+        # Transition to WF_INIT if uninitialized or completed
         if current_state in ['UNINITIALIZED', 'WF_DONE', 'WF_CLEANUP', None]:
-            state_mgr.transition_to('WF_START')
-            current_state = 'WF_START'
+            state_mgr.transition_to('WF_INIT')
+            current_state = 'WF_INIT'
         
         # Update session info
         state = load_workflow_state(cwd) or create_initial_state()
@@ -78,17 +78,17 @@ def main():
         # Build context message
         wm_file = state.get('working_memory_file')
         
-        if current_state == 'WF_START':
-            # Read WF_START instructions
-            instructions = read_instruction_file(cwd, 'WF_START')
+        if current_state == 'WF_INIT':
+            # Read WF_INIT instructions
+            instructions = read_instruction_file(cwd, 'WF_INIT')
             context = f"""🚀 SERENA WORKFLOW ENGINE - Session {session_id}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Current State: WF_START
+Current State: WF_INIT
 Working Memory: {wm_file or 'Not created yet'}
 
-MANDATORY: Follow the WF_START workflow instructions below.
+MANDATORY: Follow the WF_INIT workflow instructions below.
 
-{instructions or 'Read: .claude/plugins/serena-workflow-engine/state-machine/instructions/WF_START.md'}
+{instructions or 'Read: .claude/plugins/serena-workflow-engine/state-machine/instructions/WF_INIT.md'}
 """
         else:
             # Resume existing workflow

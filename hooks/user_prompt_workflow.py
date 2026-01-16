@@ -63,10 +63,10 @@ def main():
         state_mgr = StateManager(cwd)
         current_state = state_mgr.get_current_state()
         
-        # Transition to WF_START if needed
+        # Transition to WF_INIT if needed
         if current_state in ['UNINITIALIZED', 'WF_DONE', 'WF_CLEANUP', None]:
-            state_mgr.transition_to('WF_START')
-            current_state = 'WF_START'
+            state_mgr.transition_to('WF_INIT')
+            current_state = 'WF_INIT'
         
         # Get working memory
         wm_file = state_mgr.get_working_memory()
