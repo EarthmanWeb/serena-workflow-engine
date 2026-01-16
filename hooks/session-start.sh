@@ -9,9 +9,29 @@ STATE_FILE="$CWD/.claude/workflow-state.json"
 SETUP_FILE="$CWD/.claude/setup-complete.json"
 LEARNING_CONFIG="$CWD/.claude/learning.json"
 
-# Skip if setup already complete check needed
+# Check if setup already complete
 if [ -f "$SETUP_FILE" ]; then
     SETUP_DONE=$(jq -r '.complete // false' "$SETUP_FILE" 2>/dev/null)
+    if [ "$SETUP_DONE" != "true" ]; then
+        echo "" >&2
+        echo "╔══════════════════════════════════════════════════════════════╗" >&2
+        echo "║  INITIAL SETUP REQUIRED                                      ║" >&2
+        echo "╚══════════════════════════════════════════════════════════════╝" >&2
+        echo "" >&2
+        echo "Run /workflow-init to complete first-time setup." >&2
+        echo "" >&2
+        exit 1
+    fi
+else
+    # No setup file = first time
+    echo "" >&2
+    echo "╔══════════════════════════════════════════════════════════════╗" >&2
+    echo "║  SERENA WORKFLOW ENGINE - First Time Setup                   ║" >&2
+    echo "╚══════════════════════════════════════════════════════════════╝" >&2
+    echo "" >&2
+    echo "Run /workflow-init to initialize the plugin." >&2
+    echo "" >&2
+    exit 1
 fi
 
 # Check for existing state file (resuming session)
