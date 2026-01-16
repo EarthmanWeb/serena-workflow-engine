@@ -46,10 +46,14 @@ Add hooks to `.claude/settings.local.json` (see SPEC_SWE_INSTALLATION).
 
 ## Commands
 
-- `/workflow-status` - Display current state
-- `/workflow-reset` - Reset workflow (requires confirmation)
-- `/workflow-goto [STATE]` - Force state transition
-- `/cleanup` - Archive completed work
+- `/swe-init` - First-time plugin setup
+- `/swe-status` - Display current state
+- `/swe-reset` - Reset workflow (requires confirmation)
+- `/swe-goto [STATE]` - Force state transition
+- `/swe-memory [action]` - Manage WORKING_MEMORY
+- `/swe-migrate` - Convert from CLAUDE.md-based workflow
+- `/swe-scaffold` - Initialize workflow for new projects
+- `/swe-cleanup` - Archive completed work
 
 ## Skills
 

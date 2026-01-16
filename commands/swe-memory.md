@@ -1,10 +1,10 @@
 ---
-name: working-memory
+name: swe-memory
 description: Manage session WORKING_MEMORY files
 argument-hint: "[show|create|update|list|archive]"
 ---
 
-# /working-memory [action]
+# /swe-memory [action]
 
 Manage WORKING_MEMORY session state files.
 
@@ -15,8 +15,8 @@ Manage WORKING_MEMORY session state files.
 Display current WORKING_MEMORY contents.
 
 ```
-/working-memory show
-/working-memory
+/swe-memory show
+/swe-memory
 ```
 
 Output: Full contents of current WORKING_MEMORY file.
@@ -26,8 +26,8 @@ Output: Full contents of current WORKING_MEMORY file.
 Create new WORKING_MEMORY with timestamp.
 
 ```
-/working-memory create auth_refactor
-/working-memory create bugfix_login
+/swe-memory create auth_refactor
+/swe-memory create bugfix_login
 ```
 
 Creates: `WORKING_MEMORY_YYYYMMDD_[descriptor].md`
@@ -60,7 +60,7 @@ Session: [session_id]
 Open current WORKING_MEMORY for editing.
 
 ```
-/working-memory update
+/swe-memory update
 ```
 
 Reads current file and prompts for updates to:
@@ -74,7 +74,7 @@ Reads current file and prompts for updates to:
 List all WORKING_MEMORY files.
 
 ```
-/working-memory list
+/swe-memory list
 ```
 
 Output:
@@ -99,7 +99,7 @@ Total: 4 files
 Archive current WORKING_MEMORY and start fresh.
 
 ```
-/working-memory archive
+/swe-memory archive
 ```
 
 Process:

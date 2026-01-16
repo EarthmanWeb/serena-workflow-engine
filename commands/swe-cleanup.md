@@ -1,5 +1,5 @@
 ---
-name: cleanup
+name: swe-cleanup
 description: Archive completed memories and specs
 argument-hint: [all|memories|specs]
 ---

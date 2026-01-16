@@ -1,5 +1,5 @@
 ---
-name: scaffold-project
+name: swe-scaffold
 description: Initialize workflow for new empty projects
 ---
 

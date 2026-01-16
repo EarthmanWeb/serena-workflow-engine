@@ -1,18 +1,18 @@
 ---
-name: workflow-goto
+name: swe-goto
 description: Force transition to specific state (debug/recovery)
 argument-hint: [STATE]
 ---
 
-# /workflow-goto [STATE]
+# /swe-goto [STATE]
 
 Force transition to a specific workflow state.
 
 ## Usage
 
 ```
-/workflow-goto WF_EXECUTE
-/workflow-goto WF_CHECKPOINT
+/swe-goto WF_EXECUTE
+/swe-goto WF_CHECKPOINT
 ```
 
 ## Warning

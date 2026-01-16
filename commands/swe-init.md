@@ -1,9 +1,9 @@
 ---
-name: workflow-init
+name: swe-init
 description: Initialize serena-workflow-engine plugin - first-time setup for new projects
 ---
 
-# /workflow-init
+# /swe-init
 
 First-time setup command for the serena-workflow-engine plugin. Run this when installing the plugin in a new project.
 
@@ -80,7 +80,7 @@ MCP servers configured. You must restart Claude Code.
 1. Close this session (Ctrl+C or exit)
 2. Reopen Claude Code
 3. Return to this project
-4. Run /workflow-init again
+4. Run /swe-init again
 
 Setup will continue from Step 3.
 ================================================================================
@@ -167,7 +167,7 @@ Type any message to begin. Workflow starts at WF_START.
 
 ## Resuming Interrupted Setup
 
-If setup was interrupted, `/workflow-init` detects state from:
+If setup was interrupted, `/swe-init` detects state from:
 - `.claude/setup-state.json` (tracks current step)
 - Resumes from last incomplete step
 

@@ -1,9 +1,9 @@
 ---
-name: workflow-status
+name: swe-status
 description: Display current workflow state and valid transitions
 ---
 
-# /workflow-status
+# /swe-status
 
 Display current workflow state information.
 

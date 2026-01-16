@@ -18,7 +18,7 @@ if [ -f "$SETUP_FILE" ]; then
         echo "║  INITIAL SETUP REQUIRED                                      ║" >&2
         echo "╚══════════════════════════════════════════════════════════════╝" >&2
         echo "" >&2
-        echo "Run /workflow-init to complete first-time setup." >&2
+        echo "Run /swe-init to complete first-time setup." >&2
         echo "" >&2
         exit 1
     fi
@@ -29,7 +29,7 @@ else
     echo "║  SERENA WORKFLOW ENGINE - First Time Setup                   ║" >&2
     echo "╚══════════════════════════════════════════════════════════════╝" >&2
     echo "" >&2
-    echo "Run /workflow-init to initialize the plugin." >&2
+    echo "Run /swe-init to initialize the plugin." >&2
     echo "" >&2
     exit 1
 fi

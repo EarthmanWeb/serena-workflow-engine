@@ -1,9 +1,9 @@
 ---
-name: workflow-reset
+name: swe-reset
 description: Reset workflow state (requires confirmation)
 ---
 
-# /workflow-reset
+# /swe-reset
 
 Reset workflow to WF_START state.
 

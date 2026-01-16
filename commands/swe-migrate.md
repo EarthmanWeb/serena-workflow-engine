@@ -1,9 +1,9 @@
 ---
-name: workflow-migrate
+name: swe-migrate
 description: Convert project from CLAUDE.md-based to plugin-based workflow
 ---
 
-# /workflow-migrate
+# /swe-migrate
 
 Convert project from CLAUDE.md-based workflow instructions to plugin-based workflow.
 
