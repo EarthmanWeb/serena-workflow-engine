@@ -15,7 +15,7 @@ if PLUGIN_ROOT:
 try:
     from swe_hooks.core.config import (
         load_setup_complete, load_workflow_state, save_workflow_state, 
-        create_initial_state, get_paths
+        create_initial_state
     )
     from swe_hooks.core.state_manager import StateManager
 except ImportError as e:
@@ -23,17 +23,7 @@ except ImportError as e:
     sys.exit(0)
 
 
-def read_instruction_file(cwd: str, state_name: str) -> str:
-    """Read the instruction file for a workflow state."""
-    paths = get_paths(cwd)
-    instruction_file = os.path.join(paths["instructions_dir"], f"{state_name}.md")
-    if os.path.exists(instruction_file):
-        try:
-            with open(instruction_file, 'r') as f:
-                return f.read()
-        except IOError:
-            return None
-    return None
+
 
 
 def main():
@@ -79,28 +69,22 @@ def main():
         wm_file = state.get('working_memory_file')
         
         if current_state == 'WF_INIT':
-            # Read WF_INIT instructions
-            instructions = read_instruction_file(cwd, 'WF_INIT')
             context = f"""🚀 SERENA WORKFLOW ENGINE - Session {session_id}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Current State: WF_INIT
 Working Memory: {wm_file or 'Not created yet'}
 
-MANDATORY: Follow the WF_INIT workflow instructions below.
-
-{instructions or 'Read: .claude/plugins/serena-workflow-engine/state-machine/instructions/WF_INIT.md'}
+MANDATORY: Read and follow the WF_INIT workflow instructions.
+Use: mcp__serena__read_memory("WF_INIT")
 """
         else:
-            # Resume existing workflow
-            instructions = read_instruction_file(cwd, current_state)
             context = f"""🔄 SERENA WORKFLOW ENGINE - Resuming Session {session_id}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Current State: {current_state}
 Working Memory: {wm_file or 'None'}
 
-MANDATORY: Continue with the {current_state} workflow instructions.
-
-{instructions or f'Read: .claude/plugins/serena-workflow-engine/state-machine/instructions/{current_state}.md'}
+MANDATORY: Read and follow the {current_state} workflow instructions.
+Use: mcp__serena__read_memory("{current_state}")
 """
 
         output = {

@@ -191,6 +191,37 @@ jq '.hooks | keys' .claude/settings.json
 # Should show: ["PostToolUse", "PreToolUse", "SessionStart", "Stop", "UserPromptSubmit"]
 ```
 
+### Step 5.6: Copy Workflow Instructions to Memories
+
+Copy the state-machine instructions and references to `.serena/memories/` so the agent can access them via SERENA's `read_memory` instead of hooks echoing content.
+
+**Copy instruction files:**
+```bash
+# Create memories directory if needed
+mkdir -p .serena/memories
+
+# Copy all instruction files (WF_* and CLAUDE_OBLIGATIONS)
+for file in .claude/plugins/serena-workflow-engine/state-machine/instructions/*.md; do
+  filename=$(basename "$file" .md)
+  cp "$file" ".serena/memories/${filename}.md"
+done
+
+# Copy all reference files (REF_*)
+for file in .claude/plugins/serena-workflow-engine/state-machine/references/*.md; do
+  filename=$(basename "$file" .md)
+  cp "$file" ".serena/memories/${filename}.md"
+done
+
+echo "Copied workflow instructions to .serena/memories/"
+```
+
+**Verify files copied:**
+```bash
+ls .serena/memories/WF_*.md | wc -l  # Should show ~21 workflow files
+ls .serena/memories/REF_*.md | wc -l  # Should show reference files
+ls .serena/memories/CLAUDE_OBLIGATIONS.md  # Should exist
+```
+
 ### Step 6: Create Core Memories
 
 If missing, create from templates:

@@ -1,6 +1,6 @@
 # CLAUDE_OBLIGATIONS - Behavioral Constraints
 
-## Response Format - ALWAYS OBEY THIS
+## READ COMPLETELY - ALWAYS OBEY EVERYTHING IN THIS FILE
 
 DO NOT BE CONVERSATIONAL when performing tasks. Concise, functional language ONLY:
 
