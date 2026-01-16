@@ -13,7 +13,7 @@ First-time setup command for the serena-workflow-engine plugin. Run this when in
 - After cloning a repo with the plugin
 - When `session-start.sh` reports "INITIAL SETUP REQUIRED"
 
-## Setup Steps (9 total)
+## Setup Steps (10 total)
 
 ### Step 1: Detect Environment
 
@@ -149,6 +149,79 @@ mv CLAUDE.md.backup CLAUDE.md
 echo "Merged claude-flow content into existing CLAUDE.md"
 ```
 
+### Step 5.5: Clean Up Claude-Flow Init Artifacts
+
+Claude-flow init adds files that are managed elsewhere by the serena-workflow-engine plugin. Remove them to avoid conflicts.
+
+**Remove root .mcp.json file:**
+```bash
+# Claude-flow init creates .mcp.json at project root
+# This is managed by the plugin at .claude/plugins/serena-workflow-engine/.mcp.json
+if [ -f ".mcp.json" ]; then
+  rm .mcp.json
+  echo "Removed root .mcp.json (managed by plugin)"
+fi
+```
+
+**Remove hooks from settings files:**
+
+Claude-flow init adds hooks to settings files, but these are managed by the serena-workflow-engine plugin.
+
+**Clean up local project settings:**
+```bash
+# Remove hooks from .claude/settings.json if present
+if [ -f ".claude/settings.json" ]; then
+  # Use jq to remove the hooks key if it exists
+  if command -v jq &> /dev/null; then
+    jq 'del(.hooks)' .claude/settings.json > .claude/settings.json.tmp && \
+      mv .claude/settings.json.tmp .claude/settings.json
+    echo "Removed hooks from .claude/settings.json"
+  else
+    echo "WARNING: jq not installed - manually remove 'hooks' key from .claude/settings.json"
+  fi
+fi
+```
+
+**Clean up user-level settings (optional):**
+```
+================================================================================
+HOOKS CLEANUP
+================================================================================
+Claude-flow may have added hooks to ~/.claude/settings.json
+
+These hooks are managed by serena-workflow-engine and should be removed
+from user settings to avoid conflicts.
+
+[A] Auto-remove hooks from ~/.claude/settings.json (recommended)
+[S] Skip - I'll manage hooks manually
+[V] View hooks before deciding
+================================================================================
+```
+
+**If Option A selected:**
+```bash
+# Remove hooks from ~/.claude/settings.json if present
+if [ -f "$HOME/.claude/settings.json" ]; then
+  if command -v jq &> /dev/null; then
+    jq 'del(.hooks)' "$HOME/.claude/settings.json" > "$HOME/.claude/settings.json.tmp" && \
+      mv "$HOME/.claude/settings.json.tmp" "$HOME/.claude/settings.json"
+    echo "Removed hooks from ~/.claude/settings.json"
+  else
+    echo "WARNING: jq not installed - manually remove 'hooks' key from ~/.claude/settings.json"
+  fi
+fi
+```
+
+**If Option V selected:**
+```bash
+# Show current hooks in both files
+echo "=== .claude/settings.json hooks ==="
+jq '.hooks // "No hooks found"' .claude/settings.json 2>/dev/null || echo "File not found or invalid JSON"
+
+echo "=== ~/.claude/settings.json hooks ==="
+jq '.hooks // "No hooks found"' "$HOME/.claude/settings.json" 2>/dev/null || echo "File not found or invalid JSON"
+```
+
 ### Step 6: Install Workflow Instructions
 
 Copy instruction files from plugin to Serena memories using dynamic discovery:
@@ -223,6 +296,7 @@ Serena Workflow Engine initialized successfully.
   [x] MCP Servers: serena, claude-flow, ruv-swarm
   [x] Serena Onboarding: Complete
   [x] Claude-Flow Initialized
+  [x] Claude-Flow Cleanup: .mcp.json and hooks removed (managed by plugin)
   [x] Workflow Instructions: Installed
   [x] Core Memories: Created
   [x] Gitignore: Configured
