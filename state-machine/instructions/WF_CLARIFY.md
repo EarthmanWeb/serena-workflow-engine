@@ -1,56 +1,41 @@
-# WF_CLARIFY
+# WF_CLARIFY - Ask User
 
-> **❓ On step WF_CLARIFY**
+> **On step WF_CLARIFY**
 
-OUTPUT THE ABOVE LINE IMMEDIATELY.
+OUTPUT THE ABOVE LINE IMMEDIATELY. Do not read further until you have reported your step to the user.
 
 ---
 
-## Purpose
+## When To Use
 
-Request clarification from user when information is ambiguous or missing.
+- Request is unclear
+- Requirement conflicts with documented behavior
+- User declined proposed changes
+- Need to choose between approaches
 
-## Entry
+## Ask User
 
-- **From**: Any state (*)
-- **Triggers**: ambiguity_detected, missing_information
-
-## Required Actions
-
-1. `formulate_question` - Create clear, specific question
-2. `present_options` - Offer choices when applicable
-3. `await_response` - Wait for user input
-
-## Permissions
-
-- **Edit**: false | **Write**: false
-- **Plan Mode**: never
-
-## Question Guidelines
-
-- Be specific about what's unclear
-- Provide context for the question
-- Offer options when possible
-- Don't ask multiple questions at once
-
-## Transitions
-
-| Condition | Next State |
-|-----------|------------|
-| clarified | (return_to_caller) |
-
-**Note**: Returns to the state that invoked WF_CLARIFY.
-
-## RLVR Signal
-
-- **Type**: clarify_visit | **Impact**: penalty (-0.1)
-
-Frequent clarification visits indicate unclear requirements or poor analysis.
+Format your question clearly:
+- "You said X, but DOM_[DOMAIN] says Z. Which is correct?"
+- "I'm not sure what you want. Do you mean A or B?"
+- "You declined. What should I do differently?"
 
 ## MANDATORY NEXT STEP
 
-Return to the calling state after clarification received.
+**YOU ARE NOT FINISHED.** After user responds:
+
+| Return To | MUST Read Next |
+|-----------|----------------|
+| From CLASSIFY | `WF_CLASSIFY` |
+| From REQUIREMENT | `WF_REQUIREMENT` |
+| From PLAN_ARCHITECTURE | `WF_PLAN_ARCHITECTURE` |
+
+1. Note where you came from
+2. After user responds, read that WF_* memory
+3. Report the new step to user
 
 **SKIPPING THIS TRANSITION = WORKFLOW VIOLATION**
+
+📋 **WORKING_MEMORY:** Update if task state changed (see `REF_WORKING_MEMORY`)
 
 [CRITICAL: Are you on a WF_* workflow step? Did you report on it?]

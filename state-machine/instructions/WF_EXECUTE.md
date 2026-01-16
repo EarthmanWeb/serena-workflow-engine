@@ -1,60 +1,136 @@
-# WF_EXECUTE
+# WF_EXECUTE - Do The Work
 
-> **⚡ On step WF_EXECUTE**
+> **On step WF_EXECUTE**
 
-OUTPUT THE ABOVE LINE IMMEDIATELY.
+OUTPUT THE ABOVE LINE IMMEDIATELY. Do not read further until you have reported your step to the user.
 
 ---
 
-## Purpose
+## ⚠️ MANDATORY: WORKING_MEMORY
 
-Execute implementation changes.
+**Before starting any work, verify WORKING_MEMORY exists and is current.**
 
-## Entry
+If WORKING_MEMORY is stale or doesn't reflect current task:
+```
+mcp__serena__write_memory("WORKING_MEMORY_<timestamp>_<descriptor>", "<content>")
+```
 
-- **From**: WF_ASK_PERMISSION, WF_SWARM_ORCHESTRATE, WF_DEBUG_TDD, WF_CHECKPOINT
-- **Triggers**: permission_granted, swarm_complete, debug_fixed
+Echo to chat: `Working Memory: WORKING_MEMORY_<filename>`
 
-## Required Actions
+**WORKING_MEMORY must be updated:**
+- Before starting significant work
+- After completing each subtask
+- When task state changes
+- Before transitioning to another WF_* step
 
-1. `implement_changes` - Make the approved code changes
-2. `follow_standards` - Adhere to REF_DEV_STANDARDS
-3. `track_edits` - Count edits for checkpoint threshold
+---
 
-## Permissions
+## BEFORE ANY WORK - Architecture Check
 
-- **Edit**: true | **Write**: true
-- **Plan Mode**: never
+**Is this multi-layer work?** (touches >1 architectural layer as defined in FEATURE_[KEY])
 
-## Execution Guidelines
+If YES, you MUST first:
+```
+mcp__serena__read_memory("ARCH_INDEX")
+```
+Then for EACH layer involved, read:
+```
+# Feature-specific (from FEATURE_[KEY]):
+mcp__serena__read_memory("SYS_[SYSTEM]")     # For system components
 
-- Follow KISS > DRY > YAGNI priority
-- Use Serena symbolic tools when possible
-- Track edit count (checkpoint at threshold)
-- Update WORKING_MEMORY after significant progress
+# Codebase-shared:
+mcp__serena__read_memory("REF_[PATTERN]")    # For patterns/standards
+mcp__serena__read_memory("REF_DEV_STANDARDS") # For coding standards
+```
 
-## Edit Tracking
+**DO NOT write code until you have read the relevant memories.**
 
-After ~5 significant edits, transition to WF_CHECKPOINT.
+---
 
-## Transitions
+## For Multi-Layer Work
 
-| Condition | Next State |
-|-----------|------------|
-| checkpoint_needed | WF_CHECKPOINT |
-| complete | WF_VERIFY |
+### Step 1: Read Architecture Documentation
+- Read ARCH_INDEX
+- Read relevant SYS_* memories for system understanding
+- Read relevant DOM_* memories for domain understanding
+- Understand the data flow pattern from ARCH_INDEX
 
-## RLVR Signal
+### Step 2: Implementation
+For each layer, follow patterns from relevant SYS_* and REF_* memories.
 
-- **Type**: execution_step | **Impact**: neutral
+### Step 3: Testing
+- Read REF_TESTING for testing patterns
+- Implement tests for functional code
+- Run tests and verify (commands from FEATURE_[KEY] or REF_DEV_STANDARDS)
+
+---
+
+## For Single-Layer Work
+
+Use Serena tools directly:
+1. `mcp__serena__find_symbol` - locate code
+2. `mcp__serena__get_symbols_overview` - file structure
+3. `Edit` / `mcp__serena__replace_symbol_body` - make changes
+
+---
+
+## For Swarm-Coordinated Work
+
+**If swarm was initialized at WF_SWARM_ORCHESTRATE:**
+
+### Execute with Parallel Agents
+
+```javascript
+// Launch work agents via Claude Code Task tool (ALL in ONE message)
+Task({ subagent_type: "Explore", run_in_background: true, prompt: "..." })
+Task({ subagent_type: "general-purpose", run_in_background: true, prompt: "..." })
+
+// Monitor swarm status (non-blocking)
+mcp__claude-flow__swarm_status({})
+
+// Store progress to memory
+mcp__claude-flow__memory_usage({ action: "store", namespace: "swarm", key: "progress", value: "..." })
+
+// Collect results (blocking)
+TaskOutput({ task_id: "...", block: true })
+```
+
+### Swarm Coordination During Execution
+
+- **Track agent IDs** in WORKING_MEMORY
+- **Update swarm memory** after each completed subtask
+- **Monitor for failures** and reassign if needed
+- **Synchronize findings** between agents via memory
+
+**⛔ NEVER run CLI init commands** - use MCP tools only. See `WF_SWARM_ORCHESTRATE`.
+
+**Read `REF_SWARM_PATTERNS` for detailed patterns.**
+
+---
+
+## Rules
+
+- Only make approved changes
+- Do not expand scope without asking
+- Tests are required for functional code
+- Integration tests are required for components that interact with external systems
 
 ## MANDATORY NEXT STEP
 
+**YOU ARE NOT FINISHED.** After each significant action:
+
 | Condition | MUST Read Next |
 |-----------|----------------|
-| Edit threshold reached | `WF_CHECKPOINT` |
-| Implementation complete | `WF_VERIFY` |
+| Created/modified file | `WF_CHECKPOINT` |
+| Completed a phase | `WF_CHECKPOINT` |
+| All work done (including tests) | `WF_VERIFY` |
+
+1. Determine which condition applies
+2. **UPDATE WORKING_MEMORY** with current progress
+3. Read that WF_* memory NOW
+4. Report the new step to user
 
 **SKIPPING THIS TRANSITION = WORKFLOW VIOLATION**
+**SKIPPING WORKING_MEMORY UPDATE = WORKFLOW VIOLATION**
 
-[CRITICAL: Are you on a WF_* workflow step? Did you report on it?]
+[CRITICAL: Did you update WORKING_MEMORY? Are you on a WF_* workflow step? Did you report on it?]

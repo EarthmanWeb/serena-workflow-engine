@@ -1,76 +1,44 @@
-# WF_DONE
+# WF_DONE - Task Complete
 
-> **✅ On step WF_DONE**
+> **On step WF_DONE**
 
-OUTPUT THE ABOVE LINE IMMEDIATELY.
+OUTPUT THE ABOVE LINE IMMEDIATELY. Do not read further until you have reported your step to the user.
 
 ---
 
-## Purpose
+## ⚠️ FINAL WORKING_MEMORY UPDATE - MANDATORY
 
-Task complete - execute RLVR learning pipeline.
-
-## Entry
-
-- **From**: WF_VERIFY
-- **Requires**: WF_VERIFY passed
-
-## Required Actions
-
-1. `execute_rlvr_pipeline` - Run learning sequence
-2. `mark_learning_complete` - Set learning flag
-3. `update_working_memory` - Final status update
-4. `final_summary` - Present completion summary to user
-
-## RLVR Pipeline (MANDATORY)
+**Before completing, you MUST update WORKING_MEMORY with final status.**
 
 ```
-trajectory_end → sona_learn → pattern_store → agent_adapt → knowledge_share
+mcp__serena__write_memory("WORKING_MEMORY_<timestamp>_<descriptor>", "<content>")
 ```
 
-**This pipeline BLOCKS completion until executed.**
+Include:
+- Final status: Completed
+- Summary of what was done
+- Any follow-up items for next conversation
+- Memories updated during session
 
-## Permissions
+**Echo to chat**: `Working Memory: WORKING_MEMORY_<filename>`
 
-- **Edit**: false | **Write**: false
-- **Plan Mode**: never
+---
 
-## Completion Summary Format
+## Checklist Before Finishing
 
-```markdown
-## Task Complete ✅
+- [ ] **WORKING_MEMORY updated with final status** (REQUIRED)
+- [ ] Feature memories updated if needed (DOM_*, SYS_*, INDEX_*)
+- [ ] No pending violations
+- [ ] User informed of any follow-up items
 
-### What Was Done
-- [Summary of changes]
+---
 
-### Files Modified
-- [List of files]
+## Summarize To User
 
-### Tests
-- [Test results]
+- What was done
+- Any memories updated
+- Any follow-up items (documented in WORKING_MEMORY)
 
-### Learning
-- RLVR pipeline: [complete/incomplete]
-```
+**DO NOT mark task complete without updating WORKING_MEMORY.**
 
-## Transitions
-
-| Condition | Next State |
-|-----------|------------|
-| learning_complete | WF_CLEANUP |
-| learning_incomplete | BLOCKED |
-
-## RLVR Signal
-
-- **Type**: learning_checkpoint | **Impact**: mandatory (blocks completion)
-
-## MANDATORY NEXT STEP
-
-| Condition | MUST Read Next |
-|-----------|----------------|
-| RLVR complete | `WF_CLEANUP` |
-| RLVR incomplete | **BLOCKED - Complete RLVR first** |
-
-**SKIPPING RLVR = WORKFLOW VIOLATION**
-
-[CRITICAL: Are you on a WF_* workflow step? Did you report on it?]
+[CRITICAL: Did you update WORKING_MEMORY? Are you on a WF_* workflow step? Did you report on it?]

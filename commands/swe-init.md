@@ -13,7 +13,7 @@ First-time setup command for the serena-workflow-engine plugin. Run this when in
 - After cloning a repo with the plugin
 - When `session-start.sh` reports "INITIAL SETUP REQUIRED"
 
-## Setup Steps (10 total)
+## Setup Steps (9 total)
 
 ### Step 1: Detect Environment
 
@@ -222,29 +222,7 @@ echo "=== ~/.claude/settings.json hooks ==="
 jq '.hooks // "No hooks found"' "$HOME/.claude/settings.json" 2>/dev/null || echo "File not found or invalid JSON"
 ```
 
-### Step 6: Install Workflow Instructions
-
-Copy instruction files from plugin to Serena memories using dynamic discovery:
-
-```
-PLUGIN_INSTRUCTIONS = ".claude/plugins/serena-workflow-engine/state-machine/instructions"
-
-# Discover all WF_*.md files (no hardcoded list)
-for each file in glob(PLUGIN_INSTRUCTIONS + "/WF_*.md"):
-    memory_name = basename(file).replace('.md', '')
-    content = read(file)
-    mcp__serena__write_memory(memory_name, content)
-    echo "  Installed: " + memory_name
-
-# Verify
-memories = mcp__serena__list_memories()
-wf_count = count(memories starting with "WF_")
-echo "Workflow instructions: " + wf_count + " installed"
-```
-
-**Expected**: All WF_* instruction files copied to Serena memories
-
-### Step 7: Create Core Memories
+### Step 6: Create Core Memories
 
 If missing, create from templates:
 
@@ -252,7 +230,7 @@ If missing, create from templates:
 **INDEX_FEATURES.md** (empty feature registry)
 **ARCH_INDEX.md** (architecture placeholder)
 
-### Step 8: Configure Gitignore
+### Step 7: Configure Gitignore
 
 Add plugin entries to .gitignore:
 ```
@@ -273,7 +251,7 @@ CLAUDE.local.md
 .serena/archive-specs/
 ```
 
-### Step 9: Mark Setup Complete
+### Step 8: Mark Setup Complete
 
 Create `.claude/setup-complete.json`:
 ```json
@@ -297,7 +275,6 @@ Serena Workflow Engine initialized successfully.
   [x] Serena Onboarding: Complete
   [x] Claude-Flow Initialized
   [x] Claude-Flow Cleanup: .mcp.json and hooks removed (managed by plugin)
-  [x] Workflow Instructions: Installed
   [x] Core Memories: Created
   [x] Gitignore: Configured
 
