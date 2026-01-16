@@ -16,7 +16,7 @@
 
 ---
 
-> **On step WF_START**
+> **🚀 On step WF_START**
 
 OUTPUT THE ABOVE LINE IMMEDIATELY. Do not read further until you have reported your step to the user.
 

@@ -149,77 +149,46 @@ mv CLAUDE.md.backup CLAUDE.md
 echo "Merged claude-flow content into existing CLAUDE.md"
 ```
 
-### Step 5.5: Clean Up Claude-Flow Init Artifacts
+### Step 5.5: Install SWE Hooks to Settings
 
-Claude-flow init adds files that are managed elsewhere by the serena-workflow-engine plugin. Remove them to avoid conflicts.
+VS Code extension reads hooks from `.claude/settings.json`, not from plugin's hooks.json. Copy SWE hooks to settings.json with relative paths.
 
-**Remove root .mcp.json file:**
+**Read hooks from plugin and convert paths:**
 ```bash
-# Claude-flow init creates .mcp.json at project root
-# This is managed by the plugin at .claude/plugins/serena-workflow-engine/.mcp.json
-if [ -f ".mcp.json" ]; then
-  rm .mcp.json
-  echo "Removed root .mcp.json (managed by plugin)"
-fi
+# Get hooks configuration from plugin and convert ${CLAUDE_PLUGIN_ROOT} to relative path
+cat .claude/plugins/serena-workflow-engine/hooks/hooks.json | \
+  sed 's|\${CLAUDE_PLUGIN_ROOT}|.claude/plugins/serena-workflow-engine|g' | \
+  jq '.hooks'
 ```
 
-**Remove hooks from settings files:**
-
-Claude-flow init adds hooks to settings files, but these are managed by the serena-workflow-engine plugin.
-
-**Clean up local project settings:**
+**Add hooks to .claude/settings.json:**
 ```bash
-# Remove hooks from .claude/settings.json if present
+# Merge hooks into settings.json
 if [ -f ".claude/settings.json" ]; then
-  # Use jq to remove the hooks key if it exists
-  if command -v jq &> /dev/null; then
-    jq 'del(.hooks)' .claude/settings.json > .claude/settings.json.tmp && \
-      mv .claude/settings.json.tmp .claude/settings.json
-    echo "Removed hooks from .claude/settings.json"
-  else
-    echo "WARNING: jq not installed - manually remove 'hooks' key from .claude/settings.json"
-  fi
+  # Read existing settings and plugin hooks (with converted paths)
+  EXISTING=$(cat .claude/settings.json)
+  HOOKS=$(cat .claude/plugins/serena-workflow-engine/hooks/hooks.json | \
+    sed 's|\${CLAUDE_PLUGIN_ROOT}|.claude/plugins/serena-workflow-engine|g' | \
+    jq '.hooks')
+  
+  # Merge hooks into settings
+  echo "$EXISTING" | jq --argjson hooks "$HOOKS" '. + {hooks: $hooks}' > .claude/settings.json.tmp
+  mv .claude/settings.json.tmp .claude/settings.json
+  echo "Installed SWE hooks to .claude/settings.json"
+else
+  # Create new settings.json with hooks
+  HOOKS=$(cat .claude/plugins/serena-workflow-engine/hooks/hooks.json | \
+    sed 's|\${CLAUDE_PLUGIN_ROOT}|.claude/plugins/serena-workflow-engine|g' | \
+    jq '.hooks')
+  echo "{\"hooks\": $HOOKS}" | jq '.' > .claude/settings.json
+  echo "Created .claude/settings.json with SWE hooks"
 fi
 ```
 
-**Clean up user-level settings (optional):**
-```
-================================================================================
-HOOKS CLEANUP
-================================================================================
-Claude-flow may have added hooks to ~/.claude/settings.json
-
-These hooks are managed by serena-workflow-engine and should be removed
-from user settings to avoid conflicts.
-
-[A] Auto-remove hooks from ~/.claude/settings.json (recommended)
-[S] Skip - I'll manage hooks manually
-[V] View hooks before deciding
-================================================================================
-```
-
-**If Option A selected:**
+**Verify hooks installed:**
 ```bash
-# Remove hooks from ~/.claude/settings.json if present
-if [ -f "$HOME/.claude/settings.json" ]; then
-  if command -v jq &> /dev/null; then
-    jq 'del(.hooks)' "$HOME/.claude/settings.json" > "$HOME/.claude/settings.json.tmp" && \
-      mv "$HOME/.claude/settings.json.tmp" "$HOME/.claude/settings.json"
-    echo "Removed hooks from ~/.claude/settings.json"
-  else
-    echo "WARNING: jq not installed - manually remove 'hooks' key from ~/.claude/settings.json"
-  fi
-fi
-```
-
-**If Option V selected:**
-```bash
-# Show current hooks in both files
-echo "=== .claude/settings.json hooks ==="
-jq '.hooks // "No hooks found"' .claude/settings.json 2>/dev/null || echo "File not found or invalid JSON"
-
-echo "=== ~/.claude/settings.json hooks ==="
-jq '.hooks // "No hooks found"' "$HOME/.claude/settings.json" 2>/dev/null || echo "File not found or invalid JSON"
+jq '.hooks | keys' .claude/settings.json
+# Should show: ["PostToolUse", "PreToolUse", "SessionStart", "Stop", "UserPromptSubmit"]
 ```
 
 ### Step 6: Create Core Memories
@@ -274,7 +243,7 @@ Serena Workflow Engine initialized successfully.
   [x] MCP Servers: serena, claude-flow, ruv-swarm
   [x] Serena Onboarding: Complete
   [x] Claude-Flow Initialized
-  [x] Claude-Flow Cleanup: .mcp.json and hooks removed (managed by plugin)
+  [x] SWE Hooks: Installed to .claude/settings.json
   [x] Core Memories: Created
   [x] Gitignore: Configured
 
