@@ -17,22 +17,27 @@ chmod +x .claude/plugins/serena-workflow-engine/hooks/*.sh
 
 ### 2. Enable the plugin
 
+Open Claude Code in your project directory. Run these slash commands **inside
+Claude Code** (not in terminal):
+
 **Option A: Via marketplace (if published)**
 
-```
-/plugin marketplace add .claude/plugins/serena-workflow-engine
-/plugin install serena-workflow-engine@serena-workflow-engine --scope project
+```bash
+claude /plugin marketplace add .claude/plugins/serena-workflow-engine
+claude /plugin install serena-workflow-engine@serena-workflow-engine --scope project
 ```
 
 **Option B: Local path (unpublished)**
 
+```bash
+claude /plugin install --path .claude/plugins/serena-workflow-engine --scope project
 ```
-/plugin install --path .claude/plugins/serena-workflow-engine --scope project
-```
+
+After running, **restart Claude Code** for the plugin to load.
 
 ### 3. Initialize the plugin
 
-Restart Claude Code, then paste this prompt:
+After restart, paste this prompt into Claude Code:
 
 ```
 Read the file .claude/plugins/serena-workflow-engine/commands/swe-init.md and execute the setup steps it describes. Install any missing MCP servers to ~/.claude.json and complete the 7-step initialization.
