@@ -6,6 +6,5 @@
     "name": "Claude Workflow Starter",
     "email": "local@localhost"
   },
-  "license": "MIT",
-  "hooksFile": "../hooks/hooks.json"
+  "license": "MIT"
 }

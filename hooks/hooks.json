@@ -1,23 +1,34 @@
 {
+  "description": "Serena Workflow Engine - 21-state workflow with RLVR learning",
   "hooks": {
     "SessionStart": [{
       "hooks": [{
         "type": "command",
-        "command": "${CLAUDE_PLUGIN_ROOT}/hooks/session-start.sh"
+        "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/session_start.py",
+        "timeout": 10
       }]
     }],
     "UserPromptSubmit": [{
-      "hooks": [{
-        "type": "command",
-        "command": "${CLAUDE_PLUGIN_ROOT}/hooks/user-prompt-swarm.sh"
-      }]
+      "hooks": [
+        {
+          "type": "command",
+          "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/user_prompt_workflow.py",
+          "timeout": 10
+        },
+        {
+          "type": "command",
+          "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/user_prompt_swarm.py",
+          "timeout": 10
+        }
+      ]
     }],
     "PreToolUse": [
       {
         "matcher": "Bash",
         "hooks": [{
           "type": "command",
-          "command": "${CLAUDE_PLUGIN_ROOT}/hooks/claude-flow-pre-bash.sh"
+          "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/claude_flow_pre_bash.py",
+          "timeout": 10
         }]
       },
       {
@@ -25,11 +36,13 @@
         "hooks": [
           {
             "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/pre-edit-validate.sh"
+            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/pre_edit_validate.py",
+            "timeout": 10
           },
           {
             "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/claude-flow-pre-edit.sh"
+            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/claude_flow_pre_edit.py",
+            "timeout": 10
           }
         ]
       }
@@ -39,7 +52,8 @@
         "matcher": "Bash",
         "hooks": [{
           "type": "command",
-          "command": "${CLAUDE_PLUGIN_ROOT}/hooks/claude-flow-post-bash.sh"
+          "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/claude_flow_post_bash.py",
+          "timeout": 10
         }]
       },
       {
@@ -47,11 +61,13 @@
         "hooks": [
           {
             "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/post-edit-checkpoint.sh"
+            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/post_edit_checkpoint.py",
+            "timeout": 10
           },
           {
             "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/claude-flow-post-edit.sh"
+            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/claude_flow_post_edit.py",
+            "timeout": 10
           }
         ]
       },
@@ -60,11 +76,13 @@
         "hooks": [
           {
             "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/post-read-state.sh"
+            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/post_read_state.py",
+            "timeout": 10
           },
           {
             "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/post-task-learn.sh"
+            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/post_task_learn.py",
+            "timeout": 10
           }
         ]
       }
@@ -72,7 +90,8 @@
     "Stop": [{
       "hooks": [{
         "type": "command",
-        "command": "${CLAUDE_PLUGIN_ROOT}/hooks/stop-workflow-check.sh"
+        "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/stop_workflow_check.py",
+        "timeout": 10
       }]
     }]
   }

@@ -15,3 +15,5 @@ setup-complete.json
 # Local settings
 *.local.json
 *.local.md
+**/__pycache__/**
+__init__.*
