@@ -1,6 +1,7 @@
 # Serena Workflow Engine
 
-21-state workflow engine for Claude Code with RLVR learning, swarm coordination, and Serena memory persistence.
+21-state workflow engine for Claude Code with RLVR learning, swarm coordination,
+and Serena memory persistence.
 
 ---
 
@@ -17,36 +18,16 @@ chmod +x .claude/plugins/serena-workflow-engine/hooks/*.sh
 ### 2. Enable the plugin
 
 **Option A: Via marketplace (if published)**
+
 ```
 /plugin marketplace add .claude/plugins/serena-workflow-engine
 /plugin install serena-workflow-engine@serena-workflow-engine --scope project
 ```
 
-**Option B: Manual settings.json (local/unpublished)**
+**Option B: Local path (unpublished)**
 
-Add to `.claude/settings.json`:
-
-```json
-{
-  "hooks": {
-    "SessionStart": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": ".claude/plugins/serena-workflow-engine/hooks/session-start.sh"
-          }
-        ]
-      }
-    ]
-  }
-}
 ```
-
-**Option C: CLI flag (testing)**
-```bash
-claude --plugin-dir .claude/plugins/serena-workflow-engine
+/plugin install --path .claude/plugins/serena-workflow-engine --scope project
 ```
 
 ### 3. Initialize the plugin
@@ -58,6 +39,7 @@ Read the file .claude/plugins/serena-workflow-engine/commands/swe-init.md and ex
 ```
 
 This will:
+
 - Detect and install required MCPs (serena, claude-flow, ruv-swarm)
 - Run Serena onboarding
 - Create core memories
@@ -71,14 +53,14 @@ After setup, the workflow guides you automatically. Type any task to begin.
 
 ## Commands
 
-| Command | Description |
-|---------|-------------|
-| `/swe-init` | First-time setup |
-| `/swe-status` | Show current state |
-| `/swe-reset` | Reset workflow |
-| `/swe-goto [STATE]` | Force transition |
-| `/swe-memory` | Manage WORKING_MEMORY |
-| `/swe-cleanup` | Archive completed work |
+| Command             | Description            |
+| ------------------- | ---------------------- |
+| `/swe-init`         | First-time setup       |
+| `/swe-status`       | Show current state     |
+| `/swe-reset`        | Reset workflow         |
+| `/swe-goto [STATE]` | Force transition       |
+| `/swe-memory`       | Manage WORKING_MEMORY  |
+| `/swe-cleanup`      | Archive completed work |
 
 ---
 
@@ -102,6 +84,7 @@ START → CLASSIFY → PLAN → EXECUTE → VERIFY → DONE → CLEANUP
 ```
 
 Key features:
+
 - Auto plan mode for medium+ complexity
 - Checkpoint every 3 edits
 - RLVR learning at task completion
