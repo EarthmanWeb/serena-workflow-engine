@@ -17,20 +17,36 @@ chmod +x .claude/plugins/serena-workflow-engine/hooks/*.sh
 
 ### 2. Install the plugin
 
-**CLI or VSCode** - Run these commands in your terminal:
+Add to `.claude/settings.local.json` (create if it doesn't exist):
 
-```bash
-# Add the plugin directory as a marketplace (use ABSOLUTE path)
-claude plugin marketplace add /full/path/to/your/project/.claude/plugins/serena-workflow-engine
-
-# Install the plugin (local scope = project-specific, gitignored)
-claude plugin install serena-workflow-engine@serena-workflow-engine --scope local
-
-# Enable the plugin
-claude plugin enable serena-workflow-engine@serena-workflow-engine --scope local
+```json
+{
+  "extraKnownMarketplaces": {
+    "serena-workflow-engine": {
+      "source": {
+        "source": "directory",
+        "path": "./plugins/serena-workflow-engine"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "serena-workflow-engine@serena-workflow-engine": true
+  }
+}
 ```
 
-**Note:** Relative paths are interpreted as GitHub repos. Always use absolute paths for local directories.
+**Note:** Path is relative to the settings file location.
+
+**Alternative: CLI installation**
+
+```bash
+# Add marketplace (use ABSOLUTE path)
+claude plugin marketplace add /full/path/to/project/.claude/plugins/serena-workflow-engine
+
+# Install and enable
+claude plugin install serena-workflow-engine@serena-workflow-engine --scope local
+claude plugin enable serena-workflow-engine@serena-workflow-engine --scope local
+```
 
 ### 3. Verify installation
 
