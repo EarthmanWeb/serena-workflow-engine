@@ -191,29 +191,31 @@ jq '.hooks | keys' .claude/settings.json
 # Should show: ["PostToolUse", "PreToolUse", "SessionStart", "Stop", "UserPromptSubmit"]
 ```
 
-### Step 5.6: Copy Workflow Instructions to Memories
+### Step 5.6: Copy Workflow Instructions to Memories (Parallel)
 
 Copy the state-machine instructions and references to `.serena/memories/` so the agent can access them via SERENA's `read_memory` instead of hooks echoing content.
 
-**Copy instruction files:**
+**Serena auto-indexes any `.md` file in the memories directory - no MCP tool required.**
+
+**Copy ALL files in parallel (single command, fastest):**
 ```bash
-# Create memories directory if needed
-mkdir -p .serena/memories
+# Create memories directory and backup existing if needed
+mkdir -p .serena/memories .serena/archive-memories
 
-# Copy all instruction files (WF_* and CLAUDE_OBLIGATIONS)
-for file in .claude/plugins/serena-workflow-engine/state-machine/instructions/*.md; do
-  filename=$(basename "$file" .md)
-  cp "$file" ".serena/memories/${filename}.md"
-done
+# Backup any existing WF_*/REF_*/CLAUDE_OBLIGATIONS files (parallel)
+cd .serena/memories && \
+  ls WF_*.md REF_*.md CLAUDE_OBLIGATIONS.md 2>/dev/null | \
+  xargs -I{} -P0 cp {} ../archive-memories/{}.bak 2>/dev/null; \
+  cd - >/dev/null
 
-# Copy all reference files (REF_*)
-for file in .claude/plugins/serena-workflow-engine/state-machine/references/*.md; do
-  filename=$(basename "$file" .md)
-  cp "$file" ".serena/memories/${filename}.md"
-done
+# Copy ALL instruction AND reference files in ONE parallel operation
+find .claude/plugins/serena-workflow-engine/state-machine -name "*.md" -print0 | \
+  xargs -0 -P0 -I{} cp {} .serena/memories/
 
-echo "Copied workflow instructions to .serena/memories/"
+echo "Copied workflow instructions to .serena/memories/ (parallel)"
 ```
+
+**Note:** `xargs -P0` uses maximum available parallelism (all CPU cores).
 
 **Verify files copied:**
 ```bash
