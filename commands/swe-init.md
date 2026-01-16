@@ -37,18 +37,16 @@ Verify required MCPs are available:
 | ruv-swarm | [connected/missing] | MANDATORY |
 
 **If any missing:**
-```
-================================================================================
-SETUP: Missing MCP Servers
-================================================================================
-The following MCP servers are required but not configured:
-  - [list missing]
 
-[A] Auto-configure in ~/.claude.json (recommended)
-[M] Show manual configuration
-[X] Cancel setup
-================================================================================
-```
+**⚠️ SETUP: Missing MCP Servers**
+
+The following MCP servers are required but not configured:
+- [list missing]
+
+Options:
+- **[A]** Auto-configure in ~/.claude.json (recommended)
+- **[M]** Show manual configuration
+- **[X]** Cancel setup
 
 **Auto-configure adds to ~/.claude.json:**
 ```json
@@ -71,10 +69,9 @@ The following MCP servers are required but not configured:
 ```
 
 **After configuring, prompt restart:**
-```
-================================================================================
-RESTART REQUIRED
-================================================================================
+
+**🔄 RESTART REQUIRED**
+
 MCP servers configured. You must restart Claude Code.
 
 1. Close this session (Ctrl+C or exit)
@@ -83,8 +80,6 @@ MCP servers configured. You must restart Claude Code.
 4. Run /swe-init again
 
 Setup will continue from Step 3.
-================================================================================
-```
 
 ### Step 3: Verify MCP Connections
 
@@ -122,18 +117,16 @@ npx claude-flow@alpha init
 ```
 
 **After init - handle CLAUDE.md:**
-```
-================================================================================
-CLAUDE.md HANDLING
-================================================================================
+
+**📄 CLAUDE.md HANDLING**
+
 Claude-flow created/modified CLAUDE.md.
 
-[A] Keep claude-flow version (recommended for new projects)
-[B] Restore original CLAUDE.md, save claude-flow version as CLAUDE_FLOW.md
-[C] Merge: Keep original, append claude-flow content
-[D] Discard claude-flow version, restore original
-================================================================================
-```
+Options:
+- **[A]** Keep claude-flow version (recommended for new projects)
+- **[B]** Restore original CLAUDE.md, save claude-flow version as CLAUDE_FLOW.md
+- **[C]** Merge: Keep original, append claude-flow content
+- **[D]** Discard claude-flow version, restore original
 
 **Option B (typical for existing projects):**
 ```bash
@@ -267,26 +260,25 @@ Create `.claude/setup-complete.json`:
 
 ## Final Output
 
-```
-================================================================================
-SETUP COMPLETE
-================================================================================
+Output this message directly (not in a code block):
+
+**✅ SETUP COMPLETE**
+
 Serena Workflow Engine initialized successfully.
 
-  [x] MCP Servers: serena, claude-flow, ruv-swarm
-  [x] Serena Onboarding: Complete
-  [x] Claude-Flow Initialized
-  [x] SWE Hooks: Installed to .claude/settings.json
-  [x] Core Memories: Created
-  [x] Gitignore: Configured
+- MCP Servers: serena, claude-flow, ruv-swarm
+- Serena Onboarding: Complete
+- Claude-Flow Initialized
+- SWE Hooks: Installed to .claude/settings.json
+- Workflow Instructions: Copied to .serena/memories/
+- Core Memories: Created
+- Gitignore: Configured
 
-Next steps:
-  1. Run /swe-onboard-feature [KEY] to register your first feature
-  2. Or start working - workflow will guide you
+**Next steps:**
+1. Run `/swe-onboard-feature [KEY]` to register your first feature
+2. Or start working - workflow will guide you
 
 Type any message to begin. Workflow starts at WF_START.
-================================================================================
-```
 
 ## Resuming Interrupted Setup
 

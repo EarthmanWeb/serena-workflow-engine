@@ -78,21 +78,18 @@ List all WORKING_MEMORY files.
 ```
 
 Output:
-```
-================================================================================
-WORKING MEMORY FILES
-================================================================================
-Current: WORKING_MEMORY_20260115_auth_refactor.md
 
-All Files:
-  * WORKING_MEMORY_20260115_auth_refactor.md (active)
-    WORKING_MEMORY_20260114_bugfix.md
-    WORKING_MEMORY_20260113_feature_x.md
-    WORKING_MEMORY_20260110_initial_archived.md
+**📁 WORKING MEMORY FILES**
 
-Total: 4 files
-================================================================================
-```
+**Current:** WORKING_MEMORY_20260115_auth_refactor.md
+
+**All Files:**
+- ★ WORKING_MEMORY_20260115_auth_refactor.md (active)
+- WORKING_MEMORY_20260114_bugfix.md
+- WORKING_MEMORY_20260113_feature_x.md
+- WORKING_MEMORY_20260110_initial_archived.md
+
+**Total:** 4 files
 
 ### archive
 
