@@ -9,33 +9,25 @@ Display current workflow state information.
 
 ## Output
 
-```
-================================================================================
-WORKFLOW STATUS
-================================================================================
-Session ID:     [session_id]
-Current State:  [WF_STATE]
-Previous State: [WF_STATE]
-Plan Mode:      [true/false]
+**📊 WORKFLOW STATUS**
 
-Working Memory: [WORKING_MEMORY_file]
-Feature(s):     [active features]
+| Field | Value |
+|-------|-------|
+| Session ID | [session_id] |
+| Current State | [WF_STATE] |
+| Previous State | [WF_STATE] |
+| Plan Mode | [true/false] |
+| Working Memory | [WORKING_MEMORY_file] |
+| Feature(s) | [active features] |
+| Edits Since Checkpoint | [count]/3 |
 
-Edits Since Checkpoint: [count]/3
+**Valid Transitions:**
+- → [state1]
+- → [state2]
 
-Valid Transitions:
-  → [state1]
-  → [state2]
+**State History (last 5):** [state1] → [state2] → ...
 
-State History (last 5):
-  1. [state]
-  2. [state]
-  ...
-
-RLVR Trajectory: [trajectory_id]
-Steps: [count]
-================================================================================
-```
+**RLVR:** Trajectory [trajectory_id], Steps [count]
 
 ## Implementation
 

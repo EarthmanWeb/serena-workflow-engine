@@ -116,28 +116,25 @@ Create from templates:
 
 ### Stage 4: First Feature Prompt
 
-```
-================================================================================
-PROJECT SCAFFOLDED
-================================================================================
-Created:
-  ✅ .serena/memories/
-  ✅ _INDEX
-  ✅ INDEX_FEATURES
-  ✅ ARCH_INDEX
+**PROJECT SCAFFOLDED**
+
+**Created:**
+- .serena/memories/
+- _INDEX
+- INDEX_FEATURES
+- ARCH_INDEX
 
 Your project needs at least one feature to enable code changes.
 
-What is the main codebase?
+**What is the main codebase?**
 - Name: [e.g., "Backend API"]
 - Key: [e.g., "BACKEND"]
 - Path: [e.g., "src/"]
 
-[A] Set up now with /swe-onboard-feature (recommended)
-[B] Quick setup with /swe-onboard-quick
-[C] Skip - add features later (research-only mode)
-================================================================================
-```
+**Options:**
+- **[A]** Set up now with /swe-onboard-feature (recommended)
+- **[B]** Quick setup with /swe-onboard-quick
+- **[C]** Skip - add features later (research-only mode)
 
 ### Stage 5: Optional Swarm Analysis
 

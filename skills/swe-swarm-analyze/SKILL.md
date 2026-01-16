@@ -151,33 +151,31 @@ mcp__ruv-swarm__daa_knowledge_share({
 
 ## Output Format
 
-```
-================================================================================
-SWARM ANALYSIS COMPLETE
-================================================================================
-Agents Used: 10
-Analysis Time: [duration]
+**SWARM ANALYSIS COMPLETE**
 
-Detected:
-  • Language: [primary]
-  • Framework: [name]
-  • Layers: [count]
-  • Domains: [count]
-  • Systems: [count]
+| Metric | Value |
+|--------|-------|
+| Agents Used | 10 |
+| Analysis Time | [duration] |
 
-Memories Created:
-  ✅ FEATURE_[KEY]
-  ✅ DOM_[KEY]_[domain1]
-  ✅ DOM_[KEY]_[domain2]
-  ✅ SYS_[KEY]_[system1]
-  ✅ INDEX_FEATURES (updated)
-  ✅ ARCH_INDEX (updated)
+**Detected:**
+- Language: [primary]
+- Framework: [name]
+- Layers: [count]
+- Domains: [count]
+- Systems: [count]
 
-DAA Learning:
-  • Patterns stored: [count]
-  • Confidence: [score]
-================================================================================
-```
+**Memories Created:**
+- FEATURE_[KEY]
+- DOM_[KEY]_[domain1]
+- DOM_[KEY]_[domain2]
+- SYS_[KEY]_[system1]
+- INDEX_FEATURES (updated)
+- ARCH_INDEX (updated)
+
+**DAA Learning:**
+- Patterns stored: [count]
+- Confidence: [score]
 
 ## Skill Return Format
 

@@ -67,25 +67,21 @@ Run a simple test to verify workflow functions:
 
 ## Output
 
-```
-================================================================================
-WORKFLOW MIGRATION
-================================================================================
-Backup:
-  [x] Legacy WF_* → .serena/archive-memories/ ([count] files)
-  [x] CLAUDE.md → CLAUDE.md.bak
+**✅ WORKFLOW MIGRATION**
 
-Migration:
-  [x] Legacy WF_* files archived (now provided via plugin hooks)
-  [x] CLAUDE.md cleaned
+**Backup:**
+- Legacy WF_* → .serena/archive-memories/ ([count] files)
+- CLAUDE.md → CLAUDE.md.bak
 
-Verification:
-  [x] Plugin hooks configured
-  [x] Workflow functions correctly
+**Migration:**
+- Legacy WF_* files archived (now provided via plugin hooks)
+- CLAUDE.md cleaned
 
-Migration Status: SUCCESS
-================================================================================
-```
+**Verification:**
+- Plugin hooks configured
+- Workflow functions correctly
+
+**Status:** SUCCESS
 
 ## Rollback
 

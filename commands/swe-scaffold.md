@@ -89,28 +89,25 @@ Create from templates:
 
 ### Stage 4: First Feature Prompt
 
-```
-================================================================================
-PROJECT SCAFFOLDED
-================================================================================
+**✅ PROJECT SCAFFOLDED**
+
 Created:
-  [x] .serena/memories/
-  [x] _INDEX
-  [x] INDEX_FEATURES
-  [x] ARCH_INDEX
+- .serena/memories/
+- _INDEX
+- INDEX_FEATURES
+- ARCH_INDEX
 
 Your project needs at least one feature to enable code changes.
 
 What is the main codebase?
-- Name: [e.g., "Backend API"]
-- Key: [e.g., "BACKEND"]
-- Path: [e.g., "src/"]
+- **Name:** [e.g., "Backend API"]
+- **Key:** [e.g., "BACKEND"]
+- **Path:** [e.g., "src/"]
 
-[A] Set up now with /swe-onboard-feature (recommended)
-[B] Quick setup with /swe-onboard-quick
-[C] Skip - add features later (research-only mode)
-================================================================================
-```
+Options:
+- **[A]** Set up now with /swe-onboard-feature (recommended)
+- **[B]** Quick setup with /swe-onboard-quick
+- **[C]** Skip - add features later (research-only mode)
 
 ### Stage 5: Optional Swarm Analysis
 
@@ -132,24 +129,22 @@ If user skips feature setup, workflow enters minimal mode:
 
 ## Output
 
-```
-================================================================================
-SCAFFOLD COMPLETE
-================================================================================
-Project Root:   [path]
-Language:       [detected]
-Framework:      [detected or none]
-Package Mgr:    [detected]
+**✅ SCAFFOLD COMPLETE**
 
-Memories Created:
-  [x] _INDEX
-  [x] INDEX_FEATURES
-  [x] ARCH_INDEX
+| Field | Value |
+|-------|-------|
+| Project Root | [path] |
+| Language | [detected] |
+| Framework | [detected or none] |
+| Package Mgr | [detected] |
 
-Next Steps:
-  1. Run /swe-onboard-feature [KEY] to add your first feature
-  2. Or /swe-onboard-quick [KEY] for fast setup
+**Memories Created:**
+- _INDEX
+- INDEX_FEATURES
+- ARCH_INDEX
 
-Workflow Mode: [full|minimal]
-================================================================================
-```
+**Next Steps:**
+1. Run `/swe-onboard-feature [KEY]` to add your first feature
+2. Or `/swe-onboard-quick [KEY]` for fast setup
+
+**Workflow Mode:** [full|minimal]
