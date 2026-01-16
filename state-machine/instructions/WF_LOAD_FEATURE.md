@@ -1,58 +1,54 @@
-# WF_LOAD_FEATURE
+# WF_LOAD_FEATURE - Load Feature Context
 
-> **📦 On step WF_LOAD_FEATURE**
+> **📂 On step WF_LOAD_FEATURE**
 
-OUTPUT THE ABOVE LINE IMMEDIATELY.
+⬆️ OUTPUT THE ABOVE LINE IMMEDIATELY. Do not read further until you have reported your step to the user.
 
 ---
 
-## Purpose
+## Execute These Steps
 
-Load feature context from memories before implementation.
+1. **Read relevant domain index:**
+   ```
+   mcp__serena__read_memory("_INDEX")  # For routing to correct memory
+   ```
 
-## Entry
+2. **Read the specific domain/system memory:**
+   ```
+   # For site-specific work:
+   mcp__serena__read_memory("DOM_DISTRICT")   # or DOM_SCHOOLS, DOM_REDACTED, DOM_NETWORK
 
-- **From**: WF_DETECT_REQ, WF_REQUIREMENT, WF_UPDATE_MEMORY
-- **Triggers**: requirements_confirmed
+   # For system-level work:
+   mcp__serena__read_memory("SYS_BLOCKS")     # or SYS_CONTEXT_PROVIDERS
+   ```
 
-## Required Actions
+3. **If touching templates, also read:**
+   ```
+   mcp__serena__read_memory("INDEX_TEMPLATES")
+   mcp__serena__read_memory("REF_BLADEONE")
+   ```
 
-1. `read_feature_memory` - Load FEATURE_[KEY] from WORKING_MEMORY
-2. `read_domain_memories` - Load relevant DOM_* memories
-3. `read_system_memories` - Load relevant SYS_* memories
-4. `build_context` - Assemble implementation context
+4. **Note key symbols and file paths** for Serena lookups.
 
-## Permissions
+## ⛔ MANDATORY NEXT STEP
 
-- **Edit**: false | **Write**: false
-- **Plan Mode**: never
-
-## Memory Loading Pattern
-
-```
-1. Get feature key from WORKING_MEMORY
-2. Read FEATURE_[KEY] for architecture info
-3. Read DOM_* for domain patterns
-4. Read SYS_* for system conventions
-5. Read REF_* for codebase-wide standards
-```
-
-## Transitions
-
-| Condition | Next State |
-|-----------|------------|
-| loaded | WF_ARCH_REVIEW |
-
-## RLVR Signal
-
-- **Type**: feature_load | **Impact**: neutral
-
-## MANDATORY NEXT STEP
+**YOU ARE NOT FINISHED.** Before responding to user:
 
 | Condition | MUST Read Next |
 |-----------|----------------|
-| Feature loaded | `WF_ARCH_REVIEW` |
+| Feature loaded | **Invoke `/arch-review` skill** |
+
+### Skill Invocation for Architecture Review
+
+1. Set workflow context in WORKING_MEMORY:
+   - calling_step: WF_LOAD_FEATURE
+   - return_step: WF_EXECUTE
+2. Invoke `/arch-review` skill
+3. The skill will verify approach against architecture patterns
+4. Follow the skill's return status to proceed
 
 **SKIPPING THIS TRANSITION = WORKFLOW VIOLATION**
+
+📋 **WORKING_MEMORY:** Update if task state changed (see `REF_WORKING_MEMORY`)
 
 [CRITICAL: Are you on a WF_* workflow step? Did you report on it?]

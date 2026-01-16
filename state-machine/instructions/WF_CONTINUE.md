@@ -1,62 +1,40 @@
-# WF_CONTINUE
+# WF_CONTINUE - Resume Previous Work
 
-> **▶️ On step WF_CONTINUE**
+> **On step WF_CONTINUE**
 
-OUTPUT THE ABOVE LINE IMMEDIATELY.
+OUTPUT THE ABOVE LINE IMMEDIATELY. Do not read further until you have reported your step to the user.
 
 ---
 
-## Purpose
+## Execute These Steps
 
-Resume from existing WORKING_MEMORY.
+1. **VERIFY WORKING_MEMORY exists** (should have been created at WF_START)
+   - If missing: **STOP** - go back and create it per `REF_WORKING_MEMORY`
+   - Echo to chat: `Working Memory: WORKING_MEMORY_<timestamp>_<descriptor>`
 
-## Entry
+2. **Check current task state:**
+   - What was in progress?
+   - Any blockers noted?
+   - What's the next step?
 
-- **From**: WF_START
-- **Triggers**: working_memory_exists
-
-## Required Actions
-
-1. `read_working_memory` - Load existing WORKING_MEMORY file
-2. `restore_context` - Understand previous progress and state
-3. `determine_next_step` - Identify where to resume
-
-## Permissions
-
-- **Edit**: false | **Write**: false
-- **Plan Mode**: never
-
-## Resume Point Detection
-
-Check WORKING_MEMORY for:
-- Last completed step
-- Current task status
-- Any blockers noted
-- Layers involved (for multi-layer detection)
-
-**Multi-layer detection**: If multiple architectural layers in WORKING_MEMORY → route to WF_ARCH_REVIEW
-
-## Transitions
-
-| Condition | Next State |
-|-----------|------------|
-| arch_review | WF_ARCH_REVIEW |
-| execute | WF_EXECUTE |
-| needs_clarification | WF_CLARIFY |
-| reclassify | WF_CLASSIFY |
-
-## RLVR Signal
-
-- **Type**: resume | **Impact**: neutral
+3. **Determine resume point** (see table below)
 
 ## MANDATORY NEXT STEP
 
+**YOU ARE NOT FINISHED.** Before responding to user:
+
 | Condition | MUST Read Next |
 |-----------|----------------|
-| Was executing (multi-layer) | `WF_ARCH_REVIEW` |
+| Was executing (multi-layer: >1 architectural layer) | `WF_ARCH_REVIEW` |
 | Was executing (single-layer) | `WF_EXECUTE` |
 | Was blocked/unclear | `WF_CLARIFY` |
 | No previous state | `WF_CLASSIFY` |
+
+**Multi-layer detection:** Check WORKING_MEMORY "Layers:" field or infer from files being modified. Layers are defined in FEATURE_[KEY] and ARCH_INDEX.
+
+1. Determine which condition applies
+2. Read that WF_* memory NOW
+3. Report the new step to user
 
 **SKIPPING THIS TRANSITION = WORKFLOW VIOLATION**
 

@@ -1,59 +1,93 @@
-# WF_VERIFY
+# WF_VERIFY - Check Work
 
-> **✔️ On step WF_VERIFY**
+> **On step WF_VERIFY**
 
-OUTPUT THE ABOVE LINE IMMEDIATELY.
+OUTPUT THE ABOVE LINE IMMEDIATELY. Do not read further until you have reported your step to the user.
 
 ---
 
-## Purpose
+## Execute These Steps
 
-Verify implementation against requirements.
+### 1. Re-read CLAUDE_OBLIGATIONS
+```
+mcp__serena__read_memory("CLAUDE_OBLIGATIONS")
+```
+Check behavioral violations:
+- [ ] Used inappropriate type assertions (e.g., `as any`)?
+- [ ] Created files without permission?
+- [ ] Guessed paths without Serena?
 
-## Entry
+### 2. Architecture Check
+```
+mcp__serena__read_memory("ARCH_INDEX")
+mcp__serena__read_memory("REF_DEV_STANDARDS")
+```
+Verify patterns (based on feature's ARCH_INDEX):
+- [ ] Components follow documented layer patterns?
+- [ ] Functions follow coding standards (see `REF_DEV_STANDARDS`)?
+- [ ] Data flow follows architecture documentation?
 
-- **From**: WF_EXECUTE, WF_CHECKPOINT
-- **Triggers**: implementation_complete
+### 3. Test Coverage Check
 
-## Required Actions
+**For multi-layer work or user-facing changes:**
+- [ ] Functional tests cover the feature? (see `REF_TESTING`)
+- [ ] Visual regression tests if UI changed?
+- [ ] Tests run and pass?
 
-1. `run_tests` - Execute test suite
-2. `verify_requirements` - Check all requirements met
-3. `check_standards` - Confirm REF_DEV_STANDARDS compliance
+Run tests using commands from FEATURE_[KEY] or REF_DEV_STANDARDS:
+```bash
+# Example - customize per project
+[test-command] -- --grep "feature-name"
+```
 
-## Permissions
+**If tests are missing for user-facing features, this is a violation.**
 
-- **Edit**: false | **Write**: false
-- **Plan Mode**: never
+**Missing tests = GO BACK to WF_EXECUTE and add them before proceeding.**
 
-## Verification Checklist
+### 4. Fix Violations
 
-- [ ] All tests pass
-- [ ] Requirements from WORKING_MEMORY satisfied
-- [ ] No regressions introduced
-- [ ] Code follows standards
-- [ ] No security vulnerabilities
+If any violations found, fix them before proceeding.
 
-## Transitions
+### 5. ⚠️ MANDATORY: Update Memories
 
-| Condition | Next State |
-|-----------|------------|
-| passed | WF_DONE |
-| failed | WF_EXECUTE |
+**You MUST update WORKING_MEMORY before proceeding to WF_DONE.**
 
-## RLVR Signal
+```
+mcp__serena__write_memory("WORKING_MEMORY_<timestamp>_<descriptor>", "<content>")
+```
 
-- **Type**: verify_check | **Impact**: bonus_if_first_try (+0.1)
+Include:
+- Status: Verify Complete / Ready for Done
+- Work completed
+- Tests passed/skipped
+- Any memories updated
 
-First-time verification pass indicates good planning and execution.
+**Echo to chat**: `Working Memory: WORKING_MEMORY_<filename>`
+
+Also update if needed:
+- **DOM_[X]:** Update if domain architecture changed
+- **SYS_[X]:** Update if system components changed
+- **INDEX_[X]:** Update if indexes need new entries
+
+---
 
 ## MANDATORY NEXT STEP
 
+**YOU ARE NOT FINISHED.** Before responding to user:
+
 | Condition | MUST Read Next |
 |-----------|----------------|
-| Verification passed | `WF_DONE` |
-| Verification failed | `WF_EXECUTE` |
+| Violations found | `WF_EXECUTE` (fix them) |
+| Tests missing | `WF_EXECUTE` (add them) |
+| WORKING_MEMORY not updated | **UPDATE IT NOW** |
+| All clean, tests pass, WORKING_MEMORY updated | `WF_DONE` |
 
+1. Determine which condition applies
+2. **VERIFY WORKING_MEMORY is updated**
+3. Read that WF_* memory NOW
+4. Report the new step to user
+
+**SKIPPING WORKING_MEMORY UPDATE = WORKFLOW VIOLATION**
 **SKIPPING THIS TRANSITION = WORKFLOW VIOLATION**
 
-[CRITICAL: Are you on a WF_* workflow step? Did you report on it?]
+[CRITICAL: Did you update WORKING_MEMORY? Are you on a WF_* workflow step? Did you report on it?]

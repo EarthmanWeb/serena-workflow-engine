@@ -1,57 +1,66 @@
-# WF_UPDATE_MEMORY
+# WF_UPDATE_MEMORY - Update Memory
 
-> **💾 On step WF_UPDATE_MEMORY**
+> **On step WF_UPDATE_MEMORY**
 
-OUTPUT THE ABOVE LINE IMMEDIATELY.
+OUTPUT THE ABOVE LINE IMMEDIATELY. Do not read further until you have reported your step to the user.
 
 ---
 
-## Purpose
+## When To Use
 
-Update WORKING_MEMORY with progress and state changes.
+- Adding new requirement to domain memory
+- Updating existing requirement after clarification
+- Creating new domain memory that doesn't exist
+- Updating WORKING_MEMORY with task progress
+- **Capturing architectural decisions after WF_ARCH_REVIEW or WF_PLAN_ARCHITECTURE**
 
-## Entry
+## Execute These Steps
 
-- **From**: WF_REQUIREMENT
-- **Triggers**: checkpoint_required, state_change
+IMPORTANT: ONLY WRITE THE MEMORY FOR THIS TASK
 
-## Required Actions
+1. **Identify the target memory:**
+   - Domain requirement -> `DOM_[DOMAIN]`
+   - System documentation -> `SYS_[SYSTEM]`
+   - Reference documentation -> `REF_[TOPIC]`
+   - Index -> `INDEX_[TYPE]`
+   - Working state -> `WORKING_MEMORY_<conversation_id>`
 
-1. `update_working_memory` - Write current state to memory
-2. `reset_edit_counter` - Clear edit count for checkpoint tracking
+2. **For DOM_* memories, include:**
+   - User-facing behavior description
+   - Any constraints or edge cases
+   - Related files/symbols if known
 
-## Permissions
+3. **For WORKING_MEMORY:**
+   - Filename: `WORKING_MEMORY_<conversation_id>` (use your conversation ID)
+   - See `REF_WORKING_MEMORY` for format template and rules
+   - Each conversation has its own isolated file
 
-- **Edit**: true | **Write**: true
-- **Plan Mode**: never
+4. **For architecture snapshots (after reading SYS_* or REF_* memories), include:**
+   - Which layers are involved
+   - Which SYS_* and REF_* were consulted
+   - Key constraints that apply to this task
+   - This enables proper resume after session breaks
 
-## WORKING_MEMORY Update Format
+5. **Use Serena to update:**
+   ```
+   mcp__serena__write_memory("DOM_[DOMAIN]", "content")
+   mcp__serena__edit_memory("DOM_[DOMAIN]", "old", "new", "literal")
+   ```
 
-```markdown
-## Progress Tracking
-- ✅ [Completed item]
-- ⏳ [In progress item]
-- ⏸️ [Paused item]
-
-## Last Updated
-[Timestamp]
-```
-
-## Transitions
-
-| Condition | Next State |
-|-----------|------------|
-| complete | WF_LOAD_FEATURE |
-
-## RLVR Signal
-
-- **Type**: memory_update | **Impact**: neutral
+6. **Confirm to user:**
+   "Updated [MEMORY_NAME] with: [brief description]"
 
 ## MANDATORY NEXT STEP
 
+**YOU ARE NOT FINISHED.** Before responding to user:
+
 | Condition | MUST Read Next |
 |-----------|----------------|
-| Memory updated | `WF_LOAD_FEATURE` |
+| Domain memory updated | `WF_LOAD_FEATURE` |
+| WORKING_MEMORY updated | Return to previous workflow step |
+
+1. Read the appropriate WF_* memory NOW
+2. Report the new step to user
 
 **SKIPPING THIS TRANSITION = WORKFLOW VIOLATION**
 

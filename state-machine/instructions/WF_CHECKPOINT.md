@@ -1,66 +1,65 @@
-# WF_CHECKPOINT
+# WF_CHECKPOINT - Update Progress
 
-> **💾 On step WF_CHECKPOINT**
+> **On step WF_CHECKPOINT**
 
-OUTPUT THE ABOVE LINE IMMEDIATELY.
+OUTPUT THE ABOVE LINE IMMEDIATELY. Do not read further until you have reported your step to the user.
 
 ---
 
-## Purpose
+## ⚠️ CRITICAL: UPDATE WORKING_MEMORY NOW
 
-Save progress checkpoint during extended execution.
+**This step exists specifically to update WORKING_MEMORY. You MUST do this.**
 
-## Entry
-
-- **From**: WF_EXECUTE
-- **Triggers**: edits_threshold, manual_checkpoint
-
-## Required Actions
-
-1. `update_working_memory` - Save current progress state
-2. `reset_edit_counter` - Clear edit count
-3. `summarize_progress` - Brief summary of what's done
-
-## Permissions
-
-- **Edit**: true | **Write**: true
-- **Plan Mode**: never
-
-## Checkpoint Content
-
-```markdown
-## Checkpoint - [Timestamp]
-
-### Completed
-- [List of completed changes]
-
-### In Progress
-- [Current work item]
-
-### Remaining
-- [Items still to do]
+```
+mcp__serena__write_memory("WORKING_MEMORY_<timestamp>_<descriptor>", "<content>")
 ```
 
-## Transitions
+**Format** (see `REF_WORKING_MEMORY` for full details):
+```markdown
+# WORKING_MEMORY - [Date] [Descriptor]
 
-| Condition | Next State |
-|-----------|------------|
-| continue | WF_EXECUTE |
-| complete | WF_VERIFY |
+## Session Context
+- **Task**: [Brief description]
+- **Feature**: [Feature key from INDEX_FEATURES]
+- **Status**: In Progress / Completed / Blocked
 
-## RLVR Signal
+## Progress Tracking
+- ✅ Completed items
+- 🔄 Current item
+- ⏳ Pending items
 
-- **Type**: checkpoint | **Impact**: penalty_if_forced (-0.05)
+## Notes
+[Any blockers, decisions, findings]
 
-Forced checkpoints (due to hitting threshold) indicate large changes that may need breaking down.
+## Last Updated
+[Timestamp]
+```
+
+**Echo to chat**: `Working Memory: WORKING_MEMORY_<filename>`
+
+---
+
+## Triggers for this state
+- Created/deleted a file
+- Modified multiple symbols
+- Completed a phase
+- ~5 minutes elapsed since last update
 
 ## MANDATORY NEXT STEP
 
+**YOU ARE NOT FINISHED.** Before responding to user:
+
 | Condition | MUST Read Next |
 |-----------|----------------|
-| More work to do | `WF_EXECUTE` |
-| All changes done | `WF_VERIFY` |
+| More work remains | `WF_EXECUTE` |
+| All work complete | `WF_VERIFY` |
 
+1. **VERIFY** you updated WORKING_MEMORY
+2. Determine which condition applies
+3. Read that WF_* memory NOW
+4. Report the new step to user
+
+**SKIPPING WORKING_MEMORY UPDATE = WORKFLOW VIOLATION**
 **SKIPPING THIS TRANSITION = WORKFLOW VIOLATION**
 
-[CRITICAL: Are you on a WF_* workflow step? Did you report on it?]
+[CRITICAL: Did you update WORKING_MEMORY? Are you on a WF_* workflow step? Did you report on it?]

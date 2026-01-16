@@ -1,71 +1,66 @@
-# WF_ASK_PERMISSION
+# WF_ASK_PERMISSION - Get Approval
 
-> **🔐 On step WF_ASK_PERMISSION**
+> **On step WF_ASK_PERMISSION**
 
-OUTPUT THE ABOVE LINE IMMEDIATELY.
+OUTPUT THE ABOVE LINE IMMEDIATELY. Do not read further until you have reported your step to the user.
 
 ---
 
-## Purpose
+## Template Check (For New Files)
 
-Request permission for significant changes before execution.
+Before proposing new files:
+1. Check existing patterns in similar files
+2. Read relevant SYS_* or REF_* memory for the file type
+3. Follow established feature conventions (from FEATURE_[KEY])
 
-## Entry
+## MANDATORY - Ask User Before Any Code Changes
 
-- **From**: WF_ARCH_REVIEW
-- **Triggers**: architecture_approved
+**Format (must include architecture justification):**
+```
+I plan to:
+- Modify: [file] -> [layer] (following [pattern from SYS_*/REF_*])
+- Create: [file] -> [layer] (following [pattern from SYS_*/REF_*])
 
-## Required Actions
+Data flow: [Layer1] <- [Layer2] <- [Layer3]
+          (as defined in ARCH_INDEX)
 
-1. `summarize_planned_changes` - Brief overview of what will change
-2. `list_affected_files` - Enumerate files to be modified
-3. `request_confirmation` - Get explicit "yes" from user
-
-## Permissions
-
-- **Edit**: false | **Write**: false
-- **Plan Mode**: never
-
-## Permission Request Format
-
-```markdown
-## Planned Changes
-
-### Summary
-[Brief description of changes]
-
-### Files to Modify
-- `path/to/file1.ts` - [change description]
-- `path/to/file2.ts` - [change description]
-
-### Tests Required
-- [Test file or coverage note]
-
-**Proceed with these changes?**
+Proceed? (yes/no)
 ```
 
-## Test Enforcement
+**Example:**
+```
+I plan to:
+- Create: UserService.ts -> Service Layer (per SYS_SERVICES)
+- Modify: UserController.ts -> Controller (per REF_CONTROLLERS)
 
-For every service, controller, or functional code proposed, you MUST also propose corresponding tests.
+Data flow: Controller <- Service <- Repository
 
-## Transitions
+Proceed?
+```
 
-| Condition | Next State |
-|-----------|------------|
-| approved | WF_EXECUTE |
-| denied | WF_CLARIFY |
+## TEST FILE ENFORCEMENT
 
-## RLVR Signal
+**For every service, controller, or functional code proposed, you MUST also propose corresponding tests.**
 
-- **Type**: permission_gate | **Impact**: neutral
+Before finalizing your proposal, check:
+- [ ] Each new component has test coverage proposed
+- [ ] Integration points have test coverage proposed
 
 ## MANDATORY NEXT STEP
 
+**YOU ARE NOT FINISHED.** Before responding to user:
+
 | Condition | MUST Read Next |
 |-----------|----------------|
-| Permission granted | `WF_EXECUTE` |
-| Permission denied | `WF_CLARIFY` |
+| User says yes | `WF_EXECUTE` |
+| User says no | `WF_CLARIFY` |
+
+1. Wait for user response
+2. Read that WF_* memory NOW
+3. Report the new step to user
 
 **SKIPPING THIS TRANSITION = WORKFLOW VIOLATION**
+
+WORKING_MEMORY: Update if task state changed (see `REF_WORKING_MEMORY`)
 
 [CRITICAL: Are you on a WF_* workflow step? Did you report on it?]

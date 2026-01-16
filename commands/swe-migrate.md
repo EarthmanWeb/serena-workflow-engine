@@ -14,7 +14,7 @@ Migrate existing project from legacy WF_* memories and CLAUDE.md-based workflow 
 - After installing serena-workflow-engine plugin
 - When legacy WF_* files don't match plugin's states.json
 
-## Process (7 Steps)
+## Process (5 Steps)
 
 ### Step 1: Backup Existing Files
 
@@ -41,38 +41,7 @@ For each existing WF_*.md, verify against `states.json`:
 | ≤100 lines? | Condense, move detail to cross-refs |
 | Icon correct? | Use icon from states.json |
 
-### Step 3: Install Plugin Instructions
-
-Copy compliant instruction files from plugin (overwrites legacy):
-
-```
-PLUGIN_INSTRUCTIONS = ".claude/plugins/serena-workflow-engine/state-machine/instructions"
-
-# Dynamic discovery - no hardcoded filenames
-for each file in glob(PLUGIN_INSTRUCTIONS + "/WF_*.md"):
-    memory_name = basename(file).replace('.md', '')
-    content = read(file)
-    mcp__serena__write_memory(memory_name, content)
-```
-
-This replaces legacy WF_* files with plugin's vetted versions.
-
-### Step 4: Verify All 21 States Present
-
-```
-memories = mcp__serena__list_memories()
-expected_states = [
-    "WF_INITIAL_SETUP", "WF_ONBOARD", "WF_START", "WF_CLASSIFY",
-    "WF_CONTINUE", "WF_RESEARCH", "WF_DETECT_REQ", "WF_REQUIREMENT",
-    "WF_PLAN_ARCHITECTURE", "WF_ARCH_REVIEW", "WF_SWARM_ORCHESTRATE",
-    "WF_CLARIFY", "WF_ASK_PERMISSION", "WF_LOAD_FEATURE",
-    "WF_UPDATE_MEMORY", "WF_EXECUTE", "WF_CHECKPOINT", "WF_DEBUG_TDD",
-    "WF_VERIFY", "WF_DONE", "WF_CLEANUP"
-]
-missing = [s for s in expected_states if s not in memories]
-```
-
-### Step 5: Clean CLAUDE.md
+### Step 3: Clean CLAUDE.md
 
 Remove workflow sections from CLAUDE.md:
 - Entry point instructions ("BEFORE responding to ANY user message...")
@@ -85,11 +54,11 @@ Keep in CLAUDE.md:
 - Coding standards
 - Non-workflow guidance
 
-### Step 6: Verify Plugin Hooks
+### Step 4: Verify Plugin Hooks
 
 Ensure hooks are configured in `.claude/settings.local.json`
 
-### Step 7: Test Workflow
+### Step 5: Test Workflow
 
 Run a simple test to verify workflow functions:
 1. Start new session
@@ -107,14 +76,12 @@ Backup:
   [x] CLAUDE.md → CLAUDE.md.bak
 
 Migration:
-  [x] Plugin instructions installed: 21 WF_* files
-  [x] Legacy files replaced with vetted versions
+  [x] Legacy WF_* files archived (now provided via plugin hooks)
   [x] CLAUDE.md cleaned
 
 Verification:
-  [x] All 21 states present in Serena memories
   [x] Plugin hooks configured
-  [x] State machine validated
+  [x] Workflow functions correctly
 
 Migration Status: SUCCESS
 ================================================================================
@@ -136,7 +103,7 @@ mv CLAUDE.md.bak CLAUDE.md
 
 | Aspect | Legacy | Plugin |
 |--------|--------|--------|
-| Location | .serena/memories/ | Plugin instructions/ → copied to memories |
+| Location | .serena/memories/ | Plugin instructions/ → injected via hooks |
 | Format | Variable | Standardized ≤100 lines |
 | RLVR | Missing | Required per state |
 | planMode | Often missing | Required per state |

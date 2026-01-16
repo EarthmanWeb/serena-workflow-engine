@@ -1,58 +1,62 @@
-# WF_ARCH_REVIEW
+# WF_ARCH_REVIEW - Architecture Compliance Check
 
-> **🔎 On step WF_ARCH_REVIEW**
+> **On step WF_ARCH_REVIEW**
 
-OUTPUT THE ABOVE LINE IMMEDIATELY.
+OUTPUT THE ABOVE LINE IMMEDIATELY. Do not read further until you have reported your step to the user.
 
 ---
 
-## Purpose
+## Execute These Steps
 
-Review architecture compliance before execution.
+1. **Get feature architecture:**
+   ```
+   mcp__serena__read_memory("INDEX_FEATURES")   # Get active feature
+   mcp__serena__read_memory("FEATURE_[KEY]")    # Get feature config with layers
+   ```
 
-## Entry
+2. **Identify layers touched** by proposed change:
+   - Check which architectural layers from FEATURE_[KEY] are affected
 
-- **From**: WF_LOAD_FEATURE, WF_CONTINUE
-- **Triggers**: feature_loaded, ready_for_review
+3. **For each layer, read its documentation:**
+   ```
+   # Read relevant SYS_* (feature-specific) and REF_* (codebase-shared) memories
+   mcp__serena__read_memory("SYS_[SYSTEM]")     # System documentation (feature-specific)
+   mcp__serena__read_memory("REF_[TOPIC]")      # Reference patterns (codebase-shared)
+   mcp__serena__read_memory("REF_DEV_STANDARDS") # Coding standards (codebase-shared)
+   ```
 
-## Required Actions
+4. **Answer these questions:**
+   - [ ] Which layer OWNS this logic?
+   - [ ] Am I putting logic in the correct layer?
+   - [ ] Am I following the project's documented data flow pattern?
 
-1. `verify_against_standards` - Check REF_DEV_STANDARDS compliance
-2. `check_pattern_compliance` - Verify follows existing patterns
-3. `validate_approach` - Confirm implementation plan is sound
+## STOP CONDITIONS
 
-## Permissions
+**If any of these are true, REDESIGN before proceeding:**
 
-- **Edit**: false | **Write**: false
-- **Plan Mode**: always
-  - Reason: Design review before execution
+### General Layer Violations
+- Business logic in presentation layer (views/templates should only display data)
+- Presentation layer calling data layer directly (should go through business logic)
+- Data access layer containing business rules (should be in service/business layer)
+- Cross-cutting concerns scattered instead of centralized
 
-## Review Checklist
+### Presentation Layer (check views/templates)
+- View contains complex logic beyond simple conditionals
+- View has data transformations that belong in business layer
+- View imports services/functions directly instead of using provided context
+- View is doing more than display/formatting
 
-- [ ] Follows existing code patterns
-- [ ] Respects architectural layers
-- [ ] No YAGNI violations
-- [ ] Tests planned for changes
-- [ ] No security concerns
-
-## Transitions
-
-| Condition | Next State |
-|-----------|------------|
-| approved | WF_ASK_PERMISSION |
-| needs_revision | WF_PLAN_ARCHITECTURE |
-
-## RLVR Signal
-
-- **Type**: arch_review | **Impact**: bonus (+0.1)
+**Read REF_* memories (codebase-shared) for correct patterns.**
 
 ## MANDATORY NEXT STEP
 
 | Condition | MUST Read Next |
 |-----------|----------------|
-| Review passed | `WF_ASK_PERMISSION` |
-| Needs revision | `WF_PLAN_ARCHITECTURE` |
+| Approach is compliant | `WF_EXECUTE` |
+| Needs redesign | Loop back, fix approach |
 
 **SKIPPING THIS TRANSITION = WORKFLOW VIOLATION**
+
+WORKING_MEMORY: Update if task state changed (see `REF_WORKING_MEMORY`)
 
 [CRITICAL: Are you on a WF_* workflow step? Did you report on it?]
