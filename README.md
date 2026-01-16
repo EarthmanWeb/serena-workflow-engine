@@ -14,9 +14,18 @@ git submodule add https://github.com/anthropics/serena-workflow-engine .claude/p
 chmod +x .claude/plugins/serena-workflow-engine/hooks/*.sh
 ```
 
-### 2. Initialize the plugin
+### 2. Install the plugin
 
-Open Claude Code in your project. Copy and paste this prompt:
+Open Claude Code and run:
+
+```
+/plugin marketplace add .claude/plugins/serena-workflow-engine
+/plugin install serena-workflow-engine@serena-workflow-engine --scope project
+```
+
+### 3. Initialize the plugin
+
+Restart Claude Code, then paste this prompt:
 
 ```
 Read the file .claude/plugins/serena-workflow-engine/commands/swe-init.md and execute the setup steps it describes. Install any missing MCP servers to ~/.claude.json and complete the 7-step initialization.
@@ -28,7 +37,7 @@ This will:
 - Create core memories
 - Configure .gitignore
 
-### 3. Start working
+### 4. Start working
 
 After setup, the workflow guides you automatically. Type any task to begin.
 

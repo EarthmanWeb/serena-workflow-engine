@@ -1,0 +1,12 @@
+{
+  "name": "serena-workflow-engine",
+  "displayName": "Serena Workflow Engine",
+  "description": "21-state workflow engine with RLVR learning and swarm coordination",
+  "plugins": [
+    {
+      "name": "serena-workflow-engine",
+      "version": "1.0.0",
+      "path": ".."
+    }
+  ]
+}
