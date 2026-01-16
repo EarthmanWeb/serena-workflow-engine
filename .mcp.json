@@ -1,8 +1,20 @@
 {
   "mcpServers": {
     "serena": {
+      "type": "stdio",
       "command": "uvx",
-      "args": ["--from", "git+https://github.com/oraios/serena", "serena", "start-mcp-server", "--context", "ide-assistant", "--project", "./", "--enable-web-dashboard=false"]
+      "args": [
+        "--from",
+        "git+https://github.com/oraios/serena",
+        "serena",
+        "start-mcp-server",
+        "--context",
+        "ide-assistant",
+        "--project",
+        "../../../",
+        "--open-web-dashboard=false"
+      ],
+      "env": {}
     },
     "claude-flow": {
       "command": "npx",
@@ -22,7 +34,11 @@
     },
     "ruv-swarm": {
       "command": "npx",
-      "args": ["ruv-swarm", "mcp", "start"]
+      "args": [
+        "ruv-swarm",
+        "mcp",
+        "start"
+      ]
     }
   }
 }
