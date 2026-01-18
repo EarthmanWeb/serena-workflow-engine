@@ -4,8 +4,10 @@
 
 ## CRITICAL: MANDATORY ENTRY POINT - FOLLOW AND REPORT ALL WORKFLOW STEPS START TO FINISH BY READING WF_START
 
-**BEFORE responding to ANY user message, you MUST:**
+**BEFORE responding to ANY user message, if you do not remember reading these, you MUST:**
 1. READ and COMPLY WITH [CLAUDE_OBLIGATIONS](CLAUDE_OBLIGATIONS.md)
+
+**THEN IN ALL CASES, you MUST:***
 2. READ and COMPLY WITH [WF_START](WF_START.md) fully
 
 **NO EXCEPTIONS.** This includes:

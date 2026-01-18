@@ -54,10 +54,11 @@ def main():
         state_mgr = StateManager(cwd)
         current_state = state_mgr.get_current_state()
         
-        # Transition to WF_INIT if uninitialized or completed
-        if current_state in ['UNINITIALIZED', 'WF_DONE', 'WF_CLEANUP', None]:
-            state_mgr.transition_to('WF_INIT')
-            current_state = 'WF_INIT'
+        # Transition to WF_START if uninitialized or completed
+        # (Skip WF_INIT since it just redirects to WF_START anyway)
+        if current_state in ['UNINITIALIZED', 'WF_DONE', 'WF_CLEANUP', 'WF_INIT', None]:
+            state_mgr.transition_to('WF_START')
+            current_state = 'WF_START'
         
         # Update session info
         state = load_workflow_state(cwd) or create_initial_state()
@@ -68,14 +69,14 @@ def main():
         # Build context message
         wm_file = state.get('working_memory_file')
         
-        if current_state == 'WF_INIT':
+        if current_state == 'WF_START':
             context = f"""🚀 SERENA WORKFLOW ENGINE - Session {session_id}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Current State: WF_INIT
-Working Memory: {wm_file or 'Not created yet'}
+Current State: WF_START
+Working Memory: {wm_file or 'None'}
 
-MANDATORY: Read and follow the WF_INIT workflow instructions.
-Use: mcp__serena__read_memory("WF_INIT")
+MANDATORY: Read and follow the WF_START workflow instructions.
+Use: mcp__serena__read_memory("WF_START")
 """
         else:
             context = f"""🔄 SERENA WORKFLOW ENGINE - Resuming Session {session_id}
