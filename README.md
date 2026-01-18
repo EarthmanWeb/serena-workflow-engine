@@ -214,6 +214,48 @@ Shows plugin loading details, manifest validation errors, and hook registration.
 
 ---
 
+## Development Standards
+
+SWE uses a **dual-location architecture**. Understanding this is critical for contributing:
+
+### File Locations
+
+| Location | Path | Purpose |
+|----------|------|---------|
+| **Plugin Folder** | `.claude/plugins/serena-workflow-engine/` | Generic/portable code |
+| **Local Memories** | `.serena/memories/` | Project-specific adaptations |
+
+### Change Classification
+
+| Change Type | Plugin Folder | Local Memories |
+|-------------|---------------|----------------|
+| Generic workflow logic | ✅ YES | ✅ SYNC (copy after) |
+| Generic hook behavior | ✅ YES | ❌ No |
+| Project-specific patterns | ❌ No | ✅ YES |
+| New skill/command | ✅ YES | ❌ No |
+
+### Hook Sync Requirement (CRITICAL)
+
+When modifying hooks, **THREE files must stay synchronized**:
+
+1. **Hook Script:** `hooks/*.py`
+2. **hooks.json:** `hooks/hooks.json` (uses `${CLAUDE_PLUGIN_ROOT}`)
+3. **settings.json:** `.claude/settings.json` (uses literal paths)
+
+```bash
+# Verify hooks match
+diff <(jq -S '.hooks' hooks/hooks.json) \
+     <(jq -S '.hooks' ../../settings.json | \
+       sed 's|\.claude/plugins/serena-workflow-engine|\${CLAUDE_PLUGIN_ROOT}|g')
+```
+
+### Development Docs
+
+- `state-machine/references/REF_SWE_DEVELOPMENT.md` - Full development standards
+- After `/swe-init`: `DOM_SWE_DEVELOPMENT`, `DOM_SWE_HOOKS` in local memories
+
+---
+
 ## How It Works
 
 The engine enforces a 21-state workflow:

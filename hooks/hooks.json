@@ -4,7 +4,7 @@
     "SessionStart": [{
       "hooks": [{
         "type": "command",
-        "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/session_start.py",
+        "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/swe_session_start.py",
         "timeout": 10
       }]
     }],
@@ -12,12 +12,12 @@
       "hooks": [
         {
           "type": "command",
-          "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/user_prompt_workflow.py",
+          "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/swe_user_prompt_workflow.py",
           "timeout": 10
         },
         {
           "type": "command",
-          "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/user_prompt_swarm.py",
+          "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/swe_user_prompt_swarm.py",
           "timeout": 10
         }
       ]
@@ -36,7 +36,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/pre_edit_validate.py",
+            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/swe_pre_edit_validate.py",
             "timeout": 10
           },
           {
@@ -61,7 +61,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/post_edit_checkpoint.py",
+            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/swe_post_edit_checkpoint.py",
             "timeout": 10
           },
           {
@@ -76,12 +76,12 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/post_read_state.py",
+            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/swe_post_read_state.py",
             "timeout": 10
           },
           {
             "type": "command",
-            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/post_task_learn.py",
+            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/swe_post_task_learn.py",
             "timeout": 10
           }
         ]
@@ -90,7 +90,7 @@
     "Stop": [{
       "hooks": [{
         "type": "command",
-        "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/stop_workflow_check.py",
+        "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/swe_stop_workflow_check.py",
         "timeout": 10
       }]
     }]
