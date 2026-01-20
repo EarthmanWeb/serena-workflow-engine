@@ -3,16 +3,6 @@
 	"hooks": {
 		"SessionStart": [
 			{
-				"matcher": ".*",
-				"hooks": [
-					{
-						"type": "command",
-						"command": "python3 .claude/plugins/serena-workflow-engine/hooks/swe_pre_tool_init_gate.py",
-						"timeout": 5000
-					}
-				]
-			},
-			{
 				"hooks": [
 					{
 						"type": "command",
@@ -39,6 +29,16 @@
 			}
 		],
 		"PreToolUse": [
+			{
+				"matcher": ".*",
+				"hooks": [
+					{
+						"type": "command",
+						"command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/swe_pre_tool_init_gate.py",
+						"timeout": 5000
+					}
+				]
+			},
 			{
 				"matcher": "Bash",
 				"hooks": [

@@ -80,9 +80,15 @@ def parse_working_memory_state(content: str) -> Dict[str, Any]:
         wf_section = wf_match.group(1)
         
         # Parse key-value pairs
-        calling_step = re.search(r'\*\*Calling Step\*\*:\s*(\S+)', wf_section)
-        if calling_step:
-            state["current_state"] = calling_step.group(1)
+        # Current State takes priority (explicit state for stop hook)
+        current_state = re.search(r'\*\*Current State\*\*:\s*(\S+)', wf_section)
+        if current_state:
+            state["current_state"] = current_state.group(1)
+        else:
+            # Fall back to Calling Step for backward compatibility
+            calling_step = re.search(r'\*\*Calling Step\*\*:\s*(\S+)', wf_section)
+            if calling_step:
+                state["current_state"] = calling_step.group(1)
         
         feature_keys = re.search(r'\*\*Feature Key\(s\)\*\*:\s*(.+)', wf_section)
         if feature_keys:
@@ -110,11 +116,19 @@ def parse_working_memory_state(content: str) -> Dict[str, Any]:
 
 def update_working_memory_state(content: str, new_state: str, return_step: str = None) -> str:
     """Update the workflow state in WORKING_MEMORY content.
-    
+
     Modifies the '## Workflow Context' section with new state.
     Returns the updated content.
     """
-    # Update Calling Step
+    # Update Current State (primary field for stop hook)
+    if re.search(r'\*\*Current State\*\*:', content):
+        content = re.sub(
+            r'(\*\*Current State\*\*:\s*)\S+',
+            f'\\g<1>{new_state}',
+            content
+        )
+
+    # Update Calling Step (for backward compatibility)
     content = re.sub(
         r'(\*\*Calling Step\*\*:\s*)\S+',
         f'\\g<1>{new_state}',
