@@ -143,9 +143,16 @@ def main():
         wm_session_id = None
         if state_data:
             wm_session_id = state_data.get("session_id")
-        
-        # If no session match or no working memory, start fresh at WF_INIT
-        if not state_data or (session_id and wm_session_id and session_id != wm_session_id):
+
+        # If no working memory, OR working memory has no session ID (old format),
+        # OR session ID mismatch, start fresh at WF_INIT
+        should_reset = (
+            not state_data or              # No working memory found
+            not wm_session_id or           # WM has no session ID (old format)
+            (session_id and session_id != wm_session_id)  # Session mismatch
+        )
+
+        if should_reset:
             # No working memory for this session - start at WF_INIT
             current_state = "WF_INIT"
             wm_file = None  # Don't show old session's working memory
