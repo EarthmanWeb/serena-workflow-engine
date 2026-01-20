@@ -18,11 +18,7 @@
     },
     "claude-flow": {
       "command": "npx",
-      "args": [
-        "@claude-flow/cli@latest",
-        "mcp",
-        "start"
-      ],
+      "args": ["@claude-flow/cli@latest", "mcp", "start"],
       "env": {
         "CLAUDE_FLOW_MODE": "v3",
         "CLAUDE_FLOW_HOOKS_ENABLED": "true",
@@ -34,11 +30,13 @@
     },
     "ruv-swarm": {
       "command": "npx",
-      "args": [
-        "ruv-swarm",
-        "mcp",
-        "start"
-      ]
+      "args": ["ruv-swarm", "mcp", "start"]
+    },
+    "flow-nexus": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["flow-nexus@latest", "mcp", "start"],
+      "env": {}
     }
   }
 }
