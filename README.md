@@ -11,7 +11,7 @@ and Serena memory persistence.
 
 ```bash
 cd your-project
-git submodule add https://github.com/anthropics/serena-workflow-engine .claude/plugins/serena-workflow-engine
+git submodule add https://github.com/EarthmanWeb/serena-workflow-engine .claude/plugins/serena-workflow-engine
 chmod +x .claude/plugins/serena-workflow-engine/hooks/*.py
 ```
 
@@ -54,7 +54,8 @@ claude plugin enable serena-workflow-engine@serena-workflow-engine --scope local
 claude plugin list
 ```
 
-Should show: `serena-workflow-engine@serena-workflow-engine` with status `✔ enabled`
+Should show: `serena-workflow-engine@serena-workflow-engine` with status
+`✔ enabled`
 
 ### 4. Restart Claude Code
 
@@ -86,31 +87,34 @@ After setup, the workflow guides you automatically. Type any task to begin.
 
 Claude Code CLI and VSCode extension **share the same configuration files**:
 
-| Scope | Settings File | Use Case |
-|-------|---------------|----------|
-| `user` | `~/.claude/settings.json` | Personal plugins across all projects |
-| `project` | `.claude/settings.json` | Team plugins shared via version control |
-| `local` | `.claude/settings.local.json` | Project-specific, gitignored |
+| Scope     | Settings File                 | Use Case                                |
+| --------- | ----------------------------- | --------------------------------------- |
+| `user`    | `~/.claude/settings.json`     | Personal plugins across all projects    |
+| `project` | `.claude/settings.json`       | Team plugins shared via version control |
+| `local`   | `.claude/settings.local.json` | Project-specific, gitignored            |
 
-When you install a plugin via CLI, it writes to these settings files. The VSCode extension reads the same files, so plugins are automatically available in both interfaces.
+When you install a plugin via CLI, it writes to these settings files. The VSCode
+extension reads the same files, so plugins are automatically available in both
+interfaces.
 
-**Recommended scope**: `local` for development plugins (keeps them out of version control)
+**Recommended scope**: `local` for development plugins (keeps them out of
+version control)
 
 ---
 
 ## Commands
 
-| Command              | Description                   |
-| -------------------- | ----------------------------- |
-| `/swe-init`          | First-time setup              |
-| `/swe-status`        | Show current state            |
-| `/swe-reset`         | Reset workflow                |
-| `/swe-goto [STATE]`  | Force transition              |
-| `/swe-memory`        | Manage WORKING_MEMORY         |
-| `/swe-scaffold`      | Scaffold new project          |
-| `/swe-onboard [KEY]` | Register existing feature     |
-| `/swe-onboard-quick` | Quick feature registration    |
-| `/swe-cleanup`       | Archive completed work        |
+| Command              | Description                |
+| -------------------- | -------------------------- |
+| `/swe-init`          | First-time setup           |
+| `/swe-status`        | Show current state         |
+| `/swe-reset`         | Reset workflow             |
+| `/swe-goto [STATE]`  | Force transition           |
+| `/swe-memory`        | Manage WORKING_MEMORY      |
+| `/swe-scaffold`      | Scaffold new project       |
+| `/swe-onboard [KEY]` | Register existing feature  |
+| `/swe-onboard-quick` | Quick feature registration |
+| `/swe-cleanup`       | Archive completed work     |
 
 ---
 
@@ -124,7 +128,8 @@ For empty or new projects:
 /swe-scaffold
 ```
 
-8-stage wizard: app type → platform config → goals → assets → recommendations → architecture → memories → analysis.
+8-stage wizard: app type → platform config → goals → assets → recommendations →
+architecture → memories → analysis.
 
 Creates: `.serena/memories/`, core memories, architecture folders.
 
@@ -138,7 +143,8 @@ To register an existing codebase feature:
 
 5-stage wizard: identifier → name → folders → dependencies → analysis mode.
 
-Creates: `FEATURE_[KEY]`, updates `INDEX_FEATURES`, optionally `DOM_*` and `SYS_*` memories.
+Creates: `FEATURE_[KEY]`, updates `INDEX_FEATURES`, optionally `DOM_*` and
+`SYS_*` memories.
 
 ### Quick Onboarding
 
@@ -183,7 +189,8 @@ claude plugin marketplace add /absolute/path/to/.claude/plugins/serena-workflow-
 
 ### Commands not appearing
 
-1. Verify plugin directory structure has `commands/` at root (not inside `.claude-plugin/`)
+1. Verify plugin directory structure has `commands/` at root (not inside
+   `.claude-plugin/`)
 2. Check that `.md` files exist in `commands/` directory
 3. Run with debug: `claude --debug`
 
@@ -197,6 +204,7 @@ chmod +x .claude/plugins/serena-workflow-engine/hooks/*.sh
 ### Debug mode
 
 Run Claude with debug output:
+
 ```bash
 claude --debug
 ```
@@ -216,23 +224,24 @@ Shows plugin loading details, manifest validation errors, and hook registration.
 
 ## Development Standards
 
-SWE uses a **dual-location architecture**. Understanding this is critical for contributing:
+SWE uses a **dual-location architecture**. Understanding this is critical for
+contributing:
 
 ### File Locations
 
-| Location | Path | Purpose |
-|----------|------|---------|
-| **Plugin Folder** | `.claude/plugins/serena-workflow-engine/` | Generic/portable code |
-| **Local Memories** | `.serena/memories/` | Project-specific adaptations |
+| Location           | Path                                      | Purpose                      |
+| ------------------ | ----------------------------------------- | ---------------------------- |
+| **Plugin Folder**  | `.claude/plugins/serena-workflow-engine/` | Generic/portable code        |
+| **Local Memories** | `.serena/memories/`                       | Project-specific adaptations |
 
 ### Change Classification
 
-| Change Type | Plugin Folder | Local Memories |
-|-------------|---------------|----------------|
-| Generic workflow logic | ✅ YES | ✅ SYNC (copy after) |
-| Generic hook behavior | ✅ YES | ❌ No |
-| Project-specific patterns | ❌ No | ✅ YES |
-| New skill/command | ✅ YES | ❌ No |
+| Change Type               | Plugin Folder | Local Memories       |
+| ------------------------- | ------------- | -------------------- |
+| Generic workflow logic    | ✅ YES        | ✅ SYNC (copy after) |
+| Generic hook behavior     | ✅ YES        | ❌ No                |
+| Project-specific patterns | ❌ No         | ✅ YES               |
+| New skill/command         | ✅ YES        | ❌ No                |
 
 ### Hook Sync Requirement (CRITICAL)
 
