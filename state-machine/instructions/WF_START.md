@@ -78,52 +78,37 @@ mcp__serena__read_memory("CLAUDE_OBLIGATIONS")
 
 **THIS IS NOT OPTIONAL. YOU CANNOT PROCEED WITHOUT A WORKING_MEMORY FILE.**
 
-See `REF_WORKING_MEMORY` for format.
+---
+
+**🛑 BLOCKING REQUIREMENT: READ REF_WORKING_MEMORY FIRST**
 
 ```
-# First, try to find existing:
+mcp__serena__read_memory("REF_WORKING_MEMORY")
+```
+
+**DO NOT create a WORKING_MEMORY file until you have read REF_WORKING_MEMORY.**
+**DO NOT use any other template or format - ONLY the one in REF_WORKING_MEMORY.**
+**DO NOT invent sections, formats, or naming conventions.**
+**THERE IS NO INLINE TEMPLATE HERE - THE ONLY SOURCE OF TRUTH IS REF_WORKING_MEMORY.**
+
+---
+
+**After reading REF_WORKING_MEMORY:**
+
+1. Get session ID from hook context (e.g., `Session: cccdb36a`) - this is an 8-char UUID, NOT a date
+2. Use naming: `WORKING_MEMORY_<SESSION_ID>_<descriptor>` 
+3. Follow the EXACT template from REF_WORKING_MEMORY - no modifications
+4. Echo to chat: `📋 Working Memory: WORKING_MEMORY_<SESSION_ID>_<descriptor>`
+
+```
+# Check for existing:
 mcp__serena__list_memories()  # Look for WORKING_MEMORY_* files
 
 # If continuing work, read existing file
-# If new conversation, CREATE NOW:
-mcp__serena__write_memory("WORKING_MEMORY_<timestamp>_<descriptor>", "<content>")
+# If new conversation, CREATE using REF_WORKING_MEMORY template ONLY
 ```
 
-**Required WORKING_MEMORY content:**
-```markdown
-# WORKING_MEMORY - [Date] [Descriptor]
-
-## Session Context
-- **Task**: [Brief description from user]
-- **Feature(s)**: [Feature key(s) from INDEX_FEATURES - comma-separated if multiple]
-- **Status**: Starting
-- **Session ID**: [Timestamp from filename, e.g., 20260109_145230]
-
-## Affected Features (if multi-feature)
-- **Primary**: [KEY1] - [reason this is primary]
-- **Secondary**: [KEY2] - [reason for involvement]
-- **Related**: [KEY3] - [reason for involvement]
-
-## Progress Tracking
-- ⏳ [First task item]
-
-## Workflow Context
-- **Calling Step**: WF_START
-- **Feature Key(s)**: [Feature key(s) from INDEX_FEATURES]
-- **Session ID**: [Same as above]
-- **Return Step**: [To be set by WF_CLASSIFY]
-- **Invocation Mode**: workflow
-
-## Last Updated
-[Timestamp]
-```
-
-**Note:** The `## Affected Features` section is optional for single-feature tasks but REQUIRED for multi-feature requests.
-
-**Note:** The `## Workflow Context` section enables workflow-aware skills to detect they are running within a workflow and return to the correct step. See `REF_SKILL_PROTOCOLS` for details.
-
-**Echo filename to chat**: `Working Memory: WORKING_MEMORY_<timestamp>_<descriptor>`
-**Store the current feature key in WORKING_MEMORY** for reference during conversation
+**CREATING WORKING_MEMORY WITHOUT READING REF_WORKING_MEMORY = WORKFLOW VIOLATION**
 
 ### 5. Classify Task Type
 
