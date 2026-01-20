@@ -27,8 +27,9 @@ First-time setup command for the serena-workflow-engine plugin. Run this when in
 - [ ] Step 3: Verify MCP Connections
 - [ ] Step 4: Serena Onboarding
 - [ ] Step 5: Initialize Claude-Flow
-- [ ] Step 5.5: Install SWE Hooks
-- [ ] Step 5.6: Install Instruction Files
+- [ ] Step 5.5: Remove Claude-Flow Hooks from Settings
+- [ ] Step 5.6: Install SWE Hooks to settings.local.json
+- [ ] Step 5.7: Install Instruction Files
 - [ ] Step 6: Create Core Memories
 - [ ] Step 7: Configure Gitignore
 - [ ] Step 8: Mark Setup Complete (ONLY after Step 9 passes)
@@ -44,7 +45,7 @@ First-time setup command for the serena-workflow-engine plugin. Run this when in
 
 ## Setup Steps (9 total + verification)
 
-**Note:** Steps are numbered 1-8 with substeps 5.5 and 5.6. Step 9 is Final Verification.
+**Note:** Steps are numbered 1-8 with substeps 5.5, 5.6, and 5.7. Step 9 is Final Verification.
 
 ### Step 1: Detect Environment
 
@@ -173,49 +174,72 @@ mv CLAUDE.md.backup CLAUDE.md
 echo "Merged claude-flow content into existing CLAUDE.md"
 ```
 
-### Step 5.5: Install SWE Hooks to Settings
+### Step 5.5: Remove Claude-Flow Hooks from Settings
 
-VS Code extension reads hooks from `.claude/settings.json`, not from plugin's hooks.json. Copy SWE hooks to settings.json with relative paths.
+**IMPORTANT:** Claude-flow init adds its own hooks to `.claude/settings.json`. These conflict with the SWE plugin hooks (which are auto-loaded via the plugin system). Remove them.
 
-**Read hooks from plugin and convert paths:**
+**Remove claude-flow hooks:**
 ```bash
-# Get hooks configuration from plugin and convert ${CLAUDE_PLUGIN_ROOT} to relative path
-cat .claude/plugins/serena-workflow-engine/hooks/hooks.json | \
-  sed 's|\${CLAUDE_PLUGIN_ROOT}|.claude/plugins/serena-workflow-engine|g' | \
-  jq '.hooks'
+# Check if hooks exist in settings.json
+if jq -e '.hooks' .claude/settings.json > /dev/null 2>&1; then
+  # Remove hooks key from settings.json
+  cat .claude/settings.json | jq 'del(.hooks)' > .claude/settings.json.tmp
+  mv .claude/settings.json.tmp .claude/settings.json
+  echo "Removed claude-flow hooks from settings.json"
+else
+  echo "No hooks to remove"
+fi
 ```
 
-**Add hooks to .claude/settings.json:**
+**Why:** Claude-flow hooks in settings.json would conflict and cause "Workflow not initialized" errors.
+
+**Verify hooks removed:**
 ```bash
-# Merge hooks into settings.json
-if [ -f ".claude/settings.json" ]; then
-  # Read existing settings and plugin hooks (with converted paths)
-  EXISTING=$(cat .claude/settings.json)
-  HOOKS=$(cat .claude/plugins/serena-workflow-engine/hooks/hooks.json | \
-    sed 's|\${CLAUDE_PLUGIN_ROOT}|.claude/plugins/serena-workflow-engine|g' | \
-    jq '.hooks')
-  
-  # Merge hooks into settings
-  echo "$EXISTING" | jq --argjson hooks "$HOOKS" '. + {hooks: $hooks}' > .claude/settings.json.tmp
-  mv .claude/settings.json.tmp .claude/settings.json
-  echo "Installed SWE hooks to .claude/settings.json"
-else
-  # Create new settings.json with hooks
-  HOOKS=$(cat .claude/plugins/serena-workflow-engine/hooks/hooks.json | \
-    sed 's|\${CLAUDE_PLUGIN_ROOT}|.claude/plugins/serena-workflow-engine|g' | \
-    jq '.hooks')
-  echo "{\"hooks\": $HOOKS}" | jq '.' > .claude/settings.json
-  echo "Created .claude/settings.json with SWE hooks"
+jq '.hooks // "none"' .claude/settings.json
+# Should show: "none"
+```
+
+### Step 5.6: Install SWE Hooks to settings.local.json (MANDATORY)
+
+**⚠️ THIS STEP IS MANDATORY - Hooks do NOT auto-load from plugin**
+
+Copy hooks from `hooks.json` to `settings.local.json`, translating paths:
+
+```bash
+# Path to plugin hooks.json
+HOOKS_SRC=".claude/plugins/serena-workflow-engine/hooks/hooks.json"
+SETTINGS_LOCAL=".claude/settings.local.json"
+
+# Create settings.local.json if missing
+if [ ! -f "$SETTINGS_LOCAL" ]; then
+  echo '{}' > "$SETTINGS_LOCAL"
 fi
+
+# Extract hooks from hooks.json, translate paths, merge into settings.local.json
+jq -s '
+  # Take hooks from first file (hooks.json), rest of config from second (settings.local.json)
+  .[0].hooks as $hooks |
+  .[1] |
+  .hooks = ($hooks | walk(
+    if type == "string" then
+      gsub("\\$\\{CLAUDE_PLUGIN_ROOT\\}"; ".claude/plugins/serena-workflow-engine")
+    else .
+    end
+  ))
+' "$HOOKS_SRC" "$SETTINGS_LOCAL" > "${SETTINGS_LOCAL}.tmp" && mv "${SETTINGS_LOCAL}.tmp" "$SETTINGS_LOCAL"
+
+echo "Installed SWE hooks to settings.local.json"
 ```
 
 **Verify hooks installed:**
 ```bash
-jq '.hooks | keys' .claude/settings.json
+jq '.hooks | keys' .claude/settings.local.json
 # Should show: ["PostToolUse", "PreToolUse", "SessionStart", "Stop", "UserPromptSubmit"]
 ```
 
-### Step 5.6: Install ALL Instruction Files to Memories (MANDATORY)
+**Why this step exists:** Claude Code plugins do NOT auto-load hooks from hooks.json. The hooks must be explicitly copied to settings.local.json with literal paths.
+
+### Step 5.7: Install ALL Instruction Files to Memories (MANDATORY)
 
 **⚠️ THIS STEP IS MANDATORY - DO NOT SKIP**
 
@@ -290,10 +314,21 @@ Run these verification commands and confirm each one passes:
 echo "=== MCP Server Check ==="
 # (Use mcp__serena__list_memories, mcp__claude-flow__system_status, mcp__ruv-swarm__swarm_status)
 
-# 2. Verify hooks installed
-echo "=== Hooks Check ==="
-jq '.hooks | keys' .claude/settings.json 2>/dev/null || echo "FAIL: No hooks in settings.json"
-# Expected: ["PostToolUse", "PreToolUse", "SessionStart", "Stop", "UserPromptSubmit"]
+# 2. Verify claude-flow hooks REMOVED from settings.json
+echo "=== Claude-Flow Hooks Check ==="
+if jq -e '.hooks' .claude/settings.json > /dev/null 2>&1; then
+  echo "FAIL: claude-flow hooks still in settings.json - run Step 5.5"
+else
+  echo "PASS: No conflicting hooks in settings.json"
+fi
+
+# 2b. Verify SWE hooks INSTALLED in settings.local.json
+echo "=== SWE Hooks Check ==="
+if jq -e '.hooks.SessionStart' .claude/settings.local.json > /dev/null 2>&1; then
+  echo "PASS: SWE hooks installed in settings.local.json"
+else
+  echo "FAIL: SWE hooks missing from settings.local.json - run Step 5.6"
+fi
 
 # 3. Verify instruction files installed (must be >= 26)
 echo "=== Instruction Files Check ==="
@@ -317,7 +352,8 @@ echo "=== Serena Onboarding Check ==="
 
 **Verification Checklist:**
 - [ ] MCP servers: serena, claude-flow, ruv-swarm all respond
-- [ ] Hooks: 5 hook types installed in .claude/settings.json
+- [ ] Hooks: claude-flow hooks REMOVED from .claude/settings.json
+- [ ] Hooks: SWE hooks INSTALLED in .claude/settings.local.json (SessionStart, etc.)
 - [ ] Instructions: >= 26 WF_*/CLAUDE_OBLIGATIONS/etc files in .serena/memories/
 - [ ] Core memories: _INDEX.md and INDEX_FEATURES.md exist
 - [ ] Gitignore: Plugin entries added
@@ -357,7 +393,7 @@ Serena Workflow Engine initialized successfully.
 - MCP Servers: serena, claude-flow, ruv-swarm
 - Serena Onboarding: Complete
 - Claude-Flow Initialized
-- SWE Hooks: Installed to .claude/settings.json
+- SWE Hooks: Installed to .claude/settings.local.json
 - Workflow Instructions: Copied to .serena/memories/
 - Core Memories: Created
 - Gitignore: Configured

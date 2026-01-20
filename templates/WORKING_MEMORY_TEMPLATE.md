@@ -1,10 +1,10 @@
-# WORKING_MEMORY_[timestamp]_[descriptor]
+# WORKING_MEMORY_[SESSION_ID]_[descriptor]
 
 ## Task Context
 - **Task**: [description]
 - **Feature(s)**: [keys]
 - **Complexity**: [simple|medium|large]
-- **Started**: [timestamp]
+- **Started**: [date]
 
 ## Current State
 - **Workflow State**: [WF_STATE]
@@ -21,9 +21,11 @@
 - [ ] [item]
 
 ## Workflow Context
-- **Invoked From**: [state]
-- **Return To**: [state]
-- **Plan Mode**: [true|false]
+- **Session ID**: [8-char ID from transcript_path]
+- **Current State**: [WF_STATE]
+- **Calling Step**: [state]
+- **Return Step**: [state]
+- **Invocation Mode**: [workflow|standalone|swarm_agent]
 
 ## Requirements
 1. [requirement]
