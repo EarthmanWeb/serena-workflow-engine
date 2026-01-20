@@ -24,13 +24,13 @@ This ensures each conversation has a truly unique working memory file.
 1. Get session ID from hook context (e.g., `Session: 3fe6b3c5`)
 2. Pick descriptor (2-4 words, snake_case)
 3. Write file
-4. Echo to chat: `📋 Working Memory: WORKING_MEMORY_<SESSION_ID>_<descriptor>`
+4. Echo to chat: `📋 Created Working Memory: WORKING_MEMORY_<SESSION_ID>_<descriptor>`
 
 ## Load
 
 1. Read file
 2. **Verify session ID matches current session** - if not, wrong file
-3. Echo to chat: `📋 Working Memory: WORKING_MEMORY_<SESSION_ID>_<descriptor>`
+3. Echo to chat: `📋 Loaded Working Memory: WORKING_MEMORY_<SESSION_ID>_<descriptor>`
 
 ## Update (BLOCKING REQUIREMENT)
 
@@ -42,7 +42,7 @@ This ensures each conversation has a truly unique working memory file.
 
 **Steps:**
 1. Write changes
-2. Echo to chat: `📋 Working Memory: WORKING_MEMORY_<SESSION_ID>_<descriptor>`
+2. Echo to chat: `📋 Updated Working Memory: WORKING_MEMORY_<SESSION_ID>_<descriptor>`
 
 **PROCEEDING WITHOUT UPDATE = WORKFLOW VIOLATION**
 

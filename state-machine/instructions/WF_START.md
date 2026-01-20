@@ -98,7 +98,7 @@ mcp__serena__read_memory("REF_WORKING_MEMORY")
 1. Get session ID from hook context (e.g., `Session: cccdb36a`) - this is an 8-char UUID, NOT a date
 2. Use naming: `WORKING_MEMORY_<SESSION_ID>_<descriptor>` 
 3. Follow the EXACT template from REF_WORKING_MEMORY - no modifications
-4. Echo to chat: `📋 Working Memory: WORKING_MEMORY_<SESSION_ID>_<descriptor>`
+4. Echo to chat: `📋 Active Working Memory: WORKING_MEMORY_<SESSION_ID>_<descriptor>`
 
 ```
 # Check for existing:
