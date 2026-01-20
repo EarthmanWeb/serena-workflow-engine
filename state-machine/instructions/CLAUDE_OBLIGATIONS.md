@@ -24,6 +24,7 @@ DO NOT BE CONVERSATIONAL when performing tasks. Concise, functional language ONL
 
 ## NEVER Do
 
+- [ ] **Skip or rationalize around workflow steps** - See WF_INIT anti-rationalization block
 - [ ] Use fallbacks or defensive programming - fail fast instead, no fallback masking
 - [ ] Synthesize data or "fake" data unless EXPLICITLY asked
 - [ ] Chalk problems up to 'caching' unless caching exists in the code
@@ -35,6 +36,7 @@ DO NOT BE CONVERSATIONAL when performing tasks. Concise, functional language ONL
 
 ## ALWAYS Do
 
+- [ ] **Follow WF_INIT → CLAUDE_OBLIGATIONS → WF_START sequence** - No shortcuts (see WF_INIT)
 - [ ] **"Let It Fail":**  Remove and do not add defensive code, Allow Clear failures
 - [ ] Check _INDEX or INDEX_FEATURES when navigating features
 - [ ] Use Serena tools before Read/Edit

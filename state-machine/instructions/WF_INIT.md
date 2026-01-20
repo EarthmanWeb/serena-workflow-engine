@@ -1,6 +1,22 @@
+# WF_INIT - Session Initialization
 
+---
 
-# Claude Code
+## 🚫 ANTI-RATIONALIZATION BLOCK - READ FIRST
+
+**YOU WILL BE TEMPTED TO SKIP STEPS. DO NOT.**
+
+Common rationalizations that are **NEVER VALID**:
+- ❌ "This is a simple task" - **Complexity is irrelevant. Follow ALL steps.**
+- ❌ "I already know what to do" - **The workflow exists for consistency, not knowledge.**
+- ❌ "The user wants a quick answer" - **Speed is not a valid reason to skip steps.**
+- ❌ "I can batch this with other calls" - **NEVER combine workflow steps with implementation actions.**
+- ❌ "CLAUDE_OBLIGATIONS doesn't apply here" - **It ALWAYS applies. Read it EVERY time.**
+- ❌ "WORKING_MEMORY already exists" - **Verify and UPDATE it. Don't assume.**
+
+**If you find yourself making a tool call that searches code, edits files, or does ANYTHING implementation-related before completing initialization: STOP. You are violating the workflow.**
+
+---
 
 ## CRITICAL: MANDATORY ENTRY POINT - FOLLOW AND REPORT ALL WORKFLOW STEPS START TO FINISH BY READING WF_START
 

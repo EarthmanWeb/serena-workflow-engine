@@ -2,6 +2,14 @@
 
 ---
 
+## 🚫 ANTI-RATIONALIZATION - See WF_INIT
+
+**If you did not read WF_INIT before this file, STOP and read it now.**
+
+The anti-rationalization block is in WF_INIT. If you skipped WF_INIT to get here, you have already violated the workflow.
+
+---
+
 ## ⚡ SWARM AGENT BYPASS
 
 **How to know if you are a spawned agent:** Your prompt contains explicit agent role assignment (e.g., "You are the researcher agent") and task-specific instructions from a coordinator.

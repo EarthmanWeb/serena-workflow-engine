@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""SessionStart hook - Initialize WF_INIT workflow and working memory."""
+"""SessionStart hook - Initialize WF_INIT workflow using WORKING_MEMORY.
+
+State is stored in WORKING_MEMORY files (session-isolated), NOT in a global state file.
+This allows multiple concurrent sessions without state conflicts.
+"""
 
 import os
 import sys
@@ -14,8 +18,9 @@ if PLUGIN_ROOT:
 
 try:
     from swe_hooks.core.config import (
-        load_setup_complete, load_workflow_state, save_workflow_state, 
-        create_initial_state
+        load_setup_complete, 
+        get_most_recent_working_memory, get_working_memory_filename,
+        read_working_memory_state
     )
     from swe_hooks.core.state_manager import StateManager
 except ImportError as e:
@@ -36,7 +41,20 @@ def main():
             pass
         
         cwd = input_data.get('cwd', os.getcwd())
-        session_id = input_data.get('session_id', datetime.now().strftime('%Y%m%d_%H%M%S'))
+        
+        # Extract unique session ID from transcript_path (contains UUID per conversation)
+        # This ensures each chat gets its own isolated session
+        transcript_path = input_data.get('transcript_path', '')
+        if transcript_path:
+            # Extract UUID from path like ~/.claude/projects/.../00893aaf-19fa-41d2-8238-13269b9b3ca0.jsonl
+            import re
+            uuid_match = re.search(r'([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})', transcript_path)
+            if uuid_match:
+                session_id = uuid_match.group(1)[:8]  # Use first 8 chars for brevity
+            else:
+                session_id = datetime.now().strftime('%Y%m%d_%H%M%S')
+        else:
+            session_id = datetime.now().strftime('%Y%m%d_%H%M%S')
 
         # Check setup
         setup = load_setup_complete(cwd)
@@ -50,42 +68,16 @@ def main():
             print(json.dumps(output))
             sys.exit(0)
 
-        # Initialize or load state
-        state_mgr = StateManager(cwd)
-        current_state = state_mgr.get_current_state()
-        
-        # Transition to WF_START if uninitialized or completed
-        # (Skip WF_INIT since it just redirects to WF_START anyway)
-        if current_state in ['UNINITIALIZED', 'WF_DONE', 'WF_CLEANUP', 'WF_INIT', None]:
-            state_mgr.transition_to('WF_START')
-            current_state = 'WF_START'
-        
-        # Update session info
-        state = load_workflow_state(cwd) or create_initial_state()
-        state['session_id'] = session_id
-        state['session_start'] = datetime.now().isoformat()
-        save_workflow_state(cwd, state)
-        
-        # Build context message
-        wm_file = state.get('working_memory_file')
-        
-        if current_state == 'WF_START':
-            context = f"""🚀 SERENA WORKFLOW ENGINE - Session {session_id}
+        # ALWAYS start fresh - never resume old working memory from previous sessions
+        # Each chat/conversation is a NEW session with its own working memory
+        # Working memory will be created by WF_INIT when the user provides their task
+        context = f"""🚀 SERENA WORKFLOW ENGINE - Session {session_id}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Current State: WF_START
-Working Memory: {wm_file or 'None'}
+Current State: WF_INIT
+Working Memory: None (will be created for your task)
 
-MANDATORY: Read and follow the WF_START workflow instructions.
-Use: mcp__serena__read_memory("WF_START")
-"""
-        else:
-            context = f"""🔄 SERENA WORKFLOW ENGINE - Resuming Session {session_id}
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Current State: {current_state}
-Working Memory: {wm_file or 'None'}
-
-MANDATORY: Read and follow the {current_state} workflow instructions.
-Use: mcp__serena__read_memory("{current_state}")
+MANDATORY: Read and follow the WF_INIT workflow instructions.
+Use: mcp__serena__read_memory("WF_INIT")
 """
 
         output = {

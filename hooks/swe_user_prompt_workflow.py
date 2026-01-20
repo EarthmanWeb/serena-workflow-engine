@@ -5,6 +5,8 @@ This hook fires on EVERY user prompt submission. It must:
 1. Detect if prompt is a continuation of current task or a new task
 2. Provide appropriate workflow instructions
 3. Ensure Claude follows the workflow state machine
+
+State is read from WORKING_MEMORY files (session-isolated), NOT a global state file.
 """
 
 import os
@@ -19,7 +21,10 @@ if PLUGIN_ROOT:
         sys.path.insert(0, hooks_dir)
 
 try:
-    from swe_hooks.core.config import load_setup_complete
+    from swe_hooks.core.config import (
+        load_setup_complete, 
+        get_working_memory_filename, read_working_memory_state
+    )
     from swe_hooks.core.state_manager import StateManager
 except ImportError as e:
     print(json.dumps({"systemMessage": f"SWE import error: {e}"}), file=sys.stdout)
@@ -121,13 +126,55 @@ def main():
             print(json.dumps(output))
             sys.exit(0)
         
-        # Get current state
+        # Extract session ID from transcript_path for session isolation
+        transcript_path = input_data.get('transcript_path', '')
+        session_id = None
+        if transcript_path:
+            uuid_match = re.search(r'([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})', transcript_path)
+            if uuid_match:
+                session_id = uuid_match.group(1)[:8]
+        
+        # Get current state from WORKING_MEMORY (session-isolated)
+        # Only use working memory if it matches this session
+        wm_file = get_working_memory_filename(cwd)
+        state_data, _ = read_working_memory_state(cwd)
+        
+        # Check if the working memory belongs to THIS session
+        wm_session_id = None
+        if state_data:
+            wm_session_id = state_data.get("session_id")
+        
+        # If no session match or no working memory, start fresh at WF_INIT
+        if not state_data or (session_id and wm_session_id and session_id != wm_session_id):
+            # No working memory for this session - start at WF_INIT
+            current_state = "WF_INIT"
+            wm_file = None  # Don't show old session's working memory
+        else:
+            current_state = state_data.get("current_state", "WF_INIT")
+        
+        # Create StateManager for potential transitions
         state_mgr = StateManager(cwd)
-        current_state = state_mgr.get_current_state()
-        wm_file = state_mgr.get_working_memory()
         
         # Analyze prompt intent
         prompt_intent = analyze_prompt(prompt, current_state)
+        
+        # Handle WF_INIT state - always direct to WF_INIT workflow
+        if current_state == 'WF_INIT':
+            context = f"""🎬 WORKFLOW STATE: WF_INIT
+Working Memory: None (will be created for your task)
+Session: {session_id or 'unknown'}
+
+MANDATORY: Read and follow the WF_INIT workflow to initialize.
+Use: mcp__serena__read_memory("WF_INIT")
+"""
+            output = {
+                "hookSpecificOutput": {
+                    "hookEventName": "UserPromptSubmit",
+                    "additionalContext": context
+                }
+            }
+            print(json.dumps(output))
+            sys.exit(0)
         
         # Handle completed/uninitialized states - transition to WF_START
         if current_state in ['UNINITIALIZED', 'WF_DONE', 'WF_CLEANUP', None]:
@@ -179,8 +226,6 @@ Use: mcp__serena__read_memory("{current_state}")
         
         else:
             # Unknown intent - route to WF_CLASSIFY for proper classification
-            # If at WF_START, stay there first to initialize WORKING_MEMORY
-            # Otherwise, transition to WF_CLASSIFY for task analysis
             if current_state == 'WF_START':
                 context = f"""❓ INTENT UNCLEAR - WORKFLOW STATE: {current_state}
 Working Memory: {wm_file or 'None'}
