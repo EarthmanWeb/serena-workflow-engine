@@ -7,13 +7,44 @@ description: Initialize serena-workflow-engine plugin - first-time setup for new
 
 First-time setup command for the serena-workflow-engine plugin. Run this when installing the plugin in a new project.
 
+---
+
+## ⛔ CRITICAL: ALL STEPS ARE MANDATORY - DO NOT SKIP ANY
+
+**Every step (1-9) MUST be executed in order. Skipping ANY step = broken installation.**
+
+**Execution Rules:**
+1. Execute EVERY step sequentially (1 → 2 → 3 → ... → 9)
+2. Verify each step's output matches expected result before continuing
+3. If a step fails, FIX IT before proceeding - do not skip
+4. Step 9 (Final Verification) MUST pass before setup-complete.json is created
+5. If Step 9 verification fails, identify failed step(s) and retry from there
+6. **NO SHORTCUTS** - each step exists for a reason
+
+**Checklist (mark as you complete):**
+- [ ] Step 1: Detect Environment
+- [ ] Step 2: Check MCP Servers
+- [ ] Step 3: Verify MCP Connections
+- [ ] Step 4: Serena Onboarding
+- [ ] Step 5: Initialize Claude-Flow
+- [ ] Step 5.5: Install SWE Hooks
+- [ ] Step 5.6: Install Instruction Files
+- [ ] Step 6: Create Core Memories
+- [ ] Step 7: Configure Gitignore
+- [ ] Step 8: Mark Setup Complete (ONLY after Step 9 passes)
+- [ ] Step 9: Final Verification (MUST PASS)
+
+---
+
 ## When to Run
 
 - First time using plugin in a project
 - After cloning a repo with the plugin
 - When `session-start.sh` reports "INITIAL SETUP REQUIRED"
 
-## Setup Steps (9 total)
+## Setup Steps (9 total + verification)
+
+**Note:** Steps are numbered 1-8 with substeps 5.5 and 5.6. Step 9 is Final Verification.
 
 ### Step 1: Detect Environment
 
@@ -184,38 +215,40 @@ jq '.hooks | keys' .claude/settings.json
 # Should show: ["PostToolUse", "PreToolUse", "SessionStart", "Stop", "UserPromptSubmit"]
 ```
 
-### Step 5.6: Copy Workflow Instructions to Memories (Parallel)
+### Step 5.6: Install ALL Instruction Files to Memories (MANDATORY)
 
-Copy the state-machine instructions and references to `.serena/memories/` so the agent can access them via SERENA's `read_memory` instead of hooks echoing content.
+**⚠️ THIS STEP IS MANDATORY - DO NOT SKIP**
 
-**Serena auto-indexes any `.md` file in the memories directory - no MCP tool required.**
+Copy OR merge EVERY file from `state-machine/instructions/` to Serena memories.
 
-**Copy ALL files in parallel (single command, fastest):**
+**Archive existing files first, then copy ALL instruction files:**
 ```bash
-# Create memories directory and backup existing if needed
-mkdir -p .serena/memories .serena/archive-memories
+# Create directories
+mkdir -p .serena/memories .serena/memories/archived
 
-# Backup any existing WF_*/REF_*/CLAUDE_OBLIGATIONS files (parallel)
-cd .serena/memories && \
-  ls WF_*.md REF_*.md CLAUDE_OBLIGATIONS.md 2>/dev/null | \
-  xargs -I{} -P0 cp {} ../archive-memories/{}.bak 2>/dev/null; \
-  cd - >/dev/null
+# Archive any existing files that will be overwritten
+cd .serena/memories
+for f in WF_*.md CLAUDE_OBLIGATIONS.md DOM_SWE_*.md FEATURE_SWE.md REF_SWE_*.md; do
+  [ -f "$f" ] && mv "$f" archived/"$f.$(date +%Y%m%d_%H%M%S).bak"
+done
+cd - >/dev/null
 
-# Copy ALL instruction AND reference files in ONE parallel operation
-find .claude/plugins/serena-workflow-engine/state-machine -name "*.md" -print0 | \
-  xargs -0 -P0 -I{} cp {} .serena/memories/
+# Copy ALL instruction files
+cp .claude/plugins/serena-workflow-engine/state-machine/instructions/*.md .serena/memories/
 
-echo "Copied workflow instructions to .serena/memories/ (parallel)"
+echo "Installed instruction files:"
+ls .serena/memories/{WF_*,CLAUDE_OBLIGATIONS,DOM_SWE_*,FEATURE_SWE,REF_SWE_*}.md 2>/dev/null | wc -l
 ```
 
-**Note:** `xargs -P0` uses maximum available parallelism (all CPU cores).
+**Expected: 26 files installed**
 
-**Verify files copied:**
+**Verify:**
 ```bash
-ls .serena/memories/WF_*.md | wc -l  # Should show ~21 workflow files
-ls .serena/memories/REF_*.md | wc -l  # Should show reference files
-ls .serena/memories/CLAUDE_OBLIGATIONS.md  # Should exist
+ls .serena/memories/ | grep -E "^(WF_|CLAUDE_OBLIGATIONS|DOM_SWE|FEATURE_SWE|REF_SWE)" | wc -l
+# Must be >= 26
 ```
+
+**If any file is missing, STOP and reinstall before proceeding.**
 
 ### Step 6: Create Core Memories
 
@@ -246,7 +279,61 @@ CLAUDE.local.md
 .serena/archive-specs/
 ```
 
+### Step 9: Final Verification (MUST PASS BEFORE STEP 8)
+
+**⛔ DO NOT create setup-complete.json until ALL verifications pass.**
+
+Run these verification commands and confirm each one passes:
+
+```bash
+# 1. Verify MCP servers respond
+echo "=== MCP Server Check ==="
+# (Use mcp__serena__list_memories, mcp__claude-flow__system_status, mcp__ruv-swarm__swarm_status)
+
+# 2. Verify hooks installed
+echo "=== Hooks Check ==="
+jq '.hooks | keys' .claude/settings.json 2>/dev/null || echo "FAIL: No hooks in settings.json"
+# Expected: ["PostToolUse", "PreToolUse", "SessionStart", "Stop", "UserPromptSubmit"]
+
+# 3. Verify instruction files installed (must be >= 26)
+echo "=== Instruction Files Check ==="
+INST_COUNT=$(ls .serena/memories/ | grep -E "^(WF_|CLAUDE_OBLIGATIONS|DOM_SWE|FEATURE_SWE|REF_SWE)" | wc -l | tr -d ' ')
+echo "Instruction files: $INST_COUNT"
+[ "$INST_COUNT" -ge 26 ] && echo "PASS" || echo "FAIL: Expected >= 26 files"
+
+# 4. Verify core memories exist
+echo "=== Core Memories Check ==="
+[ -f ".serena/memories/_INDEX.md" ] && echo "PASS: _INDEX.md" || echo "FAIL: Missing _INDEX.md"
+[ -f ".serena/memories/INDEX_FEATURES.md" ] && echo "PASS: INDEX_FEATURES.md" || echo "FAIL: Missing INDEX_FEATURES.md"
+
+# 5. Verify gitignore entries
+echo "=== Gitignore Check ==="
+grep -q "CLAUDE.local.md" .gitignore && echo "PASS: gitignore configured" || echo "FAIL: Missing gitignore entries"
+
+# 6. Verify Serena onboarding
+echo "=== Serena Onboarding Check ==="
+# (Use mcp__serena__check_onboarding_performed)
+```
+
+**Verification Checklist:**
+- [ ] MCP servers: serena, claude-flow, ruv-swarm all respond
+- [ ] Hooks: 5 hook types installed in .claude/settings.json
+- [ ] Instructions: >= 26 WF_*/CLAUDE_OBLIGATIONS/etc files in .serena/memories/
+- [ ] Core memories: _INDEX.md and INDEX_FEATURES.md exist
+- [ ] Gitignore: Plugin entries added
+- [ ] Serena: Onboarding complete
+
+**If ANY verification fails:**
+1. Identify which step created that artifact
+2. Return to that step and re-execute
+3. Re-run Step 9 verification
+4. Only proceed to Step 8 when ALL pass
+
+---
+
 ### Step 8: Mark Setup Complete
+
+**⚠️ ONLY execute this step after Step 9 passes ALL verifications.**
 
 Create `.claude/setup-complete.json`:
 ```json
@@ -254,7 +341,8 @@ Create `.claude/setup-complete.json`:
   "complete": true,
   "timestamp": "[ISO date]",
   "mcps": ["serena", "claude-flow", "ruv-swarm"],
-  "version": "1.0.0"
+  "version": "1.0.0",
+  "verified": true
 }
 ```
 

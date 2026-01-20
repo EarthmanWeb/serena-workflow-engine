@@ -4,6 +4,20 @@ Multi-agent swarm patterns for parallel processing and complex task coordination
 
 ---
 
+## ⚠️ CRITICAL: EXPLICIT TOOL SELECTION RULE
+
+**When user explicitly requests a specific swarm system, USE THOSE EXACT MCP TOOLS.**
+
+| User Says | YOU MUST USE | NOT |
+|-----------|--------------|-----|
+| "launch ruv-swarm" / "ruv swarm" | `mcp__plugin_serena-workflow-engine_ruv-swarm__*` tools | Task/Explore agents |
+| "launch claude-flow swarm" | `mcp__claude-flow__*` tools | Task/Explore agents |
+| "use hive-mind" | `mcp__claude-flow__hive-mind_*` tools | Task/Explore agents |
+
+**FAILURE MODE:** Substituting Task/Explore agents for MCP swarm tools breaks coordination model.
+
+---
+
 ## ⛔ CRITICAL: NEVER RUN CLI INIT COMMANDS
 
 **DO NOT run `npx claude-flow init`, `npx ruv-swarm init`, or any similar initialization commands.**
@@ -22,63 +36,66 @@ npx claude-flow init
 ## Available Swarm Systems
 
 ### 1. Claude-Flow (Primary - Recommended)
-**MCP Server:** `mcp__claude-flow__*`
+**MCP Prefix:** `mcp__claude-flow__*`
 
 Core workflow:
 ```
 1. mcp__claude-flow__swarm_init({ topology: "mesh"|"hierarchical"|"star", maxAgents: N })
-2. mcp__claude-flow__agent_spawn({ type: "researcher"|"coder"|"analyst"|"tester", name: "...", capabilities: [...] })
+2. mcp__claude-flow__agent_spawn({ agentType: "researcher"|"coder"|"analyst"|"tester", agentId: "..." })
 3. mcp__claude-flow__task_orchestrate({ task: "description", strategy: "parallel"|"sequential", priority: "high" })
-4. mcp__claude-flow__memory_usage({ action: "store", namespace: "...", key: "...", value: "..." })
+4. mcp__claude-flow__memory_store({ key: "swarm:state", value: { ... } })
 ```
 
 Key tools:
 - `swarm_init` - Initialize swarm with topology
-- `agent_spawn` - Create agents with capabilities
+- `agent_spawn` - Create agents (params: agentType, agentId)
 - `task_orchestrate` - Coordinate task across agents
 - `swarm_status` - Monitor swarm health
-- `memory_usage` - Persistent memory (store/retrieve/search)
+- `memory_store` - Store to persistent memory
+- `memory_retrieve` - Get from memory
 - `memory_search` - Pattern-based search
 
 ### 2. RUV-Swarm (DAA - Decentralized Autonomous Agents)
-**MCP Server:** `mcp__ruv-swarm__*`
+**MCP Prefix:** `mcp__plugin_serena-workflow-engine_ruv-swarm__*`
 
 For tasks requiring learning/adaptation:
 ```
-1. mcp__ruv-swarm__swarm_init({ topology: "mesh", strategy: "specialized" })
-2. mcp__ruv-swarm__agent_spawn({ type: "researcher", capabilities: [...] })
-3. mcp__ruv-swarm__daa_init({ enableLearning: true, enableCoordination: true })
-4. mcp__ruv-swarm__task_orchestrate({ task: "...", strategy: "adaptive" })
-5. mcp__ruv-swarm__daa_knowledge_share({ sourceAgentId: "...", targetAgentIds: [...] })
+1. mcp__plugin_serena-workflow-engine_ruv-swarm__swarm_init({ topology: "mesh", strategy: "specialized" })
+2. mcp__plugin_serena-workflow-engine_ruv-swarm__daa_init({ enableLearning: true, enableCoordination: true })
+3. mcp__plugin_serena-workflow-engine_ruv-swarm__daa_agent_create({ id: "...", cognitivePattern: "adaptive", enableMemory: true })
+4. mcp__plugin_serena-workflow-engine_ruv-swarm__task_orchestrate({ task: "...", strategy: "adaptive" })
+5. mcp__plugin_serena-workflow-engine_ruv-swarm__daa_knowledge_share({ sourceAgentId: "...", targetAgentIds: [...] })
 ```
 
 DAA-specific tools:
 - `daa_init` - Enable autonomous learning
+- `daa_agent_create` - Create autonomous agent with cognitive pattern
 - `daa_knowledge_share` - Share patterns between agents
 - `daa_agent_adapt` - Trigger adaptation from feedback
 - `daa_learning_status` - Check learning progress
 - `neural_train` - Train coordination patterns
 
 ### 3. Hive-Mind (Collective Intelligence & Consensus)
-**Skill Commands:** `/hive-mind-*`
+**MCP Prefix:** `mcp__claude-flow__hive-mind_*`
 
 For tasks requiring collective decision-making or distributed memory:
 ```
-1. /hive-mind-init                              # Initialize hive collective
-2. /hive-mind-spawn { type: "worker" }          # Spawn hive agents
-3. /hive-mind-consensus { proposal: "..." }     # Reach collective decisions
-4. /hive-mind-memory { action: "store", ... }   # Shared memory operations
-5. /hive-mind-status                            # Check collective health
-6. /hive-mind-metrics                           # Performance data
+1. mcp__claude-flow__hive-mind_init({ topology: "mesh" })
+2. mcp__claude-flow__hive-mind_spawn({ count: 3, role: "worker", agentType: "worker" })
+3. mcp__claude-flow__hive-mind_consensus({ action: "propose", type: "decision", value: "..." })
+4. mcp__claude-flow__hive-mind_memory({ action: "set", key: "...", value: "..." })
+5. mcp__claude-flow__hive-mind_status({ verbose: true })
+6. mcp__claude-flow__hive-mind_broadcast({ message: "...", priority: "normal" })
 ```
 
-Hive-Mind capabilities:
-- `/hive-mind-init` - Initialize the collective
-- `/hive-mind-spawn` - Create hive worker agents
-- `/hive-mind-consensus` - Reach collective agreement on decisions
-- `/hive-mind-memory` - Distributed shared memory
-- `/hive-mind-status` - Monitor hive health
-- `/hive-mind-metrics` - Collective performance metrics
+Hive-Mind MCP tools:
+- `hive-mind_init` - Initialize the collective (topology: mesh|hierarchical|ring|star)
+- `hive-mind_spawn` - Spawn and auto-join workers (count, role, agentType)
+- `hive-mind_join` - Join existing agent to hive
+- `hive-mind_consensus` - Propose/vote on collective decisions
+- `hive-mind_memory` - Distributed shared memory (get/set/delete/list)
+- `hive-mind_status` - Monitor hive health
+- `hive-mind_broadcast` - Send message to all workers
 
 **Best for:**
 - Decisions requiring consensus across multiple perspectives
@@ -158,9 +175,9 @@ Phase 6: SYNTHESIZE
 mcp__claude-flow__swarm_init({ topology: "mesh", maxAgents: 5 })
 
 // Step 2: Spawn all agents in ONE message
-mcp__claude-flow__agent_spawn({ type: "analyst", name: "code-reader-1", capabilities: ["code-analysis"] })
-mcp__claude-flow__agent_spawn({ type: "analyst", name: "code-reader-2", capabilities: ["code-analysis"] })
-mcp__claude-flow__agent_spawn({ type: "researcher", name: "pattern-finder", capabilities: ["pattern-detection"] })
+mcp__claude-flow__agent_spawn({ agentType: "analyst", agentId: "code-reader-1" })
+mcp__claude-flow__agent_spawn({ agentType: "analyst", agentId: "code-reader-2" })
+mcp__claude-flow__agent_spawn({ agentType: "researcher", agentId: "pattern-finder" })
 
 // Step 3: Orchestrate tasks
 mcp__claude-flow__task_orchestrate({ task: "Analyze codebase structure", strategy: "parallel", priority: "high" })
@@ -171,7 +188,7 @@ Task({ subagent_type: "Explore", run_in_background: true, prompt: "Read module B
 Task({ subagent_type: "Explore", run_in_background: true, prompt: "Find patterns..." })
 
 // Step 5: Store coordination state
-mcp__claude-flow__memory_usage({ action: "store", namespace: "analysis", key: "status", value: "agents_spawned" })
+mcp__claude-flow__memory_store({ key: "analysis:status", value: { status: "agents_spawned", agentCount: 3 } })
 
 // Step 6: Monitor (non-blocking)
 mcp__claude-flow__swarm_status({})

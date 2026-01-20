@@ -6,6 +6,32 @@
 
 ---
 
+## ⚠️ CRITICAL: EXPLICIT TOOL SELECTION RULE
+
+**When user explicitly requests a specific swarm system, USE THOSE EXACT MCP TOOLS.**
+
+| User Says | YOU MUST USE | NOT |
+|-----------|--------------|-----|
+| "launch ruv-swarm" / "ruv swarm" | `mcp__plugin_serena-workflow-engine_ruv-swarm__*` tools | Task/Explore agents |
+| "launch claude-flow swarm" | `mcp__claude-flow__*` tools | Task/Explore agents |
+| "use hive-mind" | `mcp__claude-flow__hive-mind_*` tools | Task/Explore agents |
+
+**FAILURE MODE TO AVOID:**
+```
+❌ User: "Launch ruv-swarm to detect features"
+❌ Agent: [Uses Task({ subagent_type: "Explore" }) instead]
+```
+
+**CORRECT BEHAVIOR:**
+```
+✅ User: "Launch ruv-swarm to detect features"
+✅ Agent: [Uses mcp__plugin_serena-workflow-engine_ruv-swarm__swarm_init(), etc.]
+```
+
+**Why this matters:** MCP swarm tools provide coordination metadata, learning, and state persistence. Task agents are for file work AFTER swarm setup. Substituting one for the other breaks the coordination model.
+
+---
+
 ## When To Use
 
 This workflow applies when:
@@ -62,11 +88,11 @@ When spawning agents, include in their prompts:
 
 ### Step 1: Select Swarm System
 
-| System | When to Use | MCP Tools |
-|--------|-------------|-----------|
+| System | When to Use | MCP Tool Prefix |
+|--------|-------------|-----------------|
 | **Claude-Flow** | General orchestration, parallel tasks | `mcp__claude-flow__*` |
-| **RUV-Swarm** | Learning/adaptation needed, DAA patterns | `mcp__ruv-swarm__*` |
-| **Hive-Mind** | Consensus, collective intelligence, distributed memory | `/hive-mind-init`, `/hive-mind-spawn` |
+| **RUV-Swarm** | Learning/adaptation needed, DAA patterns | `mcp__plugin_serena-workflow-engine_ruv-swarm__*` |
+| **Hive-Mind** | Consensus, collective intelligence, distributed memory | `mcp__claude-flow__hive-mind_*` |
 
 ### Step 2: Select Topology
 
@@ -101,49 +127,52 @@ reviewer      - Quality assurance, security audit
 mcp__claude-flow__swarm_init({ topology: "mesh", maxAgents: 5 })
 
 // Step 2: Spawn agents IN ONE MESSAGE (parallel)
-mcp__claude-flow__agent_spawn({ type: "researcher", name: "agent-1", capabilities: [...] })
-mcp__claude-flow__agent_spawn({ type: "coder", name: "agent-2", capabilities: [...] })
-mcp__claude-flow__agent_spawn({ type: "tester", name: "agent-3", capabilities: [...] })
+mcp__claude-flow__agent_spawn({ agentType: "researcher", agentId: "agent-1" })
+mcp__claude-flow__agent_spawn({ agentType: "coder", agentId: "agent-2" })
+mcp__claude-flow__agent_spawn({ agentType: "tester", agentId: "agent-3" })
 
 // Step 3: Orchestrate tasks
 mcp__claude-flow__task_orchestrate({ task: "...", strategy: "parallel", priority: "high" })
 
 // Step 4: Store coordination state
-mcp__claude-flow__memory_usage({ action: "store", namespace: "swarm", key: "state", value: "..." })
+mcp__claude-flow__memory_store({ key: "swarm:state", value: { status: "agents_spawned", topology: "mesh" } })
 ```
 
 ### Pattern B: RUV-Swarm DAA (For learning/adaptation)
 
 ```javascript
 // Step 1: Initialize with DAA
-mcp__ruv-swarm__swarm_init({ topology: "mesh", strategy: "specialized" })
-mcp__ruv-swarm__daa_init({ enableLearning: true, enableCoordination: true })
+mcp__plugin_serena-workflow-engine_ruv-swarm__swarm_init({ topology: "mesh", strategy: "specialized" })
+mcp__plugin_serena-workflow-engine_ruv-swarm__daa_init({ enableLearning: true, enableCoordination: true })
 
 // Step 2: Create autonomous agents
-mcp__ruv-swarm__daa_agent_create({ id: "agent-1", cognitivePattern: "adaptive", enableMemory: true })
-mcp__ruv-swarm__daa_agent_create({ id: "agent-2", cognitivePattern: "critical", enableMemory: true })
+mcp__plugin_serena-workflow-engine_ruv-swarm__daa_agent_create({ id: "agent-1", cognitivePattern: "adaptive", enableMemory: true })
+mcp__plugin_serena-workflow-engine_ruv-swarm__daa_agent_create({ id: "agent-2", cognitivePattern: "critical", enableMemory: true })
 
 // Step 3: Orchestrate with adaptation
-mcp__ruv-swarm__task_orchestrate({ task: "...", strategy: "adaptive" })
+mcp__plugin_serena-workflow-engine_ruv-swarm__task_orchestrate({ task: "...", strategy: "adaptive" })
 
 // Step 4: Share knowledge between agents
-mcp__ruv-swarm__daa_knowledge_share({ sourceAgentId: "agent-1", targetAgentIds: ["agent-2"] })
+mcp__plugin_serena-workflow-engine_ruv-swarm__daa_knowledge_share({ sourceAgentId: "agent-1", targetAgentIds: ["agent-2"] })
 ```
 
 ### Pattern C: Hive-Mind (For consensus/collective intelligence)
 
 ```javascript
 // Step 1: Initialize hive
-/hive-mind-init  // Skill invocation
+mcp__claude-flow__hive-mind_init({ topology: "mesh" })
 
-// Step 2: Spawn hive agents
-/hive-mind-spawn { type: "worker", count: 3 }
+// Step 2: Spawn hive workers (combined spawn + join)
+mcp__claude-flow__hive-mind_spawn({ count: 3, role: "worker", agentType: "worker" })
 
 // Step 3: Coordinate via consensus
-/hive-mind-consensus { proposal: "...", agents: [...] }
+mcp__claude-flow__hive-mind_consensus({ action: "propose", type: "decision", value: "..." })
 
 // Step 4: Access collective memory
-/hive-mind-memory { action: "store", key: "...", value: "..." }
+mcp__claude-flow__hive-mind_memory({ action: "set", key: "...", value: "..." })
+
+// Step 5: Broadcast to all workers
+mcp__claude-flow__hive-mind_broadcast({ message: "...", priority: "normal" })
 ```
 
 ---
