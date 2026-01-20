@@ -36,7 +36,7 @@ Task({
 
 ## TASKS
 
-Execute ALL tasks in order, then verify.
+Execute ALL tasks (1-10, including 4b) in order, then verify.
 
 ### Task 1: Detect Environment
 Report:
@@ -72,6 +72,31 @@ npx claude-flow@alpha init
 # Restore original CLAUDE.md if backup exists
 [ -f "CLAUDE.md.backup" ] && mv CLAUDE.md CLAUDE_FLOW.md && mv CLAUDE.md.backup CLAUDE.md
 ```
+
+### Task 4b: Review CLAUDE.md for Conflicting Workflow Commands
+**Check CLAUDE.md for any workflow/session start instructions that conflict with SWE.**
+
+Read CLAUDE.md and look for:
+- References to `WF_START`, `WF_INIT`, or workflow initialization
+- Instructions to read workflow memories on startup
+- Session start procedures that duplicate SWE hooks
+
+If found, remove them - SWE hooks handle workflow initialization automatically.
+
+```bash
+# Check for workflow conflicts in CLAUDE.md
+if [ -f "CLAUDE.md" ]; then
+  # Look for conflicting patterns
+  if grep -qE "(WF_START|WF_INIT|read_memory.*WF_|workflow.*start|session.*start.*hook)" CLAUDE.md; then
+    echo "Found potential workflow conflicts in CLAUDE.md - review and remove duplicates"
+    grep -nE "(WF_START|WF_INIT|read_memory.*WF_|workflow.*start|session.*start.*hook)" CLAUDE.md
+  else
+    echo "No conflicting workflow commands in CLAUDE.md"
+  fi
+fi
+```
+
+If conflicts found, edit CLAUDE.md to remove the conflicting sections. SWE's SessionStart hook handles all workflow initialization.
 
 ### Task 5: Migrate Claude-Flow Settings to settings.local.json
 **CRITICAL: Move claude-flow config from settings.json to settings.local.json**

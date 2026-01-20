@@ -21,7 +21,7 @@ Task({
   description: "SWE plugin initialization",
   prompt: `You are the SWE Init Agent.
 
-Read .claude/plugins/serena-workflow-engine/agents/swe-init-agent.md and execute ALL tasks (1-10), then run all 7 verifications.
+Read .claude/plugins/serena-workflow-engine/agents/swe-init-agent.md and execute ALL tasks (1-10, including 4b), then run all 7 verifications.
 
 Only create setup-complete.json after ALL verifications pass.
 Output the completion summary at the end.`
