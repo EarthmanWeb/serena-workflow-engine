@@ -12,7 +12,7 @@ and Serena memory persistence.
 ```bash
 cd your-project
 git submodule add https://github.com/anthropics/serena-workflow-engine .claude/plugins/serena-workflow-engine
-chmod +x .claude/plugins/serena-workflow-engine/hooks/*.sh
+chmod +x .claude/plugins/serena-workflow-engine/hooks/*.py
 ```
 
 ### 2. Install the plugin
