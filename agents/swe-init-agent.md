@@ -133,22 +133,40 @@ fi
 ```
 
 ### Task 7: Install SWE Hooks to settings.local.json
+**CRITICAL: Use ABSOLUTE paths to avoid CWD-related path resolution bugs.**
+
+The hooks in settings.local.json MUST use absolute paths. Relative paths like `.claude/plugins/...` will fail when the CWD changes during session resume or context compaction.
+
 ```bash
+PROJECT_ROOT="$(pwd)"
 HOOKS_SRC=".claude/plugins/serena-workflow-engine/hooks/hooks.json"
 SETTINGS_LOCAL=".claude/settings.local.json"
 
-jq -s '
+# Replace ${CLAUDE_PLUGIN_ROOT} with ABSOLUTE path (not relative!)
+jq -s --arg root "$PROJECT_ROOT" '
   .[0].hooks as $hooks |
   .[1] |
   .hooks = ($hooks | walk(
     if type == "string" then
-      gsub("\\$\\{CLAUDE_PLUGIN_ROOT\\}"; ".claude/plugins/serena-workflow-engine")
+      gsub("\\$\\{CLAUDE_PLUGIN_ROOT\\}"; ($root + "/.claude/plugins/serena-workflow-engine"))
     else .
     end
   ))
 ' "$HOOKS_SRC" "$SETTINGS_LOCAL" > "${SETTINGS_LOCAL}.tmp" && mv "${SETTINGS_LOCAL}.tmp" "$SETTINGS_LOCAL"
 
-echo "Installed SWE hooks to settings.local.json"
+# Also fix any standalone relative paths in hook commands
+jq --arg root "$PROJECT_ROOT" '
+  .hooks |= walk(
+    if type == "string" and startswith("python3 .claude/") then
+      "python3 " + $root + "/" + ltrimstr("python3 ")
+    elif type == "string" and startswith(".claude/") then
+      $root + "/" + .
+    else .
+    end
+  )
+' "$SETTINGS_LOCAL" > "${SETTINGS_LOCAL}.tmp" && mv "${SETTINGS_LOCAL}.tmp" "$SETTINGS_LOCAL"
+
+echo "Installed SWE hooks to settings.local.json with ABSOLUTE paths"
 ```
 
 ### Task 8: Install Instruction Files to Memories
@@ -212,6 +230,12 @@ After all tasks, verify these 7 conditions:
    jq '.hooks | keys' .claude/settings.local.json
    # Expected: ["PostToolUse", "PreToolUse", "SessionStart", "Stop", "UserPromptSubmit"]
    ```
+4b. **Hook Paths Are Absolute**: All hook commands use absolute paths (not relative)
+   ```bash
+   # Check for relative paths - should return nothing
+   jq -r '.. | .command? // empty' .claude/settings.local.json | grep -E "^python3 \\.claude/|^\\.claude/" || echo "OK: All paths are absolute"
+   # If any relative paths found, re-run Task 7
+   ```
 5. **Instruction Files**: >= 26 files
    ```bash
    ls .serena/memories/ | grep -E "^(WF_|CLAUDE_OBLIGATIONS|DOM_SWE|FEATURE_SWE|REF_SWE)" | wc -l
@@ -271,3 +295,25 @@ rm -rf ~/.serena/language_servers/static/BashLanguageServer
 
 ### Verification Fails
 Identify which check failed, return to that task, fix, and re-verify.
+
+### Hook Path Resolution Error (can't open file)
+**Error:** `can't open file '/path/to/project/private/tests/.claude/plugins/...'`
+
+**Cause:** Hook commands in settings.local.json use relative paths (`.claude/plugins/...`) that resolve from CWD. When session resumes after context compaction, CWD may be different.
+
+**Fix:** Convert all relative paths to absolute paths in settings.local.json:
+```bash
+PROJECT_ROOT="/path/to/project"  # Adjust for your project
+jq --arg root "$PROJECT_ROOT" '
+  .hooks |= walk(
+    if type == "string" and (startswith("python3 .claude/") or startswith(".claude/")) then
+      if startswith("python3 ") then
+        "python3 " + $root + "/" + ltrimstr("python3 ")
+      else
+        $root + "/" + .
+      end
+    else .
+    end
+  )
+' .claude/settings.local.json > .claude/settings.local.json.tmp && mv .claude/settings.local.json.tmp .claude/settings.local.json
+```
