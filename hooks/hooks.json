@@ -68,6 +68,16 @@
 						"timeout": 10
 					}
 				]
+			},
+			{
+				"matcher": "mcp__playwright__browser_navigate",
+				"hooks": [
+					{
+						"type": "command",
+						"command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/swe_pre_playwright_auth.py",
+						"timeout": 10
+					}
+				]
 			}
 		],
 		"PostToolUse": [
