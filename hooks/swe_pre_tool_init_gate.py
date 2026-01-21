@@ -31,8 +31,18 @@ ALLOWED_TOOLS = [
     'mcp__serena__list_memories',
 ]
 
+def find_project_root(start_dir):
+    """Walk up directory tree to find project root containing .serena folder."""
+    current = os.path.abspath(start_dir)
+    while current != os.path.dirname(current):  # Stop at filesystem root
+        if os.path.isdir(os.path.join(current, '.serena')):
+            return current
+        current = os.path.dirname(current)
+    return start_dir  # Fallback to original if not found
+
 def get_serena_memories_dir(cwd):
-    return os.path.join(cwd, '.serena', 'memories')
+    project_root = find_project_root(cwd)
+    return os.path.join(project_root, '.serena', 'memories')
 
 def extract_session_id(transcript_path):
     """Extract session ID from transcript_path UUID."""
