@@ -6,9 +6,13 @@ This allows multiple concurrent sessions without state conflicts.
 
 from typing import Dict, Any, Optional, Tuple
 from .config import (
-    load_workflow_state, save_workflow_state, 
+    load_workflow_state, save_workflow_state,
     get_most_recent_working_memory, get_working_memory_filename,
     read_working_memory_state, write_working_memory_state
+)
+from .session import (
+    extract_session_id, find_working_memory_for_session,
+    validate_working_memory_session
 )
 
 
@@ -55,26 +59,48 @@ EXIT_PLAN_MODE_STATES = {
 
 class StateManager:
     """Manages workflow state transitions.
-    
+
     State is stored in WORKING_MEMORY files, allowing multiple concurrent sessions.
     Each session has its own WORKING_MEMORY file with embedded workflow context.
     """
 
-    def __init__(self, cwd: str, wm_filename: str = None):
+    def __init__(self, cwd: str, wm_filename: str = None, session_id: str = None):
         """Initialize state manager.
-        
+
         Args:
             cwd: Working directory
             wm_filename: Optional specific WORKING_MEMORY filename (without .md)
-                        If None, uses most recent WORKING_MEMORY file
+                        If None, finds working memory for session_id
+            session_id: Optional session ID for session isolation.
+                       If provided, only uses working memory matching this session.
         """
         self.cwd = cwd
         self.wm_filename = wm_filename
         self.wm_filepath = None
-        
-        # Try to load state from WORKING_MEMORY
-        state_data, filepath = read_working_memory_state(cwd, wm_filename)
-        
+        self.session_id = session_id
+
+        # Try to load state from WORKING_MEMORY with session isolation
+        state_data = None
+        filepath = None
+
+        if wm_filename:
+            # Specific filename provided - use it
+            state_data, filepath = read_working_memory_state(cwd, wm_filename)
+        elif session_id:
+            # Session ID provided - find working memory for this session only
+            filepath = find_working_memory_for_session(cwd, session_id)
+            if filepath:
+                state_data, filepath = read_working_memory_state(cwd, filepath.replace('.md', '').split('/')[-1])
+        else:
+            # No session context - fall back to most recent (legacy behavior)
+            state_data, filepath = read_working_memory_state(cwd)
+
+        # Validate session ownership if session_id provided
+        if filepath and session_id and not validate_working_memory_session(filepath, session_id):
+            # Working memory doesn't belong to this session - don't use it
+            state_data = None
+            filepath = None
+
         if state_data:
             self.wm_filepath = filepath
             self.wm_filename = filepath.replace('.md', '').split('/')[-1] if filepath else None
@@ -82,7 +108,7 @@ class StateManager:
             self.state = {
                 "current_state": state_data.get("current_state", "WF_INIT"),
                 "previous_state": None,
-                "session_id": state_data.get("session_id"),
+                "session_id": state_data.get("session_id") or session_id,
                 "working_memory_file": self.wm_filename,
                 "feature_keys": state_data.get("feature_keys", []),
                 "edits_since_checkpoint": 0,
@@ -90,11 +116,11 @@ class StateManager:
                 "reward_signals": {"state_transitions": 0, "edit_count": 0},
             }
         else:
-            # No WORKING_MEMORY found - use minimal state
+            # No WORKING_MEMORY found for this session - use minimal state
             self.state = {
                 "current_state": "WF_INIT",
                 "previous_state": None,
-                "session_id": None,
+                "session_id": session_id,
                 "working_memory_file": None,
                 "edits_since_checkpoint": 0,
                 "plan_mode": False,
