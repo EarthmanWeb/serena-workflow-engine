@@ -47,8 +47,17 @@ DO NOT BE CONVERSATIONAL when performing tasks. Concise, functional language ONL
 - [ ] Ensure cleanup after tasks (remove temp files, branches, agents)
 - [ ] Communicate blockers or uncertainties immediately
 
-## If Debugging Is Needed
+## ⚠️ MANDATORY SKILL FAILURE THRESHOLD RULE:**
+After 2 consecutive command failures of the same type:
+1. STOP immediately
+2. Re-read the relevant skill/memory
+3. Try again with adjustments
+3. Ask user if still failing
 
+**DO NOT flail with variations of the same broken approach.**
+
+## If Debugging Is Needed
+    
 1. FOLLOW project-specific debugging patterns (check REF_* memories)
 2. LOG all findings in WORKING_MEMORY
 3. SUMMARIZE issues and proposed fixes for user review
