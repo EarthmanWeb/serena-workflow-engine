@@ -10,9 +10,17 @@ OUTPUT THE ABOVE LINE IMMEDIATELY. Do not read further until you have reported y
 
 **This step exists specifically to update WORKING_MEMORY. You MUST do this.**
 
+**MANDATORY: Read REF_WORKING_MEMORY BEFORE updating:**
+```
+mcp__serena__read_memory("REF_WORKING_MEMORY")
+```
+
+Then update:
 ```
 mcp__serena__write_memory("WORKING_MEMORY_<timestamp>_<descriptor>", "<content>")
 ```
+
+**⛔ NEVER do single-field state edits. Follow anti-pattern warnings in REF_WORKING_MEMORY.**
 
 **Format** (see `REF_WORKING_MEMORY` for full details):
 ```markdown

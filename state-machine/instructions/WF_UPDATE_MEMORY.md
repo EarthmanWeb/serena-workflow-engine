@@ -31,8 +31,13 @@ IMPORTANT: ONLY WRITE THE MEMORY FOR THIS TASK
    - Related files/symbols if known
 
 3. **For WORKING_MEMORY:**
+   - **MANDATORY: Read `REF_WORKING_MEMORY` BEFORE updating**
+   ```
+   mcp__serena__read_memory("REF_WORKING_MEMORY")
+   ```
    - Filename: `WORKING_MEMORY_<conversation_id>` (use your conversation ID)
-   - See `REF_WORKING_MEMORY` for format template and rules
+   - Follow format template and anti-pattern warnings in REF_WORKING_MEMORY
+   - **⛔ NEVER do single-field state edits**
    - Each conversation has its own isolated file
 
 4. **For architecture snapshots (after reading SYS_* or REF_* memories), include:**
