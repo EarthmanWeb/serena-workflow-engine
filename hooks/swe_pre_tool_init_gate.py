@@ -143,19 +143,30 @@ def main():
             sys.exit(0)
 
         # Check if initialization is complete (WORKING_MEMORY exists with state FOR THIS SESSION)
-        if check_working_memory_exists(cwd, session_id):
+        is_valid, diagnostic = check_working_memory_exists(cwd, session_id)
+        if is_valid:
             # Initialized - allow through
             print(json.dumps({}))
             sys.exit(0)
 
-        # NOT initialized - BLOCK the tool call
+        # NOT initialized - BLOCK the tool call with specific diagnostic
         output = {
             "decision": "block",
             "reason": f"""🛑 BLOCKED: Workflow initialization NOT complete for session {session_id or 'unknown'}.
 
+**Diagnostic**: {diagnostic}
+
+**Required format** (from REF_WORKING_MEMORY):
+```
+## Workflow Context
+- **Current State**: WF_EXECUTE
+- **Session ID**: {session_id}
+```
+
 You MUST complete the WF_INIT workflow BEFORE using any other tools:
 1. Read WF_INIT: mcp__serena__read_memory("WF_INIT")
-2. Follow its instructions to create WORKING_MEMORY_{session_id}_<descriptor> with workflow state
+2. Read REF_WORKING_MEMORY for exact template
+3. Create WORKING_MEMORY_{session_id}_<descriptor> with correct format
 
 NO EXCEPTIONS. Complete initialization first."""
         }
