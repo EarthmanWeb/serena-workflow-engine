@@ -50,12 +50,17 @@
 					{
 						"type": "command",
 						"command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/swe_pre_bash_test_gate.py",
-						"timeout": 10
-					}
-				]
-			},
-			{
-				"matcher": "Write|Edit|MultiEdit|mcp__serena__replace_symbol_body|mcp__serena__insert_after_symbol|mcp__serena__insert_before_symbol",
+					"timeout": 10
+				},
+				{
+					"type": "command",
+					"command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/swe_pre_bash_serena_suggest.py",
+					"timeout": 10
+				}
+			]
+		},
+		{
+			"matcher": "Write|Edit|MultiEdit|mcp__serena__replace_symbol_body|mcp__serena__insert_after_symbol|mcp__serena__insert_before_symbol",
 				"hooks": [
 					{
 						"type": "command",
@@ -70,7 +75,7 @@
 				]
 			},
 			{
-				"matcher": "mcp__playwright__browser_navigate",
+				"matcher": "mcp__playwright__browser_open",
 				"hooks": [
 					{
 						"type": "command",
