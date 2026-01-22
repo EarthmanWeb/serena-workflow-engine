@@ -8,7 +8,9 @@ from typing import Dict, Any, Optional, Tuple
 from .config import (
     load_workflow_state, save_workflow_state,
     get_most_recent_working_memory, get_working_memory_filename,
-    read_working_memory_state, write_working_memory_state
+    read_working_memory_state, write_working_memory_state,
+    persist_edit_to_wm, check_wm_staleness, get_wm_edit_count,
+    reset_wm_edit_tracking
 )
 from .session import (
     extract_session_id, find_working_memory_for_session,
@@ -170,22 +172,45 @@ class StateManager:
             # This is expected at session start before WM is created
             return True, f"Transition: {old_state} → {new_state} (in-memory, no WORKING_MEMORY yet)"
 
-    def increment_edits(self) -> int:
-        """Increment edit counter, return new count.
+    def increment_edits(self, edited_file: str = None) -> int:
+        """Increment edit counter and persist to WM file.
         
-        Edit counts are kept in-memory only - they don't need cross-session persistence.
+        Edit counts are now persisted to WORKING_MEMORY for staleness detection.
+        
+        Args:
+            edited_file: Optional path to the file that was edited
+        
+        Returns:
+            New edit count
         """
         self.state["edits_since_checkpoint"] = \
             self.state.get("edits_since_checkpoint", 0) + 1
         self.state["reward_signals"]["edit_count"] = \
             self.state["reward_signals"].get("edit_count", 0) + 1
-        # Note: Not persisting edit counts - they're session-local
+        
+        # Persist to WORKING_MEMORY file if available
+        if self.wm_filepath:
+            success, wm_count = persist_edit_to_wm(self.cwd, self.wm_filepath, edited_file)
+            if success:
+                # Use the persisted count as source of truth
+                self.state["edits_since_checkpoint"] = wm_count
+        
         return self.state["edits_since_checkpoint"]
 
     def reset_edit_counter(self):
-        """Reset edit counter after checkpoint."""
+        """Reset edit counter after checkpoint (user updated WM progress)."""
         self.state["edits_since_checkpoint"] = 0
-        # Note: Not persisting - edit counts are session-local
+        
+        # Reset in WORKING_MEMORY file if available
+        if self.wm_filepath:
+            try:
+                with open(self.wm_filepath, 'r') as f:
+                    content = f.read()
+                updated_content = reset_wm_edit_tracking(content)
+                with open(self.wm_filepath, 'w') as f:
+                    f.write(updated_content)
+            except IOError:
+                pass  # Silent fail - in-memory reset still works
 
     def should_checkpoint(self, threshold: int = 3) -> bool:
         """Check if checkpoint is needed based on edit count."""

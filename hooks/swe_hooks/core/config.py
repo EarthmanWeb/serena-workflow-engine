@@ -155,6 +155,329 @@ def update_working_memory_state(content: str, new_state: str, return_step: str =
     return content
 
 
+# =============================================================================
+# WORKING_MEMORY Staleness Detection (for enforcement)
+# =============================================================================
+
+def get_wm_last_updated(content: str) -> Optional[datetime]:
+    """Extract the last updated timestamp from WORKING_MEMORY content.
+    
+    Looks for patterns like:
+    - **Last Updated:** 2026-01-22T14:30:00Z
+    - **Edit Count Since Checkpoint:** N
+    """
+    # Try ISO format first
+    match = re.search(r'\*\*Last Updated\*\*:\s*(\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(?::\d{2})?)', content)
+    if match:
+        try:
+            ts = match.group(1).replace('T', ' ')[:16]  # Normalize to YYYY-MM-DD HH:MM
+            return datetime.strptime(ts, "%Y-%m-%d %H:%M")
+        except ValueError:
+            pass
+    
+    # Try simpler date format
+    match = re.search(r'\*\*Last Updated\*\*:\s*(\d{4}-\d{2}-\d{2} \d{2}:\d{2})', content)
+    if match:
+        try:
+            return datetime.strptime(match.group(1), "%Y-%m-%d %H:%M")
+        except ValueError:
+            pass
+    
+    return None
+
+
+def get_wm_edit_count(content: str) -> int:
+    """Extract the edit count from WORKING_MEMORY content."""
+    match = re.search(r'\*\*Edit Count Since Checkpoint\*\*:\s*(\d+)', content)
+    if match:
+        return int(match.group(1))
+    return 0
+
+
+def update_wm_edit_tracking(content: str, edit_count: int, edited_files: List[str] = None) -> str:
+    """Update edit tracking metadata in WORKING_MEMORY content.
+    
+    Updates or adds:
+    - **Last Updated:** timestamp
+    - **Edit Count Since Checkpoint:** N
+    - **Recent Edits:** list of files
+    """
+    timestamp = datetime.now().strftime("%Y-%m-%dT%H:%M:%SZ")
+    
+    # Update or add Last Updated
+    if re.search(r'\*\*Last Updated\*\*:', content):
+        content = re.sub(
+            r'(\*\*Last Updated\*\*:\s*).*',
+            f'\\g<1>{timestamp}',
+            content
+        )
+    else:
+        # Add to Progress section if it exists
+        if '## Progress' in content:
+            content = re.sub(
+                r'(## Progress\s*\n)',
+                f'\\g<1>\n**Last Updated:** {timestamp}\n',
+                content
+            )
+    
+    # Update or add Edit Count
+    if re.search(r'\*\*Edit Count Since Checkpoint\*\*:', content):
+        content = re.sub(
+            r'(\*\*Edit Count Since Checkpoint\*\*:\s*)\d+',
+            f'\\g<1>{edit_count}',
+            content
+        )
+    else:
+        # Add after Last Updated if present, otherwise to Progress section
+        if re.search(r'\*\*Last Updated\*\*:', content):
+            content = re.sub(
+                r'(\*\*Last Updated\*\*:.*\n)',
+                f'\\g<1>**Edit Count Since Checkpoint:** {edit_count}\n',
+                content
+            )
+    
+    # Update Recent Edits list
+    if edited_files:
+        edits_str = ', '.join([f'`{f}`' for f in edited_files[-5:]])  # Keep last 5
+        if re.search(r'\*\*Recent Edits\*\*:', content):
+            content = re.sub(
+                r'(\*\*Recent Edits\*\*:\s*).*',
+                f'\\g<1>{edits_str}',
+                content
+            )
+        else:
+            if re.search(r'\*\*Edit Count Since Checkpoint\*\*:', content):
+                content = re.sub(
+                    r'(\*\*Edit Count Since Checkpoint\*\*:.*\n)',
+                    f'\\g<1>**Recent Edits:** {edits_str}\n',
+                    content
+                )
+    
+    return content
+
+
+def reset_wm_edit_tracking(content: str) -> str:
+    """Reset edit tracking after a checkpoint (user updated progress)."""
+    timestamp = datetime.now().strftime("%Y-%m-%dT%H:%M:%SZ")
+    
+    # Update Last Updated
+    if re.search(r'\*\*Last Updated\*\*:', content):
+        content = re.sub(
+            r'(\*\*Last Updated\*\*:\s*).*',
+            f'\\g<1>{timestamp}',
+            content
+        )
+    
+    # Reset Edit Count to 0
+    if re.search(r'\*\*Edit Count Since Checkpoint\*\*:', content):
+        content = re.sub(
+            r'(\*\*Edit Count Since Checkpoint\*\*:\s*)\d+',
+            '\\g<1>0',
+            content
+        )
+    
+    # Clear Recent Edits
+    if re.search(r'\*\*Recent Edits\*\*:', content):
+        content = re.sub(
+            r'\*\*Recent Edits\*\*:.*\n',
+            '',
+            content
+        )
+    
+    return content
+
+
+def check_wm_staleness(cwd: str, wm_filepath: str, edit_threshold: int = 3) -> Tuple[bool, int, Optional[datetime]]:
+    """Check if WORKING_MEMORY is stale based on edit tracking.
+    
+    Args:
+        cwd: Working directory
+        wm_filepath: Path to the WORKING_MEMORY file
+        edit_threshold: Number of edits before considered stale
+    
+    Returns:
+        Tuple of (is_stale, edit_count, last_update_time)
+    """
+    if not wm_filepath or not os.path.exists(wm_filepath):
+        return False, 0, None
+    
+    try:
+        with open(wm_filepath, 'r') as f:
+            content = f.read()
+        
+        edit_count = get_wm_edit_count(content)
+        last_updated = get_wm_last_updated(content)
+        
+        is_stale = edit_count >= edit_threshold
+        return is_stale, edit_count, last_updated
+    except IOError:
+        return False, 0, None
+
+
+def check_wm_progress_updated(cwd: str, wm_filepath: str, since_timestamp: datetime = None) -> bool:
+    """Check if WORKING_MEMORY Progress section was updated since timestamp.
+    
+    Args:
+        cwd: Working directory
+        wm_filepath: Path to the WORKING_MEMORY file
+        since_timestamp: Check if updated after this time. If None, checks if edit count is 0.
+    
+    Returns:
+        True if progress was updated (edit count is 0 or last_updated > since_timestamp)
+    """
+    if not wm_filepath or not os.path.exists(wm_filepath):
+        return True  # No WM to check - allow operation
+    
+    try:
+        with open(wm_filepath, 'r') as f:
+            content = f.read()
+        
+        edit_count = get_wm_edit_count(content)
+        
+        # If edit count is 0, WM was updated after last checkpoint
+        if edit_count == 0:
+            return True
+        
+        # If we have a timestamp to check against
+        if since_timestamp:
+            last_updated = get_wm_last_updated(content)
+            if last_updated and last_updated > since_timestamp:
+                return True
+        
+        return False
+    except IOError:
+        return True  # On error, allow operation
+
+
+def persist_edit_to_wm(cwd: str, wm_filepath: str, edited_file: str = None) -> Tuple[bool, int]:
+    """Persist an edit to WORKING_MEMORY tracking.
+    
+    Args:
+        cwd: Working directory
+        wm_filepath: Path to the WORKING_MEMORY file
+        edited_file: Optional file path that was edited
+    
+    Returns:
+        Tuple of (success, new_edit_count)
+    """
+    if not wm_filepath or not os.path.exists(wm_filepath):
+        return False, 0
+    
+    try:
+        with open(wm_filepath, 'r') as f:
+            content = f.read()
+        
+        # Get current edit count and increment
+        current_count = get_wm_edit_count(content)
+        new_count = current_count + 1
+        
+        # Get recent edits list
+        recent_match = re.search(r'\*\*Recent Edits\*\*:\s*(.+)', content)
+        recent_files = []
+        if recent_match:
+            # Parse existing files
+            recent_str = recent_match.group(1)
+            recent_files = [f.strip('`').strip() for f in recent_str.split(',') if f.strip()]
+        
+        # Add new file if provided
+        if edited_file:
+            # Clean up file path
+            clean_path = edited_file.replace(cwd, '').lstrip('/')
+            if clean_path not in recent_files:
+                recent_files.append(clean_path)
+        
+        # Update content
+        updated_content = update_wm_edit_tracking(content, new_count, recent_files)
+        
+        with open(wm_filepath, 'w') as f:
+            f.write(updated_content)
+        
+        return True, new_count
+    except IOError:
+        return False, 0
+
+
+def append_transition_to_wm(wm_filepath: str, from_state: str, to_state: str) -> bool:
+    """Append a state transition note to WORKING_MEMORY Progress section.
+    
+    Args:
+        wm_filepath: Path to the WORKING_MEMORY file
+        from_state: Previous workflow state
+        to_state: New workflow state
+    
+    Returns:
+        True if successful, False otherwise
+    """
+    if not wm_filepath or not os.path.exists(wm_filepath):
+        return False
+    
+    try:
+        with open(wm_filepath, 'r') as f:
+            content = f.read()
+        
+        timestamp = datetime.now().strftime("%H:%M")
+        transition_note = f"- [{timestamp}] Transitioned: {from_state} → {to_state}"
+        
+        # Find Progress section and append transition note
+        progress_match = re.search(r'(## Progress\s*\n)(.*?)(?=\n## |\Z)', content, re.DOTALL)
+        if progress_match:
+            progress_section = progress_match.group(2)
+            
+            # Check if there's already a Transitions subsection
+            if '### Transitions' in progress_section:
+                # Append to existing Transitions subsection
+                content = re.sub(
+                    r'(### Transitions\s*\n.*?)(\n###|\n##|\Z)',
+                    f'\\g<1>{transition_note}\n\\g<2>',
+                    content,
+                    flags=re.DOTALL
+                )
+            else:
+                # Add Transitions subsection before the next section or at end of Progress
+                insert_pos = progress_match.end()
+                content = content[:insert_pos] + f"\n### Transitions\n{transition_note}\n" + content[insert_pos:]
+        
+        with open(wm_filepath, 'w') as f:
+            f.write(content)
+        
+        return True
+    except IOError:
+        return False
+    
+    try:
+        with open(wm_filepath, 'r') as f:
+            content = f.read()
+        
+        # Get current edit count and increment
+        current_count = get_wm_edit_count(content)
+        new_count = current_count + 1
+        
+        # Get recent edits list
+        recent_match = re.search(r'\*\*Recent Edits\*\*:\s*(.+)', content)
+        recent_files = []
+        if recent_match:
+            # Parse existing files
+            recent_str = recent_match.group(1)
+            recent_files = [f.strip('`').strip() for f in recent_str.split(',') if f.strip()]
+        
+        # Add new file if provided
+        if edited_file:
+            # Clean up file path
+            clean_path = edited_file.replace(cwd, '').lstrip('/')
+            if clean_path not in recent_files:
+                recent_files.append(clean_path)
+        
+        # Update content
+        updated_content = update_wm_edit_tracking(content, new_count, recent_files)
+        
+        with open(wm_filepath, 'w') as f:
+            f.write(updated_content)
+        
+        return True, new_count
+    except IOError:
+        return False, 0
+
+
 def read_working_memory_state(cwd: str, wm_filename: str = None) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
     """Read state from a WORKING_MEMORY file.
     
