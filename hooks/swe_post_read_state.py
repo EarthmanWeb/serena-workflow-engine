@@ -20,6 +20,7 @@ try:
     from swe_hooks.core.input import read_stdin_safe, get_input_field
     from swe_hooks.core.state_manager import StateManager, STATE_ICONS
     from swe_hooks.core.session import extract_session_id
+    from swe_hooks.core.config import append_transition_to_wm
 except ImportError as e:
     output = {"hookSpecificOutput": {"hookEventName": "PostToolUse", "additionalContext": f"SWE import error: {e}"}}
     print(json.dumps(output), file=sys.stdout)
@@ -55,6 +56,9 @@ def main():
             success, msg = state_mgr.transition_to(memory_name)
             if success:
                 output.add_message(msg)
+                # Auto-log transition to WORKING_MEMORY Progress section
+                if state_mgr.wm_filepath:
+                    append_transition_to_wm(state_mgr.wm_filepath, current, memory_name)
             else:
                 output.add_message(f"⚠️ State transition issue: {msg}")
 
