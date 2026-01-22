@@ -36,6 +36,7 @@ HIGH_RISK_PATTERNS = [
 TEST_SYNTAX_BLOCK_PATTERNS = [
     r'TEST_ENV=\w+\s+npx\s+playwright\s+test',  # Direct npx playwright test with TEST_ENV
     r'cd\s+.*private/tests\s*&&\s*TEST_ENV=',   # cd to tests dir then TEST_ENV
+    r'npm\s+run\s+test:(dev|test|refactor)\s+--',  # npm run test:env -- (wrong script)
 ]
 
 # Warn patterns (not blocked)
@@ -72,10 +73,8 @@ def main():
                     f"🛑 INCORRECT TEST SYNTAX BLOCKED\n\n"
                     f"Command: {command}\n"
                     f"Pattern matched: {pattern}\n\n"
-                    f"You are using the wrong syntax to run tests.\n\n"
-                    f"REQUIRED: Read FEATURE_TESTS before proceeding:\n"
-                    f"  mcp__serena__read_memory(\"FEATURE_TESTS\")\n\n"
-                    f"Use the proper test runner script, not direct npx invocation."
+                    f"You are using the wrong syntax to run tests.\n"
+                    f"YOU MUST invoke: /test-runner"
                 )
 
         # Check warn patterns

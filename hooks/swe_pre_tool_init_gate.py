@@ -54,10 +54,13 @@ def extract_session_id(transcript_path):
     return None
 
 def check_working_memory_exists(cwd, session_id):
-    """Check if a WORKING_MEMORY file exists for THIS SESSION with proper workflow state."""
+    """Check if a WORKING_MEMORY file exists for THIS SESSION with proper workflow state.
+
+    Returns: tuple (bool, str) - (is_valid, diagnostic_message)
+    """
     memories_dir = get_serena_memories_dir(cwd)
     if not os.path.exists(memories_dir):
-        return False
+        return False, "No .serena/memories directory found"
 
     # Look for WORKING_MEMORY_<session_id>_* files specifically
     if session_id:
@@ -69,34 +72,60 @@ def check_working_memory_exists(cwd, session_id):
         working_memories = glob.glob(pattern)
 
     if not working_memories:
-        return False
+        return False, f"No WORKING_MEMORY_{session_id}_*.md file found"
 
     # Check the most recent one for workflow state
     latest = max(working_memories, key=os.path.getmtime)
+    filename = os.path.basename(latest)
+
     try:
         with open(latest, 'r') as f:
             content = f.read()
-            # Must have workflow state indicating initialization is complete
-            if any(p in content for p in [
-                'Current State:',
-                'Workflow State:',
-                'Calling Step:',
-                '## Workflow Context'
-            ]):
-                # Verify session ID matches (if we have one)
-                if session_id:
-                    session_match = re.search(r'\*\*Session ID\*\*:\s*(\S+)', content)
-                    if session_match and session_match.group(1) == session_id:
-                        return True
-                    # Also check filename contains session ID
-                    if session_id in os.path.basename(latest):
-                        return True
-                    return False
-                return True
-    except:
-        pass
 
-    return False
+            # Required patterns for valid workflow state
+            required_patterns = [
+                ('## Workflow Context', 'Section header'),
+                ('**Current State**:', 'Current State field'),
+            ]
+
+            # Check for required patterns
+            missing = []
+            for pattern_str, desc in required_patterns:
+                if pattern_str not in content:
+                    missing.append(f"'{pattern_str}' ({desc})")
+
+            if missing:
+                # Check what WAS found (for diagnostic)
+                found_patterns = []
+                alt_patterns = [
+                    ('## Workflow State', 'Wrong section header'),
+                    ('**Current**:', 'Wrong field format'),
+                    ('Current State:', 'Missing bold markers'),
+                    ('Workflow State:', 'Legacy format'),
+                ]
+                for alt_pat, alt_desc in alt_patterns:
+                    if alt_pat in content:
+                        found_patterns.append(f"'{alt_pat}' ({alt_desc})")
+
+                diag = f"File {filename} missing: {', '.join(missing)}"
+                if found_patterns:
+                    diag += f". Found instead: {', '.join(found_patterns)}"
+                return False, diag
+
+            # Verify session ID matches (if we have one)
+            if session_id:
+                session_match = re.search(r'\*\*Session ID\*\*:\s*(\S+)', content)
+                if session_match and session_match.group(1) == session_id:
+                    return True, "Valid"
+                # Also check filename contains session ID
+                if session_id in filename:
+                    return True, "Valid"
+                return False, f"Session ID mismatch: expected {session_id}, file has different ID"
+            return True, "Valid"
+    except Exception as e:
+        return False, f"Error reading {filename}: {e}"
+
+    return False, "Unknown validation failure"
 
 def main():
     try:
