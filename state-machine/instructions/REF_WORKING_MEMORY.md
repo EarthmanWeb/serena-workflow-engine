@@ -4,49 +4,55 @@
 
 `WORKING_MEMORY_<SESSION_ID>_<descriptor>.md`
 
-Example: `WORKING_MEMORY_3fe6b3c5_theme_refactor`
+- **Session ID**: 8-char from transcript_path UUID (e.g., `3fe6b3c5`)
+- **Descriptor**: 2-4 words, snake_case (e.g., `theme_refactor`)
 
-**Format:**
-- Session ID: 8-character unique conversation identifier (from `transcript_path` UUID)
-- Descriptor: 2-4 words, snake_case (e.g., `theme_refactor`, `plugin_core_implementation`)
+## Create / Load / Update
 
-**Session ID Source:**
-The session ID is extracted from Claude Code's `transcript_path` which contains a UUID per conversation:
+| Action | Steps |
+|--------|-------|
+| **Create** | Get session ID from hook → pick descriptor → write file → echo to chat |
+| **Load** | Read file → verify session ID matches → echo to chat |
+| **Update** | Write changes → echo to chat: `📋 Updated Working Memory: WORKING_MEMORY_<filename>` |
+
+**Update is MANDATORY after:** memory edits, file edits, workflow transitions, state changes.
+
+---
+
+## ⛔ ANTI-PATTERN: State-Only Edits
+
+**THIS IS WRONG - DO NOT DO THIS:**
+```python
+# ❌ WRONG: Only changing Current State field
+edit_memory("WORKING_MEMORY_...", "Current State: WF_EXECUTE", "Current State: WF_VERIFY", "literal")
 ```
-~/.claude/projects/.../00893aaf-19fa-41d2-8238-13269b9b3ca0.jsonl
-                       ^^^^^^^^ (first 8 chars = session ID)
+
+**Why it's wrong:** Captures no progress, no completed work, no context. Memory becomes useless for resumption.
+
+### ✅ A VALID Update MUST Modify MULTIPLE Sections:
+
+| Section | What to Update |
+|---------|----------------|
+| `Current State` | New workflow state |
+| `Status` | `[IN PROGRESS]` → `[COMPLETED]` |
+| `Progress` | Mark completed items with `[x]` |
+| `Files` | Add any new files modified |
+| `Context` | Add findings, blockers, decisions |
+
+**Correct approach:**
+```python
+# ✅ CORRECT: Full rewrite with all sections
+write_memory("WORKING_MEMORY_...", "<full updated content>")
+
+# ✅ ALSO CORRECT: Multiple targeted edits
+edit_memory(..., "- [ ] Step 3", "- [x] Step 3", "literal")
+edit_memory(..., "[IN PROGRESS]", "[COMPLETED]", "literal")
+edit_memory(..., "Current State: WF_EXECUTE", "Current State: WF_VERIFY", "literal")
 ```
 
-This ensures each conversation has a truly unique working memory file.
+**SINGLE-FIELD STATE EDIT = WORKFLOW VIOLATION**
 
-## Create
-
-1. Get session ID from hook context (e.g., `Session: 3fe6b3c5`)
-2. Pick descriptor (2-4 words, snake_case)
-3. Write file
-4. Echo to chat: `📋 Created Working Memory: WORKING_MEMORY_<SESSION_ID>_<descriptor>`
-
-## Load
-
-1. Read file
-2. **Verify session ID matches current session** - if not, wrong file
-3. Echo to chat: `📋 Loaded Working Memory: WORKING_MEMORY_<SESSION_ID>_<descriptor>`
-
-## Update (BLOCKING REQUIREMENT)
-
-**After ANY of these, you MUST update WORKING_MEMORY before next action:**
-- Memory edit (write_memory, edit_memory)
-- File edit (replace_symbol_body, insert_*)
-- Workflow step transition
-- Tool result that changes task state
-
-**Steps:**
-1. Write changes
-2. Echo to chat: `📋 Updated Working Memory: WORKING_MEMORY_<SESSION_ID>_<descriptor>`
-
-**PROCEEDING WITHOUT UPDATE = WORKFLOW VIOLATION**
-
-**Echoing keeps the active ID in context window across long conversations.**
+---
 
 ## Template
 
@@ -56,6 +62,14 @@ This ensures each conversation has a truly unique working memory file.
 ## Chat: <descriptor>
 Session: <SESSION_ID>
 
+## Workflow Context
+- **Calling Step**: WF_CLASSIFY
+- **Feature Key(s)**: BLOCKS
+- **Session ID**: 3fe6b3c5
+- **Return Step**: WF_DETECT_REQ
+- **Invocation Mode**: workflow
+- **Current State**: WF_EXECUTE
+
 ## Current Task
 **[STATUS]**: [Task Name]
 
@@ -63,12 +77,7 @@ Session: <SESSION_ID>
 [1-2 sentences]
 
 ### Feature(s)
-[Single feature key OR comma-separated list for multi-feature tasks]
-
-### Affected Features (multi-feature only)
-- **Primary**: [KEY1] - [why primary]
-- **Secondary**: [KEY2] - [involvement reason]
-- **Related**: [KEY3] - [involvement reason]
+[Single feature key OR comma-separated list]
 
 ### Progress
 - [ ] Step 1
@@ -80,76 +89,47 @@ Session: <SESSION_ID>
 **[OUTCOME]**: [Task name] - [summary]
 ```
 
-**Note:** The `### Affected Features` section is only required when task spans multiple features. Omit for single-feature tasks.
+---
 
-## Workflow Context Section (REQUIRED for Stop Hook)
+## Workflow Context (REQUIRED for Stop Hook)
 
-**This section is REQUIRED for the workflow stop hook to function.**
-
-The stop hook reads state from this section to warn about incomplete work.
-
-```markdown
-## Workflow Context
-- **Calling Step**: WF_CLASSIFY
-- **Feature Key(s)**: BLOCKS, CONTEXT_PROVIDERS
-- **Session ID**: 20260109_145230
-- **Return Step**: WF_DETECT_REQ
-- **Invocation Mode**: workflow
-- **Current State**: WF_EXECUTE
-```
-
-**Fields:**
-- `Calling Step`: Which WF_* invoked the current skill/action
-- `Current State`: **CRITICAL** - Active workflow state (used by stop hook)
-- `Feature Key(s)`: Active feature(s) from INDEX_FEATURES (comma-separated if multiple)
-- `Session ID`: 8-char unique ID from transcript_path UUID (e.g., `3fe6b3c5`)
-- `Return Step`: Where to return after skill completion
-- `Invocation Mode`: `workflow` | `standalone` | `swarm_agent`
+| Field | Purpose |
+|-------|---------|
+| `Calling Step` | Which WF_* invoked current action |
+| `Current State` | **CRITICAL** - Active state (used by stop hook) |
+| `Feature Key(s)` | Active feature(s) from INDEX_FEATURES |
+| `Session ID` | 8-char unique ID |
+| `Return Step` | Where to return after completion |
+| `Invocation Mode` | `workflow` \| `standalone` \| `swarm_agent` |
 
 **Stop Hook Behavior:**
-The stop hook checks `Current State` (or falls back to `Calling Step`) to detect incomplete work:
 
-| State | Stop Behavior |
-|-------|---------------|
-| `WF_DONE`, `WF_CLEANUP` | Clean exit - no warning |
-| `WF_EXECUTE`, `WF_DEBUG_TDD`, `WF_VERIFY`, `WF_PLAN_ARCHITECTURE` | ⚠️ Warning: "Stopping with incomplete work" |
-| `UNINITIALIZED` | Clean exit - no warning |
-
-**IMPORTANT:** Always update `Current State` when transitioning between workflow steps to ensure accurate stop hook behavior.
+| State | Behavior |
+|-------|----------|
+| `WF_DONE`, `WF_CLEANUP` | Clean exit |
+| `WF_EXECUTE`, `WF_DEBUG_TDD`, `WF_VERIFY` | ⚠️ Warning: incomplete work |
 
 ---
 
 ## Skill Return Section (Optional)
 
-When a skill completes, add this section:
-
 ```markdown
 ## Skill Return
 - **Skill**: research
 - **Status**: success_with_findings
-- **Findings Summary**: [brief summary]
-- **Artifacts**: [list of outputs]
+- **Findings Summary**: [brief]
+- **Artifacts**: [list]
 - **Next Step Hint**: WF_DETECT_REQ
-- **Context Updates**: [any state changes]
 ```
 
-**Status codes:**
-- `success` - Completed normally → go to return_step
-- `success_with_findings` - Completed with artifacts → go to return_step
-- `needs_clarification` - Cannot proceed → go to WF_CLARIFY
-- `blocked` - Hit blocker → go to WF_CLARIFY
-- `escalate_complexity` - More complex → go to WF_SWARM_ORCHESTRATE
-
-See `REF_SKILL_PROTOCOLS` for full specification.
+**Status codes:** `success`, `success_with_findings`, `needs_clarification`, `blocked`, `escalate_complexity`
 
 ---
 
 ## Rules
 
-1. One file per conversation (timestamp ensures uniqueness)
-2. Echo ID on every operation (keeps ID in context)
-3. Verify descriptor on load (confirms correct file)
-4. One Current Task, one Previous Task
-5. Update after significant actions
-6. Add Workflow Context when skill invoked from workflow
-7. Add Skill Return when skill completes in workflow mode
+1. One file per conversation
+2. Echo ID on every operation
+3. Verify session ID on load
+4. Update after significant actions
+5. **NEVER do single-field state edits**

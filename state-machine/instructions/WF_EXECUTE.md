@@ -10,18 +10,25 @@ OUTPUT THE ABOVE LINE IMMEDIATELY. Do not read further until you have reported y
 
 **Before starting any work, verify WORKING_MEMORY exists and is current.**
 
+**BEFORE any WORKING_MEMORY update, you MUST read:**
+```
+mcp__serena__read_memory("REF_WORKING_MEMORY")
+```
+
 If WORKING_MEMORY is stale or doesn't reflect current task:
 ```
 mcp__serena__write_memory("WORKING_MEMORY_<timestamp>_<descriptor>", "<content>")
 ```
 
-Echo to chat: `Working Memory: WORKING_MEMORY_<filename>`
+Echo to chat: `📋 Working Memory: WORKING_MEMORY_<filename>`
 
 **WORKING_MEMORY must be updated:**
 - Before starting significant work
 - After completing each subtask
 - When task state changes
 - Before transitioning to another WF_* step
+
+**⛔ NEVER do single-field state edits. See REF_WORKING_MEMORY for anti-patterns.**
 
 ---
 
