@@ -8,8 +8,35 @@ import json
 import os
 import re
 import glob
-from typing import Dict, Any, Optional, List, Tuple
+from typing import Dict, Any, Optional, List, Tuple, Callable
 from datetime import datetime
+
+# Async write support - lazy import to avoid circular dependencies
+_async_writer_available = None
+_use_async_writes = True  # Set to False to disable async writes globally
+
+
+def _get_async_writer():
+    """Lazy import of async writer to avoid circular dependencies."""
+    global _async_writer_available
+    if _async_writer_available is None:
+        try:
+            from .wm_background_writer import async_wm_write, async_wm_append
+            _async_writer_available = True
+        except ImportError:
+            _async_writer_available = False
+    return _async_writer_available
+
+
+def set_async_writes_enabled(enabled: bool):
+    """Enable or disable async writes globally."""
+    global _use_async_writes
+    _use_async_writes = enabled
+
+
+def is_async_writes_enabled() -> bool:
+    """Check if async writes are enabled and available."""
+    return _use_async_writes and _get_async_writer()
 
 
 def get_paths(cwd: str) -> Dict[str, str]:
@@ -349,28 +376,30 @@ def check_wm_progress_updated(cwd: str, wm_filepath: str, since_timestamp: datet
         return True  # On error, allow operation
 
 
-def persist_edit_to_wm(cwd: str, wm_filepath: str, edited_file: str = None) -> Tuple[bool, int]:
+def persist_edit_to_wm(cwd: str, wm_filepath: str, edited_file: str = None,
+                       async_mode: bool = None) -> Tuple[bool, int]:
     """Persist an edit to WORKING_MEMORY tracking.
-    
+
     Args:
         cwd: Working directory
         wm_filepath: Path to the WORKING_MEMORY file
         edited_file: Optional file path that was edited
-    
+        async_mode: Override async behavior (None = use global setting)
+
     Returns:
         Tuple of (success, new_edit_count)
     """
     if not wm_filepath or not os.path.exists(wm_filepath):
         return False, 0
-    
+
     try:
         with open(wm_filepath, 'r') as f:
             content = f.read()
-        
+
         # Get current edit count and increment
         current_count = get_wm_edit_count(content)
         new_count = current_count + 1
-        
+
         # Get recent edits list
         recent_match = re.search(r'\*\*Recent Edits\*\*:\s*(.+)', content)
         recent_files = []
@@ -378,55 +407,74 @@ def persist_edit_to_wm(cwd: str, wm_filepath: str, edited_file: str = None) -> T
             # Parse existing files
             recent_str = recent_match.group(1)
             recent_files = [f.strip('`').strip() for f in recent_str.split(',') if f.strip()]
-        
+
         # Add new file if provided
         if edited_file:
             # Clean up file path
             clean_path = edited_file.replace(cwd, '').lstrip('/')
             if clean_path not in recent_files:
                 recent_files.append(clean_path)
-        
+
         # Update content
         updated_content = update_wm_edit_tracking(content, new_count, recent_files)
-        
-        with open(wm_filepath, 'w') as f:
-            f.write(updated_content)
-        
-        return True, new_count
+
+        # Determine if async write should be used
+        use_async = async_mode if async_mode is not None else is_async_writes_enabled()
+
+        if use_async:
+            # Use async background writer
+            from .wm_background_writer import async_wm_write
+            success = async_wm_write(
+                filepath=wm_filepath,
+                content=updated_content,
+                operation_type='edit_tracking',
+                validate=False,  # Edit tracking doesn't need full validation
+                old_content=content,
+            )
+            return success, new_count
+        else:
+            # Synchronous write (original behavior)
+            with open(wm_filepath, 'w') as f:
+                f.write(updated_content)
+            return True, new_count
     except IOError:
         return False, 0
 
 
-def append_transition_to_wm(wm_filepath: str, from_state: str, to_state: str) -> bool:
+def append_transition_to_wm(wm_filepath: str, from_state: str, to_state: str,
+                            async_mode: bool = None) -> bool:
     """Append a state transition note to WORKING_MEMORY Progress section.
-    
+
     Args:
         wm_filepath: Path to the WORKING_MEMORY file
         from_state: Previous workflow state
         to_state: New workflow state
-    
+        async_mode: Override async behavior (None = use global setting)
+
     Returns:
         True if successful, False otherwise
     """
     if not wm_filepath or not os.path.exists(wm_filepath):
         return False
-    
+
     try:
         with open(wm_filepath, 'r') as f:
             content = f.read()
-        
+
         timestamp = datetime.now().strftime("%H:%M")
         transition_note = f"- [{timestamp}] Transitioned: {from_state} → {to_state}"
-        
+
         # Find Progress section and append transition note
         progress_match = re.search(r'(## Progress\s*\n)(.*?)(?=\n## |\Z)', content, re.DOTALL)
+        updated_content = content
+
         if progress_match:
             progress_section = progress_match.group(2)
-            
+
             # Check if there's already a Transitions subsection
             if '### Transitions' in progress_section:
                 # Append to existing Transitions subsection
-                content = re.sub(
+                updated_content = re.sub(
                     r'(### Transitions\s*\n.*?)(\n###|\n##|\Z)',
                     f'\\g<1>{transition_note}\n\\g<2>',
                     content,
@@ -435,47 +483,28 @@ def append_transition_to_wm(wm_filepath: str, from_state: str, to_state: str) ->
             else:
                 # Add Transitions subsection before the next section or at end of Progress
                 insert_pos = progress_match.end()
-                content = content[:insert_pos] + f"\n### Transitions\n{transition_note}\n" + content[insert_pos:]
-        
-        with open(wm_filepath, 'w') as f:
-            f.write(content)
-        
-        return True
+                updated_content = content[:insert_pos] + f"\n### Transitions\n{transition_note}\n" + content[insert_pos:]
+
+        # Determine if async write should be used
+        use_async = async_mode if async_mode is not None else is_async_writes_enabled()
+
+        if use_async:
+            # Use async background writer
+            from .wm_background_writer import async_wm_write
+            return async_wm_write(
+                filepath=wm_filepath,
+                content=updated_content,
+                operation_type='transition_log',
+                validate=False,  # Transition logging doesn't need full validation
+                old_content=content,
+            )
+        else:
+            # Synchronous write (original behavior)
+            with open(wm_filepath, 'w') as f:
+                f.write(updated_content)
+            return True
     except IOError:
         return False
-    
-    try:
-        with open(wm_filepath, 'r') as f:
-            content = f.read()
-        
-        # Get current edit count and increment
-        current_count = get_wm_edit_count(content)
-        new_count = current_count + 1
-        
-        # Get recent edits list
-        recent_match = re.search(r'\*\*Recent Edits\*\*:\s*(.+)', content)
-        recent_files = []
-        if recent_match:
-            # Parse existing files
-            recent_str = recent_match.group(1)
-            recent_files = [f.strip('`').strip() for f in recent_str.split(',') if f.strip()]
-        
-        # Add new file if provided
-        if edited_file:
-            # Clean up file path
-            clean_path = edited_file.replace(cwd, '').lstrip('/')
-            if clean_path not in recent_files:
-                recent_files.append(clean_path)
-        
-        # Update content
-        updated_content = update_wm_edit_tracking(content, new_count, recent_files)
-        
-        with open(wm_filepath, 'w') as f:
-            f.write(updated_content)
-        
-        return True, new_count
-    except IOError:
-        return False, 0
 
 
 def read_working_memory_state(cwd: str, wm_filename: str = None) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
@@ -508,31 +537,47 @@ def read_working_memory_state(cwd: str, wm_filename: str = None) -> Tuple[Option
         return None, None
 
 
-def write_working_memory_state(cwd: str, wm_filepath: str, new_state: str, return_step: str = None) -> bool:
+def write_working_memory_state(cwd: str, wm_filepath: str, new_state: str,
+                                return_step: str = None, async_mode: bool = None) -> bool:
     """Update state in a WORKING_MEMORY file.
-    
+
     Args:
         cwd: Working directory
         wm_filepath: Full path to the WORKING_MEMORY file
         new_state: New workflow state (e.g., 'WF_EXECUTE')
         return_step: Optional return step to set
-    
+        async_mode: Override async behavior (None = use global setting)
+
     Returns:
         True if successful, False otherwise
     """
     if not os.path.exists(wm_filepath):
         return False
-    
+
     try:
         with open(wm_filepath, 'r') as f:
             content = f.read()
-        
+
         updated_content = update_working_memory_state(content, new_state, return_step)
-        
-        with open(wm_filepath, 'w') as f:
-            f.write(updated_content)
-        
-        return True
+
+        # Determine if async write should be used
+        use_async = async_mode if async_mode is not None else is_async_writes_enabled()
+
+        if use_async:
+            # Use async background writer with anti-pattern detection
+            from .wm_background_writer import async_wm_write
+            return async_wm_write(
+                filepath=wm_filepath,
+                content=updated_content,
+                operation_type='state_update',
+                validate=True,  # State updates should be validated
+                old_content=content,  # For anti-pattern detection
+            )
+        else:
+            # Synchronous write (original behavior)
+            with open(wm_filepath, 'w') as f:
+                f.write(updated_content)
+            return True
     except IOError:
         return False
 

@@ -87,6 +87,16 @@
 		],
 		"PostToolUse": [
 			{
+				"matcher": "mcp__serena__replace_content|mcp__plugin_serena-workflow-engine_serena__replace_content",
+				"hooks": [
+					{
+						"type": "command",
+						"command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/swe_post_serena_replace_fallback.py",
+						"timeout": 10
+					}
+				]
+			},
+			{
 				"matcher": "Bash",
 				"hooks": [
 					{
