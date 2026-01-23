@@ -1,5 +1,11 @@
 # _INDEX - Memory Navigation
 
+<!-- TEMPLATE: Update during swe-init:
+  - ## Active Features: Replace with actual FEATURE_* files
+  - ## Current Session: Remove placeholder text
+  Delete this comment after customization.
+-->
+
 ## Quick Reference
 - Features: [INDEX_FEATURES](INDEX_FEATURES)
 - Architecture: [ARCH_INDEX](ARCH_INDEX)
@@ -17,6 +23,23 @@
 | WF_ | Workflow state definitions | WF_START |
 | WORKING_MEMORY_ | Session state | WORKING_MEMORY_20260115_task |
 | SPEC_ | Specifications | SPEC_NEW_FEATURE |
+| LITE_MODE_ | Lightweight session marker | LITE_MODE_abc12345 |
+
+## Context Optimization
+
+| Memory | Purpose |
+|--------|---------|
+| `WF_QUICKSTART` | Consolidated init (replaces reading 3 files) |
+| `WF_RESEARCH_LITE` | Minimal path for simple lookups |
+
+## Workflow Routing
+
+| Situation | Go To |
+|-----------|-------|
+| Simple lookup ("find X") | `WF_RESEARCH_LITE` ⚡ |
+| Starting work (full) | `WF_QUICKSTART` or `WF_START` |
+| Researching | `WF_RESEARCH` |
+| Making changes | `WF_CLASSIFY` |
 
 ## Active Features
 - [FEATURE_X](FEATURE_X) - Description

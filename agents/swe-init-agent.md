@@ -185,10 +185,28 @@ echo "Installed instruction files"
 ls .serena/memories/{WF_*,CLAUDE_OBLIGATIONS,DOM_SWE_*,FEATURE_SWE,REF_SWE_*}.md 2>/dev/null | wc -l
 ```
 
-### Task 9: Create Core Memories (if missing)
+### Task 9: Create and Customize Core Memories
 Check for and create if missing:
-- `.serena/memories/_INDEX.md` (from templates/_INDEX_TEMPLATE.md)
+- `.serena/memories/_INDEX.md` (from state-machine/instructions/_INDEX.md)
 - `.serena/memories/INDEX_FEATURES.md`
+
+**IMPORTANT: Customize _INDEX.md after copying:**
+1. List actual FEATURE_* files in `## Active Features` section
+2. Remove the `<!-- TEMPLATE: ... -->` comment block
+3. Clear placeholder text from `## Current Session`
+
+```bash
+# Copy _INDEX if missing
+[ ! -f ".serena/memories/_INDEX.md" ] && cp .claude/plugins/serena-workflow-engine/state-machine/instructions/_INDEX.md .serena/memories/
+
+# List existing FEATURE_* files to populate Active Features
+echo "Available features to add to _INDEX:"
+ls .serena/memories/FEATURE_*.md 2>/dev/null | xargs -I{} basename {} .md
+```
+
+Then edit `.serena/memories/_INDEX.md`:
+- Replace `[FEATURE_X](FEATURE_X) - Description` with actual features
+- Remove template comment block
 
 ### Task 10: Configure Gitignore
 Add these entries to .gitignore if not present:

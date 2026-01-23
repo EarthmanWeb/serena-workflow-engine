@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
-"""PreToolUse gate - BLOCKS all tools until WF_INIT workflow is COMPLETED.
+"""PreToolUse gate - BLOCKS all tools until workflow is initialized.
 
-Initialization is NOT complete until:
-1. WF_INIT is read
-2. A WORKING_MEMORY file is created with workflow state FOR THIS SESSION
+Supports two modes:
+1. FULL MODE: Requires WORKING_MEMORY file with proper workflow state
+2. LITE MODE: For simple lookups, allows tools with minimal init marker
 
-This hook ensures Claude CANNOT do anything until the full init workflow is done.
+Initialization is complete when EITHER:
+- A WORKING_MEMORY_{session}_* file exists with proper workflow state (full mode)
+- A LITE_MODE_{session} marker exists (lightweight research mode)
+
 Session isolation: Each conversation must have its own working memory (matched by session ID).
 """
 
@@ -29,6 +32,8 @@ ALLOWED_TOOLS = [
     'mcp__serena__write_memory',
     'mcp__plugin_serena-workflow-engine_serena__list_memories',
     'mcp__serena__list_memories',
+    'mcp__plugin_serena-workflow-engine_serena__edit_memory',
+    'mcp__serena__edit_memory',
 ]
 
 def find_project_root(start_dir):
@@ -52,6 +57,21 @@ def extract_session_id(transcript_path):
     if uuid_match:
         return uuid_match.group(1)[:8]
     return None
+
+def check_lite_mode(cwd, session_id):
+    """Check if lite mode is active for this session.
+
+    Lite mode allows simple lookups without full WORKING_MEMORY overhead.
+    Activated by creating LITE_MODE_{session_id} file in memories dir.
+
+    Returns: bool - True if lite mode is active
+    """
+    if not session_id:
+        return False
+
+    memories_dir = get_serena_memories_dir(cwd)
+    lite_marker = os.path.join(memories_dir, f'LITE_MODE_{session_id}.md')
+    return os.path.exists(lite_marker)
 
 def check_working_memory_exists(cwd, session_id):
     """Check if a WORKING_MEMORY file exists for THIS SESSION with proper workflow state.
@@ -142,7 +162,13 @@ def main():
             print(json.dumps({}))
             sys.exit(0)
 
-        # Check if initialization is complete (WORKING_MEMORY exists with state FOR THIS SESSION)
+        # Check if LITE MODE is active (lightweight research path)
+        if check_lite_mode(cwd, session_id):
+            # Lite mode - allow through without full working memory
+            print(json.dumps({"systemMessage": "🔎 LITE_MODE active - minimal workflow"}))
+            sys.exit(0)
+
+        # Check if full initialization is complete (WORKING_MEMORY exists with state FOR THIS SESSION)
         is_valid, diagnostic = check_working_memory_exists(cwd, session_id)
         if is_valid:
             # Initialized - allow through
@@ -156,19 +182,17 @@ def main():
 
 **Diagnostic**: {diagnostic}
 
-**Required format** (from REF_WORKING_MEMORY):
-```
-## Workflow Context
-- **Current State**: WF_EXECUTE
-- **Session ID**: {session_id}
-```
+**Options**:
 
-You MUST complete the WF_INIT workflow BEFORE using any other tools:
-1. Read WF_INIT: mcp__serena__read_memory("WF_INIT")
-2. Read REF_WORKING_MEMORY for exact template
-3. Create WORKING_MEMORY_{session_id}_<descriptor> with correct format
+1️⃣ **Full Workflow** (for implementation/complex tasks):
+   - Read WF_INIT: `mcp__serena__read_memory("WF_INIT")`
+   - Create WORKING_MEMORY_{session_id}_<descriptor>
 
-NO EXCEPTIONS. Complete initialization first."""
+2️⃣ **Lite Mode** (for simple lookups like "find X"):
+   - Read WF_QUICKSTART: `mcp__serena__read_memory("WF_QUICKSTART")`
+   - Create lite marker: `mcp__serena__write_memory("LITE_MODE_{session_id}", "# Lite Mode\\nSession: {session_id}\\nTask: simple lookup")`
+
+Choose based on task complexity."""
         }
         print(json.dumps(output))
         sys.exit(0)

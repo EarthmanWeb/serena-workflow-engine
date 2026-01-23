@@ -93,6 +93,27 @@ def output_empty():
     sys.exit(0)
 
 
+def output_status(status: str, event: str = "PostToolUse"):
+    """Output a concise one-line status message.
+
+    Use this instead of output_empty() when you want to inform
+    the user what happened without being verbose.
+
+    Examples:
+        output_status("WM: edit #3 tracked")
+        output_status("WM: state unchanged")
+        output_status("✓ transition logged")
+    """
+    result = {
+        "hookSpecificOutput": {
+            "hookEventName": event,
+            "additionalContext": status
+        }
+    }
+    print(json.dumps(result), file=sys.stdout)
+    sys.exit(0)
+
+
 def output_error(error: str, event: str = "PostToolUse"):
     """Output error as message (non-blocking)."""
     result = {

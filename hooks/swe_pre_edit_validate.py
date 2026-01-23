@@ -19,7 +19,7 @@ if PLUGIN_ROOT:
         sys.path.insert(0, hooks_dir)
 
 try:
-    from swe_hooks.core.output import HookOutput, output_empty, output_block
+    from swe_hooks.core.output import HookOutput, output_empty, output_block, output_status
     from swe_hooks.core.input import read_stdin_safe, get_input_field
     from swe_hooks.core.state_manager import StateManager
     from swe_hooks.core.session import extract_session_id, find_working_memory_for_session
@@ -79,7 +79,7 @@ After updating WORKING_MEMORY, you may continue editing.""")
 
         # Allow edits in execution states
         if current in EDIT_ALLOWED:
-            output_empty()
+            output_status(f"✓ Edit allowed ({current})", event="PreToolUse")
             return
 
         # Warn but allow in planning states
@@ -90,7 +90,7 @@ After updating WORKING_MEMORY, you may continue editing.""")
             return
 
         # Default: allow the edit (don't block workflow)
-        output_empty()
+        output_status(f"✓ Edit allowed ({current})", event="PreToolUse")
 
     except Exception as e:
         output = {"hookSpecificOutput": {"hookEventName": "PreToolUse", "additionalContext": f"Pre-edit error: {e}"}}
