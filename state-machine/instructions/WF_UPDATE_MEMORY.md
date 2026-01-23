@@ -8,52 +8,48 @@ OUTPUT THE ABOVE LINE IMMEDIATELY. Do not read further until you have reported y
 
 ## When To Use
 
-- Adding new requirement to domain memory
-- Updating existing requirement after clarification
-- Creating new domain memory that doesn't exist
-- Updating WORKING_MEMORY with task progress
-- **Capturing architectural decisions after WF_ARCH_REVIEW or WF_PLAN_ARCHITECTURE**
+- Adding/updating domain requirements (`DOM_*`)
+- Updating system or reference documentation (`SYS_*`, `REF_*`)
+- Creating/updating index files (`INDEX_*`)
+- Updating `WORKING_MEMORY_*` with task progress
+- Capturing architectural decisions after WF_ARCH_REVIEW or WF_PLAN_ARCHITECTURE
 
 ## Execute These Steps
 
-IMPORTANT: ONLY WRITE THE MEMORY FOR THIS TASK
+### 1. Identify Target Memory
 
-1. **Identify the target memory:**
-   - Domain requirement -> `DOM_[DOMAIN]`
-   - System documentation -> `SYS_[SYSTEM]`
-   - Reference documentation -> `REF_[TOPIC]`
-   - Index -> `INDEX_[TYPE]`
-   - Working state -> `WORKING_MEMORY_<conversation_id>`
+| Type | Naming | Purpose |
+|------|--------|---------|
+| Domain | `DOM_[DOMAIN]` | User-facing behavior, constraints, edge cases |
+| System | `SYS_[SYSTEM]` | System documentation |
+| Reference | `REF_[TOPIC]` | Reference documentation |
+| Index | `INDEX_[TYPE]` | File/symbol indexes |
+| Working | `WORKING_MEMORY_*` | Session task state |
 
-2. **For DOM_* memories, include:**
-   - User-facing behavior description
-   - Any constraints or edge cases
-   - Related files/symbols if known
+### 2. For WORKING_MEMORY Updates
 
-3. **For WORKING_MEMORY:**
-   - **MANDATORY: Read `REF_WORKING_MEMORY` BEFORE updating**
-   ```
-   mcp__serena__read_memory("REF_WORKING_MEMORY")
-   ```
-   - Filename: `WORKING_MEMORY_<conversation_id>` (use your conversation ID)
-   - Follow format template and anti-pattern warnings in REF_WORKING_MEMORY
-   - **⛔ NEVER do single-field state edits**
-   - Each conversation has its own isolated file
+**MANDATORY: Read `REF_WORKING_MEMORY` first** - it contains:
+- Naming conventions
+- Required template format
+- Anti-patterns to avoid (especially single-field state edits)
+- Stop hook behavior
 
-4. **For architecture snapshots (after reading SYS_* or REF_* memories), include:**
-   - Which layers are involved
-   - Which SYS_* and REF_* were consulted
-   - Key constraints that apply to this task
-   - This enables proper resume after session breaks
+```
+mcp__serena__read_memory("REF_WORKING_MEMORY")
+```
 
-5. **Use Serena to update:**
-   ```
-   mcp__serena__write_memory("DOM_[DOMAIN]", "content")
-   mcp__serena__edit_memory("DOM_[DOMAIN]", "old", "new", "literal")
-   ```
+### 3. Update Using Serena Tools
 
-6. **Confirm to user:**
-   "Updated [MEMORY_NAME] with: [brief description]"
+```python
+mcp__serena__write_memory("MEMORY_NAME", "content")
+mcp__serena__edit_memory("MEMORY_NAME", "old", "new", "literal")
+```
+
+### 4. Confirm to User
+
+"Updated [MEMORY_NAME] with: [brief description]"
+
+---
 
 ## MANDATORY NEXT STEP
 
