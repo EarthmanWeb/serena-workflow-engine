@@ -31,13 +31,7 @@ HIGH_RISK_PATTERNS = [
     r'chown\s+-R.*/',
 ]
 
-# Test syntax patterns - block incorrect test invocation
-# These patterns indicate bypassing the proper test runner script
-TEST_SYNTAX_BLOCK_PATTERNS = [
-    r'TEST_ENV=\w+\s+npx\s+playwright\s+test',  # Direct npx playwright test with TEST_ENV
-    r'cd\s+.*private/tests\s*&&\s*TEST_ENV=',   # cd to tests dir then TEST_ENV
-    r'npm\s+run\s+test:(dev|test|refactor)\s+--',  # npm run test:env -- (wrong script)
-]
+
 
 # Warn patterns (not blocked)
 WARN_PATTERNS = [
@@ -64,17 +58,6 @@ def main():
                     f"Command: {command}\n"
                     f"Pattern matched: {pattern}\n\n"
                     f"This command could cause system damage."
-                )
-
-        # Check test syntax patterns - block incorrect test invocation
-        for pattern in TEST_SYNTAX_BLOCK_PATTERNS:
-            if re.search(pattern, command, re.IGNORECASE):
-                output_block(
-                    f"🛑 INCORRECT TEST SYNTAX BLOCKED\n\n"
-                    f"Command: {command}\n"
-                    f"Pattern matched: {pattern}\n\n"
-                    f"You are using the wrong syntax to run tests.\n"
-                    f"YOU MUST invoke: /test-runner"
                 )
 
         # Check warn patterns
