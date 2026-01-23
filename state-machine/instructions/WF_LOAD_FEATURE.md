@@ -8,24 +8,23 @@
 
 ## Execute These Steps
 
-1. **Read relevant domain index:**
+1. **Read the feature index to discover available features:**
    ```
-   mcp__serena__read_memory("_INDEX")  # For routing to correct memory
-   ```
-
-2. **Read the specific domain/system memory:**
-   ```
-   # For site-specific work:
-   mcp__serena__read_memory("DOM_DISTRICT")   # or DOM_SCHOOLS, DOM_REDACTED, DOM_NETWORK
-
-   # For system-level work:
-   mcp__serena__read_memory("SYS_BLOCKS")     # or SYS_CONTEXT_PROVIDERS
+   mcp__serena__read_memory("INDEX_FEATURES")
    ```
 
-3. **If touching templates, also read:**
+2. **From INDEX_FEATURES, identify and read relevant memories:**
+   - Look for `DOM_*` entries for domain-specific context
+   - Look for `SYS_*` entries for system-level components
+   - Look for `REF_*` entries for reference documentation
+   - Look for `INDEX_*` entries for additional indexes
+
+3. **Read the specific memories identified:**
    ```
-   mcp__serena__read_memory("INDEX_TEMPLATES")
-   mcp__serena__read_memory("REF_BLADEONE")
+   # Example - read whatever domains/systems are relevant to your task:
+   mcp__serena__read_memory("DOM_[DOMAIN]")
+   mcp__serena__read_memory("SYS_[SYSTEM]")
+   mcp__serena__read_memory("REF_[TOPIC]")
    ```
 
 4. **Note key symbols and file paths** for Serena lookups.
