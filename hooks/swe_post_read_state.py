@@ -16,7 +16,7 @@ if PLUGIN_ROOT:
         sys.path.insert(0, hooks_dir)
 
 try:
-    from swe_hooks.core.output import HookOutput, output_empty
+    from swe_hooks.core.output import HookOutput, output_empty, output_status
     from swe_hooks.core.input import read_stdin_safe, get_input_field
     from swe_hooks.core.state_manager import StateManager, STATE_ICONS
     from swe_hooks.core.session import extract_session_id
@@ -35,7 +35,7 @@ def main():
 
         # Only process WF_* memories for state transitions
         if not memory_name or not memory_name.startswith('WF_'):
-            output_empty()
+            output_status(f"📖 Read: {memory_name or 'unknown'}")
             return  # Explicit return for clarity (output_empty exits)
 
         # Extract session ID for session isolation

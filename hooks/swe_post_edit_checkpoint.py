@@ -18,7 +18,7 @@ if PLUGIN_ROOT:
         sys.path.insert(0, hooks_dir)
 
 try:
-    from swe_hooks.core.output import HookOutput, output_empty
+    from swe_hooks.core.output import HookOutput, output_empty, output_status
     from swe_hooks.core.input import read_stdin_safe, get_input_field
     from swe_hooks.core.state_manager import StateManager
     from swe_hooks.core.session import extract_session_id, find_working_memory_for_session
@@ -62,7 +62,7 @@ def main():
                 output.output_and_exit()
                 return
             
-            output_empty()
+            output_status(f"WM: edit #{count} (no WM yet)")
             return
 
         # Persist edit to working memory file
@@ -101,7 +101,8 @@ After updating, you may continue editing.""")
                 output.output_and_exit()
                 return
 
-        output_empty()
+        # Under threshold - just track silently with concise status
+        output_status(f"WM: edit #{edit_count}")
 
     except Exception as e:
         output = {"hookSpecificOutput": {"hookEventName": "PostToolUse", "additionalContext": f"Checkpoint error: {e}"}}
