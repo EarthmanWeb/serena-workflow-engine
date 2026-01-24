@@ -6,29 +6,29 @@ OUTPUT THE ABOVE LINE IMMEDIATELY. Do not read further until you have reported y
 
 ---
 
-## ⚠️ MANDATORY: WORKING_MEMORY
+## ⚠️ MANDATORY: WM
 
-**Before starting any work, verify WORKING_MEMORY exists and is current.**
+**Before starting any work, verify WM exists and is current.**
 
-**BEFORE any WORKING_MEMORY update, you MUST read:**
+**BEFORE any WM update, you MUST read:**
 ```
-mcp__serena__read_memory("REF_WORKING_MEMORY")
-```
-
-If WORKING_MEMORY is stale or doesn't reflect current task:
-```
-mcp__serena__write_memory("WORKING_MEMORY_<timestamp>_<descriptor>", "<content>")
+mcp__serena__read_memory("REF_WM")
 ```
 
-Echo to chat: `📋 Working Memory: WORKING_MEMORY_<filename>`
+If WM is stale or doesn't reflect current task:
+```
+mcp__serena__write_memory("WM_<timestamp>_<descriptor>", "<content>")
+```
 
-**WORKING_MEMORY must be updated:**
+Echo to chat: `📋 Working Memory: WM_<filename>`
+
+**WM must be updated:**
 - Before starting significant work
 - After completing each subtask
 - When task state changes
 - Before transitioning to another WF_* step
 
-**⛔ NEVER do single-field state edits. See REF_WORKING_MEMORY for anti-patterns.**
+**⛔ NEVER do single-field state edits. See REF_WM for anti-patterns.**
 
 ---
 
@@ -104,7 +104,7 @@ TaskOutput({ task_id: "...", block: true })
 
 ### Swarm Coordination During Execution
 
-- **Track agent IDs** in WORKING_MEMORY
+- **Track agent IDs** in WM
 - **Update swarm memory** after each completed subtask
 - **Monitor for failures** and reassign if needed
 - **Synchronize findings** between agents via memory
@@ -133,11 +133,11 @@ TaskOutput({ task_id: "...", block: true })
 | All work done (including tests) | `WF_VERIFY` |
 
 1. Determine which condition applies
-2. **UPDATE WORKING_MEMORY** with current progress
+2. **UPDATE WM** with current progress
 3. Read that WF_* memory NOW
 4. Report the new step to user
 
 **SKIPPING THIS TRANSITION = WORKFLOW VIOLATION**
-**SKIPPING WORKING_MEMORY UPDATE = WORKFLOW VIOLATION**
+**SKIPPING WM UPDATE = WORKFLOW VIOLATION**
 
-[CRITICAL: Did you update WORKING_MEMORY? Are you on a WF_* workflow step? Did you report on it?]
+[CRITICAL: Did you update WM? Are you on a WF_* workflow step? Did you report on it?]

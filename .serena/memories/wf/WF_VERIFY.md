@@ -38,14 +38,14 @@ Verify:
 
 If any violations found, fix them before proceeding.
 
-## 5. ⚠️ MANDATORY: Update WORKING_MEMORY
+## 5. ⚠️ MANDATORY: Update WM
 
 **BEFORE updating, you MUST read:**
 ```
-mcp__serena__read_memory("REF_WORKING_MEMORY")
+mcp__serena__read_memory("REF_WM")
 ```
 
-**Follow the anti-pattern warnings and multi-section update requirements in REF_WORKING_MEMORY.**
+**Follow the anti-pattern warnings and multi-section update requirements in REF_WM.**
 
 Include in your update:
 - Status: `[COMPLETED]` or `[VERIFY_COMPLETE]`
@@ -53,7 +53,7 @@ Include in your update:
 - Files: All files modified
 - Current State: `WF_VERIFY` → `WF_DONE`
 
-**Echo to chat**: `📋 Updated Working Memory: WORKING_MEMORY_<filename>`
+**Echo to chat**: `📋 Updated Working Memory: WM_<filename>`
 
 ### Also update if needed:
 - **DOM_[X]:** If domain architecture changed
@@ -68,11 +68,11 @@ Include in your update:
 |-----------|----------------|
 | Violations found | `WF_EXECUTE` (fix them) |
 | Tests missing | `WF_EXECUTE` (add them) |
-| WORKING_MEMORY not updated comprehensively | **READ REF_WORKING_MEMORY, then UPDATE** |
-| All clean, tests pass, WORKING_MEMORY fully updated | `WF_DONE` |
+| WM not updated comprehensively | **READ REF_WM, then UPDATE** |
+| All clean, tests pass, WM fully updated | `WF_DONE` |
 
-**SKIPPING REF_WORKING_MEMORY READ = WORKFLOW VIOLATION**
+**SKIPPING REF_WM READ = WORKFLOW VIOLATION**
 **SINGLE-FIELD STATE EDIT = WORKFLOW VIOLATION**
 **SKIPPING THIS TRANSITION = WORKFLOW VIOLATION**
 
-[CRITICAL: Did you read REF_WORKING_MEMORY? Did you update comprehensively? Did you report your step?]
+[CRITICAL: Did you read REF_WM? Did you update comprehensively? Did you report your step?]

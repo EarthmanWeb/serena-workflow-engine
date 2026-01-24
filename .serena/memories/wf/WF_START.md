@@ -18,7 +18,7 @@ The anti-rationalization block is in WF_INIT. If you skipped WF_INIT to get here
 - ✅ You MAY bypass this workflow entirely
 - ✅ Adhere ONLY to the specific instructions provided by the initiating agent
 - ✅ Read CLAUDE_FLOW, CLAUDE_OBLIGATIONS, _INDEX, and only read other memories if they assist with your specific task
-- ❌ Do NOT create WORKING_MEMORY files (the coordinator handles this)
+- ❌ Do NOT create WM files (the coordinator handles this)
 
 **IF you are NOT a swarm agent, ALWAYS continue below.**
 
@@ -74,9 +74,9 @@ If any FEATURE_[KEY] doesn't exist -> `WF_ONBOARD`
 mcp__serena__read_memory("CLAUDE_OBLIGATIONS")
 ```
 
-### 4. ⚠️ MANDATORY: Create/Read WORKING_MEMORY
+### 4. ⚠️ MANDATORY: Create/Read WM
 
-**THIS IS NOT OPTIONAL. YOU CANNOT PROCEED WITHOUT A WORKING_MEMORY FILE.**
+**THIS IS NOT OPTIONAL. YOU CANNOT PROCEED WITHOUT A WM FILE.**
 
 ---
 
@@ -84,8 +84,8 @@ mcp__serena__read_memory("CLAUDE_OBLIGATIONS")
 
 **If you are arriving here from WF_DONE with a new task in the SAME session:**
 
-1. **DO NOT create a new WORKING_MEMORY** - the existing one for this session is still valid
-2. **UPDATE the existing WORKING_MEMORY:**
+1. **DO NOT create a new WM** - the existing one for this session is still valid
+2. **UPDATE the existing WM:**
    - Increment `Task Iteration` (e.g., 1 → 2)
    - Move previous task to `## Completed Tasks (This Session)` section
    - Add new task to `## Active Task`
@@ -94,41 +94,41 @@ mcp__serena__read_memory("CLAUDE_OBLIGATIONS")
 3. **Skip to step 5** (Classify Task Type) after updating
 
 **How to detect this scenario:**
-- WORKING_MEMORY file exists for current session ID
+- WM file exists for current session ID
 - Previous state was WF_DONE or WF_CLEANUP
 - User has provided a new task/request
 
 ---
 
-**🛑 BLOCKING REQUIREMENT: READ REF_WORKING_MEMORY FIRST**
+**🛑 BLOCKING REQUIREMENT: READ REF_WM FIRST**
 
 ```
-mcp__serena__read_memory("REF_WORKING_MEMORY")
+mcp__serena__read_memory("REF_WM")
 ```
 
-**DO NOT create a WORKING_MEMORY file until you have read REF_WORKING_MEMORY.**
-**DO NOT use any other template or format - ONLY the one in REF_WORKING_MEMORY.**
+**DO NOT create a WM file until you have read REF_WM.**
+**DO NOT use any other template or format - ONLY the one in REF_WM.**
 **DO NOT invent sections, formats, or naming conventions.**
-**THERE IS NO INLINE TEMPLATE HERE - THE ONLY SOURCE OF TRUTH IS REF_WORKING_MEMORY.**
+**THERE IS NO INLINE TEMPLATE HERE - THE ONLY SOURCE OF TRUTH IS REF_WM.**
 
 ---
 
-**After reading REF_WORKING_MEMORY:**
+**After reading REF_WM:**
 
 1. Get session ID from hook context (e.g., `Session: cccdb36a`) - this is an 8-char UUID, NOT a date
-2. Use naming: `WORKING_MEMORY_<SESSION_ID>_<descriptor>` 
-3. Follow the EXACT template from REF_WORKING_MEMORY - no modifications
-4. Echo to chat: `📋 Read Working Memory: WORKING_MEMORY_<SESSION_ID>_<descriptor>`
+2. Use naming: `WM_<SESSION_ID>_<descriptor>` 
+3. Follow the EXACT template from REF_WM - no modifications
+4. Echo to chat: `📋 Read Working Memory: WM_<SESSION_ID>_<descriptor>`
 
 ```
 # Check for existing:
-mcp__serena__list_memories()  # Look for WORKING_MEMORY_* files
+mcp__serena__list_memories()  # Look for WM_* files
 
 # If continuing work, read existing file
-# If new conversation, CREATE using REF_WORKING_MEMORY template ONLY
+# If new conversation, CREATE using REF_WM template ONLY
 ```
 
-**CREATING WORKING_MEMORY WITHOUT READING REF_WORKING_MEMORY = WORKFLOW VIOLATION**
+**CREATING WM WITHOUT READING REF_WM = WORKFLOW VIOLATION**
 
 ### 5. Classify Task Type
 
@@ -143,21 +143,21 @@ See routing table below.
 | No features registered | `WF_ONBOARD` |
 | Feature not found | `WF_ONBOARD` |
 | Simple lookup ("find X", "show Y") | `WF_RESEARCH` |
-| WORKING_MEMORY not created/updated | **CREATE IT NOW** |
+| WM not created/updated | **CREATE IT NOW** |
 | Continue previous work | `WF_CONTINUE` |
 | Research/question only | `WF_RESEARCH` |
 | Code change/feature/bug | `WF_CLASSIFY` |
-| **New task after WF_DONE (same session)** | **UPDATE existing WORKING_MEMORY** → `WF_CLASSIFY` |
+| **New task after WF_DONE (same session)** | **UPDATE existing WM** → `WF_CLASSIFY` |
 
 **⚡ LITE MODE (User-Requested Only):** `WF_RESEARCH_LITE` is ONLY available when the user explicitly requests it (e.g., "/lite", "use lite mode", "quick lookup").
 NEVER auto-route to LITE mode based on task classification.
 
 1. Determine which condition applies
-2. **VERIFY WORKING_MEMORY exists and is current**
+2. **VERIFY WM exists and is current**
 3. Read that WF_* memory NOW
 4. Report the new step to user
 
-**PROCEEDING WITHOUT WORKING_MEMORY = WORKFLOW VIOLATION**
+**PROCEEDING WITHOUT WM = WORKFLOW VIOLATION**
 **SKIPPING THIS TRANSITION = WORKFLOW VIOLATION**
 
-[CRITICAL: Does WORKING_MEMORY exist? Are you on a WF_* workflow step? Did you report on it?]
+[CRITICAL: Does WM exist? Are you on a WF_* workflow step? Did you report on it?]

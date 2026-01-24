@@ -145,7 +145,7 @@ Contains files that should work across ANY project using the plugin:
 - `README.md` - Plugin documentation
 
 ### Location 2: Local Serena Memories (Project-Specific)
-**Path:** `.serena/memories/`
+**Path:** `.serena/memories/wm/`
 
 Contains project-specific adaptations:
 - `WF_*.md` - Copied from plugin, may have project customizations
@@ -153,7 +153,7 @@ Contains project-specific adaptations:
 - `DOM_SWE_*.md` - Domain documentation
 - `SYS_SWE_*.md` - System documentation
 - `FEATURE_SWE.md` - This file
-- `WORKING_MEMORY_*.md` - Session state
+- `WM_*.md` - Session state
 
 ### Change Decision Matrix
 

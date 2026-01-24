@@ -133,7 +133,7 @@ Add to `_INDEX`:
 - [ ] `REF_DEV_STANDARDS` created as index entry point
 - [ ] Individual `DEV_*` memories created (~100-120 lines each)
 - [ ] `_INDEX` updated with Development Standards section
-- [ ] WORKING_MEMORY updated with completion status
+- [ ] WM updated with completion status
 
 ## Output Structure
 

@@ -40,9 +40,9 @@ def find_project_root(start_dir: str) -> str:
 
 
 def get_serena_memories_dir(cwd: str) -> str:
-    """Get the .serena/memories directory path."""
+    """Get the .serena/memories/wm directory path."""
     project_root = find_project_root(cwd)
-    return os.path.join(project_root, '.serena', 'memories')
+    return os.path.join(project_root, '.serena', 'wm')
 
 
 def find_working_memory_for_session(cwd: str, session_id: Optional[str]) -> Optional[str]:
@@ -60,8 +60,8 @@ def find_working_memory_for_session(cwd: str, session_id: Optional[str]) -> Opti
         return None
 
     if session_id:
-        # Look for WORKING_MEMORY_<session_id>_* files specifically
-        pattern = os.path.join(memories_dir, f'WORKING_MEMORY_{session_id}_*.md')
+        # Look for WM_<session_id>_* files specifically
+        pattern = os.path.join(memories_dir, f'WM_{session_id}_*.md')
         working_memories = glob.glob(pattern)
         if working_memories:
             # Return most recent by modification time

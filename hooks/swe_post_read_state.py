@@ -56,7 +56,7 @@ def main():
             success, msg = state_mgr.transition_to(memory_name)
             if success:
                 output.add_message(msg)
-                # Auto-log transition to WORKING_MEMORY Progress section
+                # Auto-log transition to WM Progress section
                 if state_mgr.wm_filepath:
                     append_transition_to_wm(state_mgr.wm_filepath, current, memory_name)
             else:

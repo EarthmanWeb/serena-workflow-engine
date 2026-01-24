@@ -71,7 +71,7 @@ intent:
 - New task detected → Transition to WF_START regardless of current state |
   user_prompt_swarm.py | UserPromptSubmit | Detect swarm keywords in prompts | |
   post_read_state.py | PostToolUse (read_memory) | State transitions,
-  WORKING_MEMORY enforcement | | post_task_learn.py | PostToolUse (read_memory)
+  WM enforcement | | post_task_learn.py | PostToolUse (read_memory)
   | RLVR trajectory tracking | | pre_edit_validate.py | PreToolUse
   (Edit/Write/Serena) | Block edits in planning states | |
   claude_flow_pre_edit.py | PreToolUse (Edit/Write/Serena) | Context gathering
@@ -88,7 +88,7 @@ intent:
 
 - Hooks no longer read and echo instruction file contents
 - Instead, hooks point agent to use `mcp__serena__read_memory("WF_*")`
-- Instruction files are copied to `.serena/memories/` during `/swe-init`
+- Instruction files are copied to `.serena/memories/wm/` during `/swe-init`
 
 **Benefits:**
 
@@ -165,29 +165,29 @@ output_block("Reason")            # Block PreToolUse and exit 0
 
 **IMPORTANT: Session-Isolated State Architecture**
 
-State is stored in WORKING_MEMORY files, NOT a global state file. This allows:
+State is stored in WM files, NOT a global state file. This allows:
 
 - Multiple concurrent sessions without state conflicts
-- Each session has its own WORKING_MEMORY with embedded workflow context
-- State persists in the `## Workflow Context` section of WORKING_MEMORY
+- Each session has its own WM with embedded workflow context
+- State persists in the `## Workflow Context` section of WM
 
 ```python
 from swe_hooks.core.state_manager import StateManager
 
-# Automatically finds most recent WORKING_MEMORY file
+# Automatically finds most recent WM file
 state_mgr = StateManager(cwd)
 
-# Or specify a specific WORKING_MEMORY file
-state_mgr = StateManager(cwd, wm_filename="WORKING_MEMORY_20260120_my_task")
+# Or specify a specific WM file
+state_mgr = StateManager(cwd, wm_filename="WM_20260120_my_task")
 
-state_mgr.get_current_state()  # "WF_START" - read from WORKING_MEMORY
-state_mgr.transition_to("WF_EXECUTE")  # Updates WORKING_MEMORY file
-state_mgr.get_working_memory()  # Returns WORKING_MEMORY filename
+state_mgr.get_current_state()  # "WF_START" - read from WM
+state_mgr.transition_to("WF_EXECUTE")  # Updates WM file
+state_mgr.get_working_memory()  # Returns WM filename
 state_mgr.increment_edits()  # In-memory only (session-local)
 state_mgr.should_checkpoint()  # True if >= 3 edits
 ```
 
-**State Storage in WORKING_MEMORY:**
+**State Storage in WM:**
 
 ```markdown
 ## Workflow Context

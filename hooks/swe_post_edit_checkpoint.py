@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """PostToolUse hook for Edit - Checkpoint enforcement.
 
-Tracks edit count and BLOCKS further edits after threshold until WORKING_MEMORY is updated.
+Tracks edit count and BLOCKS further edits after threshold until WM is updated.
 Uses session isolation for edit counting and persistence to WM file.
 
-ENFORCEMENT: This hook converts soft reminders to hard blocking per SPEC_WORKING_MEMORY_ENFORCEMENT.
+ENFORCEMENT: This hook converts soft reminders to hard blocking per SPEC_WM_ENFORCEMENT.
 """
 
 import os
@@ -57,7 +57,7 @@ def main():
             
             if state_mgr.should_checkpoint(CHECKPOINT_THRESHOLD):
                 output = HookOutput(event_name="PostToolUse")
-                output.add_message(f"💾 CHECKPOINT: {count} edits - Create WORKING_MEMORY first")
+                output.add_message(f"💾 CHECKPOINT: {count} edits - Create WM first")
                 state_mgr.reset_edit_counter()
                 output.output_and_exit()
                 return
@@ -83,9 +83,9 @@ def main():
                 output = HookOutput(event_name="PostToolUse")
                 output.add_message(f"""🛑 CHECKPOINT REQUIRED: {edit_count} edits since last update
 
-You have made {edit_count} edits without updating WORKING_MEMORY.
+You have made {edit_count} edits without updating WM.
 
-**UPDATE WORKING_MEMORY NOW:**
+**UPDATE WM NOW:**
 1. Update `## Progress` section with completed work
 2. Mark completed items with `[x]`
 3. Update `**Files:**` with files you've edited

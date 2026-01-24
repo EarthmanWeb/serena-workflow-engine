@@ -37,11 +37,11 @@ Add to `.claude/settings.local.json` (create if it doesn't exist):
 
 **Note:** Path is relative to the settings file location.
 
-**Alternative: CLI installation**
+**Local installation**
 
 ```bash
 # Add marketplace (use ABSOLUTE path)
-claude plugin marketplace add /full/path/to/project/.claude/plugins/serena-workflow-engine
+claude plugin marketplace add "$(pwd)/.claude/plugins/serena-workflow-engine"
 
 # Install and enable
 claude plugin install serena-workflow-engine@serena-workflow-engine --scope local
@@ -184,7 +184,7 @@ Example: `/swe-onboard-quick AUTH "Authentication" src/auth/`
 claude plugin marketplace list
 
 # If not listed, add it again
-claude plugin marketplace add /absolute/path/to/.claude/plugins/serena-workflow-engine
+claude plugin marketplace add "$(pwd)/.claude/plugins/serena-workflow-engine"
 ```
 
 ### Commands not appearing

@@ -33,9 +33,9 @@ def test_filename_validation():
 
     # Valid filenames
     valid_cases = [
-        "WORKING_MEMORY_3fe6b3c5_theme_refactor.md",
-        "WORKING_MEMORY_abcd1234_test.md",
-        "WORKING_MEMORY_12345678_multi_word_desc.md",
+        "WM_3fe6b3c5_theme_refactor.md",
+        "WM_abcd1234_test.md",
+        "WM_12345678_multi_word_desc.md",
     ]
 
     for filename in valid_cases:
@@ -45,10 +45,10 @@ def test_filename_validation():
 
     # Invalid filenames
     invalid_cases = [
-        "WORKING_MEMORY_short_desc.md",  # Session ID too short
+        "WM_short_desc.md",  # Session ID too short
         "working_memory_3fe6b3c5_test.md",  # Wrong prefix case
         "MEMORY_3fe6b3c5_test.md",  # Missing WORKING_
-        "WORKING_MEMORY_3fe6b3c5.md",  # Missing descriptor
+        "WM_3fe6b3c5.md",  # Missing descriptor
     ]
 
     for filename in invalid_cases:

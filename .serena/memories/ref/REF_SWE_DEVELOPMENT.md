@@ -10,7 +10,7 @@ SWE operates with files in TWO locations:
 | Location | Path | Purpose |
 |----------|------|---------|
 | **Plugin Folder** | `.claude/plugins/serena-workflow-engine/` | Generic/portable code |
-| **Local Memories** | `.serena/memories/` | Project-specific adaptations |
+| **Local Memories** | `.serena/memories/wm/` | Project-specific adaptations |
 
 ## Change Classification
 
@@ -27,10 +27,10 @@ SWE operates with files in TWO locations:
 
 | Change Type | Where |
 |-------------|-------|
-| Custom DOM_* docs | `.serena/memories/` only |
-| Custom SYS_* docs | `.serena/memories/` only |
-| Project REF_* docs | `.serena/memories/` only |
-| FEATURE_* configs | `.serena/memories/` only |
+| Custom DOM_* docs | `.serena/memories/wm/` only |
+| Custom SYS_* docs | `.serena/memories/wm/` only |
+| Project REF_* docs | `.serena/memories/wm/` only |
+| FEATURE_* configs | `.serena/memories/wm/` only |
 
 ## Hook Sync Requirements (CRITICAL)
 
@@ -61,7 +61,7 @@ diff <(jq -S '.hooks' .claude/plugins/serena-workflow-engine/hooks/hooks.json) \
 
 1. Create instruction: `memories/WF_NEWSTATE.md`
 2. Update `states.json` with state definition
-3. Copy to local memories: `cp ... .serena/memories/WF_NEWSTATE.md`
+3. Copy to local memories: `cp ... .serena/memories/wm/WF_NEWSTATE.md`
 4. Document in DOM_SWE_STATE_MACHINE
 
 ## Adding New Hook

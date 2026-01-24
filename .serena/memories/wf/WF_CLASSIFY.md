@@ -117,7 +117,7 @@ OUTPUT THE ABOVE LINE IMMEDIATELY. Do not read further until you have reported y
       | `DOM_[KEY]` | Domain-specific context |
       | `SYS_[KEY]` | System-level context |
    
-   d. **Update WORKING_MEMORY with all features:**
+   d. **Update WM with all features:**
       ```markdown
       ## Affected Features
       - **Primary**: [KEY1] - [reason]
@@ -179,7 +179,7 @@ OUTPUT THE ABOVE LINE IMMEDIATELY. Do not read further until you have reported y
 
 When routing to a workflow-aware skill (e.g., `/research`):
 
-### 1. Set Workflow Context in WORKING_MEMORY
+### 1. Set Workflow Context in WM
 
 Update the `## Workflow Context` section:
 
@@ -187,7 +187,7 @@ Update the `## Workflow Context` section:
 ## Workflow Context
 - **Calling Step**: WF_CLASSIFY
 - **Feature Key**: [from INDEX_FEATURES or detected]
-- **Session ID**: [from WORKING_MEMORY filename]
+- **Session ID**: [from WM filename]
 - **Return Step**: WF_DETECT_REQ
 - **Invocation Mode**: workflow
 ```
@@ -209,7 +209,7 @@ The skill will:
 
 ### 4. Handle Skill Return
 
-After skill completes, check `## Skill Return` in WORKING_MEMORY:
+After skill completes, check `## Skill Return` in WM:
 
 | Status | Action |
 |--------|--------|
@@ -241,15 +241,15 @@ See `REF_SKILL_PROTOCOLS` for full specification.
 
 **SKIPPING THIS TRANSITION = WORKFLOW VIOLATION**
 
-## ⚠️ MANDATORY: WORKING_MEMORY UPDATE
+## ⚠️ MANDATORY: WM UPDATE
 
 **Before transitioning to another state, you MUST:**
 1. Update `## Progress` with completed steps
 2. Update `**Files:**` with new files edited
 3. Verify `## Workflow Context` is current
 
-**SKIPPING WORKING_MEMORY UPDATE = WORKFLOW VIOLATION**
+**SKIPPING WM UPDATE = WORKFLOW VIOLATION**
 
-The hooks will BLOCK your next action if WORKING_MEMORY is stale.
+The hooks will BLOCK your next action if WM is stale.
 
 [CRITICAL: Are you on a WF_* workflow step? Did you report on it?]

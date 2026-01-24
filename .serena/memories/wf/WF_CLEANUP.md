@@ -17,9 +17,9 @@ Archive completed work - terminal state.
 
 ## Required Actions
 
-1. `identify_archivable_files` - Find WORKING_MEMORY and temp files
+1. `identify_archivable_files` - Find WM and temp files
 2. `confirm_with_user` - Ask if cleanup should proceed
-3. `move_to_archive` - Archive completed WORKING_MEMORY
+3. `move_to_archive` - Archive completed WM
 4. `update_indexes` - Remove from active, add to archive index
 
 ## Permissions
@@ -30,8 +30,8 @@ Archive completed work - terminal state.
 ## Archive Process
 
 ```bash
-# Move WORKING_MEMORY to archive
-mv .serena/memories/WORKING_MEMORY_*.md .serena/archive-memories/
+# Move WM to archive
+mv .serena/memories/wm/WM_*.md .serena/archive-memories/
 
 # Clean up any temp files
 rm -f .claude-flow/workflow-state.json

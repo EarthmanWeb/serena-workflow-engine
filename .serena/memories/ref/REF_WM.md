@@ -1,8 +1,8 @@
-# REF_WORKING_MEMORY
+# REF_WM
 
 ## Naming
 
-`WORKING_MEMORY_<SESSION_ID>_<descriptor>.md`
+`WM_<SESSION_ID>_<descriptor>.md`
 
 - **Session ID**: 8-char from transcript_path UUID (e.g., `3fe6b3c5`)
 - **Descriptor**: 2-4 words, snake_case (e.g., `theme_refactor`)
@@ -13,7 +13,7 @@
 |--------|-------|
 | **Create** | Get session ID from hook → pick descriptor → write file → echo to chat |
 | **Load** | Read file → verify session ID matches → echo to chat |
-| **Update** | Write changes → echo to chat: `📋 Updated Working Memory: WORKING_MEMORY_<filename>` |
+| **Update** | Write changes → echo to chat: `📋 Updated Working Memory: WM_<filename>` |
 
 **Update is MANDATORY after:** memory edits, file edits, workflow transitions, state changes.
 
@@ -24,7 +24,7 @@
 **THIS IS WRONG - DO NOT DO THIS:**
 ```python
 # ❌ WRONG: Only changing Current State field
-edit_memory("WORKING_MEMORY_...", "Current State: WF_EXECUTE", "Current State: WF_VERIFY", "literal")
+edit_memory("WM_...", "Current State: WF_EXECUTE", "Current State: WF_VERIFY", "literal")
 ```
 
 **Why it's wrong:** Captures no progress, no completed work, no context. Memory becomes useless for resumption.
@@ -42,7 +42,7 @@ edit_memory("WORKING_MEMORY_...", "Current State: WF_EXECUTE", "Current State: W
 **Correct approach:**
 ```python
 # ✅ CORRECT: Full rewrite with all sections
-write_memory("WORKING_MEMORY_...", "<full updated content>")
+write_memory("WM_...", "<full updated content>")
 
 # ✅ ALSO CORRECT: Multiple targeted edits
 edit_memory(..., "- [ ] Step 3", "- [x] Step 3", "literal")

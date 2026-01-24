@@ -49,7 +49,7 @@ def get_paths(cwd: str) -> Dict[str, str]:
         "plugin_dir": os.path.join(cwd, ".claude", "plugins", "serena-workflow-engine"),
         "instructions_dir": os.path.join(cwd, ".claude", "plugins", "serena-workflow-engine", "memories", "instructions"),
         "references_dir": os.path.join(cwd, ".claude", "plugins", "serena-workflow-engine", "memories", "references"),
-        "serena_memories": os.path.join(cwd, ".serena", "memories"),
+        "serena_memories": os.path.join(cwd, ".serena", "wm"),
     }
 
 
@@ -65,7 +65,7 @@ def find_working_memory_files(cwd: str) -> List[str]:
     if not os.path.exists(memories_dir):
         return []
     
-    pattern = os.path.join(memories_dir, "WORKING_MEMORY_*.md")
+    pattern = os.path.join(memories_dir, "WM_*.md")
     files = glob.glob(pattern)
     
     # Sort by filename (which includes timestamp) in reverse order
