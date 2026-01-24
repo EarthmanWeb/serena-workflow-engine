@@ -72,7 +72,7 @@
     ],
     "PostToolUse": [
       {
-        "matcher": "mcp__serena__replace_content|mcp__plugin_serena-workflow-engine_serena__replace_content",
+        "matcher": "mcp__serena__replace_content|mcp__plugin_swe_serena__replace_content",
         "hooks": [
           {
             "type": "command",

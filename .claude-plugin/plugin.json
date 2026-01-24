@@ -1,5 +1,5 @@
 {
-  "name": "serena-workflow-engine",
+  "name": "swe",
   "version": "1.0.0",
   "description": "Enforces WF_* state machine workflow with Serena memory persistence, RLVR learning, and auto plan mode switching",
   "author": {

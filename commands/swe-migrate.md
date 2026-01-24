@@ -11,7 +11,7 @@ Migrate existing project from legacy WF_* memories and CLAUDE.md-based workflow 
 
 - Projects with existing `.serena/memories/WF_*.md` files (legacy format)
 - Migrating from CLAUDE.md-based workflow instructions
-- After installing serena-workflow-engine plugin
+- After installing swe plugin
 - When legacy WF_* files don't match plugin's states.json
 
 ## Process (5 Steps)
