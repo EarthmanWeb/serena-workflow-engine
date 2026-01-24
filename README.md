@@ -7,22 +7,14 @@ and Serena memory persistence.
 
 ## Installation
 
-### 1. Add to your project
-
-```bash
-cd your-project
-git submodule add https://github.com/EarthmanWeb/serena-workflow-engine .claude/plugins/serena-workflow-engine
-chmod +x .claude/plugins/serena-workflow-engine/hooks/*.py
-```
-
-### 2. Install the plugin
+### 1. Configure the plugin
 
 Add to `.claude/settings.local.json` (create if it doesn't exist):
 
 ```json
 {
   "extraKnownMarketplaces": {
-    "swe": {
+    "EarthmanWebSwe": {
       "source": {
         "source": "git",
         "url": "https://github.com/EarthmanWeb/serena-workflow-engine",
@@ -31,57 +23,25 @@ Add to `.claude/settings.local.json` (create if it doesn't exist):
     }
   },
   "enabledPlugins": {
-    "swe@swe": true
+    "swe@EarthmanWebSwe": true
   }
 }
 ```
 
-**Local development installation** (for plugin development):
-
-```json
-{
-  "extraKnownMarketplaces": {
-    "swe": {
-      "source": {
-        "source": "directory",
-        "path": "./plugins/serena-workflow-engine"
-      }
-    }
-  },
-  "enabledPlugins": {
-    "swe@swe": true
-  }
-}
-```
-
-**Note:** Directory path is relative to the settings file location.
-
-**CLI installation** (alternative):
-
-```bash
-# Add marketplace (use ABSOLUTE path for local dev)
-claude plugin marketplace add "$(pwd)/.claude/plugins/serena-workflow-engine"
-
-# Install and enable
-claude plugin install swe@swe --scope local
-claude plugin enable swe@swe --scope local
-```
-
-### 3. Verify installation
+### 2. Verify installation
 
 ```bash
 claude plugin list
 ```
 
-Should show: `swe@swe` with status
-`✔ enabled`
+Should show: `swe@EarthmanWebSwe` with status `✔ enabled`
 
-### 4. Restart Claude Code
+### 3. Restart Claude Code
 
 - **CLI**: Start a new `claude` session
 - **VSCode**: Reload the window (`Cmd+Shift+P` → "Developer: Reload Window")
 
-### 5. Initialize the plugin
+### 4. Initialize the plugin
 
 After restart, paste this prompt into Claude Code:
 
@@ -96,9 +56,75 @@ This will:
 - Create core memories
 - Configure .gitignore
 
-### 6. Start working
+### 5. Start working
 
 After setup, the workflow guides you automatically. Type any task to begin.
+
+---
+
+## Local Development Installation
+
+For contributing to or modifying the plugin itself.
+
+### 1. Clone as submodule
+
+```bash
+cd your-project
+git submodule add https://github.com/EarthmanWeb/serena-workflow-engine .claude/plugins/serena-workflow-engine
+chmod +x .claude/plugins/serena-workflow-engine/hooks/*.py
+```
+
+### 2. Configure for local development
+
+Add to `.claude/settings.local.json`:
+
+```json
+{
+  "extraKnownMarketplaces": {
+    "localDev": {
+      "source": {
+        "source": "directory",
+        "path": "./plugins/serena-workflow-engine"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "swe@localDev": true
+  }
+}
+```
+
+**Note:** Directory path is relative to the `.claude/` folder.
+
+### 3. Alternative: CLI installation
+
+```bash
+# Add marketplace (use ABSOLUTE path)
+claude plugin marketplace add "$(pwd)/.claude/plugins/serena-workflow-engine"
+
+# Install and enable
+claude plugin install swe@localDev --scope local
+claude plugin enable swe@localDev --scope local
+
+# Verify
+claude plugin list
+claude plugin marketplace list
+```
+
+### 4. Updating the submodule
+
+```bash
+# Pull latest changes
+cd .claude/plugins/serena-workflow-engine
+git pull origin main
+
+# Or update from parent repo
+git submodule update --remote .claude/plugins/serena-workflow-engine
+```
+
+### 5. Switching between git and local
+
+To switch from git source to local (or vice versa), update `extraKnownMarketplaces` in settings and restart Claude Code. Only one source can be active at a time per marketplace name.
 
 ---
 
