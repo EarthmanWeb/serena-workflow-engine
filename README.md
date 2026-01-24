@@ -86,12 +86,12 @@ chmod +x .claude/plugins/serena-workflow-engine/hooks/*.py
 ### 2. Add the marketplace and install
 
 ```bash
-# Add marketplace from local directory (name "swe" comes from marketplace.json)
+# Add marketplace from local directory (name "EarthmanWeb" comes from marketplace.json)
 claude plugin marketplace add "$(pwd)/.claude/plugins/serena-workflow-engine"
 
 # Install and enable
-claude plugin install swe@swe --scope local
-claude plugin enable swe@swe --scope local
+claude plugin install swe@EarthmanWeb --scope local
+claude plugin enable swe@EarthmanWeb --scope local
 
 # Verify
 claude plugin list
