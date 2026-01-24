@@ -10,7 +10,7 @@ Multi-agent swarm patterns for parallel processing and complex task coordination
 
 | User Says | YOU MUST USE | NOT |
 |-----------|--------------|-----|
-| "launch ruv-swarm" / "ruv swarm" | `mcp__plugin_serena-workflow-engine_ruv-swarm__*` tools | Task/Explore agents |
+| "launch ruv-swarm" / "ruv swarm" | `mcp__plugin_swe_ruv-swarm__*` tools | Task/Explore agents |
 | "launch claude-flow swarm" | `mcp__claude-flow__*` tools | Task/Explore agents |
 | "use hive-mind" | `mcp__claude-flow__hive-mind_*` tools | Task/Explore agents |
 
@@ -56,15 +56,15 @@ Key tools:
 - `memory_search` - Pattern-based search
 
 ### 2. RUV-Swarm (DAA - Decentralized Autonomous Agents)
-**MCP Prefix:** `mcp__plugin_serena-workflow-engine_ruv-swarm__*`
+**MCP Prefix:** `mcp__plugin_swe_ruv-swarm__*`
 
 For tasks requiring learning/adaptation:
 ```
-1. mcp__plugin_serena-workflow-engine_ruv-swarm__swarm_init({ topology: "mesh", strategy: "specialized" })
-2. mcp__plugin_serena-workflow-engine_ruv-swarm__daa_init({ enableLearning: true, enableCoordination: true })
-3. mcp__plugin_serena-workflow-engine_ruv-swarm__daa_agent_create({ id: "...", cognitivePattern: "adaptive", enableMemory: true })
-4. mcp__plugin_serena-workflow-engine_ruv-swarm__task_orchestrate({ task: "...", strategy: "adaptive" })
-5. mcp__plugin_serena-workflow-engine_ruv-swarm__daa_knowledge_share({ sourceAgentId: "...", targetAgentIds: [...] })
+1. mcp__plugin_swe_ruv-swarm__swarm_init({ topology: "mesh", strategy: "specialized" })
+2. mcp__plugin_swe_ruv-swarm__daa_init({ enableLearning: true, enableCoordination: true })
+3. mcp__plugin_swe_ruv-swarm__daa_agent_create({ id: "...", cognitivePattern: "adaptive", enableMemory: true })
+4. mcp__plugin_swe_ruv-swarm__task_orchestrate({ task: "...", strategy: "adaptive" })
+5. mcp__plugin_swe_ruv-swarm__daa_knowledge_share({ sourceAgentId: "...", targetAgentIds: [...] })
 ```
 
 DAA-specific tools:

@@ -109,7 +109,7 @@ def main():
         # Only process Serena replace operations
         serena_replace_tools = [
             'mcp__serena__replace_content',
-            'mcp__plugin_serena-workflow-engine_serena__replace_content',
+            'mcp__plugin_swe_serena__replace_content',
         ]
         
         if tool_name not in serena_replace_tools:

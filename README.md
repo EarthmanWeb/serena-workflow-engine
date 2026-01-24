@@ -22,7 +22,26 @@ Add to `.claude/settings.local.json` (create if it doesn't exist):
 ```json
 {
   "extraKnownMarketplaces": {
-    "serena-workflow-engine": {
+    "swe": {
+      "source": {
+        "source": "git",
+        "url": "https://github.com/EarthmanWeb/serena-workflow-engine",
+        "ref": "main"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "swe@swe": true
+  }
+}
+```
+
+**Local development installation** (for plugin development):
+
+```json
+{
+  "extraKnownMarketplaces": {
+    "swe": {
       "source": {
         "source": "directory",
         "path": "./plugins/serena-workflow-engine"
@@ -30,22 +49,22 @@ Add to `.claude/settings.local.json` (create if it doesn't exist):
     }
   },
   "enabledPlugins": {
-    "serena-workflow-engine@serena-workflow-engine": true
+    "swe@swe": true
   }
 }
 ```
 
-**Note:** Path is relative to the settings file location.
+**Note:** Directory path is relative to the settings file location.
 
-**Local installation**
+**CLI installation** (alternative):
 
 ```bash
-# Add marketplace (use ABSOLUTE path)
+# Add marketplace (use ABSOLUTE path for local dev)
 claude plugin marketplace add "$(pwd)/.claude/plugins/serena-workflow-engine"
 
 # Install and enable
-claude plugin install serena-workflow-engine@serena-workflow-engine --scope local
-claude plugin enable serena-workflow-engine@serena-workflow-engine --scope local
+claude plugin install swe@swe --scope local
+claude plugin enable swe@swe --scope local
 ```
 
 ### 3. Verify installation
@@ -54,7 +73,7 @@ claude plugin enable serena-workflow-engine@serena-workflow-engine --scope local
 claude plugin list
 ```
 
-Should show: `serena-workflow-engine@serena-workflow-engine` with status
+Should show: `swe@swe` with status
 `✔ enabled`
 
 ### 4. Restart Claude Code
@@ -170,7 +189,7 @@ Example: `/swe-onboard-quick AUTH "Authentication" src/auth/`
 
 2. **If disabled, enable it:**
    ```bash
-   claude plugin enable serena-workflow-engine@serena-workflow-engine --scope local
+   claude plugin enable swe@swe --scope local
    ```
 
 3. **Restart Claude Code:**

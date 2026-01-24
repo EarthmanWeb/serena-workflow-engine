@@ -1,6 +1,6 @@
 {
   "mcpServers": {
-    "EarthmanWeb/serena": {
+    "serena-em": {
       "type": "stdio",
       "command": "uvx",
       "args": [

@@ -1,5 +1,5 @@
 {
-  "name": "serena-workflow-engine",
+  "name": "swe",
   "version": "1.0.0",
   "description": "21-state workflow engine with RLVR learning and swarm coordination",
   "owner": {
@@ -8,7 +8,7 @@
   },
   "plugins": [
     {
-      "name": "serena-workflow-engine",
+      "name": "swe",
       "version": "1.0.0",
       "description": "21-state workflow engine with RLVR learning and swarm coordination",
       "source": "./"

@@ -1,11 +1,11 @@
 ---
 name: swe-init
-description: Initialize serena-workflow-engine plugin via autonomous agent
+description: Initialize swe plugin via autonomous agent
 ---
 
 # /swe-init
 
-First-time setup command for the serena-workflow-engine plugin. Launches an autonomous agent to complete all initialization tasks and verify success.
+First-time setup command for the swe plugin. Launches an autonomous agent to complete all initialization tasks and verify success.
 
 ## When to Run
 

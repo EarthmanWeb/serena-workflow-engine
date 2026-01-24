@@ -29,22 +29,22 @@ ALLOWED_TOOLS = [
     # ToolSearch - CRITICAL: needed to load deferred MCP tools (prevents deadlock)
     'ToolSearch',
     # Memory tools (needed for reading WF_INIT and creating WORKING_MEMORY)
-    'mcp__plugin_serena-workflow-engine_serena__read_memory',
+    'mcp__plugin_swe_serena__read_memory',
     'mcp__serena__read_memory',
-    'mcp__plugin_serena-workflow-engine_serena__write_memory',
+    'mcp__plugin_swe_serena__write_memory',
     'mcp__serena__write_memory',
-    'mcp__plugin_serena-workflow-engine_serena__list_memories',
+    'mcp__plugin_swe_serena__list_memories',
     'mcp__serena__list_memories',
-    'mcp__plugin_serena-workflow-engine_serena__edit_memory',
+    'mcp__plugin_swe_serena__edit_memory',
     'mcp__serena__edit_memory',
-    'mcp__plugin_serena-workflow-engine_serena__delete_memory',
+    'mcp__plugin_swe_serena__delete_memory',
     'mcp__serena__delete_memory',
     # Project activation tools (needed when no active project - chicken/egg problem)
-    'mcp__plugin_serena-workflow-engine_serena__activate_project',
+    'mcp__plugin_swe_serena__activate_project',
     'mcp__serena__activate_project',
-    'mcp__plugin_serena-workflow-engine_serena__list_projects',
+    'mcp__plugin_swe_serena__list_projects',
     'mcp__serena__list_projects',
-    'mcp__plugin_serena-workflow-engine_serena__add_project',
+    'mcp__plugin_swe_serena__add_project',
     'mcp__serena__add_project',
 ]
 
@@ -67,7 +67,7 @@ def find_project_root(start_dir):
 
 def get_serena_memories_dir(cwd):
     project_root = find_project_root(cwd)
-    return os.path.join(project_root, '.serena', 'wm')
+    return os.path.join(project_root, '.serena', 'memories', 'wm')
 
 def extract_session_id(transcript_path):
     """Extract session ID from transcript_path UUID."""

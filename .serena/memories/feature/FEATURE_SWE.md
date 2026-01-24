@@ -124,7 +124,7 @@ jq . .claude/plugins/serena-workflow-engine/state-machine/states.json
 ls -la .claude/plugins/serena-workflow-engine/hooks/*.sh
 
 # Verify plugin installation
-claude plugin list | grep serena-workflow-engine
+claude plugin list | grep swe
 ```
 
 ## ⚠️ Development Standards (Dual-Location Architecture)

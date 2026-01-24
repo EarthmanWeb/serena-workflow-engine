@@ -11,7 +11,7 @@ capabilities:
 
 # SWE Init Agent
 
-Autonomous agent for initializing the serena-workflow-engine plugin. Completes all setup tasks and verifies success.
+Autonomous agent for initializing the swe plugin. Completes all setup tasks and verifies success.
 
 ## Capabilities
 
@@ -47,17 +47,17 @@ Report:
 
 ### Task 2: Verify MCP Servers
 Test these MCP tools respond:
-- `mcp__plugin_serena-workflow-engine_serena__list_memories`
+- `mcp__plugin_swe_serena__list_memories`
 - `mcp__claude-flow__system_status`
-- `mcp__plugin_serena-workflow-engine_ruv-swarm__swarm_status`
+- `mcp__plugin_swe_ruv-swarm__swarm_status`
 
 If any fail, report which ones and stop.
 
 ### Task 3: Serena Onboarding
 ```javascript
-const status = await mcp__plugin_serena-workflow-engine_serena__check_onboarding_performed();
+const status = await mcp__plugin_swe_serena__check_onboarding_performed();
 if (!status.performed) {
-  await mcp__plugin_serena-workflow-engine_serena__onboarding();
+  await mcp__plugin_swe_serena__onboarding();
 }
 ```
 

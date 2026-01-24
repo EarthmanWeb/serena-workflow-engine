@@ -10,7 +10,7 @@ Thumbs.db
 # Runtime state (not for distribution)
 workflow-state.json
 setup-state.json
-setup-complete.json
+swe-setup-complete.json
 
 # Local settings
 *.local.json

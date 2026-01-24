@@ -44,12 +44,12 @@ def get_paths(cwd: str) -> Dict[str, str]:
     return {
         "cwd": cwd,
         "claude_dir": os.path.join(cwd, ".claude"),
-        "setup_file": os.path.join(cwd, ".claude", "setup-complete.json"),
+        "setup_file": os.path.join(cwd, ".claude", "plugins", "serena-workflow-engine", "swe-setup-complete.json"),
         "learning_file": os.path.join(cwd, ".claude", "learning.json"),
-        "plugin_dir": os.path.join(cwd, ".claude", "plugins", "serena-workflow-engine"),
-        "instructions_dir": os.path.join(cwd, ".claude", "plugins", "serena-workflow-engine", "memories", "instructions"),
-        "references_dir": os.path.join(cwd, ".claude", "plugins", "serena-workflow-engine", "memories", "references"),
-        "serena_memories": os.path.join(cwd, ".serena", "wm"),
+        "plugin_dir": os.path.join(cwd, ".claude", "plugins", "swe"),
+        "instructions_dir": os.path.join(cwd, ".claude", "plugins", "swe", "memories", "instructions"),
+        "references_dir": os.path.join(cwd, ".claude", "plugins", "swe", "memories", "references"),
+        "serena_memories": os.path.join(cwd, ".serena", "memories", "wm"),
     }
 
 
