@@ -179,7 +179,7 @@ for f in WF_*.md CLAUDE_OBLIGATIONS.md DOM_SWE_*.md FEATURE_SWE.md REF_SWE_*.md;
 done
 cd - >/dev/null
 
-cp .claude/plugins/serena-workflow-engine/state-machine/instructions/*.md .serena/memories/
+cp .claude/plugins/serena-workflow-engine/memories/*.md .serena/memories/
 
 echo "Installed instruction files"
 ls .serena/memories/{WF_*,CLAUDE_OBLIGATIONS,DOM_SWE_*,FEATURE_SWE,REF_SWE_*}.md 2>/dev/null | wc -l
@@ -187,7 +187,7 @@ ls .serena/memories/{WF_*,CLAUDE_OBLIGATIONS,DOM_SWE_*,FEATURE_SWE,REF_SWE_*}.md
 
 ### Task 9: Create and Customize Core Memories
 Check for and create if missing:
-- `.serena/memories/_INDEX.md` (from state-machine/instructions/_INDEX.md)
+- `.serena/memories/_INDEX.md` (from memories/_INDEX.md)
 - `.serena/memories/INDEX_FEATURES.md`
 
 **IMPORTANT: Customize _INDEX.md after copying:**
@@ -197,7 +197,7 @@ Check for and create if missing:
 
 ```bash
 # Copy _INDEX if missing
-[ ! -f ".serena/memories/_INDEX.md" ] && cp .claude/plugins/serena-workflow-engine/state-machine/instructions/_INDEX.md .serena/memories/
+[ ! -f ".serena/memories/_INDEX.md" ] && cp .claude/plugins/serena-workflow-engine/memories/_INDEX.md .serena/memories/
 
 # List existing FEATURE_* files to populate Active Features
 echo "Available features to add to _INDEX:"

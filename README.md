@@ -260,7 +260,7 @@ diff <(jq -S '.hooks' hooks/hooks.json) \
 
 ### Development Docs
 
-- `state-machine/references/REF_SWE_DEVELOPMENT.md` - Full development standards
+- `memories/REF_SWE_DEVELOPMENT.md` - Full development standards
 - After `/swe-init`: `DOM_SWE_DEVELOPMENT`, `DOM_SWE_HOOKS` in local memories
 
 ---

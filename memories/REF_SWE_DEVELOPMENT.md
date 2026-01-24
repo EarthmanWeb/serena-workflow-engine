@@ -18,8 +18,8 @@ SWE operates with files in TWO locations:
 
 | Change Type | Plugin File | Local Memory | Action |
 |-------------|-------------|--------------|--------|
-| New workflow state | `state-machine/instructions/WF_*.md` | `WF_*.md` | Create in plugin, copy to memories |
-| Reference doc | `state-machine/references/REF_*.md` | `REF_*.md` | Create in plugin, copy to memories |
+| New workflow state | `memories/WF_*.md` | `WF_*.md` | Create in plugin, copy to memories |
+| Reference doc | `memories/REF_*.md` | `REF_*.md` | Create in plugin, copy to memories |
 | Hook behavior | `hooks/*.py` | N/A | Edit plugin only |
 | New skill/command | `skills/` or `commands/` | N/A | Plugin only |
 
@@ -59,7 +59,7 @@ diff <(jq -S '.hooks' .claude/plugins/serena-workflow-engine/hooks/hooks.json) \
 
 ## Adding New Workflow State
 
-1. Create instruction: `state-machine/instructions/WF_NEWSTATE.md`
+1. Create instruction: `memories/WF_NEWSTATE.md`
 2. Update `states.json` with state definition
 3. Copy to local memories: `cp ... .serena/memories/WF_NEWSTATE.md`
 4. Document in DOM_SWE_STATE_MACHINE
