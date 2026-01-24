@@ -183,11 +183,31 @@ Use: mcp__serena__read_memory("WF_INIT")
             print(json.dumps(output))
             sys.exit(0)
         
-        # Handle completed/uninitialized states - transition to WF_START
+        # Handle completed/uninitialized states
         if current_state in ['UNINITIALIZED', 'WF_DONE', 'WF_CLEANUP', None]:
-            state_mgr.transition_to('WF_START')
-            current_state = 'WF_START'
-            prompt_intent = 'new_task'  # Force new task workflow
+            # Check if we have a valid working memory for THIS session
+            # If so, this is a "new task in same session" - preserve working memory
+            is_same_session_new_task = (
+                wm_file and
+                wm_session_id and
+                session_id and
+                wm_session_id == session_id and
+                current_state in ['WF_DONE', 'WF_CLEANUP']
+            )
+
+            if is_same_session_new_task:
+                # Same session, new task after completion - go to WF_CLASSIFY, preserve WM
+                state_mgr.transition_to('WF_CLASSIFY')
+                current_state = 'WF_CLASSIFY'
+                # Analyze the prompt to understand intent (don't force new_task)
+                prompt_intent = analyze_prompt(prompt, current_state)
+                if prompt_intent == 'unknown':
+                    prompt_intent = 'same_session_new_task'  # Special case
+            else:
+                # Truly new session or no working memory - go to WF_START
+                state_mgr.transition_to('WF_START')
+                current_state = 'WF_START'
+                prompt_intent = 'new_task'
         
         # Build context based on prompt intent and state
         if prompt_intent == 'continuation':
@@ -218,12 +238,33 @@ User is adding to the current task. Incorporate this into your current workflow 
 If scope changes significantly, transition to WF_CLASSIFY.
 """
         
+        elif prompt_intent == 'same_session_new_task':
+            # New task in same session after WF_DONE - preserve and update existing working memory
+            context = f"""🔄 NEW TASK IN SAME SESSION - WORKFLOW STATE: {current_state}
+Working Memory: {wm_file}
+Session: {session_id}
+
+**IMPORTANT: This is a NEW TASK in the SAME SESSION after completing WF_DONE.**
+
+**DO NOT create a new WORKING_MEMORY file.** Instead:
+
+1. **UPDATE the existing WORKING_MEMORY ({wm_file}):**
+   - Increment `Task Iteration` counter
+   - Move previous task to `## Completed Tasks (This Session)` section
+   - Add new task to `## Active Task`
+   - Reset `Edit Count Since Checkpoint` to 0
+   - Set `Current State` to `WF_CLASSIFY`
+
+2. **Then proceed with task classification:**
+   Use: mcp__serena__read_memory("WF_CLASSIFY")
+"""
+
         elif prompt_intent == 'new_task':
             # New task - transition to WF_START
             if current_state not in ['WF_START', 'WF_INIT']:
                 state_mgr.transition_to('WF_START')
                 current_state = 'WF_START'
-            
+
             context = f"""🆕 NEW TASK DETECTED - WORKFLOW STATE: {current_state}
 Working Memory: {wm_file or 'None'}
 

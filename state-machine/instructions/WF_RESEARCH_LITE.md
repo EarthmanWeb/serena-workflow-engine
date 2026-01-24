@@ -1,9 +1,25 @@
 # WF_RESEARCH_LITE - Minimal Research Path
 
+---
+
+## ⚠️ USER-REQUESTED MODE ONLY
+
+**This workflow is ONLY available when the user explicitly requests it.**
+
+Valid triggers:
+- User says "/lite" or "use lite mode"
+- User explicitly asks for "quick lookup" mode
+- User specifically requests to skip WORKING_MEMORY
+
+**NEVER auto-route to this workflow based on task classification.**
+If no explicit user request → Use `WF_RESEARCH` instead.
+
+---
+
 > **🔎 On step WF_RESEARCH_LITE**
 
 ## Purpose
-Lightweight workflow for simple lookup/research tasks that don't require full initialization overhead.
+Lightweight workflow for simple lookup/research tasks when user explicitly requests minimal overhead.
 
 ## Qualifying Tasks
 - "Find where X is"

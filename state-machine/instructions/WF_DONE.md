@@ -41,4 +41,46 @@ Include:
 
 **DO NOT mark task complete without updating WORKING_MEMORY.**
 
+---
+
+## 🔄 Same-Session New Task Handling
+
+**When a new task arrives AFTER completing WF_DONE in the same session:**
+
+This session's WORKING_MEMORY should be PRESERVED and UPDATED, not replaced.
+
+### What to Do:
+
+1. **Keep the existing WORKING_MEMORY file** - do NOT create a new one
+2. **Update the WORKING_MEMORY with the new task:**
+   - Increment `Task Iteration` counter (e.g., `Task Iteration: 2`)
+   - Add new task to `## Active Task` section
+   - Preserve `## Completed Tasks` history from previous iterations
+   - Reset `Edit Count Since Checkpoint` to 0
+   - Update `Current State` to the appropriate next step (typically `WF_CLASSIFY`)
+
+3. **Transition to WF_CLASSIFY** for the new task:
+   ```
+   mcp__serena__read_memory("WF_CLASSIFY")
+   ```
+
+### WORKING_MEMORY Update Template for New Task:
+
+```markdown
+## Workflow Context
+- **Current State**: WF_CLASSIFY
+- **Task Iteration**: [INCREMENT PREVIOUS VALUE]
+- **Edit Count Since Checkpoint:** 0
+
+## Active Task
+[NEW TASK DESCRIPTION]
+
+## Completed Tasks (This Session)
+### Iteration 1: [Previous Task Title]
+- Status: ✅ Completed
+- Summary: [What was done]
+```
+
+**The session ID in the WORKING_MEMORY filename remains the same - only the content is updated.**
+
 [CRITICAL: Did you update WORKING_MEMORY? Are you on a WF_* workflow step? Did you report on it?]
