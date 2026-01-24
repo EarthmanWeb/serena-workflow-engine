@@ -9,8 +9,8 @@ Hooks will send you data to guide you. ALWAYS LISTEN TO THEM.
 - Did you read all references mentioned in hook responses COMPLETELY?
 - Did you check INDEX_FEATURES or _INDEX for existing features?
 - Did you use Serena tools before Read/Edit?
-- Did you log findings to WORKING_MEMORY?
-- Did you update WORKING_MEMORY after significant steps?
+- Did you log findings to WM?
+- Did you update WM after significant steps?
 
 ## 🎯 Core Principles
 

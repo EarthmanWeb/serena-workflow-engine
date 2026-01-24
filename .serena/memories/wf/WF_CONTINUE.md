@@ -8,9 +8,9 @@ OUTPUT THE ABOVE LINE IMMEDIATELY. Do not read further until you have reported y
 
 ## Execute These Steps
 
-1. **VERIFY WORKING_MEMORY exists** (should have been created at WF_START)
-   - If missing: **STOP** - go back and create it per `REF_WORKING_MEMORY`
-   - Echo to chat: `Working Memory: WORKING_MEMORY_<timestamp>_<descriptor>`
+1. **VERIFY WM exists** (should have been created at WF_START)
+   - If missing: **STOP** - go back and create it per `REF_WM`
+   - Echo to chat: `Working Memory: WM_<timestamp>_<descriptor>`
 
 2. **Check current task state:**
    - What was in progress?
@@ -30,7 +30,7 @@ OUTPUT THE ABOVE LINE IMMEDIATELY. Do not read further until you have reported y
 | Was blocked/unclear | `WF_CLARIFY` |
 | No previous state | `WF_CLASSIFY` |
 
-**Multi-layer detection:** Check WORKING_MEMORY "Layers:" field or infer from files being modified. Layers are defined in FEATURE_[KEY] and ARCH_INDEX.
+**Multi-layer detection:** Check WM "Layers:" field or infer from files being modified. Layers are defined in FEATURE_[KEY] and ARCH_INDEX.
 
 1. Determine which condition applies
 2. Read that WF_* memory NOW
@@ -38,15 +38,15 @@ OUTPUT THE ABOVE LINE IMMEDIATELY. Do not read further until you have reported y
 
 **SKIPPING THIS TRANSITION = WORKFLOW VIOLATION**
 
-## ⚠️ MANDATORY: WORKING_MEMORY UPDATE
+## ⚠️ MANDATORY: WM UPDATE
 
 **Before transitioning to another state, you MUST:**
 1. Update `## Progress` with completed steps
 2. Update `**Files:**` with new files edited
 3. Verify `## Workflow Context` is current
 
-**SKIPPING WORKING_MEMORY UPDATE = WORKFLOW VIOLATION**
+**SKIPPING WM UPDATE = WORKFLOW VIOLATION**
 
-The hooks will BLOCK your next action if WORKING_MEMORY is stale.
+The hooks will BLOCK your next action if WM is stale.
 
 [CRITICAL: Are you on a WF_* workflow step? Did you report on it?]

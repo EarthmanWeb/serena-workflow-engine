@@ -158,7 +158,7 @@
 | `CLAUDE_WORKFLOW` | Visual state diagram |
 | `SPEC_WORKFLOW_SKILLS` | Skill conversion spec |
 | `REF_SKILL_PROTOCOLS` | WCP/SRP protocols |
-| `REF_WORKING_MEMORY` | Session state format |
+| `REF_WM` | Session state format |
 
 ## Context Optimization
 

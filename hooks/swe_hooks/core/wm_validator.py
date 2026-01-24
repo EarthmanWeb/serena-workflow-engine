@@ -1,6 +1,6 @@
 """Working Memory format validator.
 
-Validates WM content against REF_WORKING_MEMORY specs:
+Validates WM content against REF_WM specs:
 - Multi-section updates (rejects single-field state edits)
 - Required sections check
 - Naming convention enforcement
@@ -12,9 +12,9 @@ from typing import Tuple, Optional, List, Set
 
 
 class WMFormatValidator:
-    """Validates Working Memory format against REF_WORKING_MEMORY specs."""
+    """Validates Working Memory format against REF_WM specs."""
 
-    # Required sections in a valid WORKING_MEMORY file
+    # Required sections in a valid WM file
     REQUIRED_SECTIONS = [
         'Workflow Context',
         'Current Task',
@@ -35,14 +35,14 @@ class WMFormatValidator:
         r'Invocation Mode',
     ]
 
-    # Naming pattern: WORKING_MEMORY_<SESSION_ID>_<descriptor>.md
-    # Case-sensitive per REF_WORKING_MEMORY spec
+    # Naming pattern: WM_<SESSION_ID>_<descriptor>.md
+    # Case-sensitive per REF_WM spec
     FILENAME_PATTERN = re.compile(
-        r'^WORKING_MEMORY_([a-f0-9]{8})_([a-zA-Z0-9_]+)(?:\.md)?$'
+        r'^WM_([a-f0-9]{8})_([a-zA-Z0-9_]+)(?:\.md)?$'
     )
 
     def validate_filename(self, filename: str) -> Tuple[bool, str, Optional[str]]:
-        """Validate WORKING_MEMORY filename format.
+        """Validate WM filename format.
 
         Args:
             filename: The filename to validate (with or without .md extension)
@@ -52,7 +52,7 @@ class WMFormatValidator:
         """
         match = self.FILENAME_PATTERN.match(filename)
         if not match:
-            return False, f"Invalid filename format. Expected: WORKING_MEMORY_<8-char-session>_<descriptor>.md", None
+            return False, f"Invalid filename format. Expected: WM_<8-char-session>_<descriptor>.md", None
 
         session_id = match.group(1)
         descriptor = match.group(2)
@@ -68,7 +68,7 @@ class WMFormatValidator:
         """Validate WM content has required sections.
 
         Args:
-            content: The full WORKING_MEMORY content
+            content: The full WM content
 
         Returns:
             Tuple of (is_valid, list_of_errors)
@@ -100,7 +100,7 @@ class WMFormatValidator:
     def detect_single_field_edit(self, old_content: str, new_content: str) -> Tuple[bool, str]:
         """Detect anti-pattern: single-field state edits.
 
-        Per REF_WORKING_MEMORY: "SINGLE-FIELD STATE EDIT = WORKFLOW VIOLATION"
+        Per REF_WM: "SINGLE-FIELD STATE EDIT = WORKFLOW VIOLATION"
 
         Args:
             old_content: Previous WM content

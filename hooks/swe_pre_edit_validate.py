@@ -2,10 +2,10 @@
 """PreToolUse hook for Edit/Write - Validate state and check staleness.
 
 Ensures edits only happen in appropriate workflow states.
-BLOCKS edits if WORKING_MEMORY is stale (>3 edits without update).
+BLOCKS edits if WM is stale (>3 edits without update).
 Uses session isolation for state checking.
 
-ENFORCEMENT: This hook adds staleness blocking per SPEC_WORKING_MEMORY_ENFORCEMENT.
+ENFORCEMENT: This hook adds staleness blocking per SPEC_WM_ENFORCEMENT.
 """
 
 import os
@@ -60,16 +60,16 @@ def main():
             if is_stale:
                 # BLOCK: WM is stale
                 output = HookOutput(event_name="PreToolUse")
-                output.block(f"""🛑 WORKING_MEMORY STALE
+                output.block(f"""🛑 WM STALE
 
-Your WORKING_MEMORY is outdated ({edit_count} edits since last update).
+Your WM is outdated ({edit_count} edits since last update).
 
-**UPDATE WORKING_MEMORY before continuing edits:**
+**UPDATE WM before continuing edits:**
 1. Update `## Progress` section with completed work
 2. Mark completed items with `[x]`
 3. Update `**Files:**` with files you've edited
 
-After updating WORKING_MEMORY, you may continue editing.""")
+After updating WM, you may continue editing.""")
                 output.output_and_exit()
                 return
 

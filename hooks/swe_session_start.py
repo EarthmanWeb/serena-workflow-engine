@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""SessionStart hook - Initialize WF_INIT workflow using WORKING_MEMORY.
+"""SessionStart hook - Initialize WF_INIT workflow using WM.
 
-State is stored in WORKING_MEMORY files (session-isolated), NOT in a global state file.
+State is stored in WM files (session-isolated), NOT in a global state file.
 This allows multiple concurrent sessions without state conflicts.
 """
 
@@ -107,10 +107,10 @@ STEP 1: Load the serena memory tool
 STEP 2: Read WF_INIT workflow instructions
    → mcp__serena__read_memory("WF_INIT")
 
-STEP 3: Follow WF_INIT to create WORKING_MEMORY_{session_id}_<task>.md
+STEP 3: Follow WF_INIT to create WM_{session_id}_<task>.md
 ═══════════════════════════════════════════════════════════════════════════════
 
-DO NOT proceed with any user task until WORKING_MEMORY is created.
+DO NOT proceed with any user task until WM is created.
 """
 
         output = {

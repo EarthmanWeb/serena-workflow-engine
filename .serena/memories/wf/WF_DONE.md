@@ -6,12 +6,12 @@ OUTPUT THE ABOVE LINE IMMEDIATELY. Do not read further until you have reported y
 
 ---
 
-## ⚠️ FINAL WORKING_MEMORY UPDATE - MANDATORY
+## ⚠️ FINAL WM UPDATE - MANDATORY
 
-**Before completing, you MUST update WORKING_MEMORY with final status.**
+**Before completing, you MUST update WM with final status.**
 
 ```
-mcp__serena__write_memory("WORKING_MEMORY_<timestamp>_<descriptor>", "<content>")
+mcp__serena__write_memory("WM_<timestamp>_<descriptor>", "<content>")
 ```
 
 Include:
@@ -20,13 +20,13 @@ Include:
 - Any follow-up items for next conversation
 - Memories updated during session
 
-**Echo to chat**: `Working Memory: WORKING_MEMORY_<filename>`
+**Echo to chat**: `Working Memory: WM_<filename>`
 
 ---
 
 ## Checklist Before Finishing
 
-- [ ] **WORKING_MEMORY updated with final status** (REQUIRED)
+- [ ] **WM updated with final status** (REQUIRED)
 - [ ] Feature memories updated if needed (DOM_*, SYS_*, INDEX_*)
 - [ ] No pending violations
 - [ ] User informed of any follow-up items
@@ -37,9 +37,9 @@ Include:
 
 - What was done
 - Any memories updated
-- Any follow-up items (documented in WORKING_MEMORY)
+- Any follow-up items (documented in WM)
 
-**DO NOT mark task complete without updating WORKING_MEMORY.**
+**DO NOT mark task complete without updating WM.**
 
 ---
 
@@ -47,12 +47,12 @@ Include:
 
 **When a new task arrives AFTER completing WF_DONE in the same session:**
 
-This session's WORKING_MEMORY should be PRESERVED and UPDATED, not replaced.
+This session's WM should be PRESERVED and UPDATED, not replaced.
 
 ### What to Do:
 
-1. **Keep the existing WORKING_MEMORY file** - do NOT create a new one
-2. **Update the WORKING_MEMORY with the new task:**
+1. **Keep the existing WM file** - do NOT create a new one
+2. **Update the WM with the new task:**
    - Increment `Task Iteration` counter (e.g., `Task Iteration: 2`)
    - Add new task to `## Active Task` section
    - Preserve `## Completed Tasks` history from previous iterations
@@ -64,7 +64,7 @@ This session's WORKING_MEMORY should be PRESERVED and UPDATED, not replaced.
    mcp__serena__read_memory("WF_CLASSIFY")
    ```
 
-### WORKING_MEMORY Update Template for New Task:
+### WM Update Template for New Task:
 
 ```markdown
 ## Workflow Context
@@ -81,6 +81,6 @@ This session's WORKING_MEMORY should be PRESERVED and UPDATED, not replaced.
 - Summary: [What was done]
 ```
 
-**The session ID in the WORKING_MEMORY filename remains the same - only the content is updated.**
+**The session ID in the WM filename remains the same - only the content is updated.**
 
-[CRITICAL: Did you update WORKING_MEMORY? Are you on a WF_* workflow step? Did you report on it?]
+[CRITICAL: Did you update WM? Are you on a WF_* workflow step? Did you report on it?]

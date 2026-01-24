@@ -6,7 +6,7 @@ This hook fires on EVERY user prompt submission. It must:
 2. Provide appropriate workflow instructions
 3. Ensure Claude follows the workflow state machine
 
-State is read from WORKING_MEMORY files (session-isolated), NOT a global state file.
+State is read from WM files (session-isolated), NOT a global state file.
 """
 
 import os
@@ -134,7 +134,7 @@ def main():
             if uuid_match:
                 session_id = uuid_match.group(1)[:8]
         
-        # Get current state from WORKING_MEMORY (session-isolated)
+        # Get current state from WM (session-isolated)
         # Only use working memory if it matches this session
         wm_file = get_working_memory_filename(cwd)
         state_data, _ = read_working_memory_state(cwd)
@@ -246,9 +246,9 @@ Session: {session_id}
 
 **IMPORTANT: This is a NEW TASK in the SAME SESSION after completing WF_DONE.**
 
-**DO NOT create a new WORKING_MEMORY file.** Instead:
+**DO NOT create a new WM file.** Instead:
 
-1. **UPDATE the existing WORKING_MEMORY ({wm_file}):**
+1. **UPDATE the existing WM ({wm_file}):**
    - Increment `Task Iteration` counter
    - Move previous task to `## Completed Tasks (This Session)` section
    - Add new task to `## Active Task`

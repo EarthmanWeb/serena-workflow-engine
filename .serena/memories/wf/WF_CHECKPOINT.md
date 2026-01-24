@@ -6,25 +6,25 @@ OUTPUT THE ABOVE LINE IMMEDIATELY. Do not read further until you have reported y
 
 ---
 
-## ⚠️ CRITICAL: UPDATE WORKING_MEMORY NOW
+## ⚠️ CRITICAL: UPDATE WM NOW
 
-**This step exists specifically to update WORKING_MEMORY. You MUST do this.**
+**This step exists specifically to update WM. You MUST do this.**
 
-**MANDATORY: Read REF_WORKING_MEMORY BEFORE updating:**
+**MANDATORY: Read REF_WM BEFORE updating:**
 ```
-mcp__serena__read_memory("REF_WORKING_MEMORY")
+mcp__serena__read_memory("REF_WM")
 ```
 
 Then update:
 ```
-mcp__serena__write_memory("WORKING_MEMORY_<timestamp>_<descriptor>", "<content>")
+mcp__serena__write_memory("WM_<timestamp>_<descriptor>", "<content>")
 ```
 
-**⛔ NEVER do single-field state edits. Follow anti-pattern warnings in REF_WORKING_MEMORY.**
+**⛔ NEVER do single-field state edits. Follow anti-pattern warnings in REF_WM.**
 
-**Format** (see `REF_WORKING_MEMORY` for full details):
+**Format** (see `REF_WM` for full details):
 ```markdown
-# WORKING_MEMORY - [Date] [Descriptor]
+# WM - [Date] [Descriptor]
 
 ## Session Context
 - **Task**: [Brief description]
@@ -43,7 +43,7 @@ mcp__serena__write_memory("WORKING_MEMORY_<timestamp>_<descriptor>", "<content>"
 [Timestamp]
 ```
 
-**Echo to chat**: `Working Memory: WORKING_MEMORY_<filename>`
+**Echo to chat**: `Working Memory: WM_<filename>`
 
 ---
 
@@ -62,12 +62,12 @@ mcp__serena__write_memory("WORKING_MEMORY_<timestamp>_<descriptor>", "<content>"
 | More work remains | `WF_EXECUTE` |
 | All work complete | `WF_VERIFY` |
 
-1. **VERIFY** you updated WORKING_MEMORY
+1. **VERIFY** you updated WM
 2. Determine which condition applies
 3. Read that WF_* memory NOW
 4. Report the new step to user
 
-**SKIPPING WORKING_MEMORY UPDATE = WORKFLOW VIOLATION**
+**SKIPPING WM UPDATE = WORKFLOW VIOLATION**
 **SKIPPING THIS TRANSITION = WORKFLOW VIOLATION**
 
-[CRITICAL: Did you update WORKING_MEMORY? Are you on a WF_* workflow step? Did you report on it?]
+[CRITICAL: Did you update WM? Are you on a WF_* workflow step? Did you report on it?]

@@ -1,0 +1,1 @@
+If you are reading this, you are not looking in the right place. Read the REF_WM for proper guidelins for working with session-scoped memory

@@ -9,7 +9,7 @@
 Valid triggers:
 - User says "/lite" or "use lite mode"
 - User explicitly asks for "quick lookup" mode
-- User specifically requests to skip WORKING_MEMORY
+- User specifically requests to skip WM
 
 **NEVER auto-route to this workflow based on task classification.**
 If no explicit user request → Use `WF_RESEARCH` instead.
@@ -55,7 +55,7 @@ Use targeted tools in this order:
 
 ### 3. Report & Exit
 - Provide findings directly
-- No WORKING_MEMORY required for simple lookups
+- No WM required for simple lookups
 - If task expands scope → transition to `WF_CLASSIFY`
 
 ## Token Budget Target

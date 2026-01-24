@@ -36,15 +36,15 @@
 
 **SKIPPING THIS TRANSITION = WORKFLOW VIOLATION**
 
-## ⚠️ MANDATORY: WORKING_MEMORY UPDATE
+## ⚠️ MANDATORY: WM UPDATE
 
 **Before transitioning to another state, you MUST:**
 1. Update `## Progress` with research findings
 2. Update `**Files:**` with files examined
 3. Verify `## Workflow Context` is current
 
-**SKIPPING WORKING_MEMORY UPDATE = WORKFLOW VIOLATION**
+**SKIPPING WM UPDATE = WORKFLOW VIOLATION**
 
-The hooks will BLOCK your next action if WORKING_MEMORY is stale.
+The hooks will BLOCK your next action if WM is stale.
 
 [CRITICAL: Are you on a WF_* workflow step? Did you report on it?]

@@ -4,7 +4,7 @@
 Requires WORKING_MEMORY file with proper workflow state.
 
 Initialization is complete when:
-- A WORKING_MEMORY_{session}_* file exists with proper workflow state
+- A WM_{session}_* file exists with proper workflow state
 
 LITE MODE: Only available when user explicitly requests it (e.g., "/lite", "use lite mode").
 Never offered as an automatic option.
@@ -53,8 +53,8 @@ def is_working_memory_write(tool_name, tool_input):
     if tool_name != 'Write':
         return False
     file_path = tool_input.get('file_path', '')
-    # Allow writes to WORKING_MEMORY files in .serena/memories/
-    return '.serena/memories/WORKING_MEMORY_' in file_path and file_path.endswith('.md')
+    # Allow writes to WORKING_MEMORY files in .serena/memories/wm/
+    return '.serena/memories/wm/WM_' in file_path and file_path.endswith('.md')
 
 def find_project_root(start_dir):
     """Walk up directory tree to find project root containing .serena folder."""
@@ -67,7 +67,7 @@ def find_project_root(start_dir):
 
 def get_serena_memories_dir(cwd):
     project_root = find_project_root(cwd)
-    return os.path.join(project_root, '.serena', 'memories')
+    return os.path.join(project_root, '.serena', 'wm')
 
 def extract_session_id(transcript_path):
     """Extract session ID from transcript_path UUID."""
@@ -100,19 +100,19 @@ def check_working_memory_exists(cwd, session_id):
     """
     memories_dir = get_serena_memories_dir(cwd)
     if not os.path.exists(memories_dir):
-        return False, "No .serena/memories directory found"
+        return False, "No .serena/memories/wm directory found"
 
-    # Look for WORKING_MEMORY_<session_id>_* files specifically
+    # Look for WM_<session_id>_* files specifically
     if session_id:
-        pattern = os.path.join(memories_dir, f'WORKING_MEMORY_{session_id}_*.md')
+        pattern = os.path.join(memories_dir, f'WM_{session_id}_*.md')
         working_memories = glob.glob(pattern)
     else:
         # Fallback: any working memory (legacy support)
-        pattern = os.path.join(memories_dir, 'WORKING_MEMORY_*.md')
+        pattern = os.path.join(memories_dir, 'WM_*.md')
         working_memories = glob.glob(pattern)
 
     if not working_memories:
-        return False, f"No WORKING_MEMORY_{session_id}_*.md file found"
+        return False, f"No WM_{session_id}_*.md file found"
 
     # Check the most recent one for workflow state
     latest = max(working_memories, key=os.path.getmtime)
@@ -223,8 +223,8 @@ STEP 1: Load the serena memory tool
 STEP 2: Read WF_INIT (contains initialization instructions)
    → mcp__serena__read_memory("WF_INIT")
 
-STEP 3: Create WORKING_MEMORY file following REF_WORKING_MEMORY template
-   → Filename: WORKING_MEMORY_{session_id}_<task_descriptor>.md
+STEP 3: Create WORKING_MEMORY file following REF_WM template
+   → Filename: WM_{session_id}_<task_descriptor>.md
    → Use mcp__serena__write_memory OR Write tool
 
 STEP 4: Clean up default Serena memories (if present):

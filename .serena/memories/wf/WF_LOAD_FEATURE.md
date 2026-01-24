@@ -39,7 +39,7 @@
 
 ### Skill Invocation for Architecture Review
 
-1. Set workflow context in WORKING_MEMORY:
+1. Set workflow context in WM:
    - calling_step: WF_LOAD_FEATURE
    - return_step: WF_EXECUTE
 2. Invoke `/arch-review` skill
@@ -48,6 +48,6 @@
 
 **SKIPPING THIS TRANSITION = WORKFLOW VIOLATION**
 
-📋 **WORKING_MEMORY:** Update if task state changed (see `REF_WORKING_MEMORY`)
+📋 **WM:** Update if task state changed (see `REF_WM`)
 
 [CRITICAL: Are you on a WF_* workflow step? Did you report on it?]

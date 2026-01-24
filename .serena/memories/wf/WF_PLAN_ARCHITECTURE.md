@@ -68,15 +68,15 @@ OUTPUT THE ABOVE LINE IMMEDIATELY. Do not read further until you have reported y
 
 **SKIPPING THIS TRANSITION = WORKFLOW VIOLATION**
 
-## ⚠️ MANDATORY: WORKING_MEMORY UPDATE
+## ⚠️ MANDATORY: WM UPDATE
 
 **Before transitioning to another state, you MUST:**
 1. Update `## Progress` with architectural decisions made
 2. Update `**Files:**` with files affected by design
 3. Verify `## Workflow Context` is current
 
-**SKIPPING WORKING_MEMORY UPDATE = WORKFLOW VIOLATION**
+**SKIPPING WM UPDATE = WORKFLOW VIOLATION**
 
-The hooks will BLOCK your next action if WORKING_MEMORY is stale.
+The hooks will BLOCK your next action if WM is stale.
 
 [CRITICAL: Are you on a WF_* workflow step? Did you report on it?]

@@ -12,7 +12,7 @@ Common rationalizations that are **NEVER VALID**:
 - ❌ "The user wants a quick answer" - **Speed is not a valid reason to skip steps.**
 - ❌ "I can batch this with other calls" - **NEVER combine workflow steps with implementation actions.**
 - ❌ "CLAUDE_OBLIGATIONS doesn't apply here" - **It ALWAYS applies. Read it EVERY time.**
-- ❌ "WORKING_MEMORY already exists" - **Verify and UPDATE it. Don't assume.**
+- ❌ "WM already exists" - **Verify and UPDATE it. Don't assume.**
 
 **If you find yourself making a tool call that searches code, edits files, or does ANYTHING implementation-related before completing initialization: STOP. You are violating the workflow.**
 

@@ -1,7 +1,7 @@
 """Background writer for async Working Memory file operations.
 
 Provides non-blocking WM writes by queueing operations to a daemon thread.
-Validates format against REF_WORKING_MEMORY specs before writing.
+Validates format against REF_WM specs before writing.
 """
 
 import queue

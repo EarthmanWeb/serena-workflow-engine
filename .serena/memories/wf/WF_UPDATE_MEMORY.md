@@ -11,7 +11,7 @@ OUTPUT THE ABOVE LINE IMMEDIATELY. Do not read further until you have reported y
 - Adding/updating domain requirements (`DOM_*`)
 - Updating system or reference documentation (`SYS_*`, `REF_*`)
 - Creating/updating index files (`INDEX_*`)
-- Updating `WORKING_MEMORY_*` with task progress
+- Updating `WM_*` with task progress
 - Capturing architectural decisions after WF_ARCH_REVIEW or WF_PLAN_ARCHITECTURE
 
 ## Execute These Steps
@@ -24,18 +24,18 @@ OUTPUT THE ABOVE LINE IMMEDIATELY. Do not read further until you have reported y
 | System | `SYS_[SYSTEM]` | System documentation |
 | Reference | `REF_[TOPIC]` | Reference documentation |
 | Index | `INDEX_[TYPE]` | File/symbol indexes |
-| Working | `WORKING_MEMORY_*` | Session task state |
+| Working | `WM_*` | Session task state |
 
-### 2. For WORKING_MEMORY Updates
+### 2. For WM Updates
 
-**MANDATORY: Read `REF_WORKING_MEMORY` first** - it contains:
+**MANDATORY: Read `REF_WM` first** - it contains:
 - Naming conventions
 - Required template format
 - Anti-patterns to avoid (especially single-field state edits)
 - Stop hook behavior
 
 ```
-mcp__serena__read_memory("REF_WORKING_MEMORY")
+mcp__serena__read_memory("REF_WM")
 ```
 
 ### 3. Update Using Serena Tools
@@ -58,7 +58,7 @@ mcp__serena__edit_memory("MEMORY_NAME", "old", "new", "literal")
 | Condition | MUST Read Next |
 |-----------|----------------|
 | Domain memory updated | `WF_LOAD_FEATURE` |
-| WORKING_MEMORY updated | Return to previous workflow step |
+| WM updated | Return to previous workflow step |
 
 1. Read the appropriate WF_* memory NOW
 2. Report the new step to user

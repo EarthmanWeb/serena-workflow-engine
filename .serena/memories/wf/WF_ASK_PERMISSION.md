@@ -61,6 +61,6 @@ Before finalizing your proposal, check:
 
 **SKIPPING THIS TRANSITION = WORKFLOW VIOLATION**
 
-WORKING_MEMORY: Update if task state changed (see `REF_WORKING_MEMORY`)
+WM: Update if task state changed (see `REF_WM`)
 
 [CRITICAL: Are you on a WF_* workflow step? Did you report on it?]

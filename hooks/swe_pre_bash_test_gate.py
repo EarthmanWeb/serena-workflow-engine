@@ -133,7 +133,7 @@ REQUIRED ACTION:
 mcp__serena__read_memory("FEATURE_TESTS")
 ```
 
-After reading FEATURE_TESTS, update your WORKING_MEMORY with:
+After reading FEATURE_TESTS, update your WM with:
 - **Feature Key(s)**: TESTS (or add TESTS to existing list)
 
 Then retry the test command."""

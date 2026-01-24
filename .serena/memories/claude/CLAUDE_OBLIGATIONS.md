@@ -40,7 +40,7 @@ DO NOT BE CONVERSATIONAL when performing tasks. Concise, functional language ONL
 - [ ] **"Let It Fail":**  Remove and do not add defensive code, Allow Clear failures
 - [ ] Check _INDEX or INDEX_FEATURES when navigating features
 - [ ] Use Serena tools before Read/Edit
-- [ ] Update WORKING_MEMORY after significant steps
+- [ ] Update WM after significant steps
 - [ ] Ask for clarification when uncertain
 - [ ] Follow existing patterns (check docs and existing code first)
 - [ ] Document new patterns or deviations in Serena memories
@@ -59,7 +59,7 @@ After 2 consecutive command failures of the same type:
 ## If Debugging Is Needed
     
 1. FOLLOW project-specific debugging patterns (check REF_* memories)
-2. LOG all findings in WORKING_MEMORY
+2. LOG all findings in WM
 3. SUMMARIZE issues and proposed fixes for user review
 
 ## User Interaction
