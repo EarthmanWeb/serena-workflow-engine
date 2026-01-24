@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """PreToolUse gate - BLOCKS all tools until workflow is initialized.
 
-Supports two modes:
-1. FULL MODE: Requires WORKING_MEMORY file with proper workflow state
-2. LITE MODE: For simple lookups, allows tools with minimal init marker
+Requires WORKING_MEMORY file with proper workflow state.
 
-Initialization is complete when EITHER:
-- A WORKING_MEMORY_{session}_* file exists with proper workflow state (full mode)
-- A LITE_MODE_{session} marker exists (lightweight research mode)
+Initialization is complete when:
+- A WORKING_MEMORY_{session}_* file exists with proper workflow state
+
+LITE MODE: Only available when user explicitly requests it (e.g., "/lite", "use lite mode").
+Never offered as an automatic option.
 
 Session isolation: Each conversation must have its own working memory (matched by session ID).
 """
@@ -26,6 +26,7 @@ if PLUGIN_ROOT:
 
 # Tools that are ALLOWED before initialization
 ALLOWED_TOOLS = [
+    # Memory tools (needed for reading WF_INIT and creating WORKING_MEMORY)
     'mcp__plugin_serena-workflow-engine_serena__read_memory',
     'mcp__serena__read_memory',
     'mcp__plugin_serena-workflow-engine_serena__write_memory',
@@ -34,6 +35,15 @@ ALLOWED_TOOLS = [
     'mcp__serena__list_memories',
     'mcp__plugin_serena-workflow-engine_serena__edit_memory',
     'mcp__serena__edit_memory',
+    'mcp__plugin_serena-workflow-engine_serena__delete_memory',
+    'mcp__serena__delete_memory',
+    # Project activation tools (needed when no active project - chicken/egg problem)
+    'mcp__plugin_serena-workflow-engine_serena__activate_project',
+    'mcp__serena__activate_project',
+    'mcp__plugin_serena-workflow-engine_serena__list_projects',
+    'mcp__serena__list_projects',
+    'mcp__plugin_serena-workflow-engine_serena__add_project',
+    'mcp__serena__add_project',
 ]
 
 def find_project_root(start_dir):
@@ -176,23 +186,30 @@ def main():
             sys.exit(0)
 
         # NOT initialized - BLOCK the tool call with specific diagnostic
+        # NOTE: LITE mode is NOT offered - only full workflow initialization
         output = {
             "decision": "block",
             "reason": f"""🛑 BLOCKED: Workflow initialization NOT complete for session {session_id or 'unknown'}.
 
 **Diagnostic**: {diagnostic}
 
-**Options**:
+**Required Action - Initialize Workflow**:
 
-1️⃣ **Full Workflow** (for implementation/complex tasks):
-   - Read WF_INIT: `mcp__serena__read_memory("WF_INIT")`
-   - Create WORKING_MEMORY_{session_id}_<descriptor>
+1. **If "No active project" error**: Activate the project first:
+   - `mcp__serena__activate_project("project_name")`
+   - Use `mcp__serena__list_projects()` to see available projects
+   - If project not listed, use `mcp__serena__add_project("name", "/path/to/project")`
 
-2️⃣ **Lite Mode** (for simple lookups like "find X"):
-   - Read WF_QUICKSTART: `mcp__serena__read_memory("WF_QUICKSTART")`
-   - Create lite marker: `mcp__serena__write_memory("LITE_MODE_{session_id}", "# Lite Mode\\nSession: {session_id}\\nTask: simple lookup")`
+2. **Read WF_INIT**: `mcp__serena__read_memory("WF_INIT")`
 
-Choose based on task complexity."""
+3. **Create WORKING_MEMORY**: Create WORKING_MEMORY_{session_id}_<descriptor> following REF_WORKING_MEMORY template
+
+4. **Clean up default Serena memories** (if present):
+   - `mcp__serena__delete_memory("PROJECT_WISDOM")` - remove default
+   - `mcp__serena__delete_memory("CLAUDE_MD")` - remove default
+   - `mcp__serena__delete_memory("LESSONS")` - remove default
+
+The workflow MUST be initialized before any tools can be used."""
         }
         print(json.dumps(output))
         sys.exit(0)

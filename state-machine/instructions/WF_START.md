@@ -80,6 +80,26 @@ mcp__serena__read_memory("CLAUDE_OBLIGATIONS")
 
 ---
 
+#### 🔄 New Task After WF_DONE (Same Session)
+
+**If you are arriving here from WF_DONE with a new task in the SAME session:**
+
+1. **DO NOT create a new WORKING_MEMORY** - the existing one for this session is still valid
+2. **UPDATE the existing WORKING_MEMORY:**
+   - Increment `Task Iteration` (e.g., 1 → 2)
+   - Move previous task to `## Completed Tasks (This Session)` section
+   - Add new task to `## Active Task`
+   - Reset `Edit Count Since Checkpoint` to 0
+   - Update `Current State` to `WF_CLASSIFY`
+3. **Skip to step 5** (Classify Task Type) after updating
+
+**How to detect this scenario:**
+- WORKING_MEMORY file exists for current session ID
+- Previous state was WF_DONE or WF_CLEANUP
+- User has provided a new task/request
+
+---
+
 **🛑 BLOCKING REQUIREMENT: READ REF_WORKING_MEMORY FIRST**
 
 ```
@@ -98,7 +118,7 @@ mcp__serena__read_memory("REF_WORKING_MEMORY")
 1. Get session ID from hook context (e.g., `Session: cccdb36a`) - this is an 8-char UUID, NOT a date
 2. Use naming: `WORKING_MEMORY_<SESSION_ID>_<descriptor>` 
 3. Follow the EXACT template from REF_WORKING_MEMORY - no modifications
-4. Echo to chat: `📋 Active Working Memory: WORKING_MEMORY_<SESSION_ID>_<descriptor>`
+4. Echo to chat: `📋 Read Working Memory: WORKING_MEMORY_<SESSION_ID>_<descriptor>`
 
 ```
 # Check for existing:
@@ -122,10 +142,15 @@ See routing table below.
 |-----------|----------------|
 | No features registered | `WF_ONBOARD` |
 | Feature not found | `WF_ONBOARD` |
+| Simple lookup ("find X", "show Y") | `WF_RESEARCH` |
 | WORKING_MEMORY not created/updated | **CREATE IT NOW** |
 | Continue previous work | `WF_CONTINUE` |
 | Research/question only | `WF_RESEARCH` |
 | Code change/feature/bug | `WF_CLASSIFY` |
+| **New task after WF_DONE (same session)** | **UPDATE existing WORKING_MEMORY** → `WF_CLASSIFY` |
+
+**⚡ LITE MODE (User-Requested Only):** `WF_RESEARCH_LITE` is ONLY available when the user explicitly requests it (e.g., "/lite", "use lite mode", "quick lookup").
+NEVER auto-route to LITE mode based on task classification.
 
 1. Determine which condition applies
 2. **VERIFY WORKING_MEMORY exists and is current**

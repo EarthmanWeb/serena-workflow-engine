@@ -5,7 +5,7 @@ and Serena memory persistence.
 
 ---
 
-## Quickstart
+## Installation
 
 ### 1. Add to your project
 

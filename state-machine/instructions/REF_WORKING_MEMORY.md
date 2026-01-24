@@ -69,6 +69,8 @@ Session: <SESSION_ID>
 - **Return Step**: WF_DETECT_REQ
 - **Invocation Mode**: workflow
 - **Current State**: WF_EXECUTE
+- **Task Iteration**: 1
+- **Edit Count Since Checkpoint:** 0
 
 ## Current Task
 **[STATUS]**: [Task Name]
@@ -87,6 +89,13 @@ Session: <SESSION_ID>
 
 ## Previous Task
 **[OUTCOME]**: [Task name] - [summary]
+
+## Completed Tasks (This Session)
+<!-- Used when multiple tasks are completed in same session -->
+### Iteration 1: [Task Title]
+- Status: ✅ Completed
+- Summary: [What was done]
+- Files Modified: [list]
 ```
 
 ---
@@ -101,6 +110,8 @@ Session: <SESSION_ID>
 | `Session ID` | 8-char unique ID |
 | `Return Step` | Where to return after completion |
 | `Invocation Mode` | `workflow` \| `standalone` \| `swarm_agent` |
+| `Task Iteration` | Counter for tasks in same session (starts at 1) |
+| `Edit Count Since Checkpoint` | Edits since last working memory update (reset on new task) |
 
 **Stop Hook Behavior:**
 
