@@ -59,10 +59,31 @@ def main():
         # Check setup
         setup = load_setup_complete(cwd)
         if not setup or not setup.get('complete'):
+            # First-time project setup NOT complete - this is different from session init
             output = {
                 "hookSpecificOutput": {
                     "hookEventName": "SessionStart",
-                    "additionalContext": "⚠️ SERENA WORKFLOW ENGINE not initialized. Run /swe-init first."
+                    "additionalContext": """🛑🛑🛑 CRITICAL: PROJECT SETUP NOT COMPLETE 🛑🛑🛑
+
+═══════════════════════════════════════════════════════════════════════════════
+                    ⚠️  FIRST-TIME SETUP REQUIRED  ⚠️
+═══════════════════════════════════════════════════════════════════════════════
+
+This is a ONE-TIME setup for the project (not per-session).
+
+MANDATORY: Run /swe-init to complete first-time project setup.
+
+This installs:
+- MCP server configurations
+- Workflow instruction files
+- Core memory templates
+- Git ignore entries
+
+After /swe-init completes, restart Claude Code and return to this project.
+
+═══════════════════════════════════════════════════════════════════════════════
+              DO NOT ATTEMPT ANY OTHER ACTIONS UNTIL SETUP COMPLETE
+═══════════════════════════════════════════════════════════════════════════════"""
                 }
             }
             print(json.dumps(output))
@@ -72,12 +93,24 @@ def main():
         # Each chat/conversation is a NEW session with its own working memory
         # Working memory will be created by WF_INIT when the user provides their task
         context = f"""🚀 SERENA WORKFLOW ENGINE - Session {session_id}
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Current State: WF_INIT
-Working Memory: None (will be created for your task)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-MANDATORY: Read and follow the WF_INIT workflow instructions.
-Use: mcp__serena__read_memory("WF_INIT")
+⚠️  MANDATORY SESSION INITIALIZATION  ⚠️
+
+Current State: WF_INIT (awaiting initialization)
+Working Memory: None (must be created)
+
+═══════════════════════════════════════════════════════════════════════════════
+STEP 1: Load the serena memory tool
+   → ToolSearch with query: "select:mcp__serena__read_memory"
+
+STEP 2: Read WF_INIT workflow instructions
+   → mcp__serena__read_memory("WF_INIT")
+
+STEP 3: Follow WF_INIT to create WORKING_MEMORY_{session_id}_<task>.md
+═══════════════════════════════════════════════════════════════════════════════
+
+DO NOT proceed with any user task until WORKING_MEMORY is created.
 """
 
         output = {

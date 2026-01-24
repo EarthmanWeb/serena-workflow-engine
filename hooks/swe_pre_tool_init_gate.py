@@ -24,8 +24,10 @@ if PLUGIN_ROOT:
     if hooks_dir not in sys.path:
         sys.path.insert(0, hooks_dir)
 
-# Tools that are ALLOWED before initialization
+# Tools that are ALWAYS ALLOWED before initialization (no path checking needed)
 ALLOWED_TOOLS = [
+    # ToolSearch - CRITICAL: needed to load deferred MCP tools (prevents deadlock)
+    'ToolSearch',
     # Memory tools (needed for reading WF_INIT and creating WORKING_MEMORY)
     'mcp__plugin_serena-workflow-engine_serena__read_memory',
     'mcp__serena__read_memory',
@@ -45,6 +47,14 @@ ALLOWED_TOOLS = [
     'mcp__plugin_serena-workflow-engine_serena__add_project',
     'mcp__serena__add_project',
 ]
+
+def is_working_memory_write(tool_name, tool_input):
+    """Check if this is a Write to WORKING_MEMORY file (allowed for initialization)."""
+    if tool_name != 'Write':
+        return False
+    file_path = tool_input.get('file_path', '')
+    # Allow writes to WORKING_MEMORY files in .serena/memories/
+    return '.serena/memories/WORKING_MEMORY_' in file_path and file_path.endswith('.md')
 
 def find_project_root(start_dir):
     """Walk up directory tree to find project root containing .serena folder."""
@@ -167,8 +177,15 @@ def main():
         # Extract session ID from transcript_path
         session_id = extract_session_id(transcript_path)
 
+        tool_input = input_data.get('tool_input', {})
+
         # Allow memory tools through (needed for initialization)
         if any(allowed in tool_name for allowed in ALLOWED_TOOLS):
+            print(json.dumps({}))
+            sys.exit(0)
+
+        # Allow Write to WORKING_MEMORY files (needed to create initialization file)
+        if is_working_memory_write(tool_name, tool_input):
             print(json.dumps({}))
             sys.exit(0)
 
@@ -189,27 +206,39 @@ def main():
         # NOTE: LITE mode is NOT offered - only full workflow initialization
         output = {
             "decision": "block",
-            "reason": f"""🛑 BLOCKED: Workflow initialization NOT complete for session {session_id or 'unknown'}.
+            "reason": f"""🛑🛑🛑 CRITICAL: WORKFLOW NOT INITIALIZED - ALL TOOLS BLOCKED 🛑🛑🛑
 
-**Diagnostic**: {diagnostic}
+Session: {session_id or 'unknown'}
+Diagnostic: {diagnostic}
 
-**Required Action - Initialize Workflow**:
+═══════════════════════════════════════════════════════════════════════════════
+                    ⚠️  MANDATORY INITIALIZATION REQUIRED  ⚠️
+═══════════════════════════════════════════════════════════════════════════════
 
-1. **If "No active project" error**: Activate the project first:
-   - `mcp__serena__activate_project("project_name")`
-   - Use `mcp__serena__list_projects()` to see available projects
-   - If project not listed, use `mcp__serena__add_project("name", "/path/to/project")`
+You MUST complete these steps IN ORDER before ANY other action:
 
-2. **Read WF_INIT**: `mcp__serena__read_memory("WF_INIT")`
+STEP 1: Load the serena memory tool
+   → Use ToolSearch with query: "select:mcp__serena__read_memory"
 
-3. **Create WORKING_MEMORY**: Create WORKING_MEMORY_{session_id}_<descriptor> following REF_WORKING_MEMORY template
+STEP 2: Read WF_INIT (contains initialization instructions)
+   → mcp__serena__read_memory("WF_INIT")
 
-4. **Clean up default Serena memories** (if present):
-   - `mcp__serena__delete_memory("PROJECT_WISDOM")` - remove default
-   - `mcp__serena__delete_memory("CLAUDE_MD")` - remove default
-   - `mcp__serena__delete_memory("LESSONS")` - remove default
+STEP 3: Create WORKING_MEMORY file following REF_WORKING_MEMORY template
+   → Filename: WORKING_MEMORY_{session_id}_<task_descriptor>.md
+   → Use mcp__serena__write_memory OR Write tool
 
-The workflow MUST be initialized before any tools can be used."""
+STEP 4: Clean up default Serena memories (if present):
+   → mcp__serena__delete_memory("PROJECT_WISDOM")
+   → mcp__serena__delete_memory("CLAUDE_MD")
+   → mcp__serena__delete_memory("LESSONS")
+
+If "No active project" error on Step 2:
+   → mcp__serena__list_projects() to see available projects
+   → mcp__serena__activate_project("project_name") to activate
+
+═══════════════════════════════════════════════════════════════════════════════
+              DO NOT ATTEMPT ANY OTHER TOOLS UNTIL INITIALIZED
+═══════════════════════════════════════════════════════════════════════════════"""
         }
         print(json.dumps(output))
         sys.exit(0)
