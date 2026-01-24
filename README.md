@@ -7,23 +7,32 @@ and Serena memory persistence.
 
 ## Installation
 
-### 1. Configure the plugin
+### 1. Add the marketplace and install
 
-Add to `.claude/settings.local.json` (create if it doesn't exist):
+```bash
+# Add the marketplace (name "swe" comes from marketplace.json)
+claude plugin marketplace add https://github.com/EarthmanWeb/serena-workflow-engine.git
+
+# Install and enable the plugin
+claude plugin install swe@swe --scope local
+claude plugin enable swe@swe --scope local
+```
+
+This writes the following to `.claude/settings.local.json`:
 
 ```json
 {
   "extraKnownMarketplaces": {
-    "EarthmanWebSwe": {
+    "swe": {
       "source": {
         "source": "git",
-        "url": "https://github.com/EarthmanWeb/serena-workflow-engine",
+        "url": "https://github.com/EarthmanWeb/serena-workflow-engine.git",
         "ref": "main"
       }
     }
   },
   "enabledPlugins": {
-    "swe@EarthmanWebSwe": true
+    "swe@EarthmanWeb": true
   }
 }
 ```
@@ -34,7 +43,7 @@ Add to `.claude/settings.local.json` (create if it doesn't exist):
 claude plugin list
 ```
 
-Should show: `swe@EarthmanWebSwe` with status `✔ enabled`
+Should show: `swe@swe` with status `✔ enabled`
 
 ### 3. Restart Claude Code
 
@@ -70,18 +79,31 @@ For contributing to or modifying the plugin itself.
 
 ```bash
 cd your-project
-git submodule add https://github.com/EarthmanWeb/serena-workflow-engine .claude/plugins/serena-workflow-engine
+git submodule add https://github.com/EarthmanWeb/serena-workflow-engine.git .claude/plugins/serena-workflow-engine
 chmod +x .claude/plugins/serena-workflow-engine/hooks/*.py
 ```
 
-### 2. Configure for local development
+### 2. Add the marketplace and install
 
-Add to `.claude/settings.local.json`:
+```bash
+# Add marketplace from local directory (name "swe" comes from marketplace.json)
+claude plugin marketplace add "$(pwd)/.claude/plugins/serena-workflow-engine"
+
+# Install and enable
+claude plugin install swe@swe --scope local
+claude plugin enable swe@swe --scope local
+
+# Verify
+claude plugin list
+claude plugin marketplace list
+```
+
+This writes the following to `.claude/settings.local.json`:
 
 ```json
 {
   "extraKnownMarketplaces": {
-    "localDev": {
+    "swe": {
       "source": {
         "source": "directory",
         "path": "./plugins/serena-workflow-engine"
@@ -89,27 +111,12 @@ Add to `.claude/settings.local.json`:
     }
   },
   "enabledPlugins": {
-    "swe@localDev": true
+    "swe@EarthmanWeb": true
   }
 }
 ```
 
 **Note:** Directory path is relative to the `.claude/` folder.
-
-### 3. Alternative: CLI installation
-
-```bash
-# Add marketplace (use ABSOLUTE path)
-claude plugin marketplace add "$(pwd)/.claude/plugins/serena-workflow-engine"
-
-# Install and enable
-claude plugin install swe@localDev --scope local
-claude plugin enable swe@localDev --scope local
-
-# Verify
-claude plugin list
-claude plugin marketplace list
-```
 
 ### 4. Updating the submodule
 
