@@ -135,8 +135,8 @@ SWE is a **standalone plugin** with a **dual-location architecture**:
 **Path:** `.claude/plugins/serena-workflow-engine/`
 
 Contains files that should work across ANY project using the plugin:
-- `state-machine/instructions/WF_*.md` - Workflow state instructions
-- `state-machine/references/REF_*.md` - Generic reference docs
+- `memories/WF_*.md` - Workflow state instructions
+- `memories/REF_*.md` - Generic reference docs
 - `hooks/*.py` - Event handler scripts
 - `hooks/hooks.json` - Hook configuration template
 - `skills/*/SKILL.md` - Skill definitions
