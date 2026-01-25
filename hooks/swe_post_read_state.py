@@ -49,18 +49,30 @@ def main():
         icon = STATE_ICONS.get(memory_name, '📍')
         current = state_mgr.get_current_state()
 
-        output.add_message(f"{icon} ON STEP: {memory_name}")
-
         # Only transition if state is different
         if current != memory_name:
             success, msg = state_mgr.transition_to(memory_name)
             if success:
+                output.add_message(f"{icon} ON STEP: {memory_name}")
                 output.add_message(msg)
                 # Auto-log transition to WM Progress section
                 if state_mgr.wm_filepath:
                     append_transition_to_wm(state_mgr.wm_filepath, current, memory_name)
             else:
-                output.add_message(f"⚠️ State transition issue: {msg}")
+                # BLOCK invalid transition with clear instructions
+                output.add_message(f"🛑 {msg}")
+                output.add_message("")
+                output.add_message("**YOU MUST STOP AND GO TO A VALID STATE.**")
+                output.add_message("")
+                output.add_message("The state machine enforces valid workflow paths.")
+                output.add_message("You cannot skip steps in the workflow.")
+                output.add_message("")
+                output.add_message("**Common fixes:**")
+                output.add_message("- From WF_START: Go to WF_CLASSIFY (for code changes)")
+                output.add_message("- From WF_CLASSIFY: Go to WF_DETECT_REQ (simple) or WF_PLAN_ARCHITECTURE (complex)")
+                output.add_message("- Features must be loaded in WF_CLASSIFY or WF_LOAD_FEATURE before WF_EXECUTE")
+        else:
+            output.add_message(f"{icon} ON STEP: {memory_name}")
 
         output.output_and_exit()
 

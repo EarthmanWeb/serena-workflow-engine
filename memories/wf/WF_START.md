@@ -10,6 +10,27 @@ The anti-rationalization block is in WF_INIT. If you skipped WF_INIT to get here
 
 ---
 
+## ⛔ CRITICAL: NO DIRECT PATH TO WF_EXECUTE
+
+**READ THIS CAREFULLY:**
+
+There is **NO VALID PATH** from WF_START directly to WF_EXECUTE.
+
+If you are thinking of going to WF_EXECUTE from here:
+- ❌ **STOP. That path does not exist.**
+- ❌ "The task is simple enough" - **NO. Simple tasks still go through WF_CLASSIFY.**
+- ❌ "I already know what to do" - **NO. WF_CLASSIFY loads features. You need them.**
+- ❌ "The WM has the feature key" - **Having the key ≠ loading the FEATURE_[KEY] memory.**
+
+**Valid paths to WF_EXECUTE (ALL go through classification/planning first):**
+1. WF_START → WF_CLASSIFY → WF_DETECT_REQ → WF_LOAD_FEATURE → WF_EXECUTE
+2. WF_START → WF_CLASSIFY → WF_PLAN_ARCHITECTURE → WF_EXECUTE
+3. WF_START → WF_CLASSIFY → WF_SWARM_ORCHESTRATE → WF_EXECUTE
+
+**If your next step is WF_EXECUTE, you have violated the workflow.**
+
+---
+
 ## ⚡ SWARM AGENT BYPASS
 
 **How to know if you are a spawned agent:** Your prompt contains explicit agent role assignment (e.g., "You are the researcher agent") and task-specific instructions from a coordinator.
@@ -48,25 +69,12 @@ Determine which feature(s) this conversation is about:
 
 1. **From user context** - Did user mention feature names, keys, or file paths?
 2. **From file paths** - If files are mentioned, which feature(s) contain them?
-3. **Cross-feature indicators** - Does request span multiple areas? (e.g., "blocks and templates", "context providers for themes")
+3. **Cross-feature indicators** - Does request span multiple areas?
 4. **Ask if unclear** - "Which feature(s) are you working on? [list from INDEX_FEATURES]"
 
-**For single feature:**
-```
-mcp__plugin_swe_serena__read_memory("FEATURE_[KEY]")  # Replace [KEY] with detected feature key
-```
+**Record the feature key(s) in WM. Feature memories will be loaded in WF_CLASSIFY.**
 
-**For multiple features:**
-```
-# Load ALL relevant feature memories
-mcp__plugin_swe_serena__read_memory("FEATURE_[KEY1]")
-mcp__plugin_swe_serena__read_memory("FEATURE_[KEY2]")
-# ... continue for each detected feature
-```
-
-If any FEATURE_[KEY] doesn't exist -> `WF_ONBOARD`
-
-**Note:** Multi-feature requests are further analyzed in WF_CLASSIFY step 3.
+If any FEATURE_[KEY] doesn't exist → `WF_ONBOARD`
 
 ### 3. Read CLAUDE_OBLIGATIONS
 
@@ -151,7 +159,7 @@ mcp__plugin_swe_serena__list_memories()  # Look for WM_* files
 
 See routing table below.
 
-## MANDATORY NEXT STEP
+## ⛔ MANDATORY NEXT STEP
 
 **YOU ARE NOT FINISHED.** Before responding to user:
 
@@ -163,11 +171,25 @@ See routing table below.
 | WM not created/updated | **CREATE IT NOW** |
 | Continue previous work | `WF_CONTINUE` |
 | Research/question only | `WF_RESEARCH` |
-| Code change/feature/bug | `WF_CLASSIFY` |
-| **New task after WF_DONE (same session)** | **UPDATE existing WM** → `WF_CLASSIFY` |
+| **Code change/feature/bug** | **`WF_CLASSIFY`** ← THIS IS MANDATORY |
+| New task after WF_DONE (same session) | **UPDATE existing WM** → `WF_CLASSIFY` |
 
-**⚡ LITE MODE (User-Requested Only):** `WF_RESEARCH_LITE` is ONLY available when the user explicitly requests it (e.g., "/lite", "use lite mode", "quick lookup").
-NEVER auto-route to LITE mode based on task classification.
+**⚡ LITE MODE (User-Requested Only):** `WF_RESEARCH_LITE` is ONLY available when the user explicitly requests it.
+
+---
+
+## 🛑 BLOCKED PATHS - These Do NOT Exist
+
+| Invalid Path | Why It's Invalid |
+|--------------|------------------|
+| WF_START → WF_EXECUTE | **Features not loaded. WF_CLASSIFY must run first.** |
+| WF_START → WF_LOAD_FEATURE | **Classification must happen first.** |
+| WF_START → WF_CHECKPOINT | **No work has been done yet.** |
+| WF_START → WF_VERIFY | **Nothing to verify yet.** |
+
+**If you find yourself wanting to go to any of these, STOP. Go to WF_CLASSIFY.**
+
+---
 
 1. Determine which condition applies
 2. **VERIFY WM exists and is current**
@@ -175,6 +197,7 @@ NEVER auto-route to LITE mode based on task classification.
 4. Report the new step to user
 
 **PROCEEDING WITHOUT WM = WORKFLOW VIOLATION**
-**SKIPPING THIS TRANSITION = WORKFLOW VIOLATION**
+**SKIPPING WF_CLASSIFY FOR CODE CHANGES = WORKFLOW VIOLATION**
+**GOING DIRECTLY TO WF_EXECUTE = WORKFLOW VIOLATION**
 
-[CRITICAL: Does WM exist? Are you on a WF_* workflow step? Did you report on it?]
+[CRITICAL: Does WM exist? Is your next step WF_CLASSIFY (for code changes)? Did you report on it?]

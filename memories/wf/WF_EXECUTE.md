@@ -6,6 +6,48 @@ OUTPUT THE ABOVE LINE IMMEDIATELY. Do not read further until you have reported y
 
 ---
 
+## 🛑 BLOCKING: Feature Memory Verification
+
+**BEFORE ANY WORK, you MUST verify feature memories were loaded.**
+
+### 1. Check WM for Feature Key(s)
+
+Look at your WM's `Feature Key(s)` field (e.g., `- **Feature Key(s)**: [KEY1], [KEY2]`)
+
+### 2. Verify FEATURE_[KEY] Was Read for EACH
+
+**Ask yourself:** "Did I read `FEATURE_[KEY]` for every key listed in my WM?"
+
+| If... | Then... |
+|-------|---------|
+| You read all feature memories | ✅ Continue to WM section |
+| You skipped feature loading | ❌ **STOP - Read them NOW** |
+| WM has no Feature Key(s) | ❌ **STOP - Go to WF_START** |
+
+### 3. If Features Not Loaded - DO THIS NOW
+
+```
+# First, get the feature registry
+mcp__plugin_swe_serena__read_memory("INDEX_FEATURES")
+
+# Then, for EACH feature key in WM:
+mcp__plugin_swe_serena__read_memory("FEATURE_[KEY1]")
+mcp__plugin_swe_serena__read_memory("FEATURE_[KEY2]")
+# ... continue for ALL features in WM
+```
+
+**Only proceed after ALL feature memories are loaded.**
+
+**⛔ EXECUTING WITHOUT FEATURE MEMORIES = WORKFLOW VIOLATION**
+
+You CANNOT understand the architecture, file locations, testing patterns, or coding standards without the feature memory. Skipping this leads to:
+- Writing code in wrong locations
+- Missing architectural patterns
+- Ignoring feature-specific requirements
+- Creating inconsistent implementations
+
+---
+
 ## ⚠️ MANDATORY: WM
 
 **Before starting any work, verify WM exists and is current.**
@@ -140,4 +182,4 @@ TaskOutput({ task_id: "...", block: true })
 **SKIPPING THIS TRANSITION = WORKFLOW VIOLATION**
 **SKIPPING WM UPDATE = WORKFLOW VIOLATION**
 
-[CRITICAL: Did you update WM? Are you on a WF_* workflow step? Did you report on it?]
+[CRITICAL: Did you load FEATURE memories? Did you update WM? Are you on a WF_* workflow step? Did you report on it?]

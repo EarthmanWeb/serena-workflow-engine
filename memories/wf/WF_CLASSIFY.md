@@ -6,157 +6,159 @@ OUTPUT THE ABOVE LINE IMMEDIATELY. Do not read further until you have reported y
 
 ---
 
+## 🚫 ANTI-SKIP BLOCK - THIS STEP IS MANDATORY
+
+**YOU CANNOT GO TO WF_EXECUTE WITHOUT COMPLETING THIS STEP.**
+
+If you are thinking of skipping to WF_EXECUTE because:
+- ❌ "The task is simple" - **Complexity doesn't matter. ALL code changes go through WF_CLASSIFY.**
+- ❌ "I already know what to do" - **You still need to load features and verify.**
+- ❌ "WM already has the feature" - **Having the key != having loaded the memory.**
+- ❌ "I'll load features later" - **NO. Features are loaded HERE, at the END of this step.**
+
+**The ONLY valid paths to WF_EXECUTE are:**
+1. WF_CLASSIFY → WF_DETECT_REQ → WF_LOAD_FEATURE → /arch-review → WF_EXECUTE
+2. WF_CLASSIFY → WF_PLAN_ARCHITECTURE → WF_EXECUTE
+3. WF_CLASSIFY → WF_SWARM_ORCHESTRATE → WF_EXECUTE
+
+**There is NO direct path from WF_START to WF_EXECUTE.**
+
+---
+
 ## Execute These Steps
 
-1. **Is the request clear?**
-   - No -> go to WF_CLARIFY
-   - Yes -> continue
+### 1. Is the request clear?
+- No → go to WF_CLARIFY
+- Yes → continue
 
-2. **Assess task complexity:**
+### 2. Assess task complexity:
 
-   ### Research Tasks (Skill-Based)
-   - Questions about how code works
-   - Exploring patterns or architecture
-   - Finding files or symbols
-   - No code changes needed
-   -> **Invoke `/research` skill** (see Skill Invocation below)
+#### Research Tasks (Skill-Based)
+- Questions about how code works
+- Exploring patterns or architecture
+- Finding files or symbols
+- No code changes needed
+→ **Invoke `/research` skill** (see Skill Invocation below)
 
-   ### Debugging Tasks (Skill-Based)
-   - Tests failing on one environment but passing on another
-   - Behavior differences between environments
-   - Test-driven debugging needed
-   -> **Invoke `/debug-tdd` skill** (see Skill Invocation below)
+#### Debugging Tasks (Skill-Based)
+- Tests failing on one environment but passing on another
+- Behavior differences between environments
+- Test-driven debugging needed
+→ **Invoke `/debug-tdd` skill** (see Skill Invocation below)
 
-   ### Simple Tasks (Single Agent)
-   - Bug fix in one file
-   - Small code change
-   - Documentation update
-   - Single function modification
-   -> **WF_DETECT_REQ**
+#### Simple Tasks (Single Agent)
+- Bug fix in one file
+- Small code change
+- Documentation update
+- Single function modification
+→ **WF_DETECT_REQ**
 
-   ### Medium Tasks (Architecture Required)
+#### Medium Tasks (Architecture Required)
 
-   **⚠️ MANDATORY: Development Standards**
+**⚠️ MANDATORY: Development Standards**
 
-   **For tasks involving code changes**, read dev standards and any subsections relevant to the task:
+**For tasks involving code changes**, read dev standards:
+```
+mcp__plugin_swe_serena__read_memory("REF_DEV_STANDARDS")
+```
 
-   ```
-   mcp__plugin_swe_serena__read_memory("REF_DEV_STANDARDS")
-   ```
+**⚠️ MANDATORY RESEARCH BEFORE ROUTING:**
+```
+mcp__plugin_swe_serena__read_memory("_INDEX")  # Full navigation hub
+```
+- Read ALL relevant: `INDEX_*`, `ARCH_*`, `SYS_*`, `DOM_*`, `REF_*`, `SPEC_*`
+- Check skills: `/research`, `/arch-review`, test skills for helpers
+- Use `mcp__plugin_swe_serena__find_symbol()` to verify existing implementations
 
-   **Skip only if:** Pure research/investigation with no code output.
+**NO IMAGINATION. NO INFERENCE. NO GUESSING. EVERYTHING IS DOCUMENTED.**
+- New feature spanning 2-5 files
+- Refactoring existing code structure
+- Multi-layer design changes
+→ **WF_PLAN_ARCHITECTURE**
 
-   **⚠️ MANDATORY RESEARCH BEFORE ROUTING:**
-   ```
-   mcp__plugin_swe_serena__read_memory("_INDEX")  # Full navigation hub
-   ```
-   - Read ALL relevant: `INDEX_*`, `ARCH_*`, `SYS_*`, `DOM_*`, `REF_*`, `SPEC_*`
-   - Check skills: `/research`, `/arch-review`, test skills for helpers
-   - Use `mcp__plugin_swe_serena__find_symbol()` to verify existing implementations
-   
-   **NO IMAGINATION. NO INFERENCE. NO GUESSING. EVERYTHING IS DOCUMENTED.**
-   - New feature spanning 2-5 files
-   - Refactoring existing code structure
-   - Multi-layer design changes
-   -> **WF_PLAN_ARCHITECTURE**
+#### Large Tasks (Swarm Orchestration Required)
 
-   ### Large Tasks (Swarm Orchestration Required)
+**⚠️ MANDATORY RESEARCH BEFORE ROUTING:**
+```
+mcp__plugin_swe_serena__read_memory("_INDEX")  # Full navigation hub
+```
 
-   **⚠️ MANDATORY RESEARCH BEFORE ROUTING:**
-   ```
-   mcp__plugin_swe_serena__read_memory("_INDEX")  # Full navigation hub
-   ```
-   - Read ALL relevant: `INDEX_*`, `ARCH_*`, `SYS_*`, `DOM_*`, `REF_*`, `SPEC_*`
-   - Check skills: `/research`, `/arch-review`, test skills for helpers
-   - Use `mcp__plugin_swe_serena__find_symbol()` to verify existing implementations
-   
-   **NO IMAGINATION. NO INFERENCE. NO GUESSING. EVERYTHING IS DOCUMENTED.**
-   Use swarms when ANY of these apply:
-   - **Scale**: 6+ files affected OR 3+ architectural layers
-   - **Parallel Work**: Independent subtasks that can run concurrently
-   - **Research-Heavy**: Requires analyzing multiple areas simultaneously
-   - **Complexity**: Multi-domain coordination needed
-   - **Time-Sensitive**: Needs parallel execution for efficiency
+Use swarms when ANY of these apply:
+- **Scale**: 6+ files affected OR 3+ architectural layers
+- **Parallel Work**: Independent subtasks that can run concurrently
+- **Research-Heavy**: Requires analyzing multiple areas simultaneously
+- **Complexity**: Multi-domain coordination needed
+→ **WF_SWARM_ORCHESTRATE**
 
-   **Swarm indicators:**
-   - "analyze the entire codebase"
-   - "refactor across all modules"
-   - "research and implement"
-   - "comprehensive audit/review"
-   - "multi-component feature"
-   -> **WF_SWARM_ORCHESTRATE**
+---
 
-3. **Identify affected area(s):**
+## 🛑 BLOCKING GATE: Feature Loading (STEP 3)
 
-   **⚠️ MULTI-FEATURE DETECTION:**
-   
-   Requests may span multiple features. Before loading feature memories:
-   
-   a. **Scan request for feature indicators:**
-      - Explicit feature names (e.g., "blocks and context providers")
-      - File paths spanning multiple feature directories
-      - Cross-cutting concerns (e.g., "theme templates that use blocks")
-      - Domain terminology from multiple features
-   
-   b. **Detect all related features:**
-      ```
-      mcp__plugin_swe_serena__read_memory("INDEX_FEATURES")   # Get feature registry
-      ```
-      
-      For EACH detected feature key:
-      ```
-      mcp__plugin_swe_serena__read_memory("FEATURE_[KEY]")    # Load feature config
-      ```
-   
-   c. **Load ALL relevant memories for EACH feature:**
-      | Memory Type | Purpose |
-      |-------------|---------|
-      | `FEATURE_[KEY]` | Feature scope and config |
-      | `ARCH_[KEY]` or shared `ARCH_*` | Architecture patterns |
-      | `INDEX_[KEY]_*` | File/symbol indexes |
-      | `DOM_[KEY]` | Domain-specific context |
-      | `SYS_[KEY]` | System-level context |
-   
-   d. **Update WM with all features:**
-      ```markdown
-      ## Affected Features
-      - **Primary**: [KEY1] - [reason]
-      - **Secondary**: [KEY2] - [reason]
-      - **Related**: [KEY3] - [reason]
-      ```
-   
-   - Check each feature's Domains (DOM_*) for domain-specific context
-   - Check each feature's Systems (SYS_*) for system-level context
-   - Check shared References (REF_*) for patterns and standards (codebase-wide)
-   
-   **Single vs Multi-Feature Routing:**
-   | Detected Features | Routing Consideration |
-   |-------------------|----------------------|
-   | 1 feature | Standard routing applies |
-   | 2-3 features | Consider WF_PLAN_ARCHITECTURE for coordination |
-   | 4+ features | Likely WF_SWARM_ORCHESTRATE territory |
+**⛔ YOU CANNOT PROCEED TO ANY NEXT STEP WITHOUT COMPLETING THIS SECTION.**
 
-4. **⚠️ MANDATORY: _INDEX for Unknown Features**
+### 3a. Read Feature Registry
+```
+mcp__plugin_swe_serena__read_memory("INDEX_FEATURES")
+```
 
-   **If ALL of these conditions are true:**
-   - Feature is unknown/unregistered (no FEATURE_[KEY] exists)
-   - Task requires codebase knowledge (investigation, research, codebase analysis)
-   
-   **THEN you MUST read _INDEX before proceeding:**
-   ```
-   mcp__plugin_swe_serena__read_memory("_INDEX")
-   ```
-   
-   **This applies to:**
-   - Investigation tasks ("where is X handled?", "how does Y work?")
-   - Codebase exploration ("find all instances of...", "analyze...")
-   - Research tasks requiring code understanding
-   - Any task where you need to navigate unfamiliar code
-   
-   **Skip _INDEX only if:**
-   - Feature is already known and loaded
-   - Task is purely documentation/non-code
-   - User explicitly provides all file paths needed
+### 3b. Identify ALL Affected Features
+
+Scan request for feature indicators:
+- Explicit feature names (e.g., "blocks and context providers")
+- File paths spanning multiple feature directories
+- Cross-cutting concerns (e.g., "theme templates that use blocks")
+- Domain terminology from multiple features
+
+### 3c. 🛑 MANDATORY: Load FEATURE_[KEY] for EACH Feature
+
+**For EVERY feature identified, you MUST call:**
+```
+mcp__plugin_swe_serena__read_memory("FEATURE_[KEY]")
+```
+
+**Examples (replace [KEY] with actual feature key from INDEX_FEATURES):**
+```
+# Single feature:
+mcp__plugin_swe_serena__read_memory("FEATURE_[KEY]")
+
+# Multiple features:
+mcp__plugin_swe_serena__read_memory("FEATURE_[KEY1]")
+mcp__plugin_swe_serena__read_memory("FEATURE_[KEY2]")
+mcp__plugin_swe_serena__read_memory("FEATURE_[KEY3]")
+```
+
+**⛔ SKIPPING FEATURE MEMORY LOAD = WORKFLOW VIOLATION**
+
+### 3d. Load Supporting Memories
+
+From each FEATURE_[KEY], load relevant:
+| Memory Type | Purpose |
+|-------------|---------|
+| `DOM_[KEY]` | Domain-specific context |
+| `ARCH_[KEY]` or shared `ARCH_*` | Architecture patterns |
+| `INDEX_[KEY]_*` | File/symbol indexes |
+
+### 3e. Update WM with Features
+
+```markdown
+## Affected Features
+- **Primary**: [KEY1] - [reason]
+- **Secondary**: [KEY2] - [reason]
+```
+
+---
+
+## Feature Loading Verification Checklist
+
+**Before proceeding to ANY next step, confirm ALL boxes:**
+
+- [ ] Read INDEX_FEATURES
+- [ ] Identified ALL features for this task
+- [ ] Called `read_memory("FEATURE_[KEY]")` for EACH feature
+- [ ] Loaded relevant DOM_*, ARCH_*, INDEX_* memories
+- [ ] Updated WM with feature information
+
+**If ANY box is unchecked: STOP and complete it NOW.**
 
 ---
 
@@ -180,9 +182,6 @@ OUTPUT THE ABOVE LINE IMMEDIATELY. Do not read further until you have reported y
 When routing to a workflow-aware skill (e.g., `/research`):
 
 ### 1. Set Workflow Context in WM
-
-Update the `## Workflow Context` section:
-
 ```markdown
 ## Workflow Context
 - **Calling Step**: WF_CLASSIFY
@@ -193,23 +192,11 @@ Update the `## Workflow Context` section:
 ```
 
 ### 2. Inform User
-
 ```
 > Routing to /research skill for exploration. Will return to WF_DETECT_REQ on completion.
 ```
 
-### 3. Skill Executes
-
-The skill will:
-1. Detect workflow context
-2. Execute its task
-3. Write `## Skill Return` section
-4. Output return signal
-5. Read and follow return step
-
-### 4. Handle Skill Return
-
-After skill completes, check `## Skill Return` in WM:
+### 3. Handle Skill Return
 
 | Status | Action |
 |--------|--------|
@@ -218,14 +205,22 @@ After skill completes, check `## Skill Return` in WM:
 | `blocked` | Go to `WF_CLARIFY` |
 | `escalate_complexity` | Go to `WF_SWARM_ORCHESTRATE` |
 
-See `REF_SKILL_PROTOCOLS` for full specification.
-
-
 ---
 
-## MANDATORY NEXT STEP
+## ⛔ MANDATORY NEXT STEP
 
-**YOU ARE NOT FINISHED.** Before responding to user:
+**YOU ARE NOT FINISHED.** Before transitioning:
+
+### Pre-Transition Verification
+
+**Answer these questions:**
+1. Did you load INDEX_FEATURES? (YES/NO)
+2. Did you call `read_memory("FEATURE_[KEY]")` for EACH feature? (YES/NO)
+3. Did you update WM with features? (YES/NO)
+
+**If ANY answer is NO: STOP and do it NOW.**
+
+### Routing Table
 
 | Condition | MUST Read Next |
 |-----------|----------------|
@@ -240,16 +235,16 @@ See `REF_SKILL_PROTOCOLS` for full specification.
 3. Report the new step to user
 
 **SKIPPING THIS TRANSITION = WORKFLOW VIOLATION**
+**SKIPPING FEATURE LOADING = WORKFLOW VIOLATION**
+**GOING DIRECTLY TO WF_EXECUTE = WORKFLOW VIOLATION**
 
 ## ⚠️ MANDATORY: WM UPDATE
 
 **Before transitioning to another state, you MUST:**
 1. Update `## Progress` with completed steps
-2. Update `**Files:**` with new files edited
+2. Update `## Affected Features` with loaded features
 3. Verify `## Workflow Context` is current
 
 **SKIPPING WM UPDATE = WORKFLOW VIOLATION**
 
-The hooks will BLOCK your next action if WM is stale.
-
-[CRITICAL: Are you on a WF_* workflow step? Did you report on it?]
+[CRITICAL: Did you load ALL FEATURE_[KEY] memories? Are you on a WF_* workflow step? Did you report on it?]

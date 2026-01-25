@@ -4,18 +4,98 @@ State is stored in WM files (session-isolated), NOT in a global state file.
 This allows multiple concurrent sessions without state conflicts.
 """
 
-from typing import Dict, Any, Optional, Tuple
+import json
+import os
+from typing import Dict, Any, Optional, Tuple, List
 from .config import (
     load_workflow_state, save_workflow_state,
     get_most_recent_working_memory, get_working_memory_filename,
     read_working_memory_state, write_working_memory_state,
     persist_edit_to_wm, check_wm_staleness, get_wm_edit_count,
-    reset_wm_edit_tracking
+    reset_wm_edit_tracking, get_project_root
 )
 from .session import (
     extract_session_id, find_working_memory_for_session,
     validate_working_memory_session
 )
+
+
+# Cache for transition matrix
+_transition_matrix_cache = None
+
+
+def load_transition_matrix() -> Dict[str, List[str]]:
+    """Load the transition matrix from states.json.
+
+    Returns:
+        Dict mapping state names to list of valid next states.
+    """
+    global _transition_matrix_cache
+
+    if _transition_matrix_cache is not None:
+        return _transition_matrix_cache
+
+    # Try to find states.json
+    plugin_root = os.environ.get('CLAUDE_PLUGIN_ROOT', '')
+    if plugin_root:
+        states_file = os.path.join(plugin_root, 'state-machine', 'states.json')
+    else:
+        project_root = get_project_root()
+        states_file = os.path.join(
+            project_root, '.claude', 'plugins', 'serena-workflow-engine',
+            'state-machine', 'states.json'
+        )
+
+    try:
+        with open(states_file, 'r') as f:
+            data = json.load(f)
+            _transition_matrix_cache = data.get('transitionMatrix', {})
+            return _transition_matrix_cache
+    except (IOError, json.JSONDecodeError):
+        # Return permissive matrix if file not found
+        return {}
+
+
+def is_valid_transition(from_state: str, to_state: str) -> Tuple[bool, str]:
+    """Check if a state transition is valid.
+
+    Args:
+        from_state: Current state
+        to_state: Target state
+
+    Returns:
+        Tuple of (is_valid, error_message)
+    """
+    matrix = load_transition_matrix()
+
+    # If no matrix loaded, allow all transitions (fail open)
+    if not matrix:
+        return True, ""
+
+    # Special case: WF_INIT can go anywhere (session start)
+    if from_state in ("WF_INIT", "UNINITIALIZED", "SessionStart"):
+        return True, ""
+
+    # Special case: WF_CLARIFY can return to caller (any state)
+    if from_state == "WF_CLARIFY":
+        return True, ""
+
+    # Check if from_state exists in matrix
+    if from_state not in matrix:
+        # Unknown state - allow transition but warn
+        return True, f"Warning: Unknown state {from_state}"
+
+    valid_targets = matrix[from_state]
+
+    # Check if to_state is valid
+    if to_state in valid_targets:
+        return True, ""
+
+    # Invalid transition
+    return False, (
+        f"BLOCKED: Invalid transition {from_state} → {to_state}. "
+        f"Valid next states from {from_state}: {', '.join(valid_targets)}"
+    )
 
 
 # State icons for display
@@ -139,12 +219,27 @@ class StateManager:
             state = self.get_current_state()
         return STATE_ICONS.get(state, "📍")
 
-    def transition_to(self, new_state: str) -> Tuple[bool, str]:
+    def transition_to(self, new_state: str, force: bool = False) -> Tuple[bool, str]:
         """Transition to a new state. Returns (success, message).
-        
+
+        Validates the transition against the state machine's transition matrix.
         State is persisted to the WM file if one exists.
+
+        Args:
+            new_state: The target state to transition to
+            force: If True, skip validation (use with caution)
+
+        Returns:
+            Tuple of (success, message). If validation fails, success=False
+            and message contains the blocking reason.
         """
         old_state = self.get_current_state()
+
+        # Validate the transition unless forced
+        if not force:
+            is_valid, error_msg = is_valid_transition(old_state, new_state)
+            if not is_valid:
+                return False, error_msg
 
         # Update in-memory state
         self.state["previous_state"] = old_state
