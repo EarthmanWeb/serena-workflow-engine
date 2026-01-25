@@ -4,6 +4,7 @@
       "type": "stdio",
       "command": "uvx",
       "args": [
+        "--refresh",
         "--from",
         "git+https://github.com/EarthmanWeb/serena@feature-multiplefoldersupport",
         "serena",

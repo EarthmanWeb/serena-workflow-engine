@@ -171,6 +171,67 @@ To switch from git source to local (or vice versa), update `extraKnownMarketplac
 
 ---
 
+## Overriding MCP Configuration
+
+You can customize the Serena MCP server configuration by creating a local `.mcp.json` file in the plugin directory. This is useful for:
+
+- Adding custom memory folder paths
+- Forcing fresh pulls from the remote repository
+- Changing Serena options without modifying the plugin
+
+### Local .mcp.json Override
+
+Create `.claude/plugins/serena-workflow-engine/.mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "plugin:swe:serena": {
+      "type": "stdio",
+      "command": "uvx",
+      "args": [
+        "--refresh",
+        "--from",
+        "git+https://github.com/EarthmanWeb/serena@feature-multiplefoldersupport",
+        "serena",
+        "start-mcp-server",
+        "--context",
+        "ide-assistant",
+        "--project",
+        "./",
+        "--additional-folders",
+        ".serena/memories/arch,.serena/memories/dev,.serena/memories/feature",
+        "--enable-web-dashboard=false"
+      ],
+      "env": {}
+    }
+  }
+}
+```
+
+### Key Options
+
+| Option | Purpose |
+| ------ | ------- |
+| `--refresh` | Force `uvx` to check for latest commits on the remote branch. Without this, the package is cached after first fetch. |
+| `--additional-folders` | Comma-separated list of memory folders for Serena to index |
+| `--context` | Serena context mode (`ide-assistant`, `cli`, etc.) |
+| `--enable-web-dashboard` | Enable/disable Serena's web dashboard |
+
+### Forcing Updates Without --refresh
+
+If you prefer faster startup (no remote check), omit `--refresh` and manually clear the cache when you want updates:
+
+```bash
+# Clear all uv cache
+uv cache clean
+
+# Or clear just serena
+uvx cache clean serena
+```
+
+---
+
 ## How It Works (CLI + VSCode)
 
 Claude Code CLI and VSCode extension **share the same configuration files**:
