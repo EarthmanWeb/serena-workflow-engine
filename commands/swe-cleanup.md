@@ -4,16 +4,16 @@ description: Archive completed memories and specs
 argument-hint: [all|memories|specs]
 ---
 
-# /cleanup [target]
+# /swe-cleanup [target]
 
 Archive completed work to `.serena/archive-*` directories.
 
 ## Options
 
-- `/cleanup` - Scan and prompt for confirmation
-- `/cleanup memories` - Archive WORKING_MEMORY_* files with status: Completed
-- `/cleanup specs` - Archive SPEC_* files (requires confirmation)
-- `/cleanup all` - Archive both
+- `/swe-cleanup` - Scan and prompt for confirmation
+- `/swe-cleanup memories` - Archive WORKING_MEMORY_* files with status: Completed
+- `/swe-cleanup specs` - Archive SPEC_* files (requires confirmation)
+- `/swe-cleanup all` - Archive both
 
 ## Archivable Criteria
 

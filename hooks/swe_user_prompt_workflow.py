@@ -167,13 +167,22 @@ def main():
         
         # Handle WF_INIT state - always direct to WF_INIT workflow
         if current_state == 'WF_INIT':
-            context = f"""🎬 WORKFLOW STATE: WF_INIT
-Working Memory: None (will be created for your task)
-Session: {session_id or 'unknown'}
+            context = f"""<workflow-gate state="WF_INIT" session="{session_id or 'unknown'}">
+<blocking-instruction priority="CRITICAL">
+STOP. Your next action MUST be a tool call. Not text. A tool call.
 
-MANDATORY: Read and follow the WF_INIT workflow to initialize.
-Use: mcp__serena__read_memory("WF_INIT")
-"""
+Call this tool NOW:
+mcp__plugin_swe_serena__read_memory("WF_INIT")
+
+- Do NOT output any text before calling this tool
+- Do NOT explain what you're doing
+- Do NOT acknowledge the user's message first
+- Do NOT skip this because the user asked something specific
+- The user's request will be handled AFTER you read WF_INIT
+
+If your next output contains ANY text instead of a tool call, you have failed.
+</blocking-instruction>
+</workflow-gate>"""
             output = {
                 "hookSpecificOutput": {
                     "hookEventName": "UserPromptSubmit",

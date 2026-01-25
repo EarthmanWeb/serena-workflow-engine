@@ -1,5 +1,5 @@
 ---
-name: workflow-coordinator
+name: swe-workflow-coordinator
 description: Coordinates swarm tasks for WF_SWARM_ORCHESTRATE
 capabilities:
   - swarm_coordination
