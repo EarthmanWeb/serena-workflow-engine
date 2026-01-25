@@ -206,12 +206,18 @@ def main():
 
         # NOT initialized - BLOCK the tool call with specific diagnostic
         # NOTE: WM should have been auto-created by session_start hook
+        # DEBUG: Show where we're looking
+        memories_dir = get_serena_memories_dir(cwd)
+        project_root = find_project_root(cwd)
         output = {
             "decision": "block",
             "reason": f"""🛑🛑🛑 CRITICAL: WORKFLOW NOT INITIALIZED - ALL TOOLS BLOCKED 🛑🛑🛑
 
 Session: {session_id or 'unknown'}
 Diagnostic: {diagnostic}
+DEBUG - cwd: {cwd}
+DEBUG - project_root: {project_root}
+DEBUG - memories_dir: {memories_dir}
 
 ═══════════════════════════════════════════════════════════════════════════════
                     ⚠️  WORKING MEMORY VALIDATION FAILED  ⚠️
