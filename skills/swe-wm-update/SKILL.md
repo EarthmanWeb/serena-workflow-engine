@@ -35,6 +35,16 @@ args:
     required: false
 ---
 
+## ⚠️ WORKFLOW INITIALIZATION
+
+**If starting a new session**, first read workflow initialization:
+```
+mcp__plugin_swe_serena__read_memory("WF_INIT")
+```
+Follow WF_INIT instructions before executing this skill.
+
+---
+
 # /swe-wm-update
 
 **CRITICAL: This is the ONLY way to update Working Memory.**
