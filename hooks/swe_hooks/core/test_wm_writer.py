@@ -20,7 +20,7 @@ from pathlib import Path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from wm_validator import WMFormatValidator, get_validator
-from wm_background_writer import (
+from wm_writer_daemon import (
     WMBackgroundWriter, WriteOperation, async_wm_write,
     get_wm_writer, shutdown_wm_writer
 )

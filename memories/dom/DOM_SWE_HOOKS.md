@@ -31,7 +31,7 @@ hooks/
 │       ├── session.py            # Session ID, WM management
 │       ├── state_manager.py      # State machine logic
 │       ├── wm_validator.py       # Working Memory validation
-│       └── wm_background_writer.py # Async WM writing
+│       └── wm_writer_daemon.py # Async WM writing
 ├── swe_session_start.py
 ├── swe_user_prompt_workflow.py
 ├── swe_user_prompt_swarm.py

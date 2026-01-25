@@ -21,7 +21,7 @@ def _get_async_writer():
     global _async_writer_available
     if _async_writer_available is None:
         try:
-            from .wm_background_writer import async_wm_write, async_wm_append
+            from .wm_writer_daemon import async_wm_write, async_wm_append
             _async_writer_available = True
         except ImportError:
             _async_writer_available = False
@@ -449,7 +449,7 @@ def persist_edit_to_wm(cwd: str, wm_filepath: str, edited_file: str = None,
 
         if use_async:
             # Use async background writer
-            from .wm_background_writer import async_wm_write
+            from .wm_writer_daemon import async_wm_write
             success = async_wm_write(
                 filepath=wm_filepath,
                 content=updated_content,
@@ -516,7 +516,7 @@ def append_transition_to_wm(wm_filepath: str, from_state: str, to_state: str,
 
         if use_async:
             # Use async background writer
-            from .wm_background_writer import async_wm_write
+            from .wm_writer_daemon import async_wm_write
             return async_wm_write(
                 filepath=wm_filepath,
                 content=updated_content,
@@ -591,7 +591,7 @@ def write_working_memory_state(cwd: str, wm_filepath: str, new_state: str,
 
         if use_async:
             # Use async background writer with anti-pattern detection
-            from .wm_background_writer import async_wm_write
+            from .wm_writer_daemon import async_wm_write
             return async_wm_write(
                 filepath=wm_filepath,
                 content=updated_content,

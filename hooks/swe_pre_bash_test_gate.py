@@ -101,9 +101,12 @@ def check_feature_tests_read(wm_filepath: str) -> dict:
                     result['reason'] = f'Timestamp valid (age: {age_seconds}s, max: {TIMESTAMP_EXPIRY_SECONDS}s)'
                     return result
                 else:
-                    result['reason'] = f'Timestamp expired (age: {age_seconds}s, max: {TIMESTAMP_EXPIRY_SECONDS}s)'
-                    # Continue to check other methods
+                    # HARD FAIL - timestamp exists but expired, must re-read FEATURE_TESTS
+                    result['passed'] = False
+                    result['reason'] = f'Timestamp EXPIRED - must re-read FEATURE_TESTS (age: {age_seconds}s, max: {TIMESTAMP_EXPIRY_SECONDS}s)'
+                    return result
 
+        # Only check fallbacks if NO timestamp exists at all
         # Check if FEATURE_TESTS is in content
         if 'FEATURE_TESTS' in content:
             result['has_feature_tests'] = True

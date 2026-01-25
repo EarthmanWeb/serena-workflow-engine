@@ -69,8 +69,8 @@ WF_START → WF_CLASSIFY → WF_DETECT_REQ/WF_PLAN_ARCHITECTURE/WF_SWARM_ORCHEST
 | `input.py` | Hook input parsing utilities |
 | `output.py` | Hook output formatting |
 | `wm_validator.py` | Working Memory validation |
-| `wm_background_writer.py` | Async WM writing |
-| `test_wm_background_writer.py` | Unit tests |
+| `wm_writer_daemon.py` | Async WM writing |
+| `test_wm_writer_daemon.py` | Unit tests |
 
 ### Hooks (17 Python scripts)
 | Hook | Trigger | Purpose |

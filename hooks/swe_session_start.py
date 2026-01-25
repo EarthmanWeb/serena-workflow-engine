@@ -23,7 +23,7 @@ try:
         read_working_memory_state, get_paths
     )
     from swe_hooks.core.state_manager import StateManager
-    from swe_hooks.core.wm_background_writer import async_wm_write
+    from swe_hooks.core.wm_writer_daemon import async_wm_write
 except ImportError as e:
     print(json.dumps({"systemMessage": f"SWE import error: {e}"}), file=sys.stdout)
     sys.exit(0)

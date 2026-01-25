@@ -19,13 +19,62 @@ try:
     from swe_hooks.core.output import HookOutput, output_empty, output_status
     from swe_hooks.core.input import read_stdin_safe, get_input_field
     from swe_hooks.core.state_manager import StateManager, STATE_ICONS
-    from swe_hooks.core.session import extract_session_id, get_project_root
+    from swe_hooks.core.session import extract_session_id, get_project_root, find_working_memory_for_session
     from swe_hooks.core.config import append_transition_to_wm
+    from swe_hooks.core.wm_writer_daemon import async_wm_write
     from datetime import datetime
+    import re
+    import time
 except ImportError as e:
     output = {"hookSpecificOutput": {"hookEventName": "PostToolUse", "additionalContext": f"SWE import error: {e}"}}
     print(json.dumps(output), file=sys.stdout)
     sys.exit(0)
+
+
+def update_test_docs_timestamp(wm_filepath: str, session_id: str) -> bool:
+    """Update or add the Test Docs timestamp in working memory.
+
+    Replaces any existing 'Test Docs: Read @<timestamp>' with current timestamp.
+    If none exists, appends after the Workflow Context section.
+
+    Returns True if successful.
+    """
+    if not wm_filepath or not os.path.exists(wm_filepath):
+        return False
+
+    try:
+        with open(wm_filepath, 'r', encoding='utf-8') as f:
+            content = f.read()
+
+        current_timestamp = int(time.time())
+        new_marker = f"Test Docs: Read @{current_timestamp}"
+
+        # Pattern to match existing timestamp marker
+        pattern = r'Test Docs: Read @\d+'
+
+        if re.search(pattern, content):
+            # Replace existing timestamp
+            updated_content = re.sub(pattern, new_marker, content)
+        else:
+            # Add after Workflow Context section or at end of file
+            context_match = re.search(r'(## Workflow Context\n(?:.*\n)*?)(\n## |\Z)', content)
+            if context_match:
+                insert_pos = context_match.end(1)
+                updated_content = content[:insert_pos] + f"\n{new_marker}\n" + content[insert_pos:]
+            else:
+                # Fallback: append at end
+                updated_content = content.rstrip() + f"\n\n{new_marker}\n"
+
+        # Use async writer for safe background write
+        return async_wm_write(
+            filepath=wm_filepath,
+            content=updated_content,
+            operation_type='edit_tracking',
+            validate=False,
+            session_id=session_id
+        )
+    except Exception:
+        return False
 
 
 def main():
@@ -33,6 +82,18 @@ def main():
         input_data = read_stdin_safe(timeout_seconds=2.0)
         cwd = get_input_field(input_data, 'cwd', default=os.getcwd())
         memory_name = get_input_field(input_data, 'tool_input', 'memory_file_name', default='')
+
+        # Handle FEATURE_TESTS read - update timestamp in WM
+        if memory_name == 'FEATURE_TESTS':
+            transcript_path = get_input_field(input_data, 'transcript_path', default='')
+            session_id = extract_session_id(transcript_path)
+            wm_filepath = find_working_memory_for_session(cwd, session_id)
+            if wm_filepath:
+                update_test_docs_timestamp(wm_filepath, session_id)
+                output_status(f"📖 Read: {memory_name} (timestamp updated)")
+                return
+            output_status(f"📖 Read: {memory_name}")
+            return
 
         # Only process WF_* memories for state transitions
         if not memory_name or not memory_name.startswith('WF_'):
