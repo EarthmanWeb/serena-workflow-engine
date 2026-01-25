@@ -152,8 +152,8 @@
 
 | Memory | Purpose |
 |--------|---------|
-| `FEATURE_WORKFLOWS` | Workflow system scope |
-| `ARCH_WORKFLOWS` | Workflow architecture |
+| `FEATURE_SWE` | Workflow system scope |
+| `ARCH_SWE` | Workflow architecture |
 | `INDEX_WORKFLOWS_STATES` | State inventory (19 states) |
 | `CLAUDE_WORKFLOW` | Visual state diagram |
 | `SPEC_WORKFLOW_SKILLS` | Skill conversion spec |
@@ -176,6 +176,6 @@
 | Making changes | `WF_CLASSIFY` |
 | Continuing | `WF_CONTINUE` |
 | Verifying | `WF_VERIFY` |
-| Modify workflow system | `FEATURE_WORKFLOWS`, `ARCH_WORKFLOWS` |
+| Modify workflow system | `FEATURE_SWE`, `ARCH_SWE` |
 | Understand workflow states | `INDEX_WORKFLOWS_STATES`, `CLAUDE_WORKFLOW` |
 | Add workflow-aware skill | `SPEC_WORKFLOW_SKILLS`, `REF_SKILL_PROTOCOLS` |

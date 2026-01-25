@@ -6,7 +6,7 @@
 - **Language:** Python/Bash/JSON/Markdown
 - **Framework:** Claude Code Plugins
 - **Root Path:** `.claude/plugins/serena-workflow-engine`
-- **Last Updated:** 2026-01-24
+- **Last Updated:** 2026-01-25
 
 ## Architecture
 
@@ -38,6 +38,14 @@ WF_START → WF_CLASSIFY → WF_DETECT_REQ/WF_PLAN_ARCHITECTURE/WF_SWARM_ORCHEST
 - **Config:** `.claude-plugin/plugin.json`
 - **Hooks Config:** `hooks/hooks.json`
 - **Init Command:** `commands/swe-init.md`
+
+## Root Plugin Files
+| File | Purpose |
+|------|---------|
+| `README.md` | Plugin documentation |
+| `.mcp.json` | MCP server configuration |
+| `swe-setup-complete.json` | Setup completion marker |
+| `.gitignore` | Git ignore patterns |
 
 ## Core Components
 
@@ -129,6 +137,7 @@ Memories are organized in subdirectories:
 | `memories/wf/` | 21 workflow state instructions (WF_*.md) |
 | `memories/ref/` | Reference docs (REF_DEV_STANDARDS, REF_SWARM_PATTERNS, etc.) |
 | `memories/claude/` | Claude behavior docs (CLAUDE.md, CLAUDE_OBLIGATIONS.md) |
+| `memories/arch/` | Architecture documentation (ARCH_SWE.md) |
 | `memories/dom/` | Domain documentation (DOM_SWE_HOOKS.md) |
 | `memories/feature/` | Feature configs (FEATURE_SWE.md) |
 | `memories/index/` | Index files (if any) |
@@ -231,8 +240,6 @@ When modifying hooks:
 See `DOM_SWE_HOOKS` for detailed sync requirements.
 
 ## Related Memories
-- [INDEX_FEATURES](INDEX_FEATURES)
-- [ARCH_INDEX](ARCH_INDEX)
-- [WF_INIT](WF_INIT) - Entry point documentation
+- [ARCH_SWE](ARCH_SWE) - SWE architecture documentation
 - [REF_SWE_DEVELOPMENT](REF_SWE_DEVELOPMENT) - Development standards
 - [DOM_SWE_HOOKS](DOM_SWE_HOOKS) - Hook architecture
