@@ -63,10 +63,10 @@ Create from templates:
 # INDEX_FEATURES
 
 ## Registered Features
-(none yet - run /swe-onboard-feature to add)
+(none yet - run /swe-feature-onboard to add)
 
 ## Quick Start
-1. `/swe-onboard-feature [KEY]` - Full wizard
+1. `/swe-feature-onboard [KEY]` - Full wizard
 2. `/swe-onboard-quick [KEY]` - Fast setup
 ```
 
@@ -84,7 +84,7 @@ Create from templates:
 [Detected or none]
 
 ## Structure
-(Run /swe-onboard-feature to populate)
+(Run /swe-feature-onboard to populate)
 ```
 
 ### Stage 4: First Feature Prompt
@@ -105,7 +105,7 @@ What is the main codebase?
 - **Path:** [e.g., "src/"]
 
 Options:
-- **[A]** Set up now with /swe-onboard-feature (recommended)
+- **[A]** Set up now with /swe-feature-onboard (recommended)
 - **[B]** Quick setup with /swe-onboard-quick
 - **[C]** Skip - add features later (research-only mode)
 
@@ -144,7 +144,7 @@ If user skips feature setup, workflow enters minimal mode:
 - ARCH_INDEX
 
 **Next Steps:**
-1. Run `/swe-onboard-feature [KEY]` to add your first feature
+1. Run `/swe-feature-onboard [KEY]` to add your first feature
 2. Or `/swe-onboard-quick [KEY]` for fast setup
 
 **Workflow Mode:** [full|minimal]

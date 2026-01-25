@@ -88,7 +88,7 @@ WF_START → WF_CLASSIFY → WF_DETECT_REQ/WF_PLAN_ARCHITECTURE/WF_SWARM_ORCHEST
 ### Skills (12 total)
 | Skill | Purpose |
 |-------|---------|
-| `swe-onboard-feature` | Onboard new feature to workflow |
+| `swe-feature-onboard` | Onboard new feature to workflow |
 | `swe-feature-update` | Update feature memory files |
 | `swe-scaffold-project` | Initialize new project |
 | `swe-sync` | Sync plugin to local memories |

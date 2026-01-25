@@ -62,7 +62,7 @@ mcp__plugin_swe_serena__read_memory("INDEX_FEATURES")
 
 **If not found:**
 ```
-> Feature [KEY] not registered. Use /swe-onboard-feature [KEY] to register it first.
+> Feature [KEY] not registered. Use /swe-feature-onboard [KEY] to register it first.
 ```
 Exit skill with `needs_clarification` status.
 
@@ -221,7 +221,7 @@ Output to user:
 ### Feature not found
 ```
 Feature [KEY] is not registered in INDEX_FEATURES.
-Run: /swe-onboard-feature [KEY]
+Run: /swe-feature-onboard [KEY]
 ```
 
 ### Root path doesn't exist

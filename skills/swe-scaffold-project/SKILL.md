@@ -100,10 +100,10 @@ Create from templates:
 # INDEX_FEATURES
 
 ## Registered Features
-(none yet - run /swe-onboard-feature to add)
+(none yet - run /swe-feature-onboard to add)
 
 ## Quick Start
-1. `/swe-onboard-feature [KEY]` - Full wizard
+1. `/swe-feature-onboard [KEY]` - Full wizard
 2. `/swe-onboard-quick [KEY]` - Fast setup
 ```
 
@@ -121,7 +121,7 @@ Create from templates:
 [Detected or none]
 
 ## Structure
-(Run /swe-onboard-feature to populate)
+(Run /swe-feature-onboard to populate)
 ```
 
 ### Stage 4: First Feature Prompt
@@ -142,7 +142,7 @@ Your project needs at least one feature to enable code changes.
 - Path: [e.g., "src/"]
 
 **Options:**
-- **[A]** Set up now with /swe-onboard-feature (recommended)
+- **[A]** Set up now with /swe-feature-onboard (recommended)
 - **[B]** Quick setup with /swe-onboard-quick
 - **[C]** Skip - add features later (research-only mode)
 
@@ -180,9 +180,9 @@ If user skips feature setup, enable minimal mode:
 - **Language**: [detected]
 - **Framework**: [detected or none]
 - **Memories Created**: _INDEX, INDEX_FEATURES, ARCH_INDEX
-- **Next Step Hint**: WF_START or /swe-onboard-feature
+- **Next Step Hint**: WF_START or /swe-feature-onboard
 ```
 
 ## Exit
 
-`> **Skill /swe-scaffold-project complete** - Project scaffolded, run /swe-onboard-feature to add first feature`
+`> **Skill /swe-scaffold-project complete** - Project scaffolded, run /swe-feature-onboard to add first feature`

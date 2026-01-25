@@ -1,5 +1,5 @@
 ---
-name: swe-onboard-feature
+name: swe-feature-onboard
 version: 2.0.0
 description: Feature onboarding wizard with optional quick mode
 workflow:
@@ -29,16 +29,16 @@ Follow WF_INIT instructions before executing this skill.
 
 ---
 
-# /swe-onboard-feature [KEY] [--quick]
+# /swe-feature-onboard [KEY] [--quick]
 
 Interactive wizard for registering features in the workflow system.
 
 ## Usage
 
 ```bash
-/swe-onboard-feature              # Full interactive wizard
-/swe-onboard-feature MYAPP        # Start with key pre-filled
-/swe-onboard-feature MYAPP --quick # Quick mode (30 sec, minimal)
+/swe-feature-onboard              # Full interactive wizard
+/swe-feature-onboard MYAPP        # Start with key pre-filled
+/swe-feature-onboard MYAPP --quick # Quick mode (30 sec, minimal)
 ```
 
 ## Quick Mode vs Full Mode
@@ -262,7 +262,7 @@ mcp__plugin_swe_serena__edit_memory(
 
 ```markdown
 ## Skill Return
-- **Skill**: swe-onboard-feature
+- **Skill**: swe-feature-onboard
 - **Status**: success
 - **Feature Key**: [KEY]
 - **Mode**: [full|quick]
@@ -275,7 +275,7 @@ mcp__plugin_swe_serena__edit_memory(
 ## Exit
 
 ```
-> **Skill /swe-onboard-feature complete** - Feature [KEY] registered
+> **Skill /swe-feature-onboard complete** - Feature [KEY] registered
 ```
 
 ---

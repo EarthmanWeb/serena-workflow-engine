@@ -292,7 +292,7 @@ EOF
 - Gitignore: Configured
 
 **Next steps:**
-1. Run /swe-onboard-feature [KEY] to register your first feature
+1. Run /swe-feature-onboard [KEY] to register your first feature
 2. Or start working - workflow will guide you
 ```
 

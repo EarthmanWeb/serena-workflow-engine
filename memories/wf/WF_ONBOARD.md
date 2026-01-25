@@ -21,13 +21,13 @@ This workflow runs when a feature needs to be registered in the workflow system.
 **Run the onboarding skill:**
 
 ```
-/swe-onboard-feature
+/swe-feature-onboard
 ```
 
 Or with options:
 ```
-/swe-onboard-feature [KEY]        # Pre-fill feature key
-/swe-onboard-feature [KEY] --quick # Quick mode (minimal)
+/swe-feature-onboard [KEY]        # Pre-fill feature key
+/swe-feature-onboard [KEY] --quick # Quick mode (minimal)
 ```
 
 ## MANDATORY NEXT STEP
