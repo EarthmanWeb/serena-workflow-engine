@@ -3,9 +3,10 @@
 ## Overview
 - **Name:** Serena Workflow Engine
 - **Type:** plugin
-- **Language:** Bash/JSON/Markdown
+- **Language:** Python/Bash/JSON/Markdown
 - **Framework:** Claude Code Plugins
 - **Root Path:** `.claude/plugins/serena-workflow-engine`
+- **Last Updated:** 2026-01-24
 
 ## Architecture
 
@@ -13,11 +14,13 @@
 | Layer | Purpose | Directory | Pattern |
 |-------|---------|-----------|---------|
 | State Machine | 21-state workflow engine | `state-machine/` | FSM with transitions |
-| Hooks | Event handlers for Claude Code | `hooks/` | Shell scripts |
+| Core Modules | Shared Python utilities | `hooks/swe_hooks/core/` | Modular imports |
+| Hooks | Event handlers for Claude Code | `hooks/` | Python scripts |
 | Skills | User-invocable workflows | `skills/` | YAML frontmatter + MD |
 | Commands | CLI shortcuts | `commands/` | Markdown |
-| Templates | Memory scaffolds | `templates/` | Markdown |
+| Memories | Workflow documentation | `memories/` | Organized subdirs |
 | Agents | Swarm agent definitions | `agents/` | Markdown |
+| Scripts | Build/deployment tools | `scripts/` | Shell scripts |
 
 ### Data Flow
 `User Request → Hook (SessionStart) → WF_START → State Machine → Hooks (Pre/Post) → Memory Persistence`
@@ -42,41 +45,93 @@ WF_START → WF_CLASSIFY → WF_DETECT_REQ/WF_PLAN_ARCHITECTURE/WF_SWARM_ORCHEST
 | Category | States |
 |----------|--------|
 | Setup | WF_INITIAL_SETUP, WF_ONBOARD |
-| Entry | WF_START, WF_CLASSIFY, WF_CONTINUE |
-| Analysis | WF_RESEARCH, WF_DETECT_REQ, WF_REQUIREMENT |
+| Entry | WF_INIT, WF_START, WF_CLASSIFY, WF_CONTINUE |
+| Analysis | WF_RESEARCH, WF_RESEARCH_LITE, WF_DETECT_REQ, WF_REQUIREMENT |
 | Planning | WF_PLAN_ARCHITECTURE, WF_ARCH_REVIEW, WF_SWARM_ORCHESTRATE |
 | Gates | WF_CLARIFY, WF_ASK_PERMISSION |
 | Execution | WF_LOAD_FEATURE, WF_UPDATE_MEMORY, WF_EXECUTE, WF_CHECKPOINT, WF_DEBUG_TDD |
 | Completion | WF_VERIFY, WF_DONE, WF_CLEANUP |
 
-### Hooks (12 Python scripts)
+### Core Modules (swe_hooks/core/)
+| Module | Purpose |
+|--------|---------|
+| `state_manager.py` | Workflow state transitions and persistence |
+| `config.py` | Configuration loading and constants |
+| `session.py` | Session ID and Working Memory management |
+| `input.py` | Hook input parsing utilities |
+| `output.py` | Hook output formatting |
+| `wm_validator.py` | Working Memory validation |
+| `wm_background_writer.py` | Async WM writing |
+| `test_wm_background_writer.py` | Unit tests |
+
+### Hooks (17 Python scripts)
 | Hook | Trigger | Purpose |
 |------|---------|---------|
-| session_start.py | SessionStart | Initialize workflow state, RLVR trajectory |
-| user_prompt_workflow.py | UserPromptSubmit | Initialize WF_START, transition state |
-| user_prompt_swarm.py | UserPromptSubmit | Detect swarm keywords |
-| claude_flow_pre_bash.py | PreToolUse (Bash) | Claude-Flow pre-command validation |
-| pre_edit_validate.py | PreToolUse (Edit/Write/Serena) | Validate edit permissions |
-| claude_flow_pre_edit.py | PreToolUse (Edit/Write/Serena) | Claude-Flow pre-edit integration |
-| claude_flow_post_bash.py | PostToolUse (Bash) | Claude-Flow post-command learning |
-| post_edit_checkpoint.py | PostToolUse (Edit/Write/Serena) | Track edits, trigger checkpoints |
-| claude_flow_post_edit.py | PostToolUse (Edit/Write/Serena) | Claude-Flow post-edit learning |
-| post_read_state.py | PostToolUse (read_memory) | State transitions, plan mode |
-| post_task_learn.py | PostToolUse (read_memory) | RLVR learning |
-| stop_workflow_check.py | Stop | Verify WF_DONE reached |
+| `swe_session_start.py` | SessionStart | Initialize workflow state, create WM |
+| `swe_user_prompt_workflow.py` | UserPromptSubmit | WF_INIT gate, state transitions |
+| `swe_user_prompt_swarm.py` | UserPromptSubmit | Detect swarm keywords |
+| `swe_pre_tool_init_gate.py` | PreToolUse | Block tools until WF_INIT read |
+| `swe_pre_edit_validate.py` | PreToolUse (Edit/Write/Serena) | Validate edit permissions |
+| `swe_pre_bash_test_gate.py` | PreToolUse (Bash) | Validate test commands |
+| `claude_flow_pre_bash.py` | PreToolUse (Bash) | Claude-Flow pre-command validation |
+| `claude_flow_pre_edit.py` | PreToolUse (Edit/Write/Serena) | Claude-Flow pre-edit integration |
+| `swe_post_read_state.py` | PostToolUse (read_memory) | State transitions, plan mode |
+| `swe_post_edit_checkpoint.py` | PostToolUse (Edit/Write/Serena) | Track edits, trigger checkpoints |
+| `swe_post_serena_replace_fallback.py` | PostToolUse (Serena replace) | Symbol replace fallback handling |
+| `claude_flow_post_bash.py` | PostToolUse (Bash) | Claude-Flow post-command learning |
+| `claude_flow_post_edit.py` | PostToolUse (Edit/Write/Serena) | Claude-Flow post-edit learning |
+| `swe_post_task_learn.py` | PostToolUse (read_memory) | RLVR learning |
+| `swe_post_ruv_swarm_init.py` | PostToolUse (ruv_swarm) | RUV-Swarm initialization |
+| `swe_stop_workflow_check.py` | Stop | Verify WF_DONE reached |
+| `hooks.json` | - | Hook configuration |
 
-### Skills (11 total)
-- swe-onboard-feature, swe-onboard-quick
-- swe-scaffold-project
-- swe-swarm-orchestrate, swe-swarm-analyze
-- swe-workflow-debug-tdd, swe-workflow-detect-req
-- swe-workflow-verify, swe-workflow-research
-- swe-workflow-arch-review, swe-workflow-linter
+### Skills (12 total)
+| Skill | Purpose |
+|-------|---------|
+| `swe-onboard-feature` | Onboard new feature to workflow |
+| `swe-feature-update` | Update feature memory files |
+| `swe-scaffold-project` | Initialize new project |
+| `swe-sync` | Sync plugin to local memories |
+| `swe-wm-update` | Update Working Memory sections |
+| `swe-swarm-orchestrate` | Multi-agent swarm coordination |
+| `swe-swarm-analyze` | DAA-powered codebase analysis |
+| `swe-workflow-debug-tdd` | Test-driven debugging |
+| `swe-workflow-detect-req` | Detect implicit requirements |
+| `swe-workflow-verify` | Verify implementation |
+| `swe-workflow-research` | Code exploration/research |
+| `swe-workflow-arch-review` | Architecture compliance review |
 
-### Commands (8 total)
-- /swe-init, /swe-status, /swe-reset
-- /swe-goto, /swe-memory, /swe-scaffold
-- /swe-cleanup, /swe-migrate
+### Commands (9 total)
+| Command | Purpose |
+|---------|---------|
+| `/swe-init` | Initialize SWE for project |
+| `/swe-status` | Show workflow state |
+| `/swe-reset` | Reset workflow state |
+| `/swe-goto` | Force transition to state |
+| `/swe-memory` | Manage session WM |
+| `/swe-scaffold` | Scaffold new project |
+| `/swe-sync` | Sync plugin memories |
+| `/swe-cleanup` | Archive completed memories |
+| `/swe-migrate` | Migrate legacy files |
+
+### Agents (2 total)
+| Agent | Purpose |
+|-------|---------|
+| `swe-init-agent` | Autonomous initialization |
+| `swe-workflow-coordinator` | Swarm task coordination |
+
+## Memories Organization
+
+Memories are organized in subdirectories:
+
+| Directory | Contents |
+|-----------|----------|
+| `memories/wf/` | 21 workflow state instructions (WF_*.md) |
+| `memories/ref/` | Reference docs (REF_DEV_STANDARDS, REF_SWARM_PATTERNS, etc.) |
+| `memories/claude/` | Claude behavior docs (CLAUDE.md, CLAUDE_OBLIGATIONS.md) |
+| `memories/dom/` | Domain documentation (DOM_SWE_HOOKS.md) |
+| `memories/feature/` | Feature configs (FEATURE_SWE.md) |
+| `memories/index/` | Index files (if any) |
 
 ## Plan Mode Triggers
 | Mode | States |
@@ -95,18 +150,16 @@ WF_START → WF_CLASSIFY → WF_DETECT_REQ/WF_PLAN_ARCHITECTURE/WF_SWARM_ORCHEST
 | verify_check | WF_VERIFY | bonus if first try (+0.1) |
 | learning_checkpoint | WF_DONE | mandatory |
 
-## Domains (DOM_*)
-- `DOM_SWE_STATE_MACHINE` - State transition logic
-- `DOM_SWE_HOOKS` - Event handling patterns
-- *RLVR documented in SYS_SWE_SWARM*
-
-## Systems (SYS_*)
-- `SYS_SWE_MEMORY` - Serena memory integration
-- `SYS_SWE_SWARM` - Claude-Flow/RUV-Swarm coordination
+## Scripts
+| Script | Purpose |
+|--------|---------|
+| `bump-version.sh` | Version management |
+| `install-hooks.sh` | Install git hooks |
+| `pre-commit` | Pre-commit validation |
 
 ## Dependencies
 - **Internal:** Serena MCP (memory), Claude-Flow MCP (swarm/learning), RUV-Swarm MCP (DAA)
-- **External:** jq (JSON parsing), bash
+- **External:** jq (JSON parsing), bash, python3
 
 ## Runtime Files
 | File | Purpose |
@@ -121,10 +174,10 @@ WF_START → WF_CLASSIFY → WF_DETECT_REQ/WF_PLAN_ARCHITECTURE/WF_SWARM_ORCHEST
 jq . .claude/plugins/serena-workflow-engine/state-machine/states.json
 
 # Check hook permissions
-ls -la .claude/plugins/serena-workflow-engine/hooks/*.sh
+ls -la .claude/plugins/serena-workflow-engine/hooks/*.py
 
 # Verify plugin installation
-claude plugin list | grep swe
+claude plugin list | grep serena-workflow-engine
 ```
 
 ## ⚠️ Development Standards (Dual-Location Architecture)
@@ -135,24 +188,25 @@ SWE is a **standalone plugin** with a **dual-location architecture**:
 **Path:** `.claude/plugins/serena-workflow-engine/`
 
 Contains files that should work across ANY project using the plugin:
-- `memories/WF_*.md` - Workflow state instructions
-- `memories/REF_*.md` - Generic reference docs
+- `memories/wf/WF_*.md` - Workflow state instructions
+- `memories/ref/REF_*.md` - Generic reference docs
 - `hooks/*.py` - Event handler scripts
+- `hooks/swe_hooks/core/*.py` - Core Python modules
 - `hooks/hooks.json` - Hook configuration template
 - `skills/*/SKILL.md` - Skill definitions
 - `commands/*.md` - Command definitions
-- `templates/*.md` - Memory templates
+- `agents/*.md` - Agent definitions
+- `scripts/*.sh` - Build scripts
 - `README.md` - Plugin documentation
 
 ### Location 2: Local Serena Memories (Project-Specific)
-**Path:** `.serena/memories/wm/`
+**Path:** `.serena/memories/`
 
 Contains project-specific adaptations:
-- `WF_*.md` - Copied from plugin, may have project customizations
-- `REF_*.md` - Project-specific references
-- `DOM_SWE_*.md` - Domain documentation
-- `SYS_SWE_*.md` - System documentation
-- `FEATURE_SWE.md` - This file
+- `wf/WF_*.md` - Copied from plugin, may have project customizations
+- `ref/REF_*.md` - Project-specific references
+- `dom/DOM_SWE_*.md` - Domain documentation
+- `feature/FEATURE_SWE.md` - This file
 - `WM_*.md` - Session state
 
 ### Change Decision Matrix
@@ -179,6 +233,6 @@ See `DOM_SWE_HOOKS` for detailed sync requirements.
 ## Related Memories
 - [INDEX_FEATURES](INDEX_FEATURES)
 - [ARCH_INDEX](ARCH_INDEX)
-- [WF_START](WF_START) - Entry point documentation
-- [DOM_SWE_DEVELOPMENT](DOM_SWE_DEVELOPMENT) - Development standards
+- [WF_INIT](WF_INIT) - Entry point documentation
+- [REF_SWE_DEVELOPMENT](REF_SWE_DEVELOPMENT) - Development standards
 - [DOM_SWE_HOOKS](DOM_SWE_HOOKS) - Hook architecture

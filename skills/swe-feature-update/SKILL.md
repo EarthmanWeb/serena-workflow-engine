@@ -124,6 +124,17 @@ Changes detected for [KEY]:
 
 ## Stage 5: Update Feature Memory
 
+### ⚠️ SPECIAL CASE: SWE Feature
+
+When updating the **SWE** feature itself, memories follow a dual-location architecture:
+
+1. **Edit FIRST** in the plugin folder: `.claude/plugins/serena-workflow-engine/memories/`
+2. **Then sync** to local project using `/swe-sync`
+
+This ensures changes are preserved in the portable plugin and propagated correctly.
+
+**DO NOT** edit SWE memories directly in `.serena/memories/` - they will be overwritten on sync.
+
 ### 5.1 Update FEATURE_[KEY]
 
 ```javascript
