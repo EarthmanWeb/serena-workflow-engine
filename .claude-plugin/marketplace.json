@@ -1,7 +1,7 @@
 {
   "name": "EarthmanWeb",
-  "version": "1.0.0",
-  "description": "21-state workflow engine with RLVR learning and swarm coordination",
+  "version": "1.0.1",
+  "description": "Earthman Media custom claude plugins",
   "owner": {
     "name": "Local",
     "email": "local@localhost"
@@ -9,8 +9,8 @@
   "plugins": [
     {
       "name": "swe",
-      "version": "1.0.0",
-      "description": "21-state workflow engine with RLVR learning and swarm coordination",
+      "version": "1.0.1",
+      "description": "21-state workflow engine for Claude",
       "source": "./"
     }
   ]
