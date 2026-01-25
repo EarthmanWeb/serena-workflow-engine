@@ -52,19 +52,27 @@ Deep codebase analysis using Decentralized Autonomous Agents (DAA).
 
 ### Step 1: Initialize Swarm
 
+**⚠️ CRITICAL: RUV-Swarm has TWO separate agent pools - choose ONE pattern:**
+
+| Pattern | Agent Creation | Execution | Use When |
+|---------|---------------|-----------|----------|
+| **Swarm** | `agent_spawn` | `task_orchestrate` | Parallel task execution |
+| **DAA** | `daa_agent_create` | `daa_workflow_execute` | Learning/adaptation needed |
+
 ```javascript
-// Prefer RUV-Swarm for DAA learning
-if (mcp_available("ruv-swarm")) {
-  mcp__ruv-swarm__daa_init({
-    enableLearning: true,
-    enableCoordination: true,
-    persistenceMode: "auto"
-  });
-} else if (mcp_available("claude-flow")) {
-  mcp__claude-flow__swarm_init({
-    topology: "mesh",
-    maxAgents: 10
-  });
+// Option A: RUV-Swarm Task Orchestration (faster, no learning)
+if (mcp_available("ruv-swarm") && !needsLearning) {
+  mcp__ruv-swarm__swarm_init({ topology: "mesh", strategy: "balanced", maxAgents: 10 });
+}
+
+// Option B: RUV-Swarm DAA Workflow (slower, with learning)
+if (mcp_available("ruv-swarm") && needsLearning) {
+  mcp__ruv-swarm__daa_init({ enableLearning: true, enableCoordination: true });
+}
+
+// Option C: Claude-Flow (alternative)
+if (mcp_available("claude-flow")) {
+  mcp__claude-flow__swarm_init({ topology: "mesh", maxAgents: 10 });
 }
 ```
 
@@ -72,8 +80,24 @@ if (mcp_available("ruv-swarm")) {
 
 **CRITICAL: Spawn ALL agents in ONE message for parallelism**
 
+**Option A: Swarm Agents (for task_orchestrate)**
 ```javascript
-// RUV-Swarm DAA agents
+// These go into the SWARM pool - usable by task_orchestrate
+mcp__ruv-swarm__agent_spawn({ type: "analyst", name: "config-analyzer" })
+mcp__ruv-swarm__agent_spawn({ type: "analyst", name: "architecture-mapper" })
+mcp__ruv-swarm__agent_spawn({ type: "researcher", name: "pattern-detector" })
+mcp__ruv-swarm__agent_spawn({ type: "researcher", name: "domain-extractor" })
+mcp__ruv-swarm__agent_spawn({ type: "analyst", name: "system-finder" })
+mcp__ruv-swarm__agent_spawn({ type: "analyst", name: "test-analyzer" })
+mcp__ruv-swarm__agent_spawn({ type: "researcher", name: "import-tracer" })
+mcp__ruv-swarm__agent_spawn({ type: "researcher", name: "convention-learner" })
+mcp__ruv-swarm__agent_spawn({ type: "analyst", name: "file-indexer" })
+mcp__ruv-swarm__agent_spawn({ type: "coordinator", name: "synthesizer" })
+```
+
+**Option B: DAA Agents (for daa_workflow_execute)**
+```javascript
+// These go into the DAA pool - usable by daa_workflow_execute, NOT task_orchestrate
 const agents = [
   { id: "config-analyzer", cognitivePattern: "convergent" },
   { id: "architecture-mapper", cognitivePattern: "systems" },
@@ -87,7 +111,7 @@ const agents = [
   { id: "synthesizer", cognitivePattern: "systems" }
 ];
 
-// Spawn all in parallel
+// Spawn all DAA agents in parallel
 agents.forEach(a => mcp__ruv-swarm__daa_agent_create({
   id: a.id,
   cognitivePattern: a.cognitivePattern,
@@ -98,12 +122,34 @@ agents.forEach(a => mcp__ruv-swarm__daa_agent_create({
 
 ### Step 3: Orchestrate Analysis
 
+**⚠️ Match execution to agent type!**
+
+**Option A: Swarm Agents → task_orchestrate**
 ```javascript
+// ONLY works with agents from agent_spawn
 mcp__ruv-swarm__task_orchestrate({
   task: "Analyze codebase structure, patterns, domains, and systems",
   strategy: "parallel",
   maxAgents: 10,
   priority: "high"
+});
+```
+
+**Option B: DAA Agents → daa_workflow_execute**
+```javascript
+// ONLY works with agents from daa_agent_create
+mcp__ruv-swarm__daa_workflow_create({
+  id: "analysis-workflow",
+  name: "Codebase Analysis",
+  strategy: "parallel"
+});
+
+mcp__ruv-swarm__daa_workflow_execute({
+  workflowId: "analysis-workflow",
+  agentIds: ["config-analyzer", "architecture-mapper", "pattern-detector",
+             "domain-extractor", "system-finder", "test-analyzer",
+             "import-tracer", "convention-learner", "file-indexer", "synthesizer"],
+  parallelExecution: true
 });
 ```
 

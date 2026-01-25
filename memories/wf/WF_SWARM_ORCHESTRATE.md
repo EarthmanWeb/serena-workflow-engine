@@ -138,22 +138,69 @@ mcp__claude-flow__task_orchestrate({ task: "...", strategy: "parallel", priority
 mcp__claude-flow__memory_store({ key: "swarm:state", value: { status: "agents_spawned", topology: "mesh" } })
 ```
 
-### Pattern B: RUV-Swarm DAA (For learning/adaptation)
+### Pattern B1: RUV-Swarm Task Orchestration (For parallel tasks)
+
+**⚠️ CRITICAL: `task_orchestrate` ONLY works with agents from `agent_spawn`, NOT `daa_agent_create`**
 
 ```javascript
-// Step 1: Initialize with DAA
-mcp__plugin_swe_ruv-swarm__swarm_init({ topology: "mesh", strategy: "specialized" })
-mcp__plugin_swe_ruv-swarm__daa_init({ enableLearning: true, enableCoordination: true })
+// Step 1: Initialize swarm
+mcp__ruv-swarm__swarm_init({ topology: "mesh", strategy: "balanced", maxAgents: 5 })
 
-// Step 2: Create autonomous agents
-mcp__plugin_swe_ruv-swarm__daa_agent_create({ id: "agent-1", cognitivePattern: "adaptive", enableMemory: true })
-mcp__plugin_swe_ruv-swarm__daa_agent_create({ id: "agent-2", cognitivePattern: "critical", enableMemory: true })
+// Step 2: Spawn swarm agents (REQUIRED before task_orchestrate)
+mcp__ruv-swarm__agent_spawn({ type: "researcher", name: "researcher-1" })
+mcp__ruv-swarm__agent_spawn({ type: "analyst", name: "analyst-1" })
+mcp__ruv-swarm__agent_spawn({ type: "coder", name: "coder-1" })
 
-// Step 3: Orchestrate with adaptation
-mcp__plugin_swe_ruv-swarm__task_orchestrate({ task: "...", strategy: "adaptive" })
+// Step 3: NOW orchestrate tasks (agents must exist first!)
+mcp__ruv-swarm__task_orchestrate({ task: "...", strategy: "parallel", priority: "high", maxAgents: 3 })
 
-// Step 4: Share knowledge between agents
-mcp__plugin_swe_ruv-swarm__daa_knowledge_share({ sourceAgentId: "agent-1", targetAgentIds: ["agent-2"] })
+// Step 4: Monitor and collect
+mcp__ruv-swarm__task_status({ detailed: true })
+mcp__ruv-swarm__task_results({ taskId: "task-xxx", format: "detailed" })
+```
+
+### Pattern B2: RUV-Swarm DAA Workflow (For autonomous learning)
+
+**⚠️ CRITICAL: DAA agents are SEPARATE from swarm agents. Use `daa_workflow_execute`, NOT `task_orchestrate`**
+
+```javascript
+// Step 1: Initialize DAA (no swarm_init needed for pure DAA)
+mcp__ruv-swarm__daa_init({ enableLearning: true, enableCoordination: true })
+
+// Step 2: Create autonomous agents (these are NOT swarm agents)
+mcp__ruv-swarm__daa_agent_create({ id: "daa-1", cognitivePattern: "adaptive", enableMemory: true })
+mcp__ruv-swarm__daa_agent_create({ id: "daa-2", cognitivePattern: "critical", enableMemory: true })
+
+// Step 3: Create and execute DAA workflow (NOT task_orchestrate!)
+mcp__ruv-swarm__daa_workflow_create({ id: "wf-1", name: "Analysis Workflow", strategy: "adaptive" })
+mcp__ruv-swarm__daa_workflow_execute({ workflowId: "wf-1", agentIds: ["daa-1", "daa-2"], parallelExecution: true })
+
+// Step 4: Share knowledge between DAA agents
+mcp__ruv-swarm__daa_knowledge_share({ sourceAgentId: "daa-1", targetAgentIds: ["daa-2"] })
+
+// Step 5: Check learning progress
+mcp__ruv-swarm__daa_learning_status({ detailed: true })
+```
+
+### Pattern B3: Hybrid (Swarm + DAA Learning)
+
+**Use when you need BOTH task orchestration AND learning capabilities**
+
+```javascript
+// Phase 1: Set up swarm for task orchestration
+mcp__ruv-swarm__swarm_init({ topology: "mesh", strategy: "specialized" })
+mcp__ruv-swarm__agent_spawn({ type: "researcher", name: "researcher-1" })
+mcp__ruv-swarm__agent_spawn({ type: "coder", name: "coder-1" })
+
+// Phase 2: Set up DAA for learning (separate agent pool)
+mcp__ruv-swarm__daa_init({ enableLearning: true, enableCoordination: true })
+mcp__ruv-swarm__daa_agent_create({ id: "learner-1", cognitivePattern: "adaptive", enableMemory: true })
+
+// Phase 3: Orchestrate tasks with swarm agents
+mcp__ruv-swarm__task_orchestrate({ task: "...", strategy: "parallel" })
+
+// Phase 4: Use DAA to learn from results
+mcp__ruv-swarm__daa_agent_adapt({ agentId: "learner-1", feedback: "Task completed", performanceScore: 0.9 })
 ```
 
 ### Pattern C: Hive-Mind (For consensus/collective intelligence)

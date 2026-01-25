@@ -92,10 +92,15 @@ After /swe-init completes, restart Claude Code and return to this project.
 
         # ALWAYS start fresh - never resume old working memory from previous sessions
         # Each chat/conversation is a NEW session with its own working memory
-        # Auto-create WM file using background daemon
-        paths = get_paths(cwd)
-        wm_filename = f"WM_{session_id}_session.md"
-        wm_filepath = os.path.join(cwd, ".serena", "memories", wm_filename)
+        # Auto-create WM file with placeholder descriptor
+        # Claude should rename to WM_{session_id}_{task_descriptor}.md once task is known
+
+        # Find the MAIN project root (not plugin directory)
+        from swe_hooks.core.session import find_project_root
+        project_root = find_project_root(cwd)
+
+        wm_filename = f"WM_{session_id}_session.md"  # Placeholder - rename after task classification
+        wm_filepath = os.path.join(project_root, ".serena", "memories", wm_filename)
 
         # Create initial WM content
         wm_content = f"""# Working Memory: Session {session_id}

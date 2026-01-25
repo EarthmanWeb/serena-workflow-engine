@@ -19,38 +19,57 @@
 
 ---
 
-## ⛔ ANTI-PATTERN: State-Only Edits
+## ⛔ ANTI-PATTERNS
+
+### ❌ Multiple edit_memory Calls
 
 **THIS IS WRONG - DO NOT DO THIS:**
+```python
+# ❌ WRONG: Multiple daemon calls!
+edit_memory("WM_...", "Task: old", "Task: new", "literal")
+edit_memory("WM_...", "Feature: old", "Feature: new", "literal")
+edit_memory("WM_...", "State: old", "State: new", "literal")
+```
+
+**Why it's wrong:** Each `edit_memory` call triggers the daemon. 4 edits = 4 daemon calls = inefficient.
+
+### ❌ State-Only Edits
+
 ```python
 # ❌ WRONG: Only changing Current State field
 edit_memory("WM_...", "Current State: WF_EXECUTE", "Current State: WF_VERIFY", "literal")
 ```
 
-**Why it's wrong:** Captures no progress, no completed work, no context. Memory becomes useless for resumption.
+**Why it's wrong:** Captures no progress, no completed work, no context.
 
-### ✅ A VALID Update MUST Modify MULTIPLE Sections:
+---
+
+## ✅ CORRECT: Single write_memory Call
+
+**Use ONE `write_memory` call with complete content:**
+
+```python
+# ✅ CORRECT: Single write with all sections
+mcp__plugin_swe_serena__write_memory("WM_{session}_session", """
+# Working Memory: Session {session}
+
+## Session
+- **ID**: {session}
+- **Task**: {complete task description}
+...full content...
+""")
+```
+
+### Required Sections for ANY Update:
 
 | Section | What to Update |
 |---------|----------------|
 | `Current State` | New workflow state |
-| `Status` | `[IN PROGRESS]` → `[COMPLETED]` |
-| `Progress` | Mark completed items with `[x]` |
-| `Files` | Add any new files modified |
-| `Context` | Add findings, blockers, decisions |
+| `Task` | Current task description |
+| `Feature(s)` | Active feature keys |
+| `Progress` | Updated checklist with `[x]` for done items |
 
-**Correct approach:**
-```python
-# ✅ CORRECT: Full rewrite with all sections
-write_memory("WM_...", "<full updated content>")
-
-# ✅ ALSO CORRECT: Multiple targeted edits
-edit_memory(..., "- [ ] Step 3", "- [x] Step 3", "literal")
-edit_memory(..., "[IN PROGRESS]", "[COMPLETED]", "literal")
-edit_memory(..., "Current State: WF_EXECUTE", "Current State: WF_VERIFY", "literal")
-```
-
-**SINGLE-FIELD STATE EDIT = WORKFLOW VIOLATION**
+**ONE WRITE CALL = ONE DAEMON CALL = CORRECT**
 
 ---
 

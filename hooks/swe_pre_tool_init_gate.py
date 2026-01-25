@@ -59,13 +59,24 @@ def is_working_memory_write(tool_name, tool_input):
     return '.serena/memories/WM_' in file_path and file_path.endswith('.md')
 
 def find_project_root(start_dir):
-    """Walk up directory tree to find project root containing .serena folder."""
+    """Find the MAIN project root by walking up directory tree.
+
+    Skips any .serena folders inside .claude/plugins/ (nested plugin repos).
+    Returns the highest .serena folder in the tree (main project).
+    """
     current = os.path.abspath(start_dir)
+    main_project_root = None
+
     while current != os.path.dirname(current):  # Stop at filesystem root
-        if os.path.isdir(os.path.join(current, '.serena')):
-            return current
+        serena_dir = os.path.join(current, '.serena')
+        if os.path.isdir(serena_dir):
+            # Only accept if NOT inside a plugin directory
+            if '/.claude/plugins/' not in current and '\\.claude\\plugins\\' not in current:
+                # Keep updating - we want the HIGHEST in the tree (main project)
+                main_project_root = current
         current = os.path.dirname(current)
-    return start_dir  # Fallback to original if not found
+
+    return main_project_root if main_project_root else start_dir
 
 def get_serena_memories_dir(cwd):
     project_root = find_project_root(cwd)

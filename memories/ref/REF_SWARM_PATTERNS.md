@@ -55,24 +55,56 @@ Key tools:
 - `memory_retrieve` - Get from memory
 - `memory_search` - Pattern-based search
 
-### 2. RUV-Swarm (DAA - Decentralized Autonomous Agents)
-**MCP Prefix:** `mcp__plugin_swe_ruv-swarm__*`
+### 2. RUV-Swarm
+**MCP Prefix:** `mcp__ruv-swarm__*`
 
-For tasks requiring learning/adaptation:
+**⚠️ CRITICAL: RUV-Swarm has TWO SEPARATE agent systems that DO NOT mix:**
+
+| System | Agent Creation | Execution | Agent Pool |
+|--------|---------------|-----------|------------|
+| **Swarm** | `agent_spawn` | `task_orchestrate` | Swarm pool (visible to `agent_list`) |
+| **DAA** | `daa_agent_create` | `daa_workflow_execute` | DAA pool (visible to `daa_learning_status`) |
+
+**❌ WRONG (will fail with "No agents available"):**
 ```
-1. mcp__plugin_swe_ruv-swarm__swarm_init({ topology: "mesh", strategy: "specialized" })
-2. mcp__plugin_swe_ruv-swarm__daa_init({ enableLearning: true, enableCoordination: true })
-3. mcp__plugin_swe_ruv-swarm__daa_agent_create({ id: "...", cognitivePattern: "adaptive", enableMemory: true })
-4. mcp__plugin_swe_ruv-swarm__task_orchestrate({ task: "...", strategy: "adaptive" })
-5. mcp__plugin_swe_ruv-swarm__daa_knowledge_share({ sourceAgentId: "...", targetAgentIds: [...] })
+daa_agent_create → task_orchestrate  // DAA agents NOT in swarm pool!
 ```
 
-DAA-specific tools:
+**✅ Pattern A: Task Orchestration (parallel tasks)**
+```
+1. mcp__ruv-swarm__swarm_init({ topology: "mesh", strategy: "balanced" })
+2. mcp__ruv-swarm__agent_spawn({ type: "researcher", name: "r1" })  // Creates SWARM agent
+3. mcp__ruv-swarm__agent_spawn({ type: "coder", name: "c1" })       // Creates SWARM agent
+4. mcp__ruv-swarm__task_orchestrate({ task: "...", strategy: "parallel" })  // Uses SWARM agents
+5. mcp__ruv-swarm__task_results({ taskId: "...", format: "detailed" })
+```
+
+**✅ Pattern B: DAA Workflow (autonomous learning)**
+```
+1. mcp__ruv-swarm__daa_init({ enableLearning: true, enableCoordination: true })
+2. mcp__ruv-swarm__daa_agent_create({ id: "daa-1", cognitivePattern: "adaptive" })  // Creates DAA agent
+3. mcp__ruv-swarm__daa_agent_create({ id: "daa-2", cognitivePattern: "critical" })  // Creates DAA agent
+4. mcp__ruv-swarm__daa_workflow_create({ id: "wf-1", name: "...", strategy: "adaptive" })
+5. mcp__ruv-swarm__daa_workflow_execute({ workflowId: "wf-1", agentIds: ["daa-1", "daa-2"] })  // Uses DAA agents
+6. mcp__ruv-swarm__daa_knowledge_share({ sourceAgentId: "daa-1", targetAgentIds: ["daa-2"] })
+```
+
+**Swarm tools (for task_orchestrate):**
+- `swarm_init` - Initialize swarm infrastructure
+- `agent_spawn` - Create swarm agent (type: researcher|coder|analyst|optimizer|coordinator)
+- `agent_list` - List swarm agents
+- `task_orchestrate` - Execute task across swarm agents
+- `task_status` - Check task progress
+- `task_results` - Get task results
+
+**DAA tools (for autonomous learning):**
 - `daa_init` - Enable autonomous learning
-- `daa_agent_create` - Create autonomous agent with cognitive pattern
-- `daa_knowledge_share` - Share patterns between agents
+- `daa_agent_create` - Create DAA agent with cognitive pattern
+- `daa_workflow_create` - Create DAA workflow
+- `daa_workflow_execute` - Execute DAA workflow with DAA agents
+- `daa_knowledge_share` - Share patterns between DAA agents
 - `daa_agent_adapt` - Trigger adaptation from feedback
-- `daa_learning_status` - Check learning progress
+- `daa_learning_status` - Check DAA agents learning progress
 - `neural_train` - Train coordination patterns
 
 ### 3. Hive-Mind (Collective Intelligence & Consensus)
@@ -139,31 +171,56 @@ Hive-Mind MCP tools:
 
 ---
 
-## Workflow Pattern: RUV (Read, Understand, Verify)
+## Workflow Patterns
+
+### Pattern: Swarm Task Orchestration (RUV-Swarm or Claude-Flow)
 
 ```
 Phase 1: ESTABLISH
-  - swarm_init + daa_init (if using DAA)
+  - swarm_init (choose topology: mesh/hierarchical/star/ring)
 
-Phase 2: SPAWN (parallel)
-  - Multiple agent_spawn calls in single message
+Phase 2: SPAWN (parallel - all in ONE message)
+  - Multiple agent_spawn calls (creates SWARM agents)
   - Store agent IDs to memory
 
 Phase 3: ORCHESTRATE
-  - task_orchestrate for each work unit
+  - task_orchestrate (requires agents from Phase 2!)
   - Launch Task tool agents for actual file work (run_in_background: true)
 
 Phase 4: MONITOR
-  - swarm_status / agent_status (non-blocking)
+  - swarm_status / agent_list (non-blocking)
   - Update memory with progress
 
 Phase 5: COLLECT
-  - TaskOutput with block: true
-  - knowledge_share findings between agents
+  - task_results / TaskOutput with block: true
 
 Phase 6: SYNTHESIZE
   - Combine results
   - Update Serena memory with findings
+```
+
+### Pattern: DAA Autonomous Learning (RUV-Swarm only)
+
+```
+Phase 1: ESTABLISH
+  - daa_init (enables learning/coordination)
+
+Phase 2: CREATE (parallel - all in ONE message)
+  - Multiple daa_agent_create calls (creates DAA agents - NOT swarm agents!)
+  - Choose cognitive patterns: adaptive/critical/convergent/divergent/lateral/systems
+
+Phase 3: WORKFLOW
+  - daa_workflow_create (define workflow steps)
+  - daa_workflow_execute (run with DAA agents)
+
+Phase 4: LEARN
+  - daa_knowledge_share (share patterns between agents)
+  - daa_agent_adapt (apply feedback)
+  - daa_learning_status (check progress)
+
+Phase 5: SYNTHESIZE
+  - daa_performance_metrics (review effectiveness)
+  - Update Serena memory with learnings
 ```
 
 ---

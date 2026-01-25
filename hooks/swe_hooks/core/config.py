@@ -39,17 +39,43 @@ def is_async_writes_enabled() -> bool:
     return _use_async_writes and _get_async_writer()
 
 
+def find_project_root(start_dir: str) -> str:
+    """Find the MAIN project root by walking up directory tree.
+
+    Skips any .serena folders inside .claude/plugins/ (nested plugin repos).
+    Returns the highest .serena folder in the tree (main project).
+    """
+    current = os.path.abspath(start_dir)
+    main_project_root = None
+
+    while current != os.path.dirname(current):  # Stop at filesystem root
+        serena_dir = os.path.join(current, '.serena')
+        if os.path.isdir(serena_dir):
+            # Only accept if NOT inside a plugin directory
+            if '/.claude/plugins/' not in current and '\\.claude\\plugins\\' not in current:
+                # Keep updating - we want the HIGHEST in the tree (main project)
+                main_project_root = current
+        current = os.path.dirname(current)
+
+    return main_project_root if main_project_root else start_dir
+
+
 def get_paths(cwd: str) -> Dict[str, str]:
-    """Get all relevant paths based on working directory."""
+    """Get all relevant paths based on working directory.
+
+    Always resolves to MAIN project root, even if cwd is inside a plugin.
+    """
+    project_root = find_project_root(cwd)
     return {
         "cwd": cwd,
-        "claude_dir": os.path.join(cwd, ".claude"),
-        "setup_file": os.path.join(cwd, ".claude", "plugins", "serena-workflow-engine", "swe-setup-complete.json"),
-        "learning_file": os.path.join(cwd, ".claude", "learning.json"),
-        "plugin_dir": os.path.join(cwd, ".claude", "plugins", "swe"),
-        "instructions_dir": os.path.join(cwd, ".claude", "plugins", "swe", "memories", "instructions"),
-        "references_dir": os.path.join(cwd, ".claude", "plugins", "swe", "memories", "references"),
-        "serena_memories": os.path.join(cwd, ".serena", "memories"),
+        "project_root": project_root,
+        "claude_dir": os.path.join(project_root, ".claude"),
+        "setup_file": os.path.join(project_root, ".claude", "plugins", "serena-workflow-engine", "swe-setup-complete.json"),
+        "learning_file": os.path.join(project_root, ".claude", "learning.json"),
+        "plugin_dir": os.path.join(project_root, ".claude", "plugins", "swe"),
+        "instructions_dir": os.path.join(project_root, ".claude", "plugins", "swe", "memories", "instructions"),
+        "references_dir": os.path.join(project_root, ".claude", "plugins", "swe", "memories", "references"),
+        "serena_memories": os.path.join(project_root, ".serena", "memories"),
     }
 
 
