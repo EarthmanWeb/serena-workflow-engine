@@ -31,49 +31,48 @@ hooks/
 │       ├── session.py            # Session ID, WM management
 │       ├── state_manager.py      # State machine logic
 │       ├── wm_validator.py       # Working Memory validation
-│       └── wm_writer_daemon.py # Async WM writing
-├── swe_session_start.py
-├── swe_user_prompt_workflow.py
-├── swe_user_prompt_swarm.py
-├── swe_pre_tool_init_gate.py
-├── swe_pre_edit_validate.py
-├── swe_pre_bash_test_gate.py
-├── swe_post_read_state.py
-├── swe_post_edit_checkpoint.py
-├── swe_post_serena_replace_fallback.py
-├── swe_post_task_learn.py
-├── swe_post_ruv_swarm_init.py
-├── swe_stop_workflow_check.py
-├── claude_flow_pre_bash.py
-├── claude_flow_post_bash.py
-├── claude_flow_pre_edit.py
-├── claude_flow_post_edit.py
+│       └── wm_writer_daemon.py   # Async WM writing
+├── session/
+│   └── swe_session_start.py
+├── prompt/
+│   ├── swe_user_prompt_workflow.py
+│   └── swe_user_prompt_swarm.py
+├── pre/
+│   ├── swe_pre_tool_init_gate.py
+│   ├── swe_pre_edit_validate.py
+│   └── swe_pre_bash_test_gate.py
+├── post/
+│   ├── swe_post_read_state.py
+│   ├── swe_post_edit_checkpoint.py
+│   ├── swe_post_serena_replace_fallback.py
+│   ├── swe_post_task_learn.py
+│   └── swe_post_ruv_swarm_init.py
+├── stop/
+│   └── swe_stop_workflow_check.py
 └── hooks.json
 ```
 
-## Hook Inventory (17 Python Scripts)
+## Hook Inventory (13 Python Scripts)
 
-### Session Hooks
+### Session Hooks (`session/`)
 | Hook | Event | Purpose |
 |------|-------|---------|
 | `swe_session_start.py` | SessionStart | Initialize workflow state, create WM file |
 
-### User Prompt Hooks
+### User Prompt Hooks (`prompt/`)
 | Hook | Event | Purpose |
 |------|-------|---------|
 | `swe_user_prompt_workflow.py` | UserPromptSubmit | WF_INIT gate, intent analysis, state transitions |
 | `swe_user_prompt_swarm.py` | UserPromptSubmit | Detect swarm keywords in prompts |
 
-### Pre-Tool Hooks (Gatekeepers)
+### Pre-Tool Hooks (`pre/`) - Gatekeepers
 | Hook | Event | Purpose |
 |------|-------|---------|
 | `swe_pre_tool_init_gate.py` | PreToolUse | Block ALL tools until WF_INIT is read |
 | `swe_pre_edit_validate.py` | PreToolUse (Edit/Write/Serena) | Block edits in planning states |
 | `swe_pre_bash_test_gate.py` | PreToolUse (Bash) | Validate test commands against WF_DEBUG_TDD |
-| `claude_flow_pre_bash.py` | PreToolUse (Bash) | Dangerous command blocking |
-| `claude_flow_pre_edit.py` | PreToolUse (Edit/Write/Serena) | Context gathering (Claude-Flow) |
 
-### Post-Tool Hooks (Observers/Learners)
+### Post-Tool Hooks (`post/`) - Observers/Learners
 | Hook | Event | Purpose |
 |------|-------|---------|
 | `swe_post_read_state.py` | PostToolUse (read_memory) | State transitions, plan mode |
@@ -81,10 +80,8 @@ hooks/
 | `swe_post_serena_replace_fallback.py` | PostToolUse (Serena replace) | Symbol replace error handling |
 | `swe_post_task_learn.py` | PostToolUse (read_memory) | RLVR trajectory tracking |
 | `swe_post_ruv_swarm_init.py` | PostToolUse (ruv_swarm) | RUV-Swarm initialization |
-| `claude_flow_post_bash.py` | PostToolUse (Bash) | Command outcome learning |
-| `claude_flow_post_edit.py` | PostToolUse (Edit/Write/Serena) | Edit outcome learning |
 
-### Stop Hooks
+### Stop Hooks (`stop/`)
 | Hook | Event | Purpose |
 |------|-------|---------|
 | `swe_stop_workflow_check.py` | Stop | Verify WF_DONE before session end |
@@ -252,96 +249,23 @@ is_valid, errors = validate_wm_structure(wm_content)
 section_content = get_wm_section(wm_content, "Workflow Context")
 ```
 
-## ⚠️ CRITICAL: settings.json Sync Requirements
+## Hook Loading
 
-Hook configuration exists in TWO places that MUST stay synchronized:
+**SWE hooks load automatically from the plugin folder.**
 
-### 1. Plugin hooks.json (Template)
+The plugin's `hooks/hooks.json` uses `${CLAUDE_PLUGIN_ROOT}` which is resolved by Claude Code's plugin system. No copying to settings.json is needed.
 
-**Path:** `.claude/plugins/serena-workflow-engine/hooks/hooks.json`
-**Uses:** `${CLAUDE_PLUGIN_ROOT}` variable for portability
-
-```json
-{
-  "hooks": {
-    "SessionStart": [{
-      "hooks": [{
-        "type": "command",
-        "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/swe_session_start.py",
-        "timeout": 10
-      }]
-    }]
-  }
-}
-```
-
-### 2. Project settings.json (Active Config)
-
-**Path:** `.claude/settings.json`
-**Uses:** Literal paths (Claude Code reads this file directly)
-
-```json
-{
-  "hooks": {
-    "SessionStart": [{
-      "hooks": [{
-        "type": "command",
-        "command": "python3 .claude/plugins/serena-workflow-engine/hooks/swe_session_start.py",
-        "timeout": 10
-      }]
-    }]
-  }
-}
-```
-
-### Sync Process
-
-When modifying hooks:
-
-1. **Edit hook script** in plugin folder
-2. **Update hooks.json** if adding/removing/renaming hooks
-3. **Update settings.json** with literal path equivalent
-4. **Verify sync** using diff command below
-
-### Path Translation
-
-| hooks.json | settings.json |
-|------------|---------------|
-| `${CLAUDE_PLUGIN_ROOT}/hooks/file.py` | `.claude/plugins/serena-workflow-engine/hooks/file.py` |
-
-### Verification Command
-
+**Verify hooks are loading:**
 ```bash
-# Compare hook structures (ignoring path differences)
-diff <(jq -S '.hooks' .claude/plugins/serena-workflow-engine/hooks/hooks.json) \
-     <(jq -S '.hooks' .claude/settings.json | \
-       sed 's|\.claude/plugins/serena-workflow-engine|${CLAUDE_PLUGIN_ROOT}|g')
+jq '.hooks | keys' .claude/plugins/serena-workflow-engine/hooks/hooks.json
+# Expected: ["PostToolUse", "PreToolUse", "SessionStart", "Stop", "UserPromptSubmit"]
 ```
-
-### Common Sync Errors
-
-| Symptom | Cause | Fix |
-|---------|-------|-----|
-| Hook not firing | Missing from settings.json | Copy config from hooks.json |
-| "Command not found" | Path typo in settings.json | Verify literal path |
-| Hook fires twice | Duplicate entries | Remove duplicate |
-| Matcher not working | Regex differs between files | Sync matcher exactly |
-
-### Required Sync Points
-
-When changing:
-
-- **Event type** (SessionStart, PreToolUse, etc.) → Sync both
-- **Matcher regex** → Sync both exactly
-- **Hook order** → Sync both (order matters!)
-- **Timeout value** → Sync both
-- **Command path** → Translate path for settings.json
 
 ## Diagnostic Checklist
 
 1. Is Python 3 available? `which python3`
-2. Are hooks executable? `chmod +x hooks/*.py`
+2. Are hooks executable? `chmod +x hooks/**/*.py`
 3. Is hooks.json using `python3` commands?
-4. Does each hook have 10s timeout?
+4. Does each hook have appropriate timeout?
 5. Do all hooks exit 0?
-6. **Are hooks.json and settings.json in sync?** (use verification command above)
+6. Is the SWE plugin enabled? `jq '.enabledPlugins' .claude/settings.local.json`

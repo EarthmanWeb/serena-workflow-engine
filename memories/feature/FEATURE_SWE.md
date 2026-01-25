@@ -15,7 +15,7 @@
 |-------|---------|-----------|---------|
 | State Machine | 21-state workflow engine | `state-machine/` | FSM with transitions |
 | Core Modules | Shared Python utilities | `hooks/swe_hooks/core/` | Modular imports |
-| Hooks | Event handlers for Claude Code | `hooks/` | Python scripts |
+| Hooks | Event handlers for Claude Code | `hooks/{session,prompt,pre,post,stop}/` | Python scripts |
 | Skills | User-invocable workflows | `skills/` | YAML frontmatter + MD |
 | Commands | CLI shortcuts | `commands/` | Markdown |
 | Memories | Workflow documentation | `memories/` | Organized subdirs |
@@ -70,28 +70,40 @@ WF_START → WF_CLASSIFY → WF_DETECT_REQ/WF_PLAN_ARCHITECTURE/WF_SWARM_ORCHEST
 | `output.py` | Hook output formatting |
 | `wm_validator.py` | Working Memory validation |
 | `wm_writer_daemon.py` | Async WM writing |
-| `test_wm_writer_daemon.py` | Unit tests |
 
-### Hooks (17 Python scripts)
+### Hooks (13 Python scripts organized by event type)
+
+#### Session Hooks (`hooks/session/`)
 | Hook | Trigger | Purpose |
 |------|---------|---------|
 | `swe_session_start.py` | SessionStart | Initialize workflow state, create WM |
+
+#### User Prompt Hooks (`hooks/prompt/`)
+| Hook | Trigger | Purpose |
+|------|---------|---------|
 | `swe_user_prompt_workflow.py` | UserPromptSubmit | WF_INIT gate, state transitions |
 | `swe_user_prompt_swarm.py` | UserPromptSubmit | Detect swarm keywords |
-| `swe_pre_tool_init_gate.py` | PreToolUse | Block tools until WF_INIT read |
+
+#### Pre-Tool Hooks (`hooks/pre/`)
+| Hook | Trigger | Purpose |
+|------|---------|---------|
+| `swe_pre_tool_init_gate.py` | PreToolUse | Block ALL tools until WF_INIT read |
 | `swe_pre_edit_validate.py` | PreToolUse (Edit/Write/Serena) | Validate edit permissions |
 | `swe_pre_bash_test_gate.py` | PreToolUse (Bash) | Validate test commands |
-| `claude_flow_pre_bash.py` | PreToolUse (Bash) | Claude-Flow pre-command validation |
-| `claude_flow_pre_edit.py` | PreToolUse (Edit/Write/Serena) | Claude-Flow pre-edit integration |
+
+#### Post-Tool Hooks (`hooks/post/`)
+| Hook | Trigger | Purpose |
+|------|---------|---------|
 | `swe_post_read_state.py` | PostToolUse (read_memory) | State transitions, plan mode |
 | `swe_post_edit_checkpoint.py` | PostToolUse (Edit/Write/Serena) | Track edits, trigger checkpoints |
 | `swe_post_serena_replace_fallback.py` | PostToolUse (Serena replace) | Symbol replace fallback handling |
-| `claude_flow_post_bash.py` | PostToolUse (Bash) | Claude-Flow post-command learning |
-| `claude_flow_post_edit.py` | PostToolUse (Edit/Write/Serena) | Claude-Flow post-edit learning |
 | `swe_post_task_learn.py` | PostToolUse (read_memory) | RLVR learning |
 | `swe_post_ruv_swarm_init.py` | PostToolUse (ruv_swarm) | RUV-Swarm initialization |
+
+#### Stop Hooks (`hooks/stop/`)
+| Hook | Trigger | Purpose |
+|------|---------|---------|
 | `swe_stop_workflow_check.py` | Stop | Verify WF_DONE reached |
-| `hooks.json` | - | Hook configuration |
 
 ### Skills (12 total)
 | Skill | Purpose |
@@ -183,7 +195,7 @@ Memories are organized in subdirectories:
 jq . .claude/plugins/serena-workflow-engine/state-machine/states.json
 
 # Check hook permissions
-ls -la .claude/plugins/serena-workflow-engine/hooks/*.py
+ls -la .claude/plugins/serena-workflow-engine/hooks/**/*.py
 
 # Verify plugin installation
 claude plugin list | grep serena-workflow-engine
@@ -199,9 +211,9 @@ SWE is a **standalone plugin** with a **dual-location architecture**:
 Contains files that should work across ANY project using the plugin:
 - `memories/wf/WF_*.md` - Workflow state instructions
 - `memories/ref/REF_*.md` - Generic reference docs
-- `hooks/*.py` - Event handler scripts
+- `hooks/{session,prompt,pre,post,stop}/*.py` - Event handler scripts
 - `hooks/swe_hooks/core/*.py` - Core Python modules
-- `hooks/hooks.json` - Hook configuration template
+- `hooks/hooks.json` - Hook configuration (auto-loaded by plugin system)
 - `skills/*/SKILL.md` - Skill definitions
 - `commands/*.md` - Command definitions
 - `agents/*.md` - Agent definitions
@@ -227,17 +239,13 @@ Contains project-specific adaptations:
 | Project-specific patterns | ❌ No | ✅ YES | Custom DOM_* doc |
 | New skill/command | ✅ YES | ❌ No | New /swe-* command |
 | Reference documentation | ✅ YES | ✅ SYNC | REF_* updates |
-| Hook script changes | ✅ YES | ⚠️ settings.json | Python hook edits |
+| Hook script changes | ✅ YES | ❌ No | Python hook edits |
 
-### ⚠️ CRITICAL: Hook Changes MUST Sync with settings.json
+### Hook Loading
 
-When modifying hooks:
-1. **Edit hook script** in `.claude/plugins/serena-workflow-engine/hooks/`
-2. **Update hooks.json** in same directory (uses `${CLAUDE_PLUGIN_ROOT}` paths)
-3. **Update .claude/settings.json** (uses literal paths)
-4. **Verify both configs match** in structure and matchers
+**SWE hooks load automatically from the plugin folder** via Claude Code's plugin system. The `${CLAUDE_PLUGIN_ROOT}` variable in `hooks/hooks.json` is resolved automatically - no copying to settings.json needed.
 
-See `DOM_SWE_HOOKS` for detailed sync requirements.
+See `DOM_SWE_HOOKS` for hook architecture details.
 
 ## Related Memories
 - [ARCH_SWE](ARCH_SWE) - SWE architecture documentation

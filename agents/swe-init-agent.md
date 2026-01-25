@@ -20,7 +20,7 @@ Autonomous agent for initializing the swe plugin. Completes all setup tasks and 
 3. **Serena Onboarding** - Run one-time Serena setup
 4. **Claude-Flow Init** - Initialize with CLAUDE.md protection
 5. **Settings Migration** - Move claudeFlow config to settings.local.json
-6. **Hook Management** - Remove from settings.json, install to settings.local.json
+6. **Plugin Verification** - Verify SWE plugin is enabled
 7. **Memory Installation** - Copy instruction files to .serena/memories/
 8. **Verification** - Confirm all tasks completed correctly
 
@@ -36,7 +36,7 @@ Task({
 
 ## TASKS
 
-Execute ALL tasks (1-10, including 4b) in order, then verify.
+Execute ALL tasks (1-9, including 4b) in order, then verify.
 
 ### Task 1: Detect Environment
 Report:
@@ -123,53 +123,33 @@ jq 'del(.statusLine, .claudeFlow)' "$SETTINGS" > "${SETTINGS}.tmp" && mv "${SETT
 echo "Migrated claudeFlow settings to settings.local.json"
 ```
 
-### Task 6: Remove Claude-Flow Hooks from settings.json
+### Task 6: Verify SWE Plugin is Enabled
+**SWE hooks load directly from the plugin folder - no copying needed.**
+
+The plugin's `hooks/hooks.json` uses `${CLAUDE_PLUGIN_ROOT}` which is automatically resolved by Claude Code's plugin system.
+
 ```bash
-if jq -e '.hooks' .claude/settings.json > /dev/null 2>&1; then
-  jq 'del(.hooks)' .claude/settings.json > .claude/settings.json.tmp
-  mv .claude/settings.json.tmp .claude/settings.json
-  echo "Removed hooks from settings.json"
+SETTINGS_LOCAL=".claude/settings.local.json"
+
+# Ensure plugin is enabled in settings.local.json
+if ! jq -e '.enabledPlugins["swe@EarthmanWeb"] == true' "$SETTINGS_LOCAL" > /dev/null 2>&1; then
+  jq '.enabledPlugins["swe@EarthmanWeb"] = true' "$SETTINGS_LOCAL" > "${SETTINGS_LOCAL}.tmp" && mv "${SETTINGS_LOCAL}.tmp" "$SETTINGS_LOCAL"
+  echo "Enabled SWE plugin"
+else
+  echo "SWE plugin already enabled"
+fi
+
+# Verify hooks.json exists in plugin
+if [ -f ".claude/plugins/serena-workflow-engine/hooks/hooks.json" ]; then
+  echo "Plugin hooks.json found - hooks will load automatically"
+  jq '.hooks | keys' .claude/plugins/serena-workflow-engine/hooks/hooks.json
+else
+  echo "ERROR: Plugin hooks.json missing!"
+  exit 1
 fi
 ```
 
-### Task 7: Install SWE Hooks to settings.local.json
-**CRITICAL: Use ABSOLUTE paths to avoid CWD-related path resolution bugs.**
-
-The hooks in settings.local.json MUST use absolute paths. Relative paths like `.claude/plugins/...` will fail when the CWD changes during session resume or context compaction.
-
-```bash
-PROJECT_ROOT="$(pwd)"
-HOOKS_SRC=".claude/plugins/serena-workflow-engine/hooks/hooks.json"
-SETTINGS_LOCAL=".claude/settings.local.json"
-
-# Replace ${CLAUDE_PLUGIN_ROOT} with ABSOLUTE path (not relative!)
-jq -s --arg root "$PROJECT_ROOT" '
-  .[0].hooks as $hooks |
-  .[1] |
-  .hooks = ($hooks | walk(
-    if type == "string" then
-      gsub("\\$\\{CLAUDE_PLUGIN_ROOT\\}"; ($root + "/.claude/plugins/serena-workflow-engine"))
-    else .
-    end
-  ))
-' "$HOOKS_SRC" "$SETTINGS_LOCAL" > "${SETTINGS_LOCAL}.tmp" && mv "${SETTINGS_LOCAL}.tmp" "$SETTINGS_LOCAL"
-
-# Also fix any standalone relative paths in hook commands
-jq --arg root "$PROJECT_ROOT" '
-  .hooks |= walk(
-    if type == "string" and startswith("python3 .claude/") then
-      "python3 " + $root + "/" + ltrimstr("python3 ")
-    elif type == "string" and startswith(".claude/") then
-      $root + "/" + .
-    else .
-    end
-  )
-' "$SETTINGS_LOCAL" > "${SETTINGS_LOCAL}.tmp" && mv "${SETTINGS_LOCAL}.tmp" "$SETTINGS_LOCAL"
-
-echo "Installed SWE hooks to settings.local.json with ABSOLUTE paths"
-```
-
-### Task 8: Install Instruction Files to Memories
+### Task 7: Install Instruction Files to Memories
 ```bash
 mkdir -p .serena/memories .serena/memories/archived
 
@@ -185,7 +165,7 @@ echo "Installed instruction files"
 ls .serena/memories/{WF_*,CLAUDE_OBLIGATIONS,DOM_SWE_*,FEATURE_SWE,REF_SWE_*}.md 2>/dev/null | wc -l
 ```
 
-### Task 9: Create and Customize Core Memories
+### Task 8: Create and Customize Core Memories
 Check for and create if missing:
 - `.serena/memories/_INDEX.md` (from memories/_INDEX.md)
 - `.serena/memories/INDEX_FEATURES.md`
@@ -208,7 +188,7 @@ Then edit `.serena/memories/_INDEX.md`:
 - Replace `[FEATURE_X](FEATURE_X) - Description` with actual features
 - Remove template comment block
 
-### Task 10: Configure Gitignore
+### Task 9: Configure Gitignore
 Add these entries to .gitignore if not present:
 ```
 # Claude Code Plugin - Local files
@@ -238,21 +218,20 @@ After all tasks, verify these 7 conditions:
    jq 'has("hooks"), has("statusLine"), has("claudeFlow")' .claude/settings.json
    # Expected: false false false
    ```
-3. **settings.local.json**: HAS hooks, statusLine, and claudeFlow
+3. **settings.local.json**: HAS statusLine and claudeFlow (hooks load from plugin)
    ```bash
-   jq 'has("hooks"), has("statusLine"), has("claudeFlow")' .claude/settings.local.json
-   # Expected: true true true
+   jq 'has("statusLine"), has("claudeFlow")' .claude/settings.local.json
+   # Expected: true true
    ```
-4. **SWE Hooks**: Correct keys installed
+4. **SWE Plugin Enabled**: Plugin is active
    ```bash
-   jq '.hooks | keys' .claude/settings.local.json
+   jq '.enabledPlugins["swe@EarthmanWeb"]' .claude/settings.local.json
+   # Expected: true
+   ```
+4b. **Plugin Hooks Exist**: hooks.json in plugin folder
+   ```bash
+   jq '.hooks | keys' .claude/plugins/serena-workflow-engine/hooks/hooks.json
    # Expected: ["PostToolUse", "PreToolUse", "SessionStart", "Stop", "UserPromptSubmit"]
-   ```
-4b. **Hook Paths Are Absolute**: All hook commands use absolute paths (not relative)
-   ```bash
-   # Check for relative paths - should return nothing
-   jq -r '.. | .command? // empty' .claude/settings.local.json | grep -E "^python3 \\.claude/|^\\.claude/" || echo "OK: All paths are absolute"
-   # If any relative paths found, re-run Task 7
    ```
 5. **Instruction Files**: >= 26 files
    ```bash
@@ -286,7 +265,7 @@ EOF
 - Serena Onboarding: Complete
 - Claude-Flow: Initialized
 - Settings Migration: claudeFlow config moved to settings.local.json
-- SWE Hooks: Installed to settings.local.json
+- SWE Plugin: Enabled (hooks load from plugin folder)
 - Instruction Files: Copied to .serena/memories/
 - Core Memories: Created
 - Gitignore: Configured
@@ -314,24 +293,14 @@ rm -rf ~/.serena/language_servers/static/BashLanguageServer
 ### Verification Fails
 Identify which check failed, return to that task, fix, and re-verify.
 
-### Hook Path Resolution Error (can't open file)
-**Error:** `can't open file '/path/to/project/private/tests/.claude/plugins/...'`
+### Hooks Not Firing
+**Cause:** Plugin not enabled or hooks.json missing.
 
-**Cause:** Hook commands in settings.local.json use relative paths (`.claude/plugins/...`) that resolve from CWD. When session resumes after context compaction, CWD may be different.
-
-**Fix:** Convert all relative paths to absolute paths in settings.local.json:
+**Fix:**
 ```bash
-PROJECT_ROOT="/path/to/project"  # Adjust for your project
-jq --arg root "$PROJECT_ROOT" '
-  .hooks |= walk(
-    if type == "string" and (startswith("python3 .claude/") or startswith(".claude/")) then
-      if startswith("python3 ") then
-        "python3 " + $root + "/" + ltrimstr("python3 ")
-      else
-        $root + "/" + .
-      end
-    else .
-    end
-  )
-' .claude/settings.local.json > .claude/settings.local.json.tmp && mv .claude/settings.local.json.tmp .claude/settings.local.json
+# Verify plugin enabled
+jq '.enabledPlugins' .claude/settings.local.json
+
+# Verify hooks.json exists
+cat .claude/plugins/serena-workflow-engine/hooks/hooks.json | jq '.hooks | keys'
 ```

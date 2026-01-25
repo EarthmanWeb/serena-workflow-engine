@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/swe_session_start.py",
+            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/session/swe_session_start.py",
             "timeout": 10
           }
         ]
@@ -17,12 +17,12 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/swe_user_prompt_workflow.py",
+            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/prompt/swe_user_prompt_workflow.py",
             "timeout": 10
           },
           {
             "type": "command",
-            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/swe_user_prompt_swarm.py",
+            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/prompt/swe_user_prompt_swarm.py",
             "timeout": 10
           }
         ]
@@ -34,7 +34,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/swe_pre_tool_init_gate.py",
+            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/pre/swe_pre_tool_init_gate.py",
             "timeout": 5000
           }
         ]
@@ -44,12 +44,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/claude_flow_pre_bash.py",
-            "timeout": 10
-          },
-          {
-            "type": "command",
-            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/swe_pre_bash_test_gate.py",
+            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/pre/swe_pre_bash_test_gate.py",
             "timeout": 10
           }
         ]
@@ -59,12 +54,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/swe_pre_edit_validate.py",
-            "timeout": 10
-          },
-          {
-            "type": "command",
-            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/claude_flow_pre_edit.py",
+            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/pre/swe_pre_edit_validate.py",
             "timeout": 10
           }
         ]
@@ -76,7 +66,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/swe_post_ruv_swarm_init.py",
+            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/post/swe_post_ruv_swarm_init.py",
             "timeout": 10
           }
         ]
@@ -86,17 +76,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/swe_post_serena_replace_fallback.py",
-            "timeout": 10
-          }
-        ]
-      },
-      {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/claude_flow_post_bash.py",
+            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/post/swe_post_serena_replace_fallback.py",
             "timeout": 10
           }
         ]
@@ -106,27 +86,22 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/swe_post_edit_checkpoint.py",
-            "timeout": 10
-          },
-          {
-            "type": "command",
-            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/claude_flow_post_edit.py",
+            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/post/swe_post_edit_checkpoint.py",
             "timeout": 10
           }
         ]
       },
       {
-        "matcher": "mcp__serena__read_memory",
+        "matcher": "mcp__serena__read_memory|mcp__plugin_swe_serena__read_memory",
         "hooks": [
           {
             "type": "command",
-            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/swe_post_read_state.py",
+            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/post/swe_post_read_state.py",
             "timeout": 10
           },
           {
             "type": "command",
-            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/swe_post_task_learn.py",
+            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/post/swe_post_task_learn.py",
             "timeout": 10
           }
         ]
@@ -137,7 +112,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/swe_stop_workflow_check.py",
+            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/stop/swe_stop_workflow_check.py",
             "timeout": 10
           }
         ]
