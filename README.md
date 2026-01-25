@@ -28,7 +28,19 @@ This writes the following to `.claude/settings.local.json`:
 }
 ```
 
-### 2. Verify installation
+### 2. Enable auto-update (recommended)
+
+To receive updates automatically when new versions are released:
+
+1. Run `/plugin` in Claude Code
+2. Press **Tab** to go to **Marketplaces** tab
+3. Select **EarthmanWeb** from the list
+4. Press **Enter**
+5. Select **Enable auto-update**
+
+Now you'll get updates automatically on Claude Code startup.
+
+### 3. Verify installation
 
 ```bash
 claude plugin list
@@ -36,12 +48,12 @@ claude plugin list
 
 Should show: `swe@EarthmanWeb` with status `✔ enabled`
 
-### 3. Restart Claude Code
+### 4. Restart Claude Code
 
 - **CLI**: Start a new `claude` session
 - **VSCode**: Reload the window (`Cmd+Shift+P` → "Developer: Reload Window")
 
-### 4. Initialize the plugin
+### 5. Initialize the plugin
 
 After restart, paste this prompt into Claude Code:
 
@@ -56,7 +68,7 @@ This will:
 - Create core memories
 - Configure .gitignore
 
-### 5. Start working
+### 6. Start working
 
 After setup, the workflow guides you automatically. Type any task to begin.
 
