@@ -58,29 +58,29 @@ def is_working_memory_write(tool_name, tool_input):
     # Allow writes to WORKING_MEMORY files in .serena/memories/
     return '.serena/memories/WM_' in file_path and file_path.endswith('.md')
 
-def find_project_root(start_dir):
-    """Find the MAIN project root by walking up directory tree.
+def get_project_root():
+    """Get project root from CLAUDE_PROJECT_DIR env var (set by Claude Code).
 
-    Skips any .serena folders inside .claude/plugins/ (nested plugin repos).
-    Returns the highest .serena folder in the tree (main project).
+    This is the official, documented way to get the project root.
+    Immune to cd commands changing the working directory.
     """
-    current = os.path.abspath(start_dir)
-    main_project_root = None
+    # Primary: CLAUDE_PROJECT_DIR - set by Claude Code, never changes
+    project_dir = os.environ.get('CLAUDE_PROJECT_DIR', '')
+    if project_dir:
+        return project_dir
 
-    while current != os.path.dirname(current):  # Stop at filesystem root
-        serena_dir = os.path.join(current, '.serena')
-        if os.path.isdir(serena_dir):
-            # Only accept if NOT inside a plugin directory
-            if '/.claude/plugins/' not in current and '\\.claude\\plugins\\' not in current:
-                # Keep updating - we want the HIGHEST in the tree (main project)
-                main_project_root = current
+    # Fallback: walk up from cwd (less reliable after cd)
+    current = os.getcwd()
+    while current != os.path.dirname(current):
+        if os.path.isdir(os.path.join(current, '.serena')):
+            return current
         current = os.path.dirname(current)
+    return os.getcwd()
 
-    return main_project_root if main_project_root else start_dir
 
-def get_serena_memories_dir(cwd):
-    project_root = find_project_root(cwd)
-    return os.path.join(project_root, '.serena', 'memories')
+def get_serena_memories_dir():
+    """Get .serena/memories directory path."""
+    return os.path.join(get_project_root(), '.serena', 'memories')
 
 def extract_session_id(transcript_path):
     """Extract session ID from transcript_path UUID."""
@@ -102,7 +102,7 @@ def check_lite_mode(cwd, session_id):
     if not session_id:
         return False
 
-    memories_dir = get_serena_memories_dir(cwd)
+    memories_dir = get_serena_memories_dir()
     lite_marker = os.path.join(memories_dir, f'LITE_MODE_{session_id}.md')
     return os.path.exists(lite_marker)
 
@@ -111,7 +111,7 @@ def check_working_memory_exists(cwd, session_id):
 
     Returns: tuple (bool, str) - (is_valid, diagnostic_message)
     """
-    memories_dir = get_serena_memories_dir(cwd)
+    memories_dir = get_serena_memories_dir()
     if not os.path.exists(memories_dir):
         return False, "No .serena/memories directory found"
 
@@ -218,8 +218,8 @@ def main():
         # NOT initialized - BLOCK the tool call with specific diagnostic
         # NOTE: WM should have been auto-created by session_start hook
         # DEBUG: Show where we're looking
-        memories_dir = get_serena_memories_dir(cwd)
-        project_root = find_project_root(cwd)
+        memories_dir = get_serena_memories_dir()
+        project_root = get_project_root()
         output = {
             "decision": "block",
             "reason": f"""🛑🛑🛑 CRITICAL: WORKFLOW NOT INITIALIZED - ALL TOOLS BLOCKED 🛑🛑🛑

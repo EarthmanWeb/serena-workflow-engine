@@ -9,6 +9,29 @@ import glob
 from typing import Optional, Tuple
 
 
+# =============================================================================
+# Project Root Resolution (CD-immune)
+# =============================================================================
+
+
+def get_project_root() -> str:
+    """Get the project root directory reliably, immune to cd commands.
+
+    Uses CLAUDE_PROJECT_DIR environment variable set by Claude Code.
+    This is the official, documented way to get the project root.
+
+    Returns:
+        Absolute path to the project root directory
+    """
+    # Primary: CLAUDE_PROJECT_DIR - set by Claude Code, never changes
+    project_dir = os.environ.get('CLAUDE_PROJECT_DIR', '')
+    if project_dir:
+        return project_dir
+
+    # Fallback: walk up from cwd to find .serena (less reliable after cd)
+    return find_project_root(os.getcwd())
+
+
 def extract_session_id(transcript_path: str) -> Optional[str]:
     """Extract 8-char session ID from transcript_path UUID.
 
@@ -50,9 +73,13 @@ def find_project_root(start_dir: str) -> str:
     return main_project_root if main_project_root else start_dir
 
 
-def get_serena_memories_dir(cwd: str) -> str:
-    """Get the .serena/memories directory path for WM files."""
-    project_root = find_project_root(cwd)
+def get_serena_memories_dir(cwd: str = None) -> str:
+    """Get the .serena/memories directory path for WM files.
+
+    Args:
+        cwd: Ignored - kept for backward compatibility. Uses get_project_root() instead.
+    """
+    project_root = get_project_root()
     return os.path.join(project_root, '.serena', 'memories')
 
 

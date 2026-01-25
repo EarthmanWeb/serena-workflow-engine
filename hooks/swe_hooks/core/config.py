@@ -39,33 +39,33 @@ def is_async_writes_enabled() -> bool:
     return _use_async_writes and _get_async_writer()
 
 
-def find_project_root(start_dir: str) -> str:
-    """Find the MAIN project root by walking up directory tree.
+def get_project_root() -> str:
+    """Get project root from CLAUDE_PROJECT_DIR env var (set by Claude Code).
 
-    Skips any .serena folders inside .claude/plugins/ (nested plugin repos).
-    Returns the highest .serena folder in the tree (main project).
+    This is the official, documented way to get the project root.
+    Immune to cd commands changing the working directory.
     """
-    current = os.path.abspath(start_dir)
-    main_project_root = None
+    # Primary: CLAUDE_PROJECT_DIR - set by Claude Code, never changes
+    project_dir = os.environ.get('CLAUDE_PROJECT_DIR', '')
+    if project_dir:
+        return project_dir
 
-    while current != os.path.dirname(current):  # Stop at filesystem root
-        serena_dir = os.path.join(current, '.serena')
-        if os.path.isdir(serena_dir):
-            # Only accept if NOT inside a plugin directory
-            if '/.claude/plugins/' not in current and '\\.claude\\plugins\\' not in current:
-                # Keep updating - we want the HIGHEST in the tree (main project)
-                main_project_root = current
+    # Fallback: walk up from cwd (less reliable after cd)
+    current = os.getcwd()
+    while current != os.path.dirname(current):
+        if os.path.isdir(os.path.join(current, '.serena')):
+            return current
         current = os.path.dirname(current)
+    return os.getcwd()
 
-    return main_project_root if main_project_root else start_dir
 
+def get_paths(cwd: str = None) -> Dict[str, str]:
+    """Get all relevant paths based on project root.
 
-def get_paths(cwd: str) -> Dict[str, str]:
-    """Get all relevant paths based on working directory.
-
-    Always resolves to MAIN project root, even if cwd is inside a plugin.
+    Args:
+        cwd: Ignored - kept for backward compatibility.
     """
-    project_root = find_project_root(cwd)
+    project_root = get_project_root()
     return {
         "cwd": cwd,
         "project_root": project_root,

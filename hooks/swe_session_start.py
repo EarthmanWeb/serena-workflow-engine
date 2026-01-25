@@ -95,9 +95,9 @@ After /swe-init completes, restart Claude Code and return to this project.
         # Auto-create WM file with placeholder descriptor
         # Claude should rename to WM_{session_id}_{task_descriptor}.md once task is known
 
-        # Find the MAIN project root (not plugin directory)
-        from swe_hooks.core.session import find_project_root
-        project_root = find_project_root(cwd)
+        # Get project root from CLAUDE_PROJECT_DIR (set by Claude Code)
+        from swe_hooks.core.session import get_project_root
+        project_root = get_project_root()
 
         wm_filename = f"WM_{session_id}_session.md"  # Placeholder - rename after task classification
         wm_filepath = os.path.join(project_root, ".serena", "memories", wm_filename)
