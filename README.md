@@ -14,23 +14,14 @@ and Serena memory persistence.
 claude plugin marketplace add https://github.com/EarthmanWeb/serena-workflow-engine.git
 
 # Install and enable the plugin
-claude plugin install swe@swe --scope local
-claude plugin enable swe@swe --scope local
+claude plugin install swe@EarthmanWeb --scope local
+claude plugin enable swe@EarthmanWeb --scope local
 ```
 
 This writes the following to `.claude/settings.local.json`:
 
 ```json
 {
-  "extraKnownMarketplaces": {
-    "swe": {
-      "source": {
-        "source": "git",
-        "url": "https://github.com/EarthmanWeb/serena-workflow-engine.git",
-        "ref": "main"
-      }
-    }
-  },
   "enabledPlugins": {
     "swe@EarthmanWeb": true
   }
@@ -43,7 +34,7 @@ This writes the following to `.claude/settings.local.json`:
 claude plugin list
 ```
 
-Should show: `swe@swe` with status `✔ enabled`
+Should show: `swe@EarthmanWeb` with status `✔ enabled`
 
 ### 3. Restart Claude Code
 

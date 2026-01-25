@@ -28,6 +28,8 @@ if PLUGIN_ROOT:
 ALLOWED_TOOLS = [
     # ToolSearch - CRITICAL: needed to load deferred MCP tools (prevents deadlock)
     'ToolSearch',
+    # Read - needed to read workflow files and understand context before WM creation
+    'Read',
     # Memory tools (needed for reading WF_INIT and creating WORKING_MEMORY)
     'mcp__plugin_swe_serena__read_memory',
     'mcp__serena__read_memory',
@@ -203,7 +205,7 @@ def main():
             sys.exit(0)
 
         # NOT initialized - BLOCK the tool call with specific diagnostic
-        # NOTE: LITE mode is NOT offered - only full workflow initialization
+        # NOTE: WM should have been auto-created by session_start hook
         output = {
             "decision": "block",
             "reason": f"""🛑🛑🛑 CRITICAL: WORKFLOW NOT INITIALIZED - ALL TOOLS BLOCKED 🛑🛑🛑
@@ -212,32 +214,28 @@ Session: {session_id or 'unknown'}
 Diagnostic: {diagnostic}
 
 ═══════════════════════════════════════════════════════════════════════════════
-                    ⚠️  MANDATORY INITIALIZATION REQUIRED  ⚠️
+                    ⚠️  WORKING MEMORY VALIDATION FAILED  ⚠️
 ═══════════════════════════════════════════════════════════════════════════════
 
-You MUST complete these steps IN ORDER before ANY other action:
+Working Memory should have been auto-created by session start.
+If you see this message, the WM file exists but is missing required sections.
 
-STEP 1: Load the serena memory tool
-   → Use ToolSearch with query: "select:mcp__serena__read_memory"
+STEP 1: Read the existing WM file to check its contents
+   → Read the file at .serena/memories/wm/WM_{session_id}_*.md
 
-STEP 2: Read WF_INIT (contains initialization instructions)
-   → mcp__serena__read_memory("WF_INIT")
+STEP 2: Ensure these required sections exist:
+   → '## Workflow Context' section header
+   → '**Current State**:' field with valid WF_* state
 
-STEP 3: Create WORKING_MEMORY file following REF_WM template
-   → Filename: WM_{session_id}_<task_descriptor>.md
-   → Use mcp__serena__write_memory OR Write tool
+STEP 3: If WM is corrupted, read REF_WM template and recreate:
+   → mcp__plugin_swe_serena__read_memory("REF_WM")
 
-STEP 4: Clean up default Serena memories (if present):
-   → mcp__serena__delete_memory("PROJECT_WISDOM")
-   → mcp__serena__delete_memory("CLAUDE_MD")
-   → mcp__serena__delete_memory("LESSONS")
-
-If "No active project" error on Step 2:
-   → mcp__serena__list_projects() to see available projects
-   → mcp__serena__activate_project("project_name") to activate
+If "No active project" error:
+   → mcp__plugin_swe_serena__list_projects() to see available projects
+   → mcp__plugin_swe_serena__activate_project("project_name") to activate
 
 ═══════════════════════════════════════════════════════════════════════════════
-              DO NOT ATTEMPT ANY OTHER TOOLS UNTIL INITIALIZED
+              FIX WORKING MEMORY BEFORE PROCEEDING
 ═══════════════════════════════════════════════════════════════════════════════"""
         }
         print(json.dumps(output))

@@ -18,11 +18,12 @@ if PLUGIN_ROOT:
 
 try:
     from swe_hooks.core.config import (
-        load_setup_complete, 
+        load_setup_complete,
         get_most_recent_working_memory, get_working_memory_filename,
-        read_working_memory_state
+        read_working_memory_state, get_paths
     )
     from swe_hooks.core.state_manager import StateManager
+    from swe_hooks.core.wm_background_writer import async_wm_write
 except ImportError as e:
     print(json.dumps({"systemMessage": f"SWE import error: {e}"}), file=sys.stdout)
     sys.exit(0)
@@ -91,26 +92,55 @@ After /swe-init completes, restart Claude Code and return to this project.
 
         # ALWAYS start fresh - never resume old working memory from previous sessions
         # Each chat/conversation is a NEW session with its own working memory
-        # Working memory will be created by WF_INIT when the user provides their task
+        # Auto-create WM file using background daemon
+        paths = get_paths(cwd)
+        wm_filename = f"WM_{session_id}_session.md"
+        wm_filepath = os.path.join(cwd, ".serena", "memories", "wm", wm_filename)
+
+        # Create initial WM content
+        wm_content = f"""# Working Memory: Session {session_id}
+
+## Session
+- **ID**: {session_id}
+- **Task**: (awaiting user task)
+- **Started**: {datetime.now().strftime('%Y-%m-%d %H:%M')}
+
+## Workflow Context
+**Current State**: WF_INIT
+**Previous State**: None
+
+## Task Context
+- **Feature(s)**: (to be determined)
+- **Complexity**: (to be determined)
+
+## Progress Tracking
+### Pending
+- [ ] Await user task
+
+## Requirements
+(to be determined from user request)
+
+## Implementation Notes
+(none yet)
+"""
+
+        # Write WM file synchronously (must exist before init_gate runs)
+        os.makedirs(os.path.dirname(wm_filepath), exist_ok=True)
+        with open(wm_filepath, 'w', encoding='utf-8') as f:
+            f.write(wm_content)
+
         context = f"""🚀 SERENA WORKFLOW ENGINE - Session {session_id}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-⚠️  MANDATORY SESSION INITIALIZATION  ⚠️
-
-Current State: WF_INIT (awaiting initialization)
-Working Memory: None (must be created)
+✅ Working Memory: {wm_filename} (auto-created)
+Current State: WF_INIT
 
 ═══════════════════════════════════════════════════════════════════════════════
-STEP 1: Load the serena memory tool
-   → ToolSearch with query: "select:mcp__serena__read_memory"
+STEP 1: Read WF_INIT workflow instructions
+   → mcp__plugin_swe_serena__read_memory("WF_INIT")
 
-STEP 2: Read WF_INIT workflow instructions
-   → mcp__serena__read_memory("WF_INIT")
-
-STEP 3: Follow WF_INIT to create WM_{session_id}_<task>.md
+STEP 2: Follow WF_INIT to classify and execute user's task
 ═══════════════════════════════════════════════════════════════════════════════
-
-DO NOT proceed with any user task until WM is created.
 """
 
         output = {
