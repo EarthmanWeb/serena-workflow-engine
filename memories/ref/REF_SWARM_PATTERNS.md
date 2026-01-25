@@ -38,22 +38,38 @@ npx claude-flow init
 ### 1. Claude-Flow (Primary - Recommended)
 **MCP Prefix:** `mcp__claude-flow__*`
 
+**⚠️ V3 API - Tool namespaces use `/` separator (e.g., `swarm/init`, `tasks/create`)**
+
 Core workflow:
 ```
-1. mcp__claude-flow__swarm_init({ topology: "mesh"|"hierarchical"|"star", maxAgents: N })
+1. mcp__claude-flow__swarm_init({ topology: "hierarchical-mesh"|"mesh"|"hierarchical", maxAgents: 15 })
 2. mcp__claude-flow__agent_spawn({ agentType: "researcher"|"coder"|"analyst"|"tester", agentId: "..." })
-3. mcp__claude-flow__task_orchestrate({ task: "description", strategy: "parallel"|"sequential", priority: "high" })
+3. mcp__claude-flow__tasks_create({ type: "analyze", description: "...", assignToAgent: "agent-id", priority: 8 })
 4. mcp__claude-flow__memory_store({ key: "swarm:state", value: { ... } })
 ```
 
-Key tools:
-- `swarm_init` - Initialize swarm with topology
-- `agent_spawn` - Create agents (params: agentType, agentId)
-- `task_orchestrate` - Coordinate task across agents
-- `swarm_status` - Monitor swarm health
-- `memory_store` - Store to persistent memory
-- `memory_retrieve` - Get from memory
-- `memory_search` - Pattern-based search
+**V3 Key Tools:**
+
+| Category | Tools |
+|----------|-------|
+| **Swarm** | `swarm/init`, `swarm/status`, `swarm/scale` |
+| **Agents** | `agent/spawn`, `agent/list`, `agent/status`, `agent/terminate` |
+| **Tasks** | `tasks/create`, `tasks/list`, `tasks/status`, `tasks/assign`, `tasks/update`, `tasks/cancel`, `tasks/dependencies`, `tasks/results` |
+| **Memory** | `memory/store`, `memory/retrieve`, `memory/search`, `memory/list` |
+| **Federation** | `broadcast`, `propose`, `vote` (for consensus coordination) |
+| **Workflow** | `workflow/create`, `workflow/execute`, `workflow/status` |
+
+**⚠️ NO `task_orchestrate` in V3** - Use `tasks/create` with `assignToAgent` or `assignToAgentType` params. For parallel execution, create multiple tasks and use `tasks/dependencies` to manage execution order.
+
+**Orchestration Pattern in V3:**
+```javascript
+// Create tasks and assign to agents (parallel by default)
+mcp__claude-flow__tasks_create({ type: "research", description: "...", assignToAgent: "agent-1" })
+mcp__claude-flow__tasks_create({ type: "research", description: "...", assignToAgent: "agent-2" })
+
+// For sequential, add dependencies
+mcp__claude-flow__tasks_dependencies({ taskId: "task-2", action: "add", dependencies: ["task-1"] })
+```
 
 ### 2. RUV-Swarm
 **MCP Prefix:** `mcp__ruv-swarm__*`
@@ -225,19 +241,37 @@ Phase 5: SYNTHESIZE
 
 ---
 
-## Example: Multi-File Codebase Analysis
+## Example: Multi-File Codebase Analysis (V3 API)
 
 ```javascript
-// Step 1: Init
-mcp__claude-flow__swarm_init({ topology: "mesh", maxAgents: 5 })
+// Step 1: Init swarm
+mcp__claude-flow__swarm_init({ topology: "hierarchical-mesh", maxAgents: 15 })
 
 // Step 2: Spawn all agents in ONE message
 mcp__claude-flow__agent_spawn({ agentType: "analyst", agentId: "code-reader-1" })
 mcp__claude-flow__agent_spawn({ agentType: "analyst", agentId: "code-reader-2" })
 mcp__claude-flow__agent_spawn({ agentType: "researcher", agentId: "pattern-finder" })
 
-// Step 3: Orchestrate tasks
-mcp__claude-flow__task_orchestrate({ task: "Analyze codebase structure", strategy: "parallel", priority: "high" })
+// Step 3: Create tasks and assign to agents (V3 uses tasks/create, NOT task_orchestrate)
+mcp__claude-flow__tasks_create({
+  type: "analyze",
+  description: "Read module A files",
+  assignToAgent: "code-reader-1",
+  priority: 8
+})
+mcp__claude-flow__tasks_create({
+  type: "analyze",
+  description: "Read module B files",
+  assignToAgent: "code-reader-2",
+  priority: 8
+})
+mcp__claude-flow__tasks_create({
+  type: "research",
+  description: "Find patterns across modules",
+  assignToAgent: "pattern-finder",
+  priority: 7,
+  dependencies: ["task-1", "task-2"]  // Wait for readers to finish
+})
 
 // Step 4: Launch ACTUAL work agents (Claude Task tool)
 Task({ subagent_type: "Explore", run_in_background: true, prompt: "Read module A files..." })
@@ -245,12 +279,14 @@ Task({ subagent_type: "Explore", run_in_background: true, prompt: "Read module B
 Task({ subagent_type: "Explore", run_in_background: true, prompt: "Find patterns..." })
 
 // Step 5: Store coordination state
-mcp__claude-flow__memory_store({ key: "analysis:status", value: { status: "agents_spawned", agentCount: 3 } })
+mcp__claude-flow__memory_store({ key: "analysis:status", value: { status: "tasks_created", taskCount: 3 } })
 
 // Step 6: Monitor (non-blocking)
-mcp__claude-flow__swarm_status({})
+mcp__claude-flow__swarm_status({ includeAgents: true })
+mcp__claude-flow__tasks_list({ status: "running" })
 
 // Step 7: Collect results
+mcp__claude-flow__tasks_results({ taskId: "task-3", format: "detailed" })
 TaskOutput({ task_id: "...", block: true })
 
 // Step 8: Synthesize and update memory

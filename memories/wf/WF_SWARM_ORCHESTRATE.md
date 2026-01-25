@@ -120,23 +120,72 @@ reviewer      - Quality assurance, security audit
 
 ## Swarm Initialization Patterns
 
-### Pattern A: Claude-Flow (Recommended for most tasks)
+### Pattern A: Claude-Flow V3 (Recommended for most tasks)
+
+**⚠️ V3 API - Uses `tasks/create` for task assignment, NOT `task_orchestrate`**
+
+Claude-Flow V3 orchestration approach:
+- `swarm/init` - Initialize swarm with topology (hierarchical-mesh default)
+- `agent/spawn` - Create agents
+- `tasks/create` - Create tasks with `assignToAgent` or `assignToAgentType`
+- `tasks/dependencies` - Manage task execution order
+- `workflow/create` + `workflow/execute` - For complex multi-step workflows
+
+**V3 Key Tools:**
+
+| Category | Tools |
+|----------|-------|
+| **Swarm** | `swarm/init`, `swarm/status`, `swarm/scale` |
+| **Agents** | `agent/spawn`, `agent/list`, `agent/status`, `agent/terminate` |
+| **Tasks** | `tasks/create`, `tasks/assign`, `tasks/status`, `tasks/results`, `tasks/dependencies` |
+| **Federation** | `broadcast`, `propose`, `vote` (consensus coordination) |
 
 ```javascript
 // Step 1: Initialize swarm
-mcp__claude-flow__swarm_init({ topology: "mesh", maxAgents: 5 })
+mcp__claude-flow__swarm_init({ topology: "hierarchical-mesh", maxAgents: 15 })
 
 // Step 2: Spawn agents IN ONE MESSAGE (parallel)
 mcp__claude-flow__agent_spawn({ agentType: "researcher", agentId: "agent-1" })
 mcp__claude-flow__agent_spawn({ agentType: "coder", agentId: "agent-2" })
 mcp__claude-flow__agent_spawn({ agentType: "tester", agentId: "agent-3" })
 
-// Step 3: Orchestrate tasks
-mcp__claude-flow__task_orchestrate({ task: "...", strategy: "parallel", priority: "high" })
+// Step 3: Create tasks and assign to agents (parallel execution)
+mcp__claude-flow__tasks_create({
+  type: "analyze",
+  description: "Analyze codebase patterns",
+  assignToAgent: "agent-1",
+  priority: 8
+})
+mcp__claude-flow__tasks_create({
+  type: "analyze",
+  description: "Review security patterns",
+  assignToAgent: "agent-2",
+  priority: 8
+})
 
-// Step 4: Store coordination state
-mcp__claude-flow__memory_store({ key: "swarm:state", value: { status: "agents_spawned", topology: "mesh" } })
+// Step 4: For sequential execution, add dependencies
+mcp__claude-flow__tasks_dependencies({
+  taskId: "task-2",
+  action: "add",
+  dependencies: ["task-1"]
+})
+
+// Step 5: Launch ACTUAL work via Task tool (in background)
+Task({ subagent_type: "researcher", run_in_background: true, prompt: "..." })
+
+// Step 6: Monitor status
+mcp__claude-flow__swarm_status({ includeAgents: true, includeMetrics: true })
+mcp__claude-flow__tasks_status({ taskId: "task-1", includeMetrics: true })
+
+// Step 7: Collect results
+mcp__claude-flow__tasks_results({ taskId: "task-1", format: "detailed" })
+TaskOutput({ task_id: "...", block: true })
+
+// Step 8: Store coordination state
+mcp__claude-flow__memory_store({ key: "swarm:state", value: { status: "completed" } })
 ```
+
+**For complex workflows:** Use `workflow/create` + `workflow/execute` with step definitions.
 
 ### Pattern B1: RUV-Swarm Task Orchestration (For parallel tasks)
 
