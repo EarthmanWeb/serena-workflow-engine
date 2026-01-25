@@ -9,9 +9,9 @@
 ## For Questions/Exploration Without Code Changes
 
 1. **Use Serena tools to explore:**
-   - `mcp__serena__find_symbol`
-   - `mcp__serena__get_symbols_overview`
-   - `mcp__serena__search_for_pattern`
+   - `mcp__plugin_swe_serena__find_symbol`
+   - `mcp__plugin_swe_serena__get_symbols_overview`
+   - `mcp__plugin_swe_serena__search_for_pattern`
 
 2. **Read relevant memories if needed.**
 

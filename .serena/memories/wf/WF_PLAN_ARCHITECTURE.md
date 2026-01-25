@@ -17,25 +17,25 @@ OUTPUT THE ABOVE LINE IMMEDIATELY. Do not read further until you have reported y
 
 1. **Get feature configuration:**
    ```
-   mcp__serena__read_memory("INDEX_FEATURES")   # Get active feature
-   mcp__serena__read_memory("FEATURE_[KEY]")    # Get architecture, layers, memories
+   mcp__plugin_swe_serena__read_memory("INDEX_FEATURES")   # Get active feature
+   mcp__plugin_swe_serena__read_memory("FEATURE_[KEY]")    # Get architecture, layers, memories
    ```
 
 2. **Read relevant specification (if exists):**
    ```
-   mcp__serena__read_memory("SPEC_[NAME]")      # Check for existing specs
+   mcp__plugin_swe_serena__read_memory("SPEC_[NAME]")      # Check for existing specs
    ```
 
 3. **Read relevant system context from FEATURE_[KEY]:**
    ```
-   mcp__serena__read_memory("SYS_[SYSTEM]")     # System documentation (feature-specific)
+   mcp__plugin_swe_serena__read_memory("SYS_[SYSTEM]")     # System documentation (feature-specific)
    ```
 
 4. **For EACH layer in design, read its rules:**
    ```
-   mcp__serena__read_memory("REF_[TOPIC]")      # Reference patterns (codebase-shared)
-   mcp__serena__read_memory("REF_DEV_STANDARDS") # Coding standards (codebase-shared)
-   mcp__serena__read_memory("DOM_[DOMAIN]")     # Domain-specific context (feature-specific)
+   mcp__plugin_swe_serena__read_memory("REF_[TOPIC]")      # Reference patterns (codebase-shared)
+   mcp__plugin_swe_serena__read_memory("REF_DEV_STANDARDS") # Coding standards (codebase-shared)
+   mcp__plugin_swe_serena__read_memory("DOM_[DOMAIN]")     # Domain-specific context (feature-specific)
    ```
    Example: New component for Domain X -> read SYS_[SYSTEM], DOM_[DOMAIN], REF_[PATTERN]
 

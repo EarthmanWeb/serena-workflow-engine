@@ -55,8 +55,8 @@ def is_working_memory_write(tool_name, tool_input):
     if tool_name != 'Write':
         return False
     file_path = tool_input.get('file_path', '')
-    # Allow writes to WORKING_MEMORY files in .serena/memories/wm/
-    return '.serena/memories/wm/WM_' in file_path and file_path.endswith('.md')
+    # Allow writes to WORKING_MEMORY files in .serena/memories/
+    return '.serena/memories/WM_' in file_path and file_path.endswith('.md')
 
 def find_project_root(start_dir):
     """Walk up directory tree to find project root containing .serena folder."""
@@ -69,7 +69,7 @@ def find_project_root(start_dir):
 
 def get_serena_memories_dir(cwd):
     project_root = find_project_root(cwd)
-    return os.path.join(project_root, '.serena', 'memories', 'wm')
+    return os.path.join(project_root, '.serena', 'memories')
 
 def extract_session_id(transcript_path):
     """Extract session ID from transcript_path UUID."""
@@ -102,7 +102,7 @@ def check_working_memory_exists(cwd, session_id):
     """
     memories_dir = get_serena_memories_dir(cwd)
     if not os.path.exists(memories_dir):
-        return False, "No .serena/memories/wm directory found"
+        return False, "No .serena/memories directory found"
 
     # Look for WM_<session_id>_* files specifically
     if session_id:
@@ -227,7 +227,7 @@ Working Memory should have been auto-created by session start.
 If you see this message, the WM file exists but is missing required sections.
 
 STEP 1: Read the existing WM file to check its contents
-   → Read the file at .serena/memories/wm/WM_{session_id}_*.md
+   → Read the file at .serena/memories/WM_{session_id}_*.md
 
 STEP 2: Ensure these required sections exist:
    → '## Workflow Context' section header

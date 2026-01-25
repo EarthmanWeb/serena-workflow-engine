@@ -11,7 +11,7 @@ OUTPUT THE ABOVE LINE IMMEDIATELY. Do not read further until you have reported y
 **Before completing, you MUST update WM with final status.**
 
 ```
-mcp__serena__write_memory("WM_<timestamp>_<descriptor>", "<content>")
+mcp__plugin_swe_serena__write_memory("WM_<timestamp>_<descriptor>", "<content>")
 ```
 
 Include:
@@ -61,7 +61,7 @@ This session's WM should be PRESERVED and UPDATED, not replaced.
 
 3. **Transition to WF_CLASSIFY** for the new task:
    ```
-   mcp__serena__read_memory("WF_CLASSIFY")
+   mcp__plugin_swe_serena__read_memory("WF_CLASSIFY")
    ```
 
 ### WM Update Template for New Task:

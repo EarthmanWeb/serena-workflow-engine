@@ -10,8 +10,8 @@ OUTPUT THE ABOVE LINE IMMEDIATELY. Do not read further until you have reported y
 
 1. **Get feature architecture:**
    ```
-   mcp__serena__read_memory("INDEX_FEATURES")   # Get active feature
-   mcp__serena__read_memory("FEATURE_[KEY]")    # Get feature config with layers
+   mcp__plugin_swe_serena__read_memory("INDEX_FEATURES")   # Get active feature
+   mcp__plugin_swe_serena__read_memory("FEATURE_[KEY]")    # Get feature config with layers
    ```
 
 2. **Identify layers touched** by proposed change:
@@ -20,9 +20,9 @@ OUTPUT THE ABOVE LINE IMMEDIATELY. Do not read further until you have reported y
 3. **For each layer, read its documentation:**
    ```
    # Read relevant SYS_* (feature-specific) and REF_* (codebase-shared) memories
-   mcp__serena__read_memory("SYS_[SYSTEM]")     # System documentation (feature-specific)
-   mcp__serena__read_memory("REF_[TOPIC]")      # Reference patterns (codebase-shared)
-   mcp__serena__read_memory("REF_DEV_STANDARDS") # Coding standards (codebase-shared)
+   mcp__plugin_swe_serena__read_memory("SYS_[SYSTEM]")     # System documentation (feature-specific)
+   mcp__plugin_swe_serena__read_memory("REF_[TOPIC]")      # Reference patterns (codebase-shared)
+   mcp__plugin_swe_serena__read_memory("REF_DEV_STANDARDS") # Coding standards (codebase-shared)
    ```
 
 4. **Answer these questions:**

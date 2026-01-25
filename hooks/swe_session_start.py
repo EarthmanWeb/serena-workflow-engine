@@ -95,7 +95,7 @@ After /swe-init completes, restart Claude Code and return to this project.
         # Auto-create WM file using background daemon
         paths = get_paths(cwd)
         wm_filename = f"WM_{session_id}_session.md"
-        wm_filepath = os.path.join(cwd, ".serena", "memories", "wm", wm_filename)
+        wm_filepath = os.path.join(cwd, ".serena", "memories", wm_filename)
 
         # Create initial WM content
         wm_content = f"""# Working Memory: Session {session_id}

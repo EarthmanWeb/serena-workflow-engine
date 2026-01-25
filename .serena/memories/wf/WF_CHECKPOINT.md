@@ -12,12 +12,12 @@ OUTPUT THE ABOVE LINE IMMEDIATELY. Do not read further until you have reported y
 
 **MANDATORY: Read REF_WM BEFORE updating:**
 ```
-mcp__serena__read_memory("REF_WM")
+mcp__plugin_swe_serena__read_memory("REF_WM")
 ```
 
 Then update:
 ```
-mcp__serena__write_memory("WM_<timestamp>_<descriptor>", "<content>")
+mcp__plugin_swe_serena__write_memory("WM_<timestamp>_<descriptor>", "<content>")
 ```
 
 **⛔ NEVER do single-field state edits. Follow anti-pattern warnings in REF_WM.**

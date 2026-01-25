@@ -50,7 +50,7 @@ This workflow applies when:
 **BEFORE planning ANY swarm, you MUST exhaustively research what exists.**
 
 ```
-mcp__serena__read_memory("_INDEX")           # Navigation hub - find all relevant memories
+mcp__plugin_swe_serena__read_memory("_INDEX")           # Navigation hub - find all relevant memories
 ```
 
 **Then read ALL relevant memories for affected areas:**
@@ -75,7 +75,7 @@ mcp__serena__read_memory("_INDEX")           # Navigation hub - find all relevan
 
 **DRY/YAGNI ENFORCEMENT:**
 - Search for existing implementations before creating new ones
-- Use `mcp__serena__find_symbol()` to verify nothing similar exists
+- Use `mcp__plugin_swe_serena__find_symbol()` to verify nothing similar exists
 - Each swarm agent MUST be instructed to research before implementing
 
 **CRITICAL FOR SWARM AGENTS:**

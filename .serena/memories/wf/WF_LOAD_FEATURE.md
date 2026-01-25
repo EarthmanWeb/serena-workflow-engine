@@ -10,7 +10,7 @@
 
 1. **Read the feature index to discover available features:**
    ```
-   mcp__serena__read_memory("INDEX_FEATURES")
+   mcp__plugin_swe_serena__read_memory("INDEX_FEATURES")
    ```
 
 2. **From INDEX_FEATURES, identify and read relevant memories:**
@@ -22,9 +22,9 @@
 3. **Read the specific memories identified:**
    ```
    # Example - read whatever domains/systems are relevant to your task:
-   mcp__serena__read_memory("DOM_[DOMAIN]")
-   mcp__serena__read_memory("SYS_[SYSTEM]")
-   mcp__serena__read_memory("REF_[TOPIC]")
+   mcp__plugin_swe_serena__read_memory("DOM_[DOMAIN]")
+   mcp__plugin_swe_serena__read_memory("SYS_[SYSTEM]")
+   mcp__plugin_swe_serena__read_memory("REF_[TOPIC]")
    ```
 
 4. **Note key symbols and file paths** for Serena lookups.

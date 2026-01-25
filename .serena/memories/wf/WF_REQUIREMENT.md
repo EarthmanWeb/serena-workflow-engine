@@ -10,13 +10,13 @@ OUTPUT THE ABOVE LINE IMMEDIATELY. Do not read further until you have reported y
 
 1. **Check for existing domain memory:**
    ```
-   mcp__serena__list_memories()
+   mcp__plugin_swe_serena__list_memories()
    ```
    Look for DOM_* memories that relate to this requirement.
 
 2. **Read the relevant domain memory if it exists:**
    ```
-   mcp__serena__read_memory("DOM_[DOMAIN]")
+   mcp__plugin_swe_serena__read_memory("DOM_[DOMAIN]")
    ```
    If memory doesn't exist, you may need to create it.
 

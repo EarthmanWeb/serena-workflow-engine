@@ -35,14 +35,14 @@ OUTPUT THE ABOVE LINE IMMEDIATELY. Do not read further until you have reported y
 - Stop hook behavior
 
 ```
-mcp__serena__read_memory("REF_WM")
+mcp__plugin_swe_serena__read_memory("REF_WM")
 ```
 
 ### 3. Update Using Serena Tools
 
 ```python
-mcp__serena__write_memory("MEMORY_NAME", "content")
-mcp__serena__edit_memory("MEMORY_NAME", "old", "new", "literal")
+mcp__plugin_swe_serena__write_memory("MEMORY_NAME", "content")
+mcp__plugin_swe_serena__edit_memory("MEMORY_NAME", "old", "new", "literal")
 ```
 
 ### 4. Confirm to User

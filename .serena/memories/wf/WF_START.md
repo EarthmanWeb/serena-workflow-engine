@@ -35,7 +35,7 @@ OUTPUT THE ABOVE LINE IMMEDIATELY. Do not read further until you have reported y
 ### 1. Check Feature Registry
 
 ```
-mcp__serena__read_memory("INDEX_FEATURES")
+mcp__plugin_swe_serena__read_memory("INDEX_FEATURES")
 ```
 
 **If INDEX_FEATURES doesn't exist or has no registered features:**
@@ -53,14 +53,14 @@ Determine which feature(s) this conversation is about:
 
 **For single feature:**
 ```
-mcp__serena__read_memory("FEATURE_[KEY]")  # Replace [KEY] with detected feature key
+mcp__plugin_swe_serena__read_memory("FEATURE_[KEY]")  # Replace [KEY] with detected feature key
 ```
 
 **For multiple features:**
 ```
 # Load ALL relevant feature memories
-mcp__serena__read_memory("FEATURE_[KEY1]")
-mcp__serena__read_memory("FEATURE_[KEY2]")
+mcp__plugin_swe_serena__read_memory("FEATURE_[KEY1]")
+mcp__plugin_swe_serena__read_memory("FEATURE_[KEY2]")
 # ... continue for each detected feature
 ```
 
@@ -71,7 +71,7 @@ If any FEATURE_[KEY] doesn't exist -> `WF_ONBOARD`
 ### 3. Read CLAUDE_OBLIGATIONS
 
 ```
-mcp__serena__read_memory("CLAUDE_OBLIGATIONS")
+mcp__plugin_swe_serena__read_memory("CLAUDE_OBLIGATIONS")
 ```
 
 ### 4. ⚠️ MANDATORY: Create/Read WM
@@ -103,7 +103,7 @@ mcp__serena__read_memory("CLAUDE_OBLIGATIONS")
 **🛑 BLOCKING REQUIREMENT: READ REF_WM FIRST**
 
 ```
-mcp__serena__read_memory("REF_WM")
+mcp__plugin_swe_serena__read_memory("REF_WM")
 ```
 
 **DO NOT create a WM file until you have read REF_WM.**
@@ -122,7 +122,7 @@ mcp__serena__read_memory("REF_WM")
 
 ```
 # Check for existing:
-mcp__serena__list_memories()  # Look for WM_* files
+mcp__plugin_swe_serena__list_memories()  # Look for WM_* files
 
 # If continuing work, read existing file
 # If new conversation, CREATE using REF_WM template ONLY

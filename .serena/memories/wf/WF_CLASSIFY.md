@@ -41,18 +41,18 @@ OUTPUT THE ABOVE LINE IMMEDIATELY. Do not read further until you have reported y
    **For tasks involving code changes**, read dev standards and any subsections relevant to the task:
 
    ```
-   mcp__serena__read_memory("REF_DEV_STANDARDS")
+   mcp__plugin_swe_serena__read_memory("REF_DEV_STANDARDS")
    ```
 
    **Skip only if:** Pure research/investigation with no code output.
 
    **⚠️ MANDATORY RESEARCH BEFORE ROUTING:**
    ```
-   mcp__serena__read_memory("_INDEX")  # Full navigation hub
+   mcp__plugin_swe_serena__read_memory("_INDEX")  # Full navigation hub
    ```
    - Read ALL relevant: `INDEX_*`, `ARCH_*`, `SYS_*`, `DOM_*`, `REF_*`, `SPEC_*`
    - Check skills: `/research`, `/arch-review`, test skills for helpers
-   - Use `mcp__serena__find_symbol()` to verify existing implementations
+   - Use `mcp__plugin_swe_serena__find_symbol()` to verify existing implementations
    
    **NO IMAGINATION. NO INFERENCE. NO GUESSING. EVERYTHING IS DOCUMENTED.**
    - New feature spanning 2-5 files
@@ -64,11 +64,11 @@ OUTPUT THE ABOVE LINE IMMEDIATELY. Do not read further until you have reported y
 
    **⚠️ MANDATORY RESEARCH BEFORE ROUTING:**
    ```
-   mcp__serena__read_memory("_INDEX")  # Full navigation hub
+   mcp__plugin_swe_serena__read_memory("_INDEX")  # Full navigation hub
    ```
    - Read ALL relevant: `INDEX_*`, `ARCH_*`, `SYS_*`, `DOM_*`, `REF_*`, `SPEC_*`
    - Check skills: `/research`, `/arch-review`, test skills for helpers
-   - Use `mcp__serena__find_symbol()` to verify existing implementations
+   - Use `mcp__plugin_swe_serena__find_symbol()` to verify existing implementations
    
    **NO IMAGINATION. NO INFERENCE. NO GUESSING. EVERYTHING IS DOCUMENTED.**
    Use swarms when ANY of these apply:
@@ -100,12 +100,12 @@ OUTPUT THE ABOVE LINE IMMEDIATELY. Do not read further until you have reported y
    
    b. **Detect all related features:**
       ```
-      mcp__serena__read_memory("INDEX_FEATURES")   # Get feature registry
+      mcp__plugin_swe_serena__read_memory("INDEX_FEATURES")   # Get feature registry
       ```
       
       For EACH detected feature key:
       ```
-      mcp__serena__read_memory("FEATURE_[KEY]")    # Load feature config
+      mcp__plugin_swe_serena__read_memory("FEATURE_[KEY]")    # Load feature config
       ```
    
    c. **Load ALL relevant memories for EACH feature:**
@@ -144,7 +144,7 @@ OUTPUT THE ABOVE LINE IMMEDIATELY. Do not read further until you have reported y
    
    **THEN you MUST read _INDEX before proceeding:**
    ```
-   mcp__serena__read_memory("_INDEX")
+   mcp__plugin_swe_serena__read_memory("_INDEX")
    ```
    
    **This applies to:**

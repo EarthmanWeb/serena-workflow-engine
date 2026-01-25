@@ -38,7 +38,7 @@ Lightweight workflow for simple lookup/research tasks when user explicitly reque
 ### 1. Quick Context Check
 ```
 # Only if feature location unknown:
-mcp__serena__read_memory("INDEX_FEATURES")  # Optional - skip if you know the feature
+mcp__plugin_swe_serena__read_memory("INDEX_FEATURES")  # Optional - skip if you know the feature
 ```
 
 ### 2. Search & Find

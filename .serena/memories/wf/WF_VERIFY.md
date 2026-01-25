@@ -8,7 +8,7 @@ OUTPUT THE ABOVE LINE IMMEDIATELY. Do not read further until you have reported y
 
 ## 1. Re-read CLAUDE_OBLIGATIONS
 ```
-mcp__serena__read_memory("CLAUDE_OBLIGATIONS")
+mcp__plugin_swe_serena__read_memory("CLAUDE_OBLIGATIONS")
 ```
 Check for violations:
 - [ ] Used inappropriate type assertions (e.g., `as any`)?
@@ -17,8 +17,8 @@ Check for violations:
 
 ## 2. Architecture Check
 ```
-mcp__serena__read_memory("ARCH_INDEX")
-mcp__serena__read_memory("REF_DEV_STANDARDS")
+mcp__plugin_swe_serena__read_memory("ARCH_INDEX")
+mcp__plugin_swe_serena__read_memory("REF_DEV_STANDARDS")
 ```
 Verify:
 - [ ] Components follow documented layer patterns?
@@ -42,7 +42,7 @@ If any violations found, fix them before proceeding.
 
 **BEFORE updating, you MUST read:**
 ```
-mcp__serena__read_memory("REF_WM")
+mcp__plugin_swe_serena__read_memory("REF_WM")
 ```
 
 **Follow the anti-pattern warnings and multi-section update requirements in REF_WM.**

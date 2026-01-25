@@ -12,12 +12,12 @@ OUTPUT THE ABOVE LINE IMMEDIATELY. Do not read further until you have reported y
 
 **BEFORE any WM update, you MUST read:**
 ```
-mcp__serena__read_memory("REF_WM")
+mcp__plugin_swe_serena__read_memory("REF_WM")
 ```
 
 If WM is stale or doesn't reflect current task:
 ```
-mcp__serena__write_memory("WM_<timestamp>_<descriptor>", "<content>")
+mcp__plugin_swe_serena__write_memory("WM_<timestamp>_<descriptor>", "<content>")
 ```
 
 Echo to chat: `📋 Working Memory: WM_<filename>`
@@ -38,16 +38,16 @@ Echo to chat: `📋 Working Memory: WM_<filename>`
 
 If YES, you MUST first:
 ```
-mcp__serena__read_memory("ARCH_INDEX")
+mcp__plugin_swe_serena__read_memory("ARCH_INDEX")
 ```
 Then for EACH layer involved, read:
 ```
 # Feature-specific (from FEATURE_[KEY]):
-mcp__serena__read_memory("SYS_[SYSTEM]")     # For system components
+mcp__plugin_swe_serena__read_memory("SYS_[SYSTEM]")     # For system components
 
 # Codebase-shared:
-mcp__serena__read_memory("REF_[PATTERN]")    # For patterns/standards
-mcp__serena__read_memory("REF_DEV_STANDARDS") # For coding standards
+mcp__plugin_swe_serena__read_memory("REF_[PATTERN]")    # For patterns/standards
+mcp__plugin_swe_serena__read_memory("REF_DEV_STANDARDS") # For coding standards
 ```
 
 **DO NOT write code until you have read the relevant memories.**
@@ -75,9 +75,9 @@ For each layer, follow patterns from relevant SYS_* and REF_* memories.
 ## For Single-Layer Work
 
 Use Serena tools directly:
-1. `mcp__serena__find_symbol` - locate code
-2. `mcp__serena__get_symbols_overview` - file structure
-3. `Edit` / `mcp__serena__replace_symbol_body` - make changes
+1. `mcp__plugin_swe_serena__find_symbol` - locate code
+2. `mcp__plugin_swe_serena__get_symbols_overview` - file structure
+3. `Edit` / `mcp__plugin_swe_serena__replace_symbol_body` - make changes
 
 ---
 

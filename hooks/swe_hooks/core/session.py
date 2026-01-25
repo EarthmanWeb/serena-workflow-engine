@@ -40,9 +40,9 @@ def find_project_root(start_dir: str) -> str:
 
 
 def get_serena_memories_dir(cwd: str) -> str:
-    """Get the .serena/memories/wm directory path."""
+    """Get the .serena/memories directory path for WM files."""
     project_root = find_project_root(cwd)
-    return os.path.join(project_root, '.serena', 'memories', 'wm')
+    return os.path.join(project_root, '.serena', 'memories')
 
 
 def find_working_memory_for_session(cwd: str, session_id: Optional[str]) -> Optional[str]:
