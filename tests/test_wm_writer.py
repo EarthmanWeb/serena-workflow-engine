@@ -16,11 +16,13 @@ import tempfile
 import threading
 from pathlib import Path
 
-# Add parent to path for imports
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+# Add hooks directory to path for imports
+_test_dir = os.path.dirname(os.path.abspath(__file__))
+_hooks_dir = os.path.join(os.path.dirname(_test_dir), 'hooks')
+sys.path.insert(0, _hooks_dir)
 
-from wm_validator import WMFormatValidator, get_validator
-from wm_writer_daemon import (
+from swe_hooks.core.wm_validator import WMFormatValidator, get_validator
+from swe_hooks.core.wm_writer_daemon import (
     WMBackgroundWriter, WriteOperation, async_wm_write,
     get_wm_writer, shutdown_wm_writer
 )
