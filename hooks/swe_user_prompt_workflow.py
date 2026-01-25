@@ -172,7 +172,7 @@ def main():
 STOP. Your next action MUST be a tool call. Not text. A tool call.
 
 Call this tool NOW:
-mcp__plugin_swe_serena__read_memory("WF_INIT")
+mcp__plugin_swe_serena__read_memory(memory_file_name="WF_INIT")
 
 - Do NOT output any text before calling this tool
 - Do NOT explain what you're doing
@@ -227,7 +227,7 @@ If your next output contains ANY text instead of a tool call, you have failed.
 Working Memory: {wm_file or 'None'}
 
 MANDATORY: Before responding, read and follow the WF_START workflow.
-Use: mcp__serena__read_memory("WF_START")
+Use: mcp__plugin_swe_serena__read_memory(memory_file_name="WF_START")
 """
             else:
                 # In active state - continue workflow
@@ -235,7 +235,7 @@ Use: mcp__serena__read_memory("WF_START")
 Working Memory: {wm_file or 'None'}
 
 Continue with the current workflow step.
-If you need to review instructions: mcp__serena__read_memory("{current_state}")
+If you need to review instructions: mcp__plugin_swe_serena__read_memory(memory_file_name="{current_state}")
 """
         
         elif prompt_intent == 'addition':
@@ -265,7 +265,7 @@ Session: {session_id}
    - Set `Current State` to `WF_CLASSIFY`
 
 2. **Then proceed with task classification:**
-   Use: mcp__serena__read_memory("WF_CLASSIFY")
+   Use: mcp__plugin_swe_serena__read_memory(memory_file_name="WF_CLASSIFY")
 """
 
         elif prompt_intent == 'new_task':
@@ -278,7 +278,7 @@ Session: {session_id}
 Working Memory: {wm_file or 'None'}
 
 MANDATORY: Before responding, read and follow the {current_state} workflow instructions.
-Use: mcp__serena__read_memory("{current_state}")
+Use: mcp__plugin_swe_serena__read_memory(memory_file_name="{current_state}")
 """
         
         else:
@@ -289,7 +289,7 @@ Working Memory: {wm_file or 'None'}
 
 MANDATORY: Before responding, read and follow WF_START to initialize.
 Then proceed to WF_CLASSIFY for task classification.
-Use: mcp__serena__read_memory("{current_state}")
+Use: mcp__plugin_swe_serena__read_memory(memory_file_name="{current_state}")
 """
             else:
                 # Transition to WF_CLASSIFY for classification
@@ -298,7 +298,7 @@ Use: mcp__serena__read_memory("{current_state}")
 Working Memory: {wm_file or 'None'}
 
 MANDATORY: Classify this task using WF_CLASSIFY.
-Use: mcp__serena__read_memory("WF_CLASSIFY")
+Use: mcp__plugin_swe_serena__read_memory(memory_file_name="WF_CLASSIFY")
 """
         
         output = {

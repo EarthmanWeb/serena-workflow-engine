@@ -90,59 +90,19 @@ After /swe-init completes, restart Claude Code and return to this project.
             print(json.dumps(output))
             sys.exit(0)
 
-        # ALWAYS start fresh - never resume old working memory from previous sessions
-        # Each chat/conversation is a NEW session with its own working memory
-        # Auto-create WM file with placeholder descriptor
-        # Claude should rename to WM_{session_id}_{task_descriptor}.md once task is known
-
-        # Get project root from CLAUDE_PROJECT_DIR (set by Claude Code)
-        from swe_hooks.core.session import get_project_root
-        project_root = get_project_root()
-
-        wm_filename = f"WM_{session_id}_session.md"  # Placeholder - rename after task classification
-        wm_filepath = os.path.join(project_root, ".serena", "memories", wm_filename)
-
-        # Create initial WM content
-        wm_content = f"""# Working Memory: Session {session_id}
-
-## Session
-- **ID**: {session_id}
-- **Task**: (awaiting user task)
-- **Started**: {datetime.now().strftime('%Y-%m-%d %H:%M')}
-
-## Workflow Context
-**Current State**: WF_INIT
-**Previous State**: None
-
-## Task Context
-- **Feature(s)**: (to be determined)
-- **Complexity**: (to be determined)
-
-## Progress Tracking
-### Pending
-- [ ] Await user task
-
-## Requirements
-(to be determined from user request)
-
-## Implementation Notes
-(none yet)
-"""
-
-        # Write WM file synchronously (must exist before init_gate runs)
-        os.makedirs(os.path.dirname(wm_filepath), exist_ok=True)
-        with open(wm_filepath, 'w', encoding='utf-8') as f:
-            f.write(wm_content)
+        # DO NOT auto-create WM here - it should only be created during WF_START transition
+        # This ensures the init_gate can block tools until WF_INIT is read
+        # WM creation happens in WF_INIT workflow instructions
 
         context = f"""🚀 SERENA WORKFLOW ENGINE - Session {session_id}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-✅ Working Memory: {wm_filename} (auto-created)
+⏳ Working Memory: Not yet created (will be created after WF_INIT)
 Current State: WF_INIT
 
 ═══════════════════════════════════════════════════════════════════════════════
 STEP 1: Read WF_INIT workflow instructions
-   → mcp__plugin_swe_serena__read_memory("WF_INIT")
+   → mcp__plugin_swe_serena__read_memory(memory_file_name="WF_INIT")
 
 STEP 2: Follow WF_INIT to classify and execute user's task
 ═══════════════════════════════════════════════════════════════════════════════

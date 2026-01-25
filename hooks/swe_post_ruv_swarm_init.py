@@ -41,7 +41,7 @@ def main():
 RUV-SWARM INITIALIZED - FOLLOW PROPER PATTERN
 
 Your NEXT ACTION must be to read the swarm coordination reference:
-→ mcp__plugin_swe_serena__read_memory("REF_SWARM_PATTERNS")
+→ mcp__plugin_swe_serena__read_memory(memory_file_name="REF_SWARM_PATTERNS")
 
 This contains MANDATORY steps for proper swarm coordination:
 1. daa_init (enable learning/coordination)

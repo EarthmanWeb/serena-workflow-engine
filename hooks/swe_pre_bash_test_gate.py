@@ -130,7 +130,7 @@ Before running tests, you MUST read FEATURE_TESTS to understand:
 
 REQUIRED ACTION:
 ```
-mcp__serena__read_memory("FEATURE_TESTS")
+mcp__plugin_swe_serena__read_memory(memory_file_name="FEATURE_TESTS")
 ```
 
 After reading FEATURE_TESTS, update your WM with:

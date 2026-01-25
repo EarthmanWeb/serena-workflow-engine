@@ -215,44 +215,28 @@ def main():
             print(json.dumps({}))
             sys.exit(0)
 
-        # NOT initialized - BLOCK the tool call with specific diagnostic
-        # NOTE: WM should have been auto-created by session_start hook
-        # DEBUG: Show where we're looking
-        memories_dir = get_serena_memories_dir()
-        project_root = get_project_root()
+        # NOT initialized - BLOCK the tool call and redirect to WF_INIT
         output = {
             "decision": "block",
-            "reason": f"""🛑🛑🛑 CRITICAL: WORKFLOW NOT INITIALIZED - ALL TOOLS BLOCKED 🛑🛑🛑
+            "reason": f"""🛑 BLOCKED: No Working Memory for session {session_id or 'unknown'}
 
-Session: {session_id or 'unknown'}
+═══════════════════════════════════════════════════════════════════════════════
+                         ⚠️  WORKFLOW NOT INITIALIZED  ⚠️
+═══════════════════════════════════════════════════════════════════════════════
+
+You must complete the WF_INIT workflow before using other tools.
+
+MANDATORY ACTION - Call this tool NOW:
+   → mcp__plugin_swe_serena__read_memory(memory_file_name="WF_INIT")
+
+Then follow WF_INIT instructions to:
+1. Read WF_START (which creates the Working Memory)
+2. Proceed with task classification
+
 Diagnostic: {diagnostic}
-DEBUG - cwd: {cwd}
-DEBUG - project_root: {project_root}
-DEBUG - memories_dir: {memories_dir}
 
 ═══════════════════════════════════════════════════════════════════════════════
-                    ⚠️  WORKING MEMORY VALIDATION FAILED  ⚠️
-═══════════════════════════════════════════════════════════════════════════════
-
-Working Memory should have been auto-created by session start.
-If you see this message, the WM file exists but is missing required sections.
-
-STEP 1: Read the existing WM file to check its contents
-   → Read the file at .serena/memories/WM_{session_id}_*.md
-
-STEP 2: Ensure these required sections exist:
-   → '## Workflow Context' section header
-   → '**Current State**:' field with valid WF_* state
-
-STEP 3: If WM is corrupted, read REF_WM template and recreate:
-   → mcp__plugin_swe_serena__read_memory("REF_WM")
-
-If "No active project" error:
-   → mcp__plugin_swe_serena__list_projects() to see available projects
-   → mcp__plugin_swe_serena__activate_project("project_name") to activate
-
-═══════════════════════════════════════════════════════════════════════════════
-              FIX WORKING MEMORY BEFORE PROCEEDING
+              COMPLETE WF_INIT BEFORE PROCEEDING
 ═══════════════════════════════════════════════════════════════════════════════"""
         }
         print(json.dumps(output))

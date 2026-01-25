@@ -19,8 +19,9 @@ try:
     from swe_hooks.core.output import HookOutput, output_empty, output_status
     from swe_hooks.core.input import read_stdin_safe, get_input_field
     from swe_hooks.core.state_manager import StateManager, STATE_ICONS
-    from swe_hooks.core.session import extract_session_id
+    from swe_hooks.core.session import extract_session_id, get_project_root
     from swe_hooks.core.config import append_transition_to_wm
+    from datetime import datetime
 except ImportError as e:
     output = {"hookSpecificOutput": {"hookEventName": "PostToolUse", "additionalContext": f"SWE import error: {e}"}}
     print(json.dumps(output), file=sys.stdout)
@@ -51,6 +52,45 @@ def main():
 
         # Only transition if state is different
         if current != memory_name:
+            # Create WM file when transitioning TO WF_START (end of WF_INIT)
+            if memory_name == 'WF_START' and not state_mgr.wm_filepath:
+                project_root = get_project_root()
+                wm_filename = f"WM_{session_id}_session.md"
+                wm_filepath = os.path.join(project_root, ".serena", "memories", wm_filename)
+
+                wm_content = f"""# Working Memory: Session {session_id}
+
+## Session
+- **ID**: {session_id}
+- **Task**: (awaiting classification)
+- **Started**: {datetime.now().strftime('%Y-%m-%d %H:%M')}
+
+## Workflow Context
+**Current State**: WF_START
+**Previous State**: WF_INIT
+
+## Task Context
+- **Feature(s)**: (to be determined)
+- **Complexity**: (to be determined)
+
+## Progress Tracking
+### Pending
+- [ ] Classify task
+
+## Requirements
+(to be determined from user request)
+
+## Implementation Notes
+(none yet)
+"""
+                os.makedirs(os.path.dirname(wm_filepath), exist_ok=True)
+                with open(wm_filepath, 'w', encoding='utf-8') as f:
+                    f.write(wm_content)
+
+                # Update state manager with new WM
+                state_mgr.set_working_memory(wm_filename.replace('.md', ''))
+                output.add_message(f"✅ Working Memory created: {wm_filename}")
+
             success, msg = state_mgr.transition_to(memory_name)
             if success:
                 output.add_message(f"{icon} ON STEP: {memory_name}")
