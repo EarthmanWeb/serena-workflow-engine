@@ -1,0 +1,18 @@
+#!/bin/bash
+# Git pre-commit hook for SWE plugin
+# Automatically bumps version on each commit
+
+# Get the plugin root (where the submodule actually lives)
+PLUGIN_ROOT="$(git rev-parse --show-toplevel)"
+BUMP_SCRIPT="$PLUGIN_ROOT/scripts/bump-version.sh"
+
+if [[ ! -f "$BUMP_SCRIPT" ]]; then
+    echo "Warning: bump-version.sh not found at $BUMP_SCRIPT"
+    exit 0
+fi
+
+# Run the bump script
+"$BUMP_SCRIPT"
+
+# Stage the bumped files
+git add "$PLUGIN_ROOT/.claude-plugin/plugin.json" "$PLUGIN_ROOT/.claude-plugin/marketplace.json"

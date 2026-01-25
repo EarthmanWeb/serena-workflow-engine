@@ -1,10 +1,19 @@
 {
   "name": "swe",
-  "version": "1.0.1",
-  "description": "Enforces WF_* state machine workflow with Serena memory persistence, RLVR learning, and auto plan mode switching",
+  "version": "1.0.4",
+  "description": "21-state workflow engine with Serena memory persistence, RLVR learning, and auto plan mode switching",
   "author": {
-    "name": "Claude Workflow Starter",
-    "email": "local@localhost"
+    "name": "EarthmanWeb",
+    "email": "claude-swe@earthman.ca"
   },
-  "license": "MIT"
+  "homepage": "https://github.com/EarthmanWeb/serena-workflow-engine",
+  "repository": "https://github.com/EarthmanWeb/serena-workflow-engine",
+  "license": "MIT",
+  "keywords": [
+    "workflow",
+    "serena",
+    "state-machine",
+    "memory",
+    "hooks"
+  ]
 }

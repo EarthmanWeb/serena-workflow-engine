@@ -72,6 +72,9 @@ For contributing to or modifying the plugin itself.
 cd your-project
 git submodule add https://github.com/EarthmanWeb/serena-workflow-engine.git .claude/plugins/serena-workflow-engine
 chmod +x .claude/plugins/serena-workflow-engine/hooks/*.py
+
+# Install git hooks for auto version bumping
+.claude/plugins/serena-workflow-engine/scripts/install-hooks.sh
 ```
 
 ### 2. Add the marketplace and install
@@ -109,6 +112,22 @@ This writes the following to `.claude/settings.local.json`:
 
 **Note:** Directory path is relative to the `.claude/` folder.
 
+### 3. Install git hooks (auto version bump)
+
+The plugin includes git hooks that auto-increment the version on each commit:
+
+```bash
+cd .claude/plugins/serena-workflow-engine
+./scripts/install-hooks.sh
+```
+
+This installs a pre-commit hook that bumps the patch version in `plugin.json` and `marketplace.json` automatically. Combined with marketplace auto-update, users get updates on next Claude Code start.
+
+**Manual version bump** (if hooks not installed):
+```bash
+./scripts/bump-version.sh
+```
+
 ### 4. Updating the submodule
 
 ```bash
@@ -120,7 +139,21 @@ git pull origin main
 git submodule update --remote .claude/plugins/serena-workflow-engine
 ```
 
-### 5. Switching between git and local
+### 5. Enable marketplace auto-update (for users)
+
+Users can enable auto-update to receive changes automatically:
+
+1. Run `/plugin` in Claude Code
+2. Go to **Marketplaces** tab
+3. Select **EarthmanWeb**
+4. Choose **Enable auto-update**
+
+Or set environment variable:
+```bash
+export FORCE_AUTOUPDATE_PLUGINS=true
+```
+
+### 6. Switching between git and local
 
 To switch from git source to local (or vice versa), update `extraKnownMarketplaces` in settings and restart Claude Code. Only one source can be active at a time per marketplace name.
 
