@@ -4,15 +4,30 @@ Multi-agent swarm patterns for parallel processing and complex task coordination
 
 ---
 
+## ⚠️ CRITICAL: ACTUAL MCP TOOL NAMES (Verified 2026-01-26)
+
+**The MCP tool names follow this pattern:**
+```
+mcp__plugin_claude-flow_<system>__<tool_name>
+```
+
+| System | MCP Prefix | Example |
+|--------|------------|---------|
+| **Claude-Flow** | `mcp__plugin_claude-flow_claude-flow__` | `mcp__plugin_claude-flow_claude-flow__swarm_init` |
+| **RUV-Swarm** | `mcp__plugin_claude-flow_ruv-swarm__` | `mcp__plugin_claude-flow_ruv-swarm__agent_spawn` |
+| **Hive-Mind** | `mcp__plugin_claude-flow_claude-flow__hive-mind_` | `mcp__plugin_claude-flow_claude-flow__hive-mind_init` |
+
+---
+
 ## ⚠️ CRITICAL: EXPLICIT TOOL SELECTION RULE
 
 **When user explicitly requests a specific swarm system, USE THOSE EXACT MCP TOOLS.**
 
 | User Says | YOU MUST USE | NOT |
 |-----------|--------------|-----|
-| "launch ruv-swarm" / "ruv swarm" | `mcp__plugin_swe_ruv-swarm__*` tools | Task/Explore agents |
-| "launch claude-flow swarm" | `mcp__claude-flow__*` tools | Task/Explore agents |
-| "use hive-mind" | `mcp__claude-flow__hive-mind_*` tools | Task/Explore agents |
+| "launch ruv-swarm" / "ruv swarm" | `mcp__plugin_claude-flow_ruv-swarm__*` tools | Task/Explore agents |
+| "launch claude-flow swarm" | `mcp__plugin_claude-flow_claude-flow__*` tools | Task/Explore agents |
+| "use hive-mind" | `mcp__plugin_claude-flow_claude-flow__hive-mind_*` tools | Task/Explore agents |
 
 **FAILURE MODE:** Substituting Task/Explore agents for MCP swarm tools breaks coordination model.
 
@@ -25,7 +40,7 @@ Multi-agent swarm patterns for parallel processing and complex task coordination
 These commands modify repository files. Use MCP tools directly instead:
 ```javascript
 // ✅ CORRECT: MCP tool (in-memory coordination only)
-mcp__claude-flow__swarm_init({ topology: "mesh" })
+mcp__plugin_claude-flow_claude-flow__swarm_init({ topology: "mesh" })
 
 // ❌ WRONG: CLI init (modifies repo files)
 npx claude-flow init
@@ -36,43 +51,37 @@ npx claude-flow init
 ## Available Swarm Systems
 
 ### 1. Claude-Flow (Primary - Recommended)
-**MCP Prefix:** `mcp__claude-flow__*`
+**MCP Prefix:** `mcp__plugin_claude-flow_claude-flow__`
 
-**⚠️ V3 API - Tool namespaces use `/` separator (e.g., `swarm/init`, `tasks/create`)**
+**Verified Tools:**
+| Tool | Full Name |
+|------|-----------|
+| `swarm_init` | `mcp__plugin_claude-flow_claude-flow__swarm_init` |
+| `swarm_status` | `mcp__plugin_claude-flow_claude-flow__swarm_status` |
+| `swarm_shutdown` | `mcp__plugin_claude-flow_claude-flow__swarm_shutdown` |
+| `swarm_health` | `mcp__plugin_claude-flow_claude-flow__swarm_health` |
+| `agent_spawn` | `mcp__plugin_claude-flow_claude-flow__agent_spawn` |
+| `agent_list` | `mcp__plugin_claude-flow_claude-flow__agent_list` |
+| `memory_store` | `mcp__plugin_claude-flow_claude-flow__memory_store` |
+| `memory_retrieve` | `mcp__plugin_claude-flow_claude-flow__memory_retrieve` |
 
 Core workflow:
-```
-1. mcp__claude-flow__swarm_init({ topology: "hierarchical-mesh"|"mesh"|"hierarchical", maxAgents: 15 })
-2. mcp__claude-flow__agent_spawn({ agentType: "researcher"|"coder"|"analyst"|"tester", agentId: "..." })
-3. mcp__claude-flow__tasks_create({ type: "analyze", description: "...", assignToAgent: "agent-id", priority: 8 })
-4. mcp__claude-flow__memory_store({ key: "swarm:state", value: { ... } })
-```
-
-**V3 Key Tools:**
-
-| Category | Tools |
-|----------|-------|
-| **Swarm** | `swarm/init`, `swarm/status`, `swarm/scale` |
-| **Agents** | `agent/spawn`, `agent/list`, `agent/status`, `agent/terminate` |
-| **Tasks** | `tasks/create`, `tasks/list`, `tasks/status`, `tasks/assign`, `tasks/update`, `tasks/cancel`, `tasks/dependencies`, `tasks/results` |
-| **Memory** | `memory/store`, `memory/retrieve`, `memory/search`, `memory/list` |
-| **Federation** | `broadcast`, `propose`, `vote` (for consensus coordination) |
-| **Workflow** | `workflow/create`, `workflow/execute`, `workflow/status` |
-
-**⚠️ NO `task_orchestrate` in V3** - Use `tasks/create` with `assignToAgent` or `assignToAgentType` params. For parallel execution, create multiple tasks and use `tasks/dependencies` to manage execution order.
-
-**Orchestration Pattern in V3:**
 ```javascript
-// Create tasks and assign to agents (parallel by default)
-mcp__claude-flow__tasks_create({ type: "research", description: "...", assignToAgent: "agent-1" })
-mcp__claude-flow__tasks_create({ type: "research", description: "...", assignToAgent: "agent-2" })
+// 1. Initialize swarm
+mcp__plugin_claude-flow_claude-flow__swarm_init({ topology: "mesh", maxAgents: 15 })
 
-// For sequential, add dependencies
-mcp__claude-flow__tasks_dependencies({ taskId: "task-2", action: "add", dependencies: ["task-1"] })
+// 2. Spawn agents
+mcp__plugin_claude-flow_claude-flow__agent_spawn({ agentType: "researcher", agentId: "agent-1" })
+
+// 3. Check status
+mcp__plugin_claude-flow_claude-flow__swarm_status({ includeAgents: true })
+
+// 4. Store coordination state
+mcp__plugin_claude-flow_claude-flow__memory_store({ key: "swarm:state", value: { ... } })
 ```
 
 ### 2. RUV-Swarm
-**MCP Prefix:** `mcp__ruv-swarm__*`
+**MCP Prefix:** `mcp__plugin_claude-flow_ruv-swarm__`
 
 **⚠️ CRITICAL: RUV-Swarm has TWO SEPARATE agent systems that DO NOT mix:**
 
@@ -86,64 +95,98 @@ mcp__claude-flow__tasks_dependencies({ taskId: "task-2", action: "add", dependen
 daa_agent_create → task_orchestrate  // DAA agents NOT in swarm pool!
 ```
 
+**Verified Swarm Tools:**
+| Tool | Full Name |
+|------|-----------|
+| `swarm_init` | `mcp__plugin_claude-flow_ruv-swarm__swarm_init` |
+| `agent_spawn` | `mcp__plugin_claude-flow_ruv-swarm__agent_spawn` |
+| `agent_list` | `mcp__plugin_claude-flow_ruv-swarm__agent_list` |
+| `task_orchestrate` | `mcp__plugin_claude-flow_ruv-swarm__task_orchestrate` |
+| `task_status` | `mcp__plugin_claude-flow_ruv-swarm__task_status` |
+| `task_results` | `mcp__plugin_claude-flow_ruv-swarm__task_results` |
+
+**Verified DAA Tools:**
+| Tool | Full Name |
+|------|-----------|
+| `daa_init` | `mcp__plugin_claude-flow_ruv-swarm__daa_init` |
+| `daa_agent_create` | `mcp__plugin_claude-flow_ruv-swarm__daa_agent_create` |
+| `daa_agent_adapt` | `mcp__plugin_claude-flow_ruv-swarm__daa_agent_adapt` |
+| `daa_workflow_create` | `mcp__plugin_claude-flow_ruv-swarm__daa_workflow_create` |
+| `daa_learning_status` | `mcp__plugin_claude-flow_ruv-swarm__daa_learning_status` |
+
 **✅ Pattern A: Task Orchestration (parallel tasks)**
-```
-1. mcp__ruv-swarm__swarm_init({ topology: "mesh", strategy: "balanced" })
-2. mcp__ruv-swarm__agent_spawn({ type: "researcher", name: "r1" })  // Creates SWARM agent
-3. mcp__ruv-swarm__agent_spawn({ type: "coder", name: "c1" })       // Creates SWARM agent
-4. mcp__ruv-swarm__task_orchestrate({ task: "...", strategy: "parallel" })  // Uses SWARM agents
-5. mcp__ruv-swarm__task_results({ taskId: "...", format: "detailed" })
+```javascript
+// 1. Initialize swarm
+mcp__plugin_claude-flow_ruv-swarm__swarm_init({ topology: "mesh", strategy: "balanced", maxAgents: 5 })
+
+// 2. Spawn swarm agents (REQUIRED before task_orchestrate)
+mcp__plugin_claude-flow_ruv-swarm__agent_spawn({ type: "researcher", name: "r1" })
+mcp__plugin_claude-flow_ruv-swarm__agent_spawn({ type: "coder", name: "c1" })
+mcp__plugin_claude-flow_ruv-swarm__agent_spawn({ type: "analyst", name: "a1" })
+
+// 3. Orchestrate task across agents
+mcp__plugin_claude-flow_ruv-swarm__task_orchestrate({ task: "...", strategy: "parallel", priority: "high" })
+
+// 4. Check status and get results
+mcp__plugin_claude-flow_ruv-swarm__task_status({ detailed: true })
+mcp__plugin_claude-flow_ruv-swarm__task_results({ taskId: "task-xxx", format: "detailed" })
 ```
 
 **✅ Pattern B: DAA Workflow (autonomous learning)**
-```
-1. mcp__ruv-swarm__daa_init({ enableLearning: true, enableCoordination: true })
-2. mcp__ruv-swarm__daa_agent_create({ id: "daa-1", cognitivePattern: "adaptive" })  // Creates DAA agent
-3. mcp__ruv-swarm__daa_agent_create({ id: "daa-2", cognitivePattern: "critical" })  // Creates DAA agent
-4. mcp__ruv-swarm__daa_workflow_create({ id: "wf-1", name: "...", strategy: "adaptive" })
-5. mcp__ruv-swarm__daa_workflow_execute({ workflowId: "wf-1", agentIds: ["daa-1", "daa-2"] })  // Uses DAA agents
-6. mcp__ruv-swarm__daa_knowledge_share({ sourceAgentId: "daa-1", targetAgentIds: ["daa-2"] })
-```
+```javascript
+// 1. Initialize DAA
+mcp__plugin_claude-flow_ruv-swarm__daa_init({ enableLearning: true, enableCoordination: true })
 
-**Swarm tools (for task_orchestrate):**
-- `swarm_init` - Initialize swarm infrastructure
-- `agent_spawn` - Create swarm agent (type: researcher|coder|analyst|optimizer|coordinator)
-- `agent_list` - List swarm agents
-- `task_orchestrate` - Execute task across swarm agents
-- `task_status` - Check task progress
-- `task_results` - Get task results
+// 2. Create DAA agents (NOT swarm agents!)
+mcp__plugin_claude-flow_ruv-swarm__daa_agent_create({ id: "daa-1", cognitivePattern: "adaptive", enableMemory: true })
+mcp__plugin_claude-flow_ruv-swarm__daa_agent_create({ id: "daa-2", cognitivePattern: "critical", enableMemory: true })
 
-**DAA tools (for autonomous learning):**
-- `daa_init` - Enable autonomous learning
-- `daa_agent_create` - Create DAA agent with cognitive pattern
-- `daa_workflow_create` - Create DAA workflow
-- `daa_workflow_execute` - Execute DAA workflow with DAA agents
-- `daa_knowledge_share` - Share patterns between DAA agents
-- `daa_agent_adapt` - Trigger adaptation from feedback
-- `daa_learning_status` - Check DAA agents learning progress
-- `neural_train` - Train coordination patterns
+// 3. Create and execute DAA workflow
+mcp__plugin_claude-flow_ruv-swarm__daa_workflow_create({ id: "wf-1", name: "Analysis", strategy: "adaptive" })
+
+// 4. Adapt agents based on feedback
+mcp__plugin_claude-flow_ruv-swarm__daa_agent_adapt({ agentId: "daa-1", feedback: "...", performanceScore: 0.9 })
+
+// 5. Check learning status
+mcp__plugin_claude-flow_ruv-swarm__daa_learning_status({ detailed: true })
+```
 
 ### 3. Hive-Mind (Collective Intelligence & Consensus)
-**MCP Prefix:** `mcp__claude-flow__hive-mind_*`
+**MCP Prefix:** `mcp__plugin_claude-flow_claude-flow__hive-mind_`
 
-For tasks requiring collective decision-making or distributed memory:
-```
-1. mcp__claude-flow__hive-mind_init({ topology: "mesh" })
-2. mcp__claude-flow__hive-mind_spawn({ count: 3, role: "worker", agentType: "worker" })
-3. mcp__claude-flow__hive-mind_consensus({ action: "propose", type: "decision", value: "..." })
-4. mcp__claude-flow__hive-mind_memory({ action: "set", key: "...", value: "..." })
-5. mcp__claude-flow__hive-mind_status({ verbose: true })
-6. mcp__claude-flow__hive-mind_broadcast({ message: "...", priority: "normal" })
-```
+**Verified Hive-Mind Tools:**
+| Tool | Full Name |
+|------|-----------|
+| `hive-mind_init` | `mcp__plugin_claude-flow_claude-flow__hive-mind_init` |
+| `hive-mind_spawn` | `mcp__plugin_claude-flow_claude-flow__hive-mind_spawn` |
+| `hive-mind_consensus` | `mcp__plugin_claude-flow_claude-flow__hive-mind_consensus` |
+| `hive-mind_memory` | `mcp__plugin_claude-flow_claude-flow__hive-mind_memory` |
+| `hive-mind_status` | `mcp__plugin_claude-flow_claude-flow__hive-mind_status` |
+| `hive-mind_broadcast` | `mcp__plugin_claude-flow_claude-flow__hive-mind_broadcast` |
 
-Hive-Mind MCP tools:
-- `hive-mind_init` - Initialize the collective (topology: mesh|hierarchical|ring|star)
-- `hive-mind_spawn` - Spawn and auto-join workers (count, role, agentType)
-- `hive-mind_join` - Join existing agent to hive
-- `hive-mind_consensus` - Propose/vote on collective decisions
-- `hive-mind_memory` - Distributed shared memory (get/set/delete/list)
-- `hive-mind_status` - Monitor hive health
-- `hive-mind_broadcast` - Send message to all workers
+**Complete Hive-Mind Pattern:**
+```javascript
+// 1. Initialize hive with topology and queen
+mcp__plugin_claude-flow_claude-flow__hive-mind_init({ topology: "mesh", queenId: "queen-coordinator" })
+
+// 2. Spawn and auto-join workers
+mcp__plugin_claude-flow_claude-flow__hive-mind_spawn({ count: 3, role: "worker", agentType: "analyst" })
+
+// 3. Set shared memory
+mcp__plugin_claude-flow_claude-flow__hive-mind_memory({ action: "set", key: "config", value: {...} })
+
+// 4. Propose consensus decision
+mcp__plugin_claude-flow_claude-flow__hive-mind_consensus({ action: "propose", type: "decision", value: {...} })
+
+// 5. Broadcast to all workers
+mcp__plugin_claude-flow_claude-flow__hive-mind_broadcast({ message: "...", priority: "high", fromId: "queen-coordinator" })
+
+// 6. Get hive status
+mcp__plugin_claude-flow_claude-flow__hive-mind_status({ verbose: true })
+
+// 7. Retrieve shared memory
+mcp__plugin_claude-flow_claude-flow__hive-mind_memory({ action: "get", key: "config" })
+```
 
 **Best for:**
 - Decisions requiring consensus across multiple perspectives
@@ -187,113 +230,6 @@ Hive-Mind MCP tools:
 
 ---
 
-## Workflow Patterns
-
-### Pattern: Swarm Task Orchestration (RUV-Swarm or Claude-Flow)
-
-```
-Phase 1: ESTABLISH
-  - swarm_init (choose topology: mesh/hierarchical/star/ring)
-
-Phase 2: SPAWN (parallel - all in ONE message)
-  - Multiple agent_spawn calls (creates SWARM agents)
-  - Store agent IDs to memory
-
-Phase 3: ORCHESTRATE
-  - task_orchestrate (requires agents from Phase 2!)
-  - Launch Task tool agents for actual file work (run_in_background: true)
-
-Phase 4: MONITOR
-  - swarm_status / agent_list (non-blocking)
-  - Update memory with progress
-
-Phase 5: COLLECT
-  - task_results / TaskOutput with block: true
-
-Phase 6: SYNTHESIZE
-  - Combine results
-  - Update Serena memory with findings
-```
-
-### Pattern: DAA Autonomous Learning (RUV-Swarm only)
-
-```
-Phase 1: ESTABLISH
-  - daa_init (enables learning/coordination)
-
-Phase 2: CREATE (parallel - all in ONE message)
-  - Multiple daa_agent_create calls (creates DAA agents - NOT swarm agents!)
-  - Choose cognitive patterns: adaptive/critical/convergent/divergent/lateral/systems
-
-Phase 3: WORKFLOW
-  - daa_workflow_create (define workflow steps)
-  - daa_workflow_execute (run with DAA agents)
-
-Phase 4: LEARN
-  - daa_knowledge_share (share patterns between agents)
-  - daa_agent_adapt (apply feedback)
-  - daa_learning_status (check progress)
-
-Phase 5: SYNTHESIZE
-  - daa_performance_metrics (review effectiveness)
-  - Update Serena memory with learnings
-```
-
----
-
-## Example: Multi-File Codebase Analysis (V3 API)
-
-```javascript
-// Step 1: Init swarm
-mcp__claude-flow__swarm_init({ topology: "hierarchical-mesh", maxAgents: 15 })
-
-// Step 2: Spawn all agents in ONE message
-mcp__claude-flow__agent_spawn({ agentType: "analyst", agentId: "code-reader-1" })
-mcp__claude-flow__agent_spawn({ agentType: "analyst", agentId: "code-reader-2" })
-mcp__claude-flow__agent_spawn({ agentType: "researcher", agentId: "pattern-finder" })
-
-// Step 3: Create tasks and assign to agents (V3 uses tasks/create, NOT task_orchestrate)
-mcp__claude-flow__tasks_create({
-  type: "analyze",
-  description: "Read module A files",
-  assignToAgent: "code-reader-1",
-  priority: 8
-})
-mcp__claude-flow__tasks_create({
-  type: "analyze",
-  description: "Read module B files",
-  assignToAgent: "code-reader-2",
-  priority: 8
-})
-mcp__claude-flow__tasks_create({
-  type: "research",
-  description: "Find patterns across modules",
-  assignToAgent: "pattern-finder",
-  priority: 7,
-  dependencies: ["task-1", "task-2"]  // Wait for readers to finish
-})
-
-// Step 4: Launch ACTUAL work agents (Claude Task tool)
-Task({ subagent_type: "Explore", run_in_background: true, prompt: "Read module A files..." })
-Task({ subagent_type: "Explore", run_in_background: true, prompt: "Read module B files..." })
-Task({ subagent_type: "Explore", run_in_background: true, prompt: "Find patterns..." })
-
-// Step 5: Store coordination state
-mcp__claude-flow__memory_store({ key: "analysis:status", value: { status: "tasks_created", taskCount: 3 } })
-
-// Step 6: Monitor (non-blocking)
-mcp__claude-flow__swarm_status({ includeAgents: true })
-mcp__claude-flow__tasks_list({ status: "running" })
-
-// Step 7: Collect results
-mcp__claude-flow__tasks_results({ taskId: "task-3", format: "detailed" })
-TaskOutput({ task_id: "...", block: true })
-
-// Step 8: Synthesize and update memory
-```
-
----
-
 ## Topology Guide
 
 | Topology | Structure | Best For |
@@ -307,14 +243,24 @@ TaskOutput({ task_id: "...", block: true })
 
 ## Agent Types
 
+### RUV-Swarm Agent Types (for `agent_spawn`)
 | Type | Capabilities | Use For |
 |------|--------------|---------|
 | researcher | Information gathering, pattern detection | Codebase exploration |
 | analyst | Code analysis, data processing | Understanding structure |
 | coder | Code generation, implementation | Writing changes |
-| tester | Validation, verification | Testing changes |
-| coordinator | Orchestration, synthesis | Managing complex flows |
 | optimizer | Performance analysis | Optimization tasks |
+| coordinator | Orchestration, synthesis | Managing complex flows |
+
+### DAA Cognitive Patterns (for `daa_agent_create`)
+| Pattern | Thinking Style | Use For |
+|---------|---------------|---------|
+| adaptive | Flexible, learns from feedback | General learning tasks |
+| critical | Analytical, evaluative | Code review, quality analysis |
+| convergent | Focused, solution-oriented | Problem-solving |
+| divergent | Creative, exploratory | Brainstorming, discovery |
+| lateral | Unconventional connections | Innovation |
+| systems | Holistic, interconnected | Architecture analysis |
 
 ---
 
@@ -325,4 +271,4 @@ TaskOutput({ task_id: "...", block: true })
 - **Use hierarchical for execution**: When changes must be coordinated
 - **Monitor memory usage**: Swarm state consumes tokens
 - **Persist across sessions**: Store agent IDs and task state to Serena memory
-
+- **Use ToolSearch first**: Load MCP tools with `ToolSearch` before calling them

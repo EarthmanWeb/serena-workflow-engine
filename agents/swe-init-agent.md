@@ -18,7 +18,7 @@ Autonomous agent for initializing the swe plugin. Completes all setup tasks and 
 1. **Environment Detection** - Check project state, git, existing directories
 2. **MCP Verification** - Test serena, claude-flow, ruv-swarm respond
 3. **Serena Onboarding** - Run one-time Serena setup
-4. **Claude-Flow Init** - Initialize with CLAUDE.md protection
+4. **Claude-Flow Verification** - Verify plugin is installed
 5. **Settings Migration** - Move claudeFlow config to settings.local.json
 6. **Plugin Verification** - Verify SWE plugin is enabled
 7. **Memory Installation** - Copy instruction files to .serena/memories/
@@ -36,7 +36,7 @@ Task({
 
 ## TASKS
 
-Execute ALL tasks (1-9, including 4b) in order, then verify.
+Execute ALL tasks (1-10) in order, then verify.
 
 ### Task 1: Detect Environment
 Report:
@@ -61,19 +61,30 @@ if (!status.performed) {
 }
 ```
 
-### Task 4: Initialize Claude-Flow
+### Task 4: Verify Claude-Flow Plugin Installation
+**Check if the claude-flow plugin is installed. If not, guide user to install it.**
+
 ```bash
-# Backup existing CLAUDE.md
-[ -f "CLAUDE.md" ] && cp CLAUDE.md CLAUDE.md.backup
-
-# Run claude-flow init
-npx claude-flow@alpha init
-
-# Restore original CLAUDE.md if backup exists
-[ -f "CLAUDE.md.backup" ] && mv CLAUDE.md CLAUDE_FLOW.md && mv CLAUDE.md.backup CLAUDE.md
+# Check if claude-flow plugin is installed
+if claude plugin list 2>/dev/null | grep -q "claude-flow@claude-flow-plugin"; then
+  echo "✅ Claude-Flow plugin is installed"
+else
+  echo "⚠️ Claude-Flow plugin NOT installed"
+  echo ""
+  echo "The SWE plugin works best with Claude-Flow. Please install it:"
+  echo ""
+  echo "  claude plugin marketplace add https://github.com/EarthmanWeb/claude-flow-plugin.git#plugin"
+  echo "  claude plugin install claude-flow@claude-flow-plugin --scope local"
+  echo ""
+  echo "Then restart Claude Code and run /swe-init again."
+  echo ""
+  echo "See the README for full installation instructions:"
+  echo "  .claude/plugins/serena-workflow-engine/README.md"
+  exit 1
+fi
 ```
 
-### Task 4b: Review CLAUDE.md for Conflicting Workflow Commands
+### Task 5: Review CLAUDE.md for Conflicting Workflow Commands
 **Check CLAUDE.md for any workflow/session start instructions that conflict with SWE.**
 
 Read CLAUDE.md and look for:
@@ -98,7 +109,7 @@ fi
 
 If conflicts found, edit CLAUDE.md to remove the conflicting sections. SWE's SessionStart hook handles all workflow initialization.
 
-### Task 5: Migrate Claude-Flow Settings to settings.local.json
+### Task 6: Migrate Claude-Flow Settings to settings.local.json
 **CRITICAL: Move claude-flow config from settings.json to settings.local.json**
 
 ```bash
@@ -123,7 +134,7 @@ jq 'del(.statusLine, .claudeFlow)' "$SETTINGS" > "${SETTINGS}.tmp" && mv "${SETT
 echo "Migrated claudeFlow settings to settings.local.json"
 ```
 
-### Task 6: Verify SWE Plugin is Enabled
+### Task 7: Verify SWE Plugin is Enabled
 **SWE hooks load directly from the plugin folder - no copying needed.**
 
 The plugin's `hooks/hooks.json` uses `${CLAUDE_PLUGIN_ROOT}` which is automatically resolved by Claude Code's plugin system.
@@ -149,7 +160,7 @@ else
 fi
 ```
 
-### Task 7: Install Instruction Files to Memories
+### Task 8: Install Instruction Files to Memories
 ```bash
 mkdir -p .serena/memories .serena/memories/archived
 
@@ -165,7 +176,7 @@ echo "Installed instruction files"
 ls .serena/memories/{WF_*,CLAUDE_OBLIGATIONS,DOM_SWE_*,FEATURE_SWE,REF_SWE_*}.md 2>/dev/null | wc -l
 ```
 
-### Task 8: Create and Customize Core Memories
+### Task 9: Create and Customize Core Memories
 Check for and create if missing:
 - `.serena/memories/_INDEX.md` (from memories/_INDEX.md)
 - `.serena/memories/INDEX_FEATURES.md`
@@ -188,7 +199,7 @@ Then edit `.serena/memories/_INDEX.md`:
 - Replace `[FEATURE_X](FEATURE_X) - Description` with actual features
 - Remove template comment block
 
-### Task 9: Configure Gitignore
+### Task 10: Configure Gitignore
 Add these entries to .gitignore if not present:
 ```
 # Claude Code Plugin - Local files
@@ -210,7 +221,7 @@ CLAUDE.local.md
 
 ## VERIFICATION
 
-After all tasks, verify these 7 conditions:
+After all tasks, verify these 8 conditions:
 
 1. **MCP Servers**: All three respond
 2. **settings.json**: NO hooks, statusLine, or claudeFlow
@@ -228,17 +239,17 @@ After all tasks, verify these 7 conditions:
    jq '.enabledPlugins["swe@EarthmanWeb"]' .claude/settings.local.json
    # Expected: true
    ```
-4b. **Plugin Hooks Exist**: hooks.json in plugin folder
+5. **Plugin Hooks Exist**: hooks.json in plugin folder
    ```bash
    jq '.hooks | keys' .claude/plugins/serena-workflow-engine/hooks/hooks.json
    # Expected: ["PostToolUse", "PreToolUse", "SessionStart", "Stop", "UserPromptSubmit"]
    ```
-5. **Instruction Files**: >= 26 files
+6. **Instruction Files**: >= 26 files
    ```bash
    ls .serena/memories/ | grep -E "^(WF_|CLAUDE_OBLIGATIONS|DOM_SWE|FEATURE_SWE|REF_SWE)" | wc -l
    ```
-6. **Core Memories**: _INDEX.md and INDEX_FEATURES.md exist
-7. **Serena Onboarding**: Complete
+7. **Core Memories**: _INDEX.md and INDEX_FEATURES.md exist
+8. **Serena Onboarding**: Complete
 
 ## COMPLETION
 
@@ -263,7 +274,7 @@ EOF
 
 - MCP Servers: serena, claude-flow, ruv-swarm
 - Serena Onboarding: Complete
-- Claude-Flow: Initialized
+- Claude-Flow Plugin: Verified installed
 - Settings Migration: claudeFlow config moved to settings.local.json
 - SWE Plugin: Enabled (hooks load from plugin folder)
 - Instruction Files: Copied to .serena/memories/
