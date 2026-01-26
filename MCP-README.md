@@ -41,13 +41,18 @@ Create `.claude/plugins/serena-workflow-engine/.mcp.json`:
 # MCP Config Cache Issue
 
 ## Problem
+
 Changes to `.claude/plugins/serena-workflow-engine/.mcp.json` like adding new folders don't take effect.
 
 ## Cause
+
 Claude caches MCP config at: `~/.claude/plugins/cache/EarthmanWeb/swe/<version>/.mcp.json`
 
 ## Fix
+
 ```bash
 rm -rf ~/.claude/plugins/cache/EarthmanWeb/
+claude plugin install swe@EarthmanWeb --scope local
 ```
+
 Then restart Claude Code.
