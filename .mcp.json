@@ -14,7 +14,7 @@
         "--project",
         "./",
         "--additional-folders",
-        ".serena/memories/arch,.serena/memories/claude,.serena/memories/dev,.serena/memories/dom,.serena/memories/feature,.serena/memories/index,.serena/memories/map,.serena/memories/ref,.serena/memories/rules,.serena/memories/wf,.serena/memories/wm",
+        ".serena/memories/arch,.serena/memories/claude,.serena/memories/dev,.serena/memories/dom,.serena/memories/feature,.serena/memories/index,.serena/memories/map,.serena/memories/ref,.serena/memories/rules,.serena/memories/sys,.serena/memories/wf,.serena/memories/wm",
         "--enable-web-dashboard=false"
       ],
       "env": {}
