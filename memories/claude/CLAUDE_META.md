@@ -1,6 +1,6 @@
 # Claude Workflow System - Meta Documentation
 
-This document explains the state machine workflow system used to guide Claude's behavior in this project. Use this to understand, modify, or replicate the approach.
+This document explains the state machine workflow system used to guide Claude's behavior. Use this to understand, modify, or replicate the approach.
 
 ---
 
@@ -37,13 +37,12 @@ This creates natural enforcement:
 
 **Every file in this system exists because large files cause drift and hallucination.**
 
-- An agent working on templates should NOT read context provider patterns
-- An agent working on a block should NOT read function implementation details
+- An agent working on one layer should NOT read unrelated layer patterns
 - Load ONLY what's needed for the specific task
 
 This applies to:
 - **Workflow files** (WF_*) - small, single-responsibility states
-- **Domain files** (DOM_*) - site-specific requirements only
+- **Domain files** (DOM_*) - domain-specific requirements only
 - **Architecture files** (ARCH_*) - layer-specific rules for agents
 
 ### Agent Spawning Pattern
@@ -52,14 +51,14 @@ When work spans multiple layers:
 ```
 WF_PLAN_ARCHITECTURE:
   1. Read ARCH_INDEX (overview only)
-  2. Propose: "Need: template, provider, block"
+  2. Propose which layers are needed
   3. User approves
-     ↓
+     |
 WF_EXECUTE:
   Spawn parallel agents:
-  ├── Template agent → ARCH_TEMPLATES + REF_BLADEONE
-  ├── Provider agent → ARCH_PROVIDERS + SYS_CONTEXT_PROVIDERS
-  └── Block agent → ARCH_BLOCKS + SYS_BLOCKS
+  +-- Layer A agent -> ARCH_LAYER_A + relevant REF_*
+  +-- Layer B agent -> ARCH_LAYER_B + relevant REF_*
+  +-- Layer C agent -> ARCH_LAYER_C + relevant REF_*
 ```
 
 Each agent has minimal, focused context = fewer hallucinations, faster execution.
@@ -72,21 +71,21 @@ Each workflow state includes a reporting line with a distinct icon:
 
 | Step | Report |
 |------|--------|
-| WF_START | **🚀 On step WF_START** |
-| WF_CLASSIFY | **🔍 On step WF_CLASSIFY** |
-| WF_PLAN_ARCHITECTURE | **📐 On step WF_PLAN_ARCHITECTURE** |
-| WF_DETECT_REQ | **📋 On step WF_DETECT_REQ** |
-| WF_REQUIREMENT | **📝 On step WF_REQUIREMENT** |
-| WF_UPDATE_MEMORY | **💾 On step WF_UPDATE_MEMORY** |
-| WF_CLARIFY | **❓ On step WF_CLARIFY** |
-| WF_LOAD_FEATURE | **📂 On step WF_LOAD_FEATURE** |
-| WF_ASK_PERMISSION | **🔐 On step WF_ASK_PERMISSION** |
-| WF_EXECUTE | **⚡ On step WF_EXECUTE** |
-| WF_CHECKPOINT | **✅ On step WF_CHECKPOINT** |
-| WF_VERIFY | **🔎 On step WF_VERIFY** |
-| WF_CONTINUE | **▶️ On step WF_CONTINUE** |
-| WF_RESEARCH | **🔬 On step WF_RESEARCH** |
-| WF_DONE | **✨ On step WF_DONE** |
+| WF_START | **On step WF_START** |
+| WF_CLASSIFY | **On step WF_CLASSIFY** |
+| WF_PLAN_ARCHITECTURE | **On step WF_PLAN_ARCHITECTURE** |
+| WF_DETECT_REQ | **On step WF_DETECT_REQ** |
+| WF_REQUIREMENT | **On step WF_REQUIREMENT** |
+| WF_UPDATE_MEMORY | **On step WF_UPDATE_MEMORY** |
+| WF_CLARIFY | **On step WF_CLARIFY** |
+| WF_LOAD_FEATURE | **On step WF_LOAD_FEATURE** |
+| WF_ASK_PERMISSION | **On step WF_ASK_PERMISSION** |
+| WF_EXECUTE | **On step WF_EXECUTE** |
+| WF_CHECKPOINT | **On step WF_CHECKPOINT** |
+| WF_VERIFY | **On step WF_VERIFY** |
+| WF_CONTINUE | **On step WF_CONTINUE** |
+| WF_RESEARCH | **On step WF_RESEARCH** |
+| WF_DONE | **On step WF_DONE** |
 
 **Benefits:**
 - Visual distinction for each step
@@ -104,34 +103,24 @@ Each workflow state includes a reporting line with a distinct icon:
 
 ```
 project/
-├── CLAUDE.md                    # Entry point (~20 lines)
-│
-├── .serena/WM/            # Serena MCP memory storage
-│   ├── CLAUDE_META.md           # This file - system documentation
-│   ├── CLAUDE_WORKFLOW.md       # Visual diagram of state machine
-│   ├── CLAUDE_OBLIGATIONS.md    # Behavioral constraints
-│   │
-│   ├── WF_*.md                  # Workflow states (16 files)
-│   │
-│   ├── ARCH_INDEX.md            # Architecture overview
-│   ├── ARCH_TEMPLATES.md        # BladeOne template layer
-│   ├── ARCH_PROVIDERS.md        # Context provider layer
-│   ├── ARCH_BLOCKS.md           # ACF block layer
-│   ├── ARCH_FUNCTIONS.md        # mu-plugin function layer
-│   │
-│   ├── DOM_DISTRICT.md          # District site domain
-│   ├── DOM_SCHOOLS.md           # Schools site domain
-│   ├── DOM_REDACTED.md             # App intranet domain
-│   ├── DOM_NETWORK.md           # Multisite network domain
-│   │
-│   ├── SYS_BLOCKS.md            # Block inventory
-│   ├── SYS_CONTEXT_PROVIDERS.md # Provider inventory
-│   │
-│   ├── INDEX_*.md               # Lookup tables
-│   ├── REF_*.md                 # Reference documentation
-│   ├── MAP_LEGACY_*.md          # Migration mappings
-│   │
-│   └── _INDEX.md                # Memory navigation
++-- CLAUDE.md                    # Entry point (~20 lines)
+|
++-- .serena/memories/            # Serena MCP memory storage
+    +-- CLAUDE_META.md           # This file - system documentation
+    +-- CLAUDE_WORKFLOW.md       # Visual diagram of state machine
+    +-- CLAUDE_OBLIGATIONS.md    # Behavioral constraints
+    |
+    +-- WF_*.md                  # Workflow states
+    |
+    +-- ARCH_INDEX.md            # Architecture overview
+    +-- ARCH_*.md                # Layer-specific architecture
+    |
+    +-- DOM_*.md                 # Domain-specific requirements
+    |
+    +-- INDEX_*.md               # Lookup tables
+    +-- REF_*.md                 # Reference documentation
+    |
+    +-- _INDEX.md                # Memory navigation
 ```
 
 ---
@@ -143,7 +132,7 @@ project/
 The only file Claude reads from disk at conversation start. Must be tiny:
 
 ```markdown
-# Claude Code - Project Reference
+# Claude Code - Project Name
 
 ## Entry Point
 
@@ -175,11 +164,11 @@ Example `WF_START`:
 ## Execute These Steps
 
 1. **Read CLAUDE_OBLIGATIONS**
-2. **Read WM**
+2. **Read WM (Working Memory)**
 3. **Classify task type:**
-   - Continue previous → `WF_CONTINUE`
-   - Research only → `WF_RESEARCH`
-   - Code change → `WF_CLASSIFY`
+   - Continue previous -> `WF_CONTINUE`
+   - Research only -> `WF_RESEARCH`
+   - Code change -> `WF_CLASSIFY`
 
 ## Next State
 Based on classification above.
@@ -193,7 +182,7 @@ Behavioral constraints only. Keep short (~20 lines):
 # Obligations
 
 ## NEVER Do
-- [ ] Use `as any` type assertions
+- [ ] Use unsafe type assertions
 - [ ] Create files without permission
 - [ ] Guess file paths
 
@@ -203,26 +192,19 @@ Behavioral constraints only. Keep short (~20 lines):
 - [ ] Update WM after steps
 ```
 
-### 4. ARCH_INDEX.md
+### 4. Architecture Memories (ARCH_*)
 
-Architecture overview pointing to layer-specific ARCH_* files:
-- `ARCH_TEMPLATES` - BladeOne template rules
-- `ARCH_PROVIDERS` - Context provider rules
-- `ARCH_BLOCKS` - ACF block rules
-- `ARCH_FUNCTIONS` - mu-plugin function rules
+`ARCH_INDEX` provides architecture overview pointing to layer-specific files:
+- Each `ARCH_*` file defines rules for one architectural layer
+- Agents load only the architecture relevant to their task
 
 ### 5. Domain Memories (DOM_*)
 
-Site-specific requirements and patterns:
-- `DOM_DISTRICT` - Main site (board meetings, policies, news)
-- `DOM_SCHOOLS` - School sites (colors, staff directories)
-- `DOM_REDACTED` - Intranet (employee tools, internal forms)
-- `DOM_NETWORK` - Multisite admin operations
+Domain-specific requirements and patterns. Define WHAT the system needs to do, not HOW.
 
 **DO** (requirement style):
-- "District site displays board meeting archives"
-- "School sites show school-specific colors"
-- "App requires authentication"
+- "Users must authenticate before accessing dashboard"
+- "Reports display date ranges selectable by user"
 
 **DON'T** (implementation details):
 - Function signatures, parameter types
@@ -230,25 +212,18 @@ Site-specific requirements and patterns:
 
 Implementation details belong in ARCH_* memories or are discovered via Serena tools at execution time.
 
-### 6. System Memories (SYS_*)
-
-Inventories of existing components:
-- `SYS_BLOCKS` - ACF block registry
-- `SYS_CONTEXT_PROVIDERS` - Provider registry with priorities
-
-### 7. Index Memories (INDEX_*)
+### 6. Index Memories (INDEX_*)
 
 Lookup tables for finding code:
-- `INDEX_TEMPLATES` - Template → file mapping
-- `INDEX_FUNCTIONS` - Function → file mapping
-- `INDEX_HOOKS` - Hook registration mapping
+- Map logical names to file locations
+- Registry of components and their paths
 
-### 8. Reference Memories (REF_*)
+### 7. Reference Memories (REF_*)
 
 How-to guides and patterns:
-- `REF_BLADEONE` - BladeOne syntax
-- `REF_DEV_STANDARDS` - Coding standards
-- `REF_TESTING` - Test patterns
+- Coding standards
+- Testing patterns
+- Framework-specific syntax
 
 ---
 
@@ -261,8 +236,8 @@ Each WF_* file should be 10-20 lines max. If it's longer, split it.
 Every state must declare what states it can transition to:
 ```
 ## Next State
-- Condition A → `WF_FOO`
-- Condition B → `WF_BAR`
+- Condition A -> `WF_FOO`
+- Condition B -> `WF_BAR`
 ```
 
 ### 3. Mandatory Checkpoints
@@ -296,15 +271,15 @@ Example:
 2. Check something
 
 ## Next State
-- Condition → `WF_NEXT`
+- Condition -> `WF_NEXT`
 ```
 
 ---
 
 ## Modifying Existing States
 
-1. Read current state with `mcp__serena__read_memory`
-2. Edit with `mcp__serena__edit_memory`
+1. Read current state with `read_memory`
+2. Edit with `edit_memory`
 3. Update diagram if transitions changed
 4. Test the workflow path
 
@@ -316,16 +291,16 @@ Using Serena MCP:
 
 ```
 # List all memories
-mcp__serena__list_memories()
+list_memories()
 
 # Read a memory
-mcp__serena__read_memory("MEMORY_NAME")
+read_memory("MEMORY_NAME")
 
 # Write a memory
-mcp__serena__write_memory("MEMORY_NAME", "content")
+write_memory("MEMORY_NAME", "content")
 
-# Edit a memory (regex or literal)
-mcp__serena__edit_memory("MEMORY_NAME", "old", "new", "literal")
+# Edit a memory
+edit_memory("MEMORY_NAME", "old", "new")
 ```
 
 ---
@@ -340,7 +315,6 @@ mcp__serena__edit_memory("MEMORY_NAME", "old", "new", "literal")
 | ARCH_INDEX | Architecture overview | ~50 lines |
 | ARCH_* | Layer architecture | ~50 lines each |
 | DOM_* | Domain requirements | Variable |
-| SYS_* | System inventories | Variable |
 | INDEX_* | Lookup tables | Variable |
 | REF_* | Reference guides | Variable |
 
