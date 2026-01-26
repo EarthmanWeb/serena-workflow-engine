@@ -28,6 +28,8 @@ if PLUGIN_ROOT:
 ALLOWED_TOOLS = [
     # ToolSearch - CRITICAL: needed to load deferred MCP tools (prevents deadlock)
     'ToolSearch',
+    # WebSearch - allow web searches without requiring workflow initialization
+    'WebSearch',
     # Read - needed to read workflow files and understand context before WM creation
     'Read',
     # Memory tools (needed for reading WF_INIT and creating WORKING_MEMORY)
@@ -225,6 +227,13 @@ def main():
 ═══════════════════════════════════════════════════════════════════════════════
 
 You must complete the WF_INIT workflow before using other tools.
+
+⛔ NO EXCEPTIONS MEANS NO EXCEPTIONS:
+- "But the user wants a quick answer" → NO. Initialize first.
+- "But this is meta-work on the workflow itself" → NO. Initialize first.
+- "But I already know what to do" → NO. Initialize first.
+- "But it's just a simple edit" → NO. Initialize first.
+DO NOT RATIONALIZE. DO NOT NEGOTIATE. INITIALIZE.
 
 MANDATORY ACTION - Call this tool NOW:
    → mcp__plugin_swe_serena__read_memory(memory_file_name="WF_INIT")
