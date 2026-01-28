@@ -99,10 +99,11 @@ Before proceeding, confirm:
 
 1. Set workflow context in WM:
    - calling_step: WF_LOAD_FEATURE
-   - return_step: WF_EXECUTE
-2. Invoke `/arch-review` skill
+   - return_step: WF_ASK_PERMISSION
+2. Invoke `/arch-review` skill (or read WF_ARCH_REVIEW directly)
 3. The skill will verify approach against architecture patterns
-4. Follow the skill's return status to proceed
+4. On approval, proceed to WF_ASK_PERMISSION (per states.json)
+5. After user permission granted, proceed to WF_EXECUTE
 
 **SKIPPING THIS TRANSITION = WORKFLOW VIOLATION**
 

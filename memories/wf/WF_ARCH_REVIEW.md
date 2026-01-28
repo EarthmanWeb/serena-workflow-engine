@@ -52,8 +52,8 @@ OUTPUT THE ABOVE LINE IMMEDIATELY. Do not read further until you have reported y
 
 | Condition | MUST Read Next |
 |-----------|----------------|
-| Approach is compliant | `WF_EXECUTE` |
-| Needs redesign | Loop back, fix approach |
+| Approach is compliant | `WF_ASK_PERMISSION` |
+| Needs redesign | `WF_PLAN_ARCHITECTURE` |
 
 **SKIPPING THIS TRANSITION = WORKFLOW VIOLATION**
 
