@@ -22,9 +22,8 @@ First-time plugin setup - install MCPs, configure environment.
 3. `prompt_restart` - Request Claude Code restart if MCPs installed
 4. `verify_installation` - Confirm MCPs are accessible
 5. `run_serena_onboard` - Execute Serena project onboarding
-6. `run_claude_flow_init` - Initialize claude-flow configuration
-7. `handle_claude_md` - Create/update CLAUDE.md with workflow entry point
-8. `configure_gitignore` - Add workflow artifacts to .gitignore
+6. `handle_claude_md` - Create/update CLAUDE.md with workflow entry point
+7. `configure_gitignore` - Add workflow artifacts to .gitignore
 
 ## Permissions
 

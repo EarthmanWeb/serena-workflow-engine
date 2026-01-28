@@ -186,7 +186,7 @@ Memories are organized in subdirectories:
 | File | Purpose |
 |------|---------|
 | `.claude/workflow-state.json` | Current state, trajectory, rewards |
-| `.claude/setup-complete.json` | Setup completion flag |
+| `.claude/plugins/serena-workflow-engine/swe-setup-complete.json` | Setup completion flag |
 | `.claude/learning.json` | RLVR configuration |
 
 ## Test Commands

@@ -23,7 +23,7 @@ Task({
 
 Read .claude/plugins/serena-workflow-engine/agents/swe-init-agent.md and execute ALL tasks (1-10), then run all 8 verifications.
 
-Only create setup-complete.json after ALL verifications pass.
+Only create swe-setup-complete.json after ALL verifications pass.
 Output the completion summary at the end.`
 })
 ```

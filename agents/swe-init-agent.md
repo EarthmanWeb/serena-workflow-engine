@@ -161,19 +161,41 @@ fi
 ```
 
 ### Task 8: Install Instruction Files to Memories
-```bash
-mkdir -p .serena/memories .serena/memories/archived
 
+**IMPORTANT: This plugin uses a forked version of Serena that supports subdirectory organization.**
+
+Memory files are organized in subdirectories and MUST be copied preserving this structure:
+- `wf/` - Workflow state instructions (WF_*.md)
+- `claude/` - Claude behavior docs (CLAUDE.md, CLAUDE_OBLIGATIONS.md)
+- `ref/` - Reference documentation (REF_*.md)
+- `dom/` - Domain documentation (DOM_*.md)
+- `feature/` - Feature configurations (FEATURE_*.md)
+- `arch/` - Architecture documentation (ARCH_*.md)
+- `index/` - Index files (INDEX_*.md)
+
+```bash
+# Create directory structure (preserving subdirectory organization)
+mkdir -p .serena/memories/{wf,claude,ref,dom,feature,arch,index,archived}
+
+# Archive existing files in subdirectories
 cd .serena/memories
-for f in WF_*.md CLAUDE_OBLIGATIONS.md DOM_SWE_*.md FEATURE_SWE.md REF_SWE_*.md; do
-  [ -f "$f" ] && mv "$f" archived/"$f.$(date +%Y%m%d_%H%M%S).bak" 2>/dev/null
+for dir in wf claude ref dom feature arch; do
+  if [ -d "$dir" ]; then
+    for f in "$dir"/*.md; do
+      [ -f "$f" ] && mv "$f" archived/"$(basename "$f").$(date +%Y%m%d_%H%M%S).bak" 2>/dev/null
+    done
+  fi
 done
 cd - >/dev/null
 
-cp .claude/plugins/serena-workflow-engine/memories/*.md .serena/memories/
+# Recursively copy ALL memories preserving directory structure
+cp -r .claude/plugins/serena-workflow-engine/memories/* .serena/memories/
 
-echo "Installed instruction files"
-ls .serena/memories/{WF_*,CLAUDE_OBLIGATIONS,DOM_SWE_*,FEATURE_SWE,REF_SWE_*}.md 2>/dev/null | wc -l
+echo "Installed instruction files with directory structure"
+echo "Subdirectories:"
+ls -d .serena/memories/*/ 2>/dev/null
+echo "Total files:"
+find .serena/memories -name "*.md" -type f | wc -l
 ```
 
 ### Task 9: Create and Customize Core Memories
@@ -207,7 +229,7 @@ CLAUDE.local.md
 .claude/settings.local.json
 .claude/workflow-state.json
 .claude/setup-state.json
-.claude/setup-complete.json
+.claude/plugins/serena-workflow-engine/swe-setup-complete.json
 
 # Runtime directories
 **/.claude-flow
@@ -244,9 +266,12 @@ After all tasks, verify these 8 conditions:
    jq '.hooks | keys' .claude/plugins/serena-workflow-engine/hooks/hooks.json
    # Expected: ["PostToolUse", "PreToolUse", "SessionStart", "Stop", "UserPromptSubmit"]
    ```
-6. **Instruction Files**: >= 26 files
+6. **Instruction Files**: >= 26 files with subdirectory structure
    ```bash
-   ls .serena/memories/ | grep -E "^(WF_|CLAUDE_OBLIGATIONS|DOM_SWE|FEATURE_SWE|REF_SWE)" | wc -l
+   # Verify subdirectories exist
+   ls -d .serena/memories/{wf,claude,ref,dom,feature,arch}/ 2>/dev/null && echo "✅ Subdirectories exist"
+   # Count total instruction files
+   find .serena/memories -name "*.md" -type f | wc -l
    ```
 7. **Core Memories**: _INDEX.md and INDEX_FEATURES.md exist
 8. **Serena Onboarding**: Complete
@@ -256,7 +281,7 @@ After all tasks, verify these 8 conditions:
 Only after ALL verifications pass:
 
 ```bash
-cat > .claude/setup-complete.json << 'EOF'
+cat > .claude/plugins/serena-workflow-engine/swe-setup-complete.json << 'EOF'
 {
   "complete": true,
   "timestamp": "$(date -Iseconds)",
