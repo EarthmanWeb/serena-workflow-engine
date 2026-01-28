@@ -7,13 +7,16 @@
 - **Session ID**: 8-char from transcript_path UUID (e.g., `3fe6b3c5`)
 - **Descriptor**: 2-4 words, snake_case (e.g., `theme_refactor`)
 
-## Create / Load / Update
+## Lifecycle
 
-| Action | Steps |
-|--------|-------|
-| **Create** | Get session ID from hook → pick descriptor → write file → echo to chat |
-| **Load** | Read file → verify session ID matches → echo to chat |
-| **Update** | Write changes → echo to chat: `📋 Updated Working Memory: WM_<filename>` |
+| Stage | When | What Happens |
+|-------|------|--------------|
+| **Auto-Create** | WF_START transition | Hook creates `WM_{session}_session.md` placeholder |
+| **Rename** | End of WF_CLASSIFY | Rename to `WM_{session}_{descriptor}.md` with meaningful descriptor |
+| **Load** | Session resume | Read file → verify session ID matches → echo to chat |
+| **Update** | After edits/transitions | Write changes → echo: `📋 Updated Working Memory: WM_<filename>` |
+
+**⚠️ Rename is MANDATORY in WF_CLASSIFY before transitioning to next state.**
 
 **Update is MANDATORY after:** memory edits, file edits, workflow transitions, state changes.
 
@@ -50,7 +53,8 @@ edit_memory("WM_...", "Current State: WF_EXECUTE", "Current State: WF_VERIFY", "
 
 ```python
 # ✅ CORRECT: Single write with all sections
-mcp__plugin_swe_serena__write_memory("WM_{session}_session", """
+# Note: Use _session suffix only in WF_START; use {descriptor} after WF_CLASSIFY rename
+mcp__plugin_swe_serena__write_memory("WM_{session}_{descriptor}", """
 # Working Memory: Session {session}
 
 ## Session
@@ -163,3 +167,4 @@ Session: <SESSION_ID>
 3. Verify session ID on load
 4. Update after significant actions
 5. **NEVER do single-field state edits**
+6. **MUST rename from `_session` to meaningful descriptor in WF_CLASSIFY** (before transitioning)

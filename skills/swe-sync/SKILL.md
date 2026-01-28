@@ -128,20 +128,40 @@ Output a structured table:
 
 ### Step 6: Execute Sync (if not dry-run)
 
+**⚠️ CRITICAL: Preserve subdirectory structure!**
+
+Files MUST be copied to their matching subdirectory:
+- `memories/wf/WF_*.md` → `.serena/memories/wf/WF_*.md`
+- `memories/ref/REF_*.md` → `.serena/memories/ref/REF_*.md`
+- `memories/claude/CLAUDE*.md` → `.serena/memories/claude/CLAUDE*.md`
+
 **Direction: plugin-to-local (default)**
 ```bash
-cp -f plugin_file local_file
+# Create subdirectory if needed
+mkdir -p .serena/memories/{category}
+# Copy preserving subdirectory
+cp -f .claude/plugins/serena-workflow-engine/memories/{category}/{file} .serena/memories/{category}/{file}
 ```
 
 **Direction: local-to-plugin**
 ```bash
-cp -f local_file plugin_file
+cp -f .serena/memories/{category}/{file} .claude/plugins/serena-workflow-engine/memories/{category}/{file}
 ```
 
 **Direction: bidirectional**
-- Plugin newer → copy to local
-- Local newer → copy to plugin
+- Plugin newer → copy to local (preserve subdir)
+- Local newer → copy to plugin (preserve subdir)
 - Same age, different content → CONFLICT (report, don't overwrite)
+
+**❌ WRONG - DO NOT flatten to root:**
+```bash
+cp memories/wf/WF_START.md .serena/memories/WF_START.md  # WRONG!
+```
+
+**✅ CORRECT - Preserve subdirectory:**
+```bash
+cp memories/wf/WF_START.md .serena/memories/wf/WF_START.md  # CORRECT!
+```
 
 ### Step 7: Verify Sync
 

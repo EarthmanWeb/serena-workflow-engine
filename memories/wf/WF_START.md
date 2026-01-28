@@ -97,7 +97,7 @@ mcp__plugin_swe_serena__read_memory("CLAUDE_OBLIGATIONS")
    ```python
    # ⛔ DO NOT use multiple edit_memory calls - each triggers daemon!
    # ✅ Use ONE write_memory with complete updated content:
-   mcp__plugin_swe_serena__write_memory("WM_{session}_session", "<full content>")
+   mcp__plugin_swe_serena__write_memory("WM_{session}_{descriptor}", "<full content>")
    ```
    Include in the update:
    - Increment `Task Iteration` (e.g., 1 → 2)
@@ -130,27 +130,19 @@ mcp__plugin_swe_serena__read_memory("REF_WM")
 **After reading REF_WM:**
 
 1. Get session ID from hook context (e.g., `Session: cccdb36a`) - this is an 8-char UUID, NOT a date
-2. **Descriptor naming:**
-   - Session start creates placeholder `WM_{session}_session`
-   - After understanding task, RENAME to meaningful descriptor: `WM_{session}_{task_descriptor}`
-   - Examples: `wm_path_fix`, `auth_refactor`, `block_tests`
-   - 2-4 words, snake_case
+2. **Placeholder WM is auto-created** as `WM_{session}_session` when you transition to WF_START
 3. Follow the EXACT template from REF_WM - no modifications
-4. Echo to chat: `📋 Working Memory: WM_<SESSION_ID>_<descriptor>`
+4. Echo to chat: `📋 Working Memory: WM_<SESSION_ID>_session`
 
-**To rename WM with proper descriptor:**
-```bash
-# Rename file from placeholder to task-specific
-mv .serena/memories/WM_{session}_session.md .serena/memories/WM_{session}_{descriptor}.md
-```
-Then use `write_memory` with the new name.
+**⚠️ NOTE: Proper WM naming happens in WF_CLASSIFY**
+
+The placeholder `_session` suffix will be replaced with a meaningful task descriptor (e.g., `_auth_fix`, `_block_tests`) at the END of WF_CLASSIFY, before transitioning to the next state. This ensures the task is understood before naming.
 
 ```
 # Check for existing:
 mcp__plugin_swe_serena__list_memories()  # Look for WM_* files
 
 # If continuing work, read existing file
-# If placeholder _session exists, RENAME with proper descriptor
 ```
 
 **CREATING WM WITHOUT READING REF_WM = WORKFLOW VIOLATION**
