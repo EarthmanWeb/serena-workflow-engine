@@ -58,6 +58,16 @@
             "timeout": 10
           }
         ]
+      },
+      {
+        "matcher": "mcp__claude-flow__task_orchestrate|mcp__ruv-swarm__task_orchestrate|mcp__plugin_claude-flow_ruv-swarm__task_orchestrate|mcp__plugin_claude-flow_claude-flow__task_orchestrate",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/pre/swe_pre_task_orchestrate_gate.py",
+            "timeout": 10
+          }
+        ]
       }
     ],
     "PostToolUse": [

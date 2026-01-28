@@ -15,28 +15,75 @@ Before proposing new files:
 
 ## MANDATORY - Ask User Before Any Code Changes
 
-**Format (must include architecture justification):**
+**Use the `AskUserQuestion` tool for interactive approval:**
+
+```javascript
+AskUserQuestion({
+  questions: [
+    {
+      question: "I plan to make the following changes. May I proceed?",
+      header: "Approval",
+      options: [
+        {
+          label: "Yes, proceed",
+          description: "Approve the proposed changes and continue to implementation"
+        },
+        {
+          label: "No, let's discuss",
+          description: "Stop and clarify requirements before making changes"
+        },
+        {
+          label: "Modify approach",
+          description: "I want to suggest a different approach"
+        }
+      ],
+      multiSelect: false
+    }
+  ]
+})
 ```
-I plan to:
-- Modify: [file] -> [layer] (following [pattern from SYS_*/REF_*])
-- Create: [file] -> [layer] (following [pattern from SYS_*/REF_*])
 
-Data flow: [Layer1] <- [Layer2] <- [Layer3]
-          (as defined in ARCH_INDEX)
+**Before calling AskUserQuestion, present your plan clearly:**
 
-Proceed? (yes/no)
+```markdown
+## Proposed Changes
+
+### Files to Modify
+| File | Layer | Pattern |
+|------|-------|---------|
+| UserService.ts | Service | per SYS_SERVICES |
+| UserController.ts | Controller | per REF_CONTROLLERS |
+
+### Files to Create
+| File | Layer | Pattern |
+|------|-------|---------|
+| UserRepository.ts | Repository | per SYS_REPOSITORIES |
+
+### Data Flow
+```
+Controller <- Service <- Repository
+(as defined in ARCH_INDEX)
 ```
 
-**Example:**
+### Test Coverage
+- [ ] UserService.test.ts
+- [ ] UserController.test.ts
+- [ ] UserRepository.test.ts
 ```
-I plan to:
-- Create: UserService.ts -> Service Layer (per SYS_SERVICES)
-- Modify: UserController.ts -> Controller (per REF_CONTROLLERS)
 
-Data flow: Controller <- Service <- Repository
+## AskUserQuestion Tool Reference
 
-Proceed?
-```
+The `AskUserQuestion` tool provides interactive UI in VS Code extension:
+
+| Parameter | Description |
+|-----------|-------------|
+| `questions` | Array of 1-4 questions |
+| `question` | Full question text to display |
+| `header` | Short label (max 12 chars) |
+| `options` | Array of 2-4 choices with `label` and `description` |
+| `multiSelect` | If `true`, allows multiple selections |
+
+**Users can always select "Other" for custom text input.**
 
 ## TEST FILE ENFORCEMENT
 
@@ -46,18 +93,30 @@ Before finalizing your proposal, check:
 - [ ] Each new component has test coverage proposed
 - [ ] Integration points have test coverage proposed
 
+## Handle User Response
+
+After `AskUserQuestion` returns:
+
+| User Selection | Action |
+|----------------|--------|
+| "Yes, proceed" | Read `WF_EXECUTE` |
+| "No, let's discuss" | Read `WF_CLARIFY` |
+| "Modify approach" | Read `WF_CLARIFY` |
+| Custom text (Other) | Parse feedback, go to `WF_CLARIFY` |
+
 ## MANDATORY NEXT STEP
 
-**YOU ARE NOT FINISHED.** Before responding to user:
+**YOU ARE NOT FINISHED.** After receiving user response:
 
 | Condition | MUST Read Next |
 |-----------|----------------|
-| User says yes | `WF_EXECUTE` |
-| User says no | `WF_CLARIFY` |
+| User approves | `WF_EXECUTE` |
+| User declines or wants changes | `WF_CLARIFY` |
 
-1. Wait for user response
-2. Read that WF_* memory NOW
-3. Report the new step to user
+1. Call `AskUserQuestion` with your proposal
+2. Wait for user response
+3. Read the appropriate WF_* memory NOW
+4. Report the new step to user
 
 **SKIPPING THIS TRANSITION = WORKFLOW VIOLATION**
 

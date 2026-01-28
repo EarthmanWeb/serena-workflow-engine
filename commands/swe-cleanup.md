@@ -33,6 +33,39 @@ Archive completed work to `.serena/archive-*` directories.
 ## Implementation
 
 1. Scan for archivable files
-2. Display list with confirmation prompt
-3. Move files with timestamp prefix
-4. Update indexes
+2. Display list of found files
+3. Use AskUserQuestion for confirmation:
+
+```javascript
+AskUserQuestion({
+  questions: [
+    {
+      question: "Found [N] files to archive. Proceed with cleanup?",
+      header: "Cleanup",
+      options: [
+        {
+          label: "Archive all",
+          description: "Move all listed files to archive directories"
+        },
+        {
+          label: "Archive memories only",
+          description: "Only archive completed WORKING_MEMORY files"
+        },
+        {
+          label: "Archive specs only",
+          description: "Only archive SPEC_* files"
+        },
+        {
+          label: "Cancel",
+          description: "Don't archive anything"
+        }
+      ],
+      multiSelect: false
+    }
+  ]
+})
+```
+
+4. Move files with timestamp prefix based on selection
+5. Update indexes
+6. Report archived files count

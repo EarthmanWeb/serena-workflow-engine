@@ -1,6 +1,6 @@
 ---
 name: swe-feature-onboard
-version: 2.0.0
+version: 2.1.0
 description: Feature onboarding wizard with optional quick mode
 workflow:
   aware: true
@@ -56,19 +56,52 @@ Interactive wizard for registering features in the workflow system.
 
 ## Stage 1: Basic Info
 
-Ask the user (skip if provided via args):
+**Use AskUserQuestion for feature information (skip if provided via args):**
 
+```javascript
+AskUserQuestion({
+  questions: [
+    {
+      question: "What is the Feature Key? (Short identifier used in memory names, e.g., BACKEND, AUTH, BLOCKS)",
+      header: "Feature Key",
+      options: [
+        { label: "BACKEND", description: "For backend/API features" },
+        { label: "FRONTEND", description: "For UI/client features" },
+        { label: "AUTH", description: "For authentication features" }
+      ],
+      multiSelect: false
+    },
+    {
+      question: "What type of codebase is this feature?",
+      header: "Type",
+      options: [
+        { label: "web_app", description: "Web application" },
+        { label: "wordpress_theme", description: "WordPress theme" },
+        { label: "wordpress_plugin", description: "WordPress plugin" },
+        { label: "api", description: "API/Backend service" }
+      ],
+      multiSelect: false
+    }
+  ]
+})
 ```
-What feature are you onboarding?
 
-1. **Feature Key**: Short identifier used in memory names
-   Examples: BACKEND, AUTH, BLOCKS, THEME_DISTRICT
-
-2. **Feature Name**: Human-readable name
-   Examples: "Backend API", "Authentication Module"
-
-3. **Root Path(s)**: Where is the code?
-   Examples: "src/", "wp-content/themes/district/"
+**Then ask for paths:**
+```javascript
+AskUserQuestion({
+  questions: [
+    {
+      question: "Where is the code located? (Root path for this feature)",
+      header: "Root Path",
+      options: [
+        { label: "src/", description: "Standard source directory" },
+        { label: "wp-content/themes/", description: "WordPress themes" },
+        { label: "wp-content/plugins/", description: "WordPress plugins" }
+      ],
+      multiSelect: false
+    }
+  ]
+})
 ```
 
 **Validation:**
@@ -79,12 +112,34 @@ What feature are you onboarding?
 
 ## Stage 2: Tech Stack
 
-```
-What technology does this feature use?
+**Use AskUserQuestion for technology selection:**
 
-1. **Type**: web_app | library | api | cli | cms | wordpress_theme | wordpress_plugin
-2. **Primary Language**: php | typescript | python | go | rust | etc.
-3. **Framework** (optional): react | nextjs | laravel | django | wordpress | etc.
+```javascript
+AskUserQuestion({
+  questions: [
+    {
+      question: "What is the primary programming language?",
+      header: "Language",
+      options: [
+        { label: "php", description: "PHP (WordPress, Laravel, etc.)" },
+        { label: "typescript", description: "TypeScript/JavaScript" },
+        { label: "python", description: "Python" }
+      ],
+      multiSelect: false
+    },
+    {
+      question: "What framework is used (if any)?",
+      header: "Framework",
+      options: [
+        { label: "wordpress", description: "WordPress CMS" },
+        { label: "react", description: "React.js" },
+        { label: "nextjs", description: "Next.js" },
+        { label: "none", description: "No framework / vanilla" }
+      ],
+      multiSelect: false
+    }
+  ]
+})
 ```
 
 **Auto-detection:** Scan root path for:
@@ -100,25 +155,35 @@ What technology does this feature use?
 
 **Skip in quick mode** - go directly to Stage 5.
 
+**Use AskUserQuestion for analysis mode selection:**
+
+```javascript
+AskUserQuestion({
+  questions: [
+    {
+      question: "How should I analyze the codebase?",
+      header: "Analysis",
+      options: [
+        {
+          label: "Full DAA Swarm (Recommended)",
+          description: "10 agents analyze in parallel, creates DOM_*/SYS_* memories (2-5 min)"
+        },
+        {
+          label: "Quick Scan",
+          description: "Basic directory structure and layer detection (~30 sec)"
+        },
+        {
+          label: "Manual Configuration",
+          description: "You describe the architecture, I create memories from your input"
+        }
+      ],
+      multiSelect: false
+    }
+  ]
+})
 ```
-How should I analyze the codebase?
 
-[A] Full DAA Swarm Analysis (Recommended for large codebases)
-    - 10 specialized agents analyze in parallel
-    - Creates detailed DOM_*, SYS_* memories
-    - Time: 2-5 minutes
-
-[B] Quick Scan
-    - Basic directory structure
-    - Primary layer detection
-    - Time: ~30 seconds
-
-[C] Manual Configuration
-    - You describe the architecture
-    - I create memories from your input
-```
-
-### If [A] Full DAA Swarm:
+### If "Full DAA Swarm" selected:
 
 ```javascript
 mcp__ruv-swarm__daa_init({ enableLearning: true })
@@ -147,29 +212,41 @@ mcp__ruv-swarm__task_orchestrate({
 
 **Skip in quick mode.**
 
-Present detected architecture for confirmation:
+Present detected architecture and confirm with AskUserQuestion:
 
+```javascript
+// First, display the detected architecture in text:
+// "I detected the following architecture for [FEATURE_NAME]:
+//  Layers: [table]
+//  Data Flow: [diagram]
+//  Dependencies: [list]"
+
+AskUserQuestion({
+  questions: [
+    {
+      question: "Is the detected architecture correct?",
+      header: "Confirm",
+      options: [
+        {
+          label: "Yes, correct",
+          description: "Proceed with memory creation using this architecture"
+        },
+        {
+          label: "No, needs changes",
+          description: "I'll provide corrections to the architecture"
+        },
+        {
+          label: "Start over",
+          description: "Re-run analysis with different settings"
+        }
+      ],
+      multiSelect: false
+    }
+  ]
+})
 ```
-I detected the following architecture for [FEATURE_NAME]:
 
-**Layers:**
-| Layer | Purpose | Directory |
-|-------|---------|-----------|
-| Presentation | Views/Templates | templates/ |
-| Business | Controllers/Services | src/controllers/ |
-| Data | Models/Repositories | src/models/ |
-
-**Data Flow:**
-Request → Controller → Service → Repository → Database
-
-**Dependencies:**
-- Internal: [other features this depends on]
-- External: [packages/libraries]
-
-Is this correct? [Y/n]
-```
-
-If user says no, gather corrections manually.
+If user selects "No, needs changes", gather corrections manually.
 
 ---
 
