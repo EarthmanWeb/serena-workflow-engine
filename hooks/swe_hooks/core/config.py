@@ -70,7 +70,7 @@ def get_paths(cwd: str = None) -> Dict[str, str]:
         "cwd": cwd,
         "project_root": project_root,
         "claude_dir": os.path.join(project_root, ".claude"),
-        "setup_file": os.path.join(project_root, ".claude", "plugins", "serena-workflow-engine", "swe-setup-complete.json"),
+        "setup_file": os.path.join(project_root, ".claude", "swe-setup-complete.json"),
         "learning_file": os.path.join(project_root, ".claude", "learning.json"),
         "plugin_dir": os.path.join(project_root, ".claude", "plugins", "swe"),
         "instructions_dir": os.path.join(project_root, ".claude", "plugins", "swe", "memories", "instructions"),

@@ -44,7 +44,6 @@ WF_START → WF_CLASSIFY → WF_DETECT_REQ/WF_PLAN_ARCHITECTURE/WF_SWARM_ORCHEST
 |------|---------|
 | `README.md` | Plugin documentation |
 | `.mcp.json` | MCP server configuration |
-| `swe-setup-complete.json` | Setup completion marker |
 | `.gitignore` | Git ignore patterns |
 
 ## Core Components
@@ -186,7 +185,7 @@ Memories are organized in subdirectories:
 | File | Purpose |
 |------|---------|
 | `.claude/workflow-state.json` | Current state, trajectory, rewards |
-| `.claude/plugins/serena-workflow-engine/swe-setup-complete.json` | Setup completion flag |
+| `.claude/swe-setup-complete.json` | Setup completion flag |
 | `.claude/learning.json` | RLVR configuration |
 
 ## Test Commands

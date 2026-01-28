@@ -229,7 +229,7 @@ CLAUDE.local.md
 .claude/settings.local.json
 .claude/workflow-state.json
 .claude/setup-state.json
-.claude/plugins/serena-workflow-engine/swe-setup-complete.json
+.claude/swe-setup-complete.json
 
 # Runtime directories
 **/.claude-flow
@@ -281,12 +281,15 @@ After all tasks, verify these 8 conditions:
 Only after ALL verifications pass:
 
 ```bash
-cat > .claude/plugins/serena-workflow-engine/swe-setup-complete.json << 'EOF'
+# Read version from plugin.json
+PLUGIN_VERSION=$(jq -r '.version' .claude/plugins/serena-workflow-engine/.claude-plugin/plugin.json)
+
+cat > .claude/swe-setup-complete.json << EOF
 {
   "complete": true,
   "timestamp": "$(date -Iseconds)",
   "mcps": ["serena", "claude-flow", "ruv-swarm"],
-  "version": "1.0.0",
+  "version": "${PLUGIN_VERSION}",
   "verified": true
 }
 EOF
