@@ -78,17 +78,24 @@ mcp__plugin_swe_serena__read_memory("_INDEX")  # Full navigation hub
 
 #### Large Tasks (Swarm Orchestration Required)
 
-**⚠️ MANDATORY RESEARCH BEFORE ROUTING:**
+**⚠️ MANDATORY: Load FEATURE_SWARM first:**
 ```
-mcp__plugin_swe_serena__read_memory("_INDEX")  # Full navigation hub
+mcp__plugin_swe_serena__read_memory("FEATURE_SWARM")
 ```
+
+FEATURE_SWARM mandates reading ALL swarm documents in order:
+1. WF_SWARM_ORCHESTRATE (primary)
+2. REF_SWARM_PATTERNS (MCP tools)
+3. CLAUDE_FLOW (coordination)
+4. REF_AGENTS (agent types)
 
 Use swarms when ANY of these apply:
 - **Scale**: 6+ files affected OR 3+ architectural layers
 - **Parallel Work**: Independent subtasks that can run concurrently
 - **Research-Heavy**: Requires analyzing multiple areas simultaneously
 - **Complexity**: Multi-domain coordination needed
-→ **WF_SWARM_ORCHESTRATE**
+- **Keywords**: "swarm", "parallel agents", "multi-agent", "hive-mind", "ruv-swarm", "DAA"
+→ **Load FEATURE_SWARM** → **WF_SWARM_ORCHESTRATE**
 
 ---
 
