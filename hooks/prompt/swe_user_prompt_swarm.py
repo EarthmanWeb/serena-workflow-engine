@@ -43,21 +43,22 @@ def main():
         prompt = get_input_field(input_data, 'prompt', default='')
         if not prompt:
             output_empty()
-        
-        # Check explicit swarm keywords first
+            return
+
+        # Check explicit swarm keywords
         for pattern in SWARM_KEYWORDS:
             if re.search(pattern, prompt, re.IGNORECASE):
                 output = HookOutput(event_name="UserPromptSubmit")
-                output.add_message("🐝 SWARM KEYWORDS DETECTED - You MUST use ruv-swarm or hive-mind swarm orchestration. Read WF_SWARM_ORCHESTRATE before continuing")
+                output.add_message("🐝 SWARM HINT: This task involves swarm orchestration. Complete WF_INIT → WF_START → WF_CLASSIFY first. In WF_CLASSIFY, you MUST read FEATURE_SWARM which loads WF_SWARM_ORCHESTRATE, REF_SWARM_PATTERNS, CLAUDE_FLOW, and REF_AGENTS.")
                 output.output_and_exit()
-        
-        # Check parallel task patterns (folder/multi-file analysis)
+
+        # Check parallel task patterns
         for pattern in PARALLEL_TASK_PATTERNS:
             if re.search(pattern, prompt, re.IGNORECASE):
                 output = HookOutput(event_name="UserPromptSubmit")
-                output.add_message("🐝 PARALLEL TASK PATTERN DETECTED - You MUST use ruv-swarm or hive-mind swarm orchestration for multi-file/folder analysis. Read WF_SWARM_ORCHESTRATE before continuing")
+                output.add_message("🐝 PARALLEL HINT: This task may benefit from swarm orchestration. Complete WF_INIT → WF_START → WF_CLASSIFY first. In WF_CLASSIFY, consider reading FEATURE_SWARM for multi-agent coordination.")
                 output.output_and_exit()
-        
+
         output_empty()
     except Exception as e:
         output = {"hookSpecificOutput": {"hookEventName": "UserPromptSubmit", "additionalContext": f"Prompt error: {e}"}}

@@ -264,15 +264,22 @@ Echo to chat: `📋 Working Memory renamed: WM_{session}_{descriptor}`
 
 **⛔ WM STILL HAS `_session` SUFFIX? You MUST rename it before transitioning!**
 
+### 🐝 Swarm Check (After Feature Loading)
+
+**If FEATURE_SWARM was loaded in step 3:**
+> 🐝 SWARM DETECTED - You MUST use ruv-swarm or hive-mind swarm orchestration. Go to WF_SWARM_ORCHESTRATE.
+
+This check happens AFTER features are loaded because swarm coordination requires feature context.
+
 ### Routing Table
 
 | Condition | MUST Read Next |
 |-----------|----------------|
 | Request unclear | `WF_CLARIFY` |
 | Test debugging needed | `WF_DEBUG_TDD` |
-| Large task (swarm needed) | `WF_SWARM_ORCHESTRATE` |
 | Needs architecture | `WF_PLAN_ARCHITECTURE` |
 | Simple change | `WF_DETECT_REQ` |
+| **FEATURE_SWARM loaded** | **`WF_SWARM_ORCHESTRATE`** ← Always last, overrides other routes |
 
 1. Determine which condition applies
 2. Read that WF_* memory NOW

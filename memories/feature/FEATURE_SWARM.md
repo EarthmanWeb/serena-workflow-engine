@@ -33,6 +33,14 @@ mcp__plugin_swe_serena__read_memory("REF_AGENTS")
 
 ---
 
+## 🐝 POST-LOAD DIRECTIVE
+
+> 🐝 SWARM DETECTED - You MUST use ruv-swarm or hive-mind swarm orchestration. After completing WF_CLASSIFY feature loading, go to **WF_SWARM_ORCHESTRATE**.
+
+This directive activates when FEATURE_SWARM is loaded. It overrides other routing options in WF_CLASSIFY.
+
+---
+
 ## Trigger Conditions
 
 Route to SWARM when ANY apply:

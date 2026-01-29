@@ -95,6 +95,14 @@ def main():
             output_status(f"📖 Read: {memory_name}")
             return
 
+        # Handle FEATURE_SWARM read - emit swarm directive
+        if memory_name == 'FEATURE_SWARM':
+            output = HookOutput(event_name="PostToolUse")
+            output.add_message(f"📖 Read: {memory_name}")
+            output.add_message("")
+            output.add_message("🐝 SWARM DETECTED - You MUST use ruv-swarm or hive-mind swarm orchestration. Go to WF_SWARM_ORCHESTRATE after completing WF_CLASSIFY feature loading.")
+            output.output_and_exit()
+
         # Only process WF_* memories for state transitions
         if not memory_name or not memory_name.startswith('WF_'):
             output_status(f"📖 Read: {memory_name or 'unknown'}")
