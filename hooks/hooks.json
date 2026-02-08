@@ -35,7 +35,7 @@
           {
             "type": "command",
             "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/pre/swe_pre_tool_init_gate.py",
-            "timeout": 5000
+            "timeout": 10
           }
         ]
       },

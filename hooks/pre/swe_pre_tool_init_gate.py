@@ -219,8 +219,10 @@ def main():
 
         # NOT initialized - BLOCK the tool call and redirect to WF_INIT
         output = {
-            "decision": "block",
-            "reason": f"""🛑 BLOCKED: No Working Memory for session {session_id or 'unknown'}
+            "hookSpecificOutput": {
+                "hookEventName": "PreToolUse",
+                "permissionDecision": "deny",
+                "permissionDecisionReason": f"""🛑 BLOCKED: No Working Memory for session {session_id or 'unknown'}
 
 ═══════════════════════════════════════════════════════════════════════════════
                          ⚠️  WORKFLOW NOT INITIALIZED  ⚠️
@@ -247,6 +249,7 @@ Diagnostic: {diagnostic}
 ═══════════════════════════════════════════════════════════════════════════════
               COMPLETE WF_INIT BEFORE PROCEEDING
 ═══════════════════════════════════════════════════════════════════════════════"""
+            }
         }
         print(json.dumps(output))
         sys.exit(0)

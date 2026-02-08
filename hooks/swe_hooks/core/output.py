@@ -1,12 +1,19 @@
-"""Hook output helpers following official Claude Code pattern.
+"""Hook output helpers following official Claude Code hooks reference.
+
+See: https://code.claude.com/docs/en/hooks
 
 Output goes to STDOUT as JSON. Exit is ALWAYS 0.
 
-For messages:
-  - Use hookSpecificOutput.additionalContext for user-visible messages
-  
-For blocking (PreToolUse only):
+For messages (all events):
+  - Use hookSpecificOutput.additionalContext for context injection
+
+For blocking PreToolUse:
   - Use hookSpecificOutput.permissionDecision = "deny"
+  - Use hookSpecificOutput.permissionDecisionReason for deny reason (shown to Claude)
+  - Use hookSpecificOutput.additionalContext for extra context (shown before tool executes)
+
+For blocking Stop/SubagentStop/PostToolUse/UserPromptSubmit:
+  - Use top-level decision = "block" and reason = "..."
 """
 
 import json
@@ -49,7 +56,7 @@ class HookOutput:
         if self.should_block:
             result["hookSpecificOutput"]["permissionDecision"] = "deny"
             if self.block_reason:
-                result["hookSpecificOutput"]["additionalContext"] = self.block_reason
+                result["hookSpecificOutput"]["permissionDecisionReason"] = self.block_reason
         elif self.messages:
             result["hookSpecificOutput"]["additionalContext"] = "\n".join(self.messages)
 
@@ -80,7 +87,7 @@ def output_block(reason: str):
         "hookSpecificOutput": {
             "hookEventName": "PreToolUse",
             "permissionDecision": "deny",
-            "additionalContext": reason
+            "permissionDecisionReason": reason
         }
     }
     print(json.dumps(result), file=sys.stdout)
