@@ -11,8 +11,7 @@
 
 | Stage | When | What Happens |
 |-------|------|--------------|
-| **Auto-Create** | WF_START transition | Hook creates `WM_{session}_session.md` placeholder |
-| **Rename** | End of WF_CLASSIFY | Rename to `WM_{session}_{descriptor}.md` with meaningful descriptor |
+| **Auto-Create** | WF_START transition | Hook creates `WM_{session}.md` placeholder |
 | **Load** | Session resume | Read file → verify session ID matches → echo to chat |
 | **Update** | After edits/transitions | Write changes → echo: `📋 Updated Working Memory: WM_<filename>` |
 
@@ -53,8 +52,7 @@ edit_memory("WM_...", "Current State: WF_EXECUTE", "Current State: WF_VERIFY", "
 
 ```python
 # ✅ CORRECT: Single write with all sections
-# Note: Use _session suffix only in WF_START; use {descriptor} after WF_CLASSIFY rename
-mcp__plugin_swe_serena__write_memory("WM_{session}_{descriptor}", """
+mcp__plugin_swe_serena__write_memory("WM_{session}", """
 # Working Memory: Session {session}
 
 ## Session
