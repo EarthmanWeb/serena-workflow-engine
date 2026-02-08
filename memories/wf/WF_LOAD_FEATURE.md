@@ -87,26 +87,34 @@ Before proceeding, confirm:
 
 ---
 
-## ⛔ MANDATORY NEXT STEP
+## ⛔ MANDATORY NEXT STEP — Route By Task Type
 
-**YOU ARE NOT FINISHED.** Before responding to user:
+**YOU ARE NOT FINISHED.** After loading features, route based on what the task actually does:
 
-| Condition | MUST Read Next |
-|-----------|----------------|
-| Feature loaded | **Invoke `/arch-review` skill** |
+| Task Type | Examples | MUST Read Next |
+|-----------|----------|----------------|
+| **Code changes** | Bug fix, new feature, refactor, config change in code | `WF_ARCH_REVIEW` |
+| **Operational** | Send test request, run CLI command, check config, verify endpoint, test webhook, run migration | `WF_EXECUTE` |
 
-### Skill Invocation for Architecture Review
+### Code Changes → Architecture Review
 
-1. Set workflow context in WM:
-   - calling_step: WF_LOAD_FEATURE
-   - return_step: WF_ASK_PERMISSION
-2. Invoke `/arch-review` skill (or read WF_ARCH_REVIEW directly)
-3. The skill will verify approach against architecture patterns
-4. On approval, proceed to WF_ASK_PERMISSION (per states.json)
-5. After user permission granted, proceed to WF_EXECUTE
+1. Invoke `/arch-review` skill (or read `WF_ARCH_REVIEW` directly)
+2. The skill verifies approach against architecture patterns
+3. On approval → `WF_ASK_PERMISSION` → `WF_EXECUTE`
 
-**SKIPPING THIS TRANSITION = WORKFLOW VIOLATION**
+### Operational Tasks → Direct Execute
 
-📋 **WM:** Update if task state changed (see `REF_WM`)
+Operational tasks **do not modify source code**. They use feature context (URLs, config keys, data formats) to perform actions like:
+- Sending test HTTP requests to endpoints
+- Running WP-CLI commands
+- Checking database state
+- Verifying webhook responses
+- Running existing test suites
 
-[CRITICAL: Did you load ALL FEATURE_[KEY] memories? Are you on a WF_* workflow step? Did you report on it?]
+These skip architecture review because there is no architecture to review — no files are being changed.
+
+**SKIPPING FEATURE LOADING IS STILL A VIOLATION** — operational tasks need feature context to know endpoints, config keys, data formats, etc.
+
+📋 **WM:** The hook daemon auto-updates `Current State` when you read the next WF_* step. You do NOT need to manually update `Current State`.
+
+[CRITICAL: Did you load ALL FEATURE_[KEY] memories? Did you route correctly based on task type?]

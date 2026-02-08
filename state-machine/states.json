@@ -386,7 +386,8 @@
         "build_context"
       ],
       "transitions": {
-        "loaded": "WF_ARCH_REVIEW"
+        "code_changes": "WF_ARCH_REVIEW",
+        "operational": "WF_EXECUTE"
       }
     },
 
@@ -422,8 +423,8 @@
       "allowWrite": true,
       "rlvr": { "signalType": "execution_step", "rewardImpact": "neutral" },
       "entryConditions": {
-        "fromStates": ["WF_ASK_PERMISSION", "WF_SWARM_ORCHESTRATE", "WF_DEBUG_TDD", "WF_CHECKPOINT"],
-        "triggers": ["permission_granted", "swarm_complete", "debug_fixed"]
+        "fromStates": ["WF_ASK_PERMISSION", "WF_SWARM_ORCHESTRATE", "WF_DEBUG_TDD", "WF_CHECKPOINT", "WF_LOAD_FEATURE"],
+        "triggers": ["permission_granted", "swarm_complete", "debug_fixed", "operational_task"]
       },
       "requiredActions": [
         "implement_changes",
@@ -586,7 +587,7 @@
     "WF_SWARM_ORCHESTRATE": ["WF_EXECUTE"],
     "WF_CLARIFY": ["(return_to_caller)"],
     "WF_ASK_PERMISSION": ["WF_EXECUTE", "WF_CLARIFY"],
-    "WF_LOAD_FEATURE": ["WF_ARCH_REVIEW"],
+    "WF_LOAD_FEATURE": ["WF_ARCH_REVIEW", "WF_EXECUTE"],
     "WF_UPDATE_MEMORY": ["WF_LOAD_FEATURE"],
     "WF_EXECUTE": ["WF_CHECKPOINT", "WF_VERIFY"],
     "WF_CHECKPOINT": ["WF_EXECUTE", "WF_VERIFY"],

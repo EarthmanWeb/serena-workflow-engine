@@ -177,8 +177,9 @@ def main():
                 output.add_message("You cannot skip steps in the workflow.")
                 output.add_message("")
                 output.add_message("**Common fixes:**")
-                output.add_message("- From WF_START: Go to WF_CLASSIFY (for code changes)")
+                output.add_message("- From WF_START: Go to WF_CLASSIFY (for all tasks including operational)")
                 output.add_message("- From WF_CLASSIFY: Go to WF_DETECT_REQ (simple) or WF_PLAN_ARCHITECTURE (complex)")
+                output.add_message("- From WF_LOAD_FEATURE: Go to WF_ARCH_REVIEW (code changes) or WF_EXECUTE (operational tasks)")
                 output.add_message("- Features must be loaded in WF_CLASSIFY or WF_LOAD_FEATURE before WF_EXECUTE")
         else:
             output.add_message(f"{icon} ON STEP: {memory_name}")

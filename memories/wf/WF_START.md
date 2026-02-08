@@ -22,10 +22,11 @@ If you are thinking of going to WF_EXECUTE from here:
 - ❌ "I already know what to do" - **NO. WF_CLASSIFY loads features. You need them.**
 - ❌ "The WM has the feature key" - **Having the key ≠ loading the FEATURE_[KEY] memory.**
 
-**Valid paths to WF_EXECUTE (ALL go through classification/planning first):**
-1. WF_START → WF_CLASSIFY → WF_DETECT_REQ → WF_LOAD_FEATURE → WF_EXECUTE
-2. WF_START → WF_CLASSIFY → WF_PLAN_ARCHITECTURE → WF_EXECUTE
-3. WF_START → WF_CLASSIFY → WF_SWARM_ORCHESTRATE → WF_EXECUTE
+**Valid paths to WF_EXECUTE (ALL go through classification first):**
+1. **Code changes:** WF_START → WF_CLASSIFY → WF_DETECT_REQ → WF_LOAD_FEATURE → WF_ARCH_REVIEW → WF_ASK_PERMISSION → WF_EXECUTE
+2. **Operational tasks:** WF_START → WF_CLASSIFY → WF_DETECT_REQ → WF_LOAD_FEATURE → WF_EXECUTE
+3. **Medium complexity:** WF_START → WF_CLASSIFY → WF_PLAN_ARCHITECTURE → ... → WF_EXECUTE
+4. **Large/swarm:** WF_START → WF_CLASSIFY → WF_SWARM_ORCHESTRATE → WF_EXECUTE
 
 **If your next step is WF_EXECUTE, you have violated the workflow.**
 
@@ -82,9 +83,51 @@ If any FEATURE_[KEY] doesn't exist → `WF_ONBOARD`
 mcp__plugin_swe_serena__read_memory("CLAUDE_OBLIGATIONS")
 ```
 
-### 4. ⚠️ MANDATORY: Create/Read WM
+### 4. ⚠️ MANDATORY: WM File
 
 **THIS IS NOT OPTIONAL. YOU CANNOT PROCEED WITHOUT A WM FILE.**
+
+---
+
+#### ⚙️ HOW WM STATE UPDATES WORK
+
+**The hook daemon manages `Current State` automatically.** When you read any `WF_*` memory, the `swe_post_read_state` hook:
+1. Validates the transition against `states.json`
+2. Updates `**Current State**:` in the WM file
+3. Appends a transition log entry to the Progress section
+
+**YOU MUST NOT manually rewrite the WM file just to update `Current State`.** The daemon does this. If you overwrite the WM with `write_memory`, you may clobber the daemon's format and cause the init gate to reject the file.
+
+**What YOU own in WM:**
+- `## Current Task` — task description, affected features
+- `## Progress` — status updates on work done (but NOT `### Transitions`)
+- `## Previous Task` — completed tasks
+
+**What the DAEMON owns in WM:**
+- `**Current State**:` — updated automatically on each WF_* read
+- `**Previous State**:` — updated automatically
+- `### Transitions` — appended automatically
+- `**Edit Count Since Checkpoint**:` — incremented on each file edit
+- `**Last Updated**:` — timestamp updated automatically
+
+**If you need to update task context** (not state), use `edit_memory` to change specific sections, or `write_memory` with the FULL content including all daemon-managed fields intact.
+
+---
+
+#### 🆕 WM Auto-Creation
+
+**The WM file is auto-created** as `WM_{session}_session.md` when you first read `WF_START`. The hook creates it with the correct format including `## Workflow Context` and `**Current State**: WF_START`.
+
+**DO NOT create your own WM file from scratch.** The auto-created file has the exact format the init gate expects (`**Current State**:` with double-asterisk bold markers inside `## Workflow Context`).
+
+After auto-creation, update the task-specific sections only:
+```
+mcp__plugin_swe_serena__edit_memory("WM_{session}_session", "update task description and features")
+```
+
+**⚠️ NOTE: Proper WM naming happens in WF_CLASSIFY**
+
+The placeholder `_session` suffix will be replaced with a meaningful task descriptor (e.g., `_auth_fix`, `_block_tests`) at the END of WF_CLASSIFY.
 
 ---
 
@@ -93,59 +136,13 @@ mcp__plugin_swe_serena__read_memory("CLAUDE_OBLIGATIONS")
 **If you are arriving here from WF_DONE with a new task in the SAME session:**
 
 1. **DO NOT create a new WM** - the existing one for this session is still valid
-2. **UPDATE with SINGLE write_memory call:**
-   ```python
-   # ⛔ DO NOT use multiple edit_memory calls - each triggers daemon!
-   # ✅ Use ONE write_memory with complete updated content:
-   mcp__plugin_swe_serena__write_memory("WM_{session}_{descriptor}", "<full content>")
-   ```
-   Include in the update:
-   - Increment `Task Iteration` (e.g., 1 → 2)
-   - Move previous task to `## Completed Tasks (This Session)` section
-   - Add new task to `## Active Task`
+2. **UPDATE with SINGLE write_memory call** (preserve all daemon-managed fields):
+   - Increment `Task Iteration`
+   - Move previous task to `## Previous Task` section
+   - Update `## Current Task` with new task
    - Reset `Edit Count Since Checkpoint` to 0
-   - Update `Current State` to `WF_CLASSIFY`
+   - **DO NOT change `Current State`** — the daemon updates it when you read the next WF_* step
 3. **Skip to step 5** (Classify Task Type) after updating
-
-**How to detect this scenario:**
-- WM file exists for current session ID
-- Previous state was WF_DONE or WF_CLEANUP
-- User has provided a new task/request
-
----
-
-**🛑 BLOCKING REQUIREMENT: READ REF_WM FIRST**
-
-```
-mcp__plugin_swe_serena__read_memory("REF_WM")
-```
-
-**DO NOT create a WM file until you have read REF_WM.**
-**DO NOT use any other template or format - ONLY the one in REF_WM.**
-**DO NOT invent sections, formats, or naming conventions.**
-**THERE IS NO INLINE TEMPLATE HERE - THE ONLY SOURCE OF TRUTH IS REF_WM.**
-
----
-
-**After reading REF_WM:**
-
-1. Get session ID from hook context (e.g., `Session: cccdb36a`) - this is an 8-char UUID, NOT a date
-2. **Placeholder WM is auto-created** as `WM_{session}_session` when you transition to WF_START
-3. Follow the EXACT template from REF_WM - no modifications
-4. Echo to chat: `📋 Working Memory: WM_<SESSION_ID>_session`
-
-**⚠️ NOTE: Proper WM naming happens in WF_CLASSIFY**
-
-The placeholder `_session` suffix will be replaced with a meaningful task descriptor (e.g., `_auth_fix`, `_block_tests`) at the END of WF_CLASSIFY, before transitioning to the next state. This ensures the task is understood before naming.
-
-```
-# Check for existing:
-mcp__plugin_swe_serena__list_memories()  # Look for WM_* files
-
-# If continuing work, read existing file
-```
-
-**CREATING WM WITHOUT READING REF_WM = WORKFLOW VIOLATION**
 
 ### 5. Classify Task Type
 
@@ -164,6 +161,7 @@ See routing table below.
 | Continue previous work | `WF_CONTINUE` |
 | Research/question only | `WF_RESEARCH` |
 | **Code change/feature/bug** | **`WF_CLASSIFY`** ← THIS IS MANDATORY |
+| **Operational task (test, run, verify)** | **`WF_CLASSIFY`** ← STILL MANDATORY (needs feature context) |
 | New task after WF_DONE (same session) | **UPDATE existing WM** → `WF_CLASSIFY` |
 
 **⚡ LITE MODE (User-Requested Only):** `WF_RESEARCH_LITE` is ONLY available when the user explicitly requests it.
@@ -192,4 +190,4 @@ See routing table below.
 **SKIPPING WF_CLASSIFY FOR CODE CHANGES = WORKFLOW VIOLATION**
 **GOING DIRECTLY TO WF_EXECUTE = WORKFLOW VIOLATION**
 
-[CRITICAL: Does WM exist? Is your next step WF_CLASSIFY (for code changes)? Did you report on it?]
+[CRITICAL: Does WM exist? Is your next step WF_CLASSIFY (for code changes) or WF_RESEARCH? Did you report on it?]

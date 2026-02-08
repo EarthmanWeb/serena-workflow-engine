@@ -31,7 +31,7 @@ If you are thinking of skipping to WF_EXECUTE because:
 - No → go to WF_CLARIFY
 - Yes → continue
 
-### 2. Assess task complexity:
+### 2. Assess task type and complexity:
 
 #### Research Tasks (Skill-Based)
 - Questions about how code works
@@ -46,7 +46,18 @@ If you are thinking of skipping to WF_EXECUTE because:
 - Test-driven debugging needed
 → **Invoke `/debug-tdd` skill** (see Skill Invocation below)
 
-#### Simple Tasks (Single Agent)
+#### Operational Tasks (No Code Changes)
+- Send test HTTP request / curl to an endpoint
+- Run WP-CLI or shell commands
+- Check database state or config values
+- Test a webhook with sample data
+- Run existing test suites
+- Verify deployment or environment state
+
+These tasks need **feature context** (endpoints, config keys, data formats) but do **not modify source code**. They follow the same path as simple tasks but skip arch review at WF_LOAD_FEATURE.
+→ **WF_DETECT_REQ** (mark task as `operational` in WM)
+
+#### Simple Tasks (Single Agent, Code Changes)
 - Bug fix in one file
 - Small code change
 - Documentation update
