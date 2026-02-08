@@ -124,7 +124,7 @@ def main():
             # Create WM file when transitioning TO WF_START (end of WF_INIT)
             if memory_name == 'WF_START' and not state_mgr.wm_filepath:
                 project_root = get_project_root()
-                wm_filename = f"WM_{session_id}_session.md"
+                wm_filename = f"WM_{session_id}.md"
                 wm_filepath = os.path.join(project_root, ".serena", "memories", wm_filename)
 
                 wm_content = f"""# Working Memory: Session {session_id}

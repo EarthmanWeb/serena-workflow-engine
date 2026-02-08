@@ -116,18 +116,16 @@ mcp__plugin_swe_serena__read_memory("CLAUDE_OBLIGATIONS")
 
 #### 🆕 WM Auto-Creation
 
-**The WM file is auto-created** as `WM_{session}_session.md` when you first read `WF_START`. The hook creates it with the correct format including `## Workflow Context` and `**Current State**: WF_START`.
+**The WM file is auto-created** as `WM_{session}.md` when you first read `WF_START`. The hook creates it with the correct format including `## Workflow Context` and `**Current State**: WF_START`.
 
 **DO NOT create your own WM file from scratch.** The auto-created file has the exact format the init gate expects (`**Current State**:` with double-asterisk bold markers inside `## Workflow Context`).
 
 After auto-creation, update the task-specific sections only:
 ```
-mcp__plugin_swe_serena__edit_memory("WM_{session}_session", "update task description and features")
+mcp__plugin_swe_serena__edit_memory("WM_{session}", "update task description and features")
 ```
 
-**⚠️ NOTE: Proper WM naming happens in WF_CLASSIFY**
-
-The placeholder `_session` suffix will be replaced with a meaningful task descriptor (e.g., `_auth_fix`, `_block_tests`) at the END of WF_CLASSIFY.
+**DO NOT rename the WM file.** The `WM_{session}` name is permanent for the session. Renaming breaks state tracking.
 
 ---
 

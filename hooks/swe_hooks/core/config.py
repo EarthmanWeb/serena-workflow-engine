@@ -471,11 +471,14 @@ def append_transition_to_wm(wm_filepath: str, from_state: str, to_state: str,
                             async_mode: bool = None) -> bool:
     """Append a state transition note to WORKING_MEMORY Progress section.
 
+    Transition logging is synchronous to avoid race conditions with
+    subsequent state reads in the same hook chain.
+
     Args:
         wm_filepath: Path to the WORKING_MEMORY file
         from_state: Previous workflow state
         to_state: New workflow state
-        async_mode: Override async behavior (None = use global setting)
+        async_mode: Ignored. Transition writes are always synchronous.
 
     Returns:
         True if successful, False otherwise
@@ -511,24 +514,9 @@ def append_transition_to_wm(wm_filepath: str, from_state: str, to_state: str,
                 insert_pos = progress_match.end()
                 updated_content = content[:insert_pos] + f"\n### Transitions\n{transition_note}\n" + content[insert_pos:]
 
-        # Determine if async write should be used
-        use_async = async_mode if async_mode is not None else is_async_writes_enabled()
-
-        if use_async:
-            # Use async background writer
-            from .wm_writer_daemon import async_wm_write
-            return async_wm_write(
-                filepath=wm_filepath,
-                content=updated_content,
-                operation_type='transition_log',
-                validate=False,  # Transition logging doesn't need full validation
-                old_content=content,
-            )
-        else:
-            # Synchronous write (original behavior)
-            with open(wm_filepath, 'w') as f:
-                f.write(updated_content)
-            return True
+        with open(wm_filepath, 'w') as f:
+            f.write(updated_content)
+        return True
     except IOError:
         return False
 
@@ -567,12 +555,15 @@ def write_working_memory_state(cwd: str, wm_filepath: str, new_state: str,
                                 return_step: str = None, async_mode: bool = None) -> bool:
     """Update state in a WORKING_MEMORY file.
 
+    State transitions are ALWAYS synchronous to prevent race conditions.
+    The next hook invocation must see the updated state immediately.
+
     Args:
         cwd: Working directory
         wm_filepath: Full path to the WORKING_MEMORY file
         new_state: New workflow state (e.g., 'WF_EXECUTE')
         return_step: Optional return step to set
-        async_mode: Override async behavior (None = use global setting)
+        async_mode: Ignored. State writes are always synchronous.
 
     Returns:
         True if successful, False otherwise
@@ -586,24 +577,13 @@ def write_working_memory_state(cwd: str, wm_filepath: str, new_state: str,
 
         updated_content = update_working_memory_state(content, new_state, return_step)
 
-        # Determine if async write should be used
-        use_async = async_mode if async_mode is not None else is_async_writes_enabled()
-
-        if use_async:
-            # Use async background writer with anti-pattern detection
-            from .wm_writer_daemon import async_wm_write
-            return async_wm_write(
-                filepath=wm_filepath,
-                content=updated_content,
-                operation_type='state_update',
-                validate=True,  # State updates should be validated
-                old_content=content,  # For anti-pattern detection
-            )
-        else:
-            # Synchronous write (original behavior)
-            with open(wm_filepath, 'w') as f:
-                f.write(updated_content)
-            return True
+        # State transitions are ALWAYS synchronous — the next hook call
+        # (which creates a new StateManager) must read the updated state.
+        # Async writes caused race conditions where the next hook read
+        # stale state before the daemon thread flushed.
+        with open(wm_filepath, 'w') as f:
+            f.write(updated_content)
+        return True
     except IOError:
         return False
 

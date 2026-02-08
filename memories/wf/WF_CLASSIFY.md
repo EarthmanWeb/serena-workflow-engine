@@ -225,40 +225,6 @@ When routing to a workflow-aware skill (e.g., `/research`):
 
 ---
 
-## 🛑 BLOCKING GATE: WM Rename (STEP 4)
-
-**⛔ YOU CANNOT TRANSITION TO THE NEXT STATE WITH A PLACEHOLDER WM NAME.**
-
-### 4a. Check WM Filename
-
-If your WM still has the `_session` suffix (e.g., `WM_abc12345_session`), you MUST rename it before proceeding.
-
-### 4b. Choose Meaningful Descriptor
-
-Based on the task you've now classified, choose a 2-4 word snake_case descriptor:
-- Examples: `auth_fix`, `block_tests`, `theme_refactor`, `api_endpoint`, `cron_debug`
-- Should describe WHAT you're working on, not the workflow state
-
-### 4c. Rename WM File
-
-```bash
-# Rename from placeholder to task-specific
-mv .serena/memories/WM_{session}_session.md .serena/memories/WM_{session}_{descriptor}.md
-```
-
-Then update the WM content to reflect the new name:
-```python
-mcp__plugin_swe_serena__write_memory("WM_{session}_{descriptor}", "<full content with updated header>")
-```
-
-### 4d. Confirm Rename
-
-Echo to chat: `📋 Working Memory renamed: WM_{session}_{descriptor}`
-
-**⛔ TRANSITIONING WITH `_session` SUFFIX = WORKFLOW VIOLATION**
-
----
-
 ## ⛔ MANDATORY NEXT STEP
 
 **YOU ARE NOT FINISHED.** Before transitioning:
@@ -269,11 +235,8 @@ Echo to chat: `📋 Working Memory renamed: WM_{session}_{descriptor}`
 1. Did you load INDEX_FEATURES? (YES/NO)
 2. Did you call `read_memory("FEATURE_[KEY]")` for EACH feature? (YES/NO)
 3. Did you update WM with features? (YES/NO)
-4. **Is your WM renamed from `_session` to a meaningful descriptor?** (YES/NO)
 
 **If ANY answer is NO: STOP and do it NOW.**
-
-**⛔ WM STILL HAS `_session` SUFFIX? You MUST rename it before transitioning!**
 
 ### 🐝 Swarm Check (After Feature Loading)
 

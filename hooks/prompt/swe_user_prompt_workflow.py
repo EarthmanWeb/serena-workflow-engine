@@ -22,9 +22,10 @@ if PLUGIN_ROOT:
 
 try:
     from swe_hooks.core.config import (
-        load_setup_complete, 
+        load_setup_complete,
         get_working_memory_filename, read_working_memory_state
     )
+    from swe_hooks.core.session import extract_session_id, find_working_memory_for_session
     from swe_hooks.core.state_manager import StateManager
 except ImportError as e:
     print(json.dumps({"systemMessage": f"SWE import error: {e}"}), file=sys.stdout)
@@ -128,26 +129,25 @@ def main():
         
         # Extract session ID from transcript_path for session isolation
         transcript_path = input_data.get('transcript_path', '')
-        session_id = None
-        if transcript_path:
-            uuid_match = re.search(r'([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})', transcript_path)
-            if uuid_match:
-                session_id = uuid_match.group(1)[:8]
-        
-        # Get current state from WM (session-isolated)
-        # Only use working memory if it matches this session
-        wm_file = get_working_memory_filename(cwd)
-        state_data, _ = read_working_memory_state(cwd)
-        
-        # Check if the working memory belongs to THIS session
-        wm_session_id = None
-        if state_data:
-            wm_session_id = state_data.get("session_id")
+        session_id = extract_session_id(transcript_path)
 
-        # If no working memory, OR working memory has no session ID (old format),
-        # OR session ID mismatch, start fresh at WF_INIT
+        # Get current state from WM using session-isolated lookup
+        wm_file = None
+        state_data = None
+        wm_session_id = None
+
+        if session_id:
+            wm_filepath = find_working_memory_for_session(cwd, session_id)
+            if wm_filepath:
+                import os
+                wm_file = os.path.basename(wm_filepath).replace('.md', '')
+                state_data, _ = read_working_memory_state(cwd, wm_file)
+                if state_data:
+                    wm_session_id = state_data.get("session_id")
+
+        # If no working memory for this session, start fresh at WF_INIT
         should_reset = (
-            not state_data or              # No working memory found
+            not state_data or              # No working memory found for this session
             not wm_session_id or           # WM has no session ID (old format)
             (session_id and session_id != wm_session_id)  # Session mismatch
         )

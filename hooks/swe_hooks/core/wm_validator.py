@@ -35,10 +35,9 @@ class WMFormatValidator:
         r'Invocation Mode',
     ]
 
-    # Naming pattern: WM_<SESSION_ID>_<descriptor>.md
-    # Case-sensitive per REF_WM spec
+    # Naming pattern: WM_<SESSION_ID>.md
     FILENAME_PATTERN = re.compile(
-        r'^WM_([a-f0-9]{8})_([a-zA-Z0-9_]+)(?:\.md)?$'
+        r'^WM_([a-f0-9]{8})(?:\.md)?$'
     )
 
     def validate_filename(self, filename: str) -> Tuple[bool, str, Optional[str]]:
@@ -52,16 +51,9 @@ class WMFormatValidator:
         """
         match = self.FILENAME_PATTERN.match(filename)
         if not match:
-            return False, f"Invalid filename format. Expected: WM_<8-char-session>_<descriptor>.md", None
+            return False, f"Invalid filename format. Expected: WM_<8-char-session>.md", None
 
         session_id = match.group(1)
-        descriptor = match.group(2)
-
-        # Validate descriptor (2-4 words, snake_case)
-        words = descriptor.split('_')
-        if len(words) < 1 or len(words) > 5:
-            return False, f"Descriptor should be 1-5 words in snake_case, got: {descriptor}", session_id
-
         return True, "", session_id
 
     def validate_content(self, content: str) -> Tuple[bool, List[str]]:
