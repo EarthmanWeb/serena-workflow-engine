@@ -1,5 +1,5 @@
 {
-  "description": "Serena Workflow Engine - 21-state workflow with RLVR learning",
+  "description": "SWE v2 - Stream-based workflow with enforcement",
   "hooks": {
     "SessionStart": [
       {
@@ -58,39 +58,9 @@
             "timeout": 10
           }
         ]
-      },
-      {
-        "matcher": "mcp__claude-flow__task_orchestrate|mcp__ruv-swarm__task_orchestrate|mcp__plugin_claude-flow_ruv-swarm__task_orchestrate|mcp__plugin_claude-flow_claude-flow__task_orchestrate",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/pre/swe_pre_task_orchestrate_gate.py",
-            "timeout": 10
-          }
-        ]
       }
     ],
     "PostToolUse": [
-      {
-        "matcher": "mcp__ruv-swarm__swarm_init",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/post/swe_post_ruv_swarm_init.py",
-            "timeout": 10
-          }
-        ]
-      },
-      {
-        "matcher": "mcp__serena__replace_content|mcp__plugin_swe_serena__replace_content",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/post/swe_post_serena_replace_fallback.py",
-            "timeout": 10
-          }
-        ]
-      },
       {
         "matcher": "Write|Edit|MultiEdit|mcp__serena__replace_symbol_body|mcp__serena__insert_after_symbol|mcp__serena__insert_before_symbol",
         "hooks": [
@@ -107,11 +77,6 @@
           {
             "type": "command",
             "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/post/swe_post_read_state.py",
-            "timeout": 10
-          },
-          {
-            "type": "command",
-            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/post/swe_post_task_learn.py",
             "timeout": 10
           }
         ]

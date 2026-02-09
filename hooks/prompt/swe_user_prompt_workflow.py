@@ -13,12 +13,7 @@ import os
 import sys
 import json
 import re
-
-PLUGIN_ROOT = os.environ.get('CLAUDE_PLUGIN_ROOT', '')
-if PLUGIN_ROOT:
-    hooks_dir = os.path.join(PLUGIN_ROOT, 'hooks')
-    if hooks_dir not in sys.path:
-        sys.path.insert(0, hooks_dir)
+import swe_hooks.bootstrap  # Sets up sys.path
 
 try:
     from swe_hooks.core.config import (
@@ -27,9 +22,9 @@ try:
     )
     from swe_hooks.core.session import extract_session_id, find_working_memory_for_session
     from swe_hooks.core.state_manager import StateManager
+    from swe_hooks.core.stream import get_stream_path, get_event_count
 except ImportError as e:
-    print(json.dumps({"systemMessage": f"SWE import error: {e}"}), file=sys.stdout)
-    sys.exit(0)
+    swe_hooks.bootstrap.import_error_exit(e, "UserPromptSubmit")
 
 
 # Patterns that indicate a continuation of the current task
@@ -139,7 +134,6 @@ def main():
         if session_id:
             wm_filepath = find_working_memory_for_session(cwd, session_id)
             if wm_filepath:
-                import os
                 wm_file = os.path.basename(wm_filepath).replace('.md', '')
                 state_data, _ = read_working_memory_state(cwd, wm_file)
                 if state_data:
@@ -193,7 +187,7 @@ If your next output contains ANY text instead of a tool call, you have failed.
             sys.exit(0)
         
         # Handle completed/uninitialized states
-        if current_state in ['UNINITIALIZED', 'WF_DONE', 'WF_CLEANUP', None]:
+        if current_state in ['UNINITIALIZED', 'WF_DONE', None]:
             # Check if we have a valid working memory for THIS session
             # If so, this is a "new task in same session" - preserve working memory
             is_same_session_new_task = (
@@ -201,7 +195,7 @@ If your next output contains ANY text instead of a tool call, you have failed.
                 wm_session_id and
                 session_id and
                 wm_session_id == session_id and
-                current_state in ['WF_DONE', 'WF_CLEANUP']
+                current_state == 'WF_DONE'
             )
 
             if is_same_session_new_task:
@@ -223,16 +217,30 @@ If your next output contains ANY text instead of a tool call, you have failed.
             # User is continuing - stay in current state, provide brief reminder
             if current_state == 'WF_START':
                 # Haven't progressed - need to classify
+                # Get stream event count for observability
+                stream_info = ""
+                if session_id:
+                    stream_path = get_stream_path(session_id)
+                    event_count = get_event_count(stream_path)
+                    if event_count > 0:
+                        stream_info = f"\nStream Events: {event_count}"
                 context = f"""📋 WORKFLOW STATE: {current_state}
-Working Memory: {wm_file or 'None'}
+Working Memory: {wm_file or 'None'}{stream_info}
 
 MANDATORY: Before responding, read and follow the WF_START workflow.
 Use: mcp__plugin_swe_serena__read_memory(memory_file_name="WF_START")
 """
             else:
                 # In active state - continue workflow
+                # Get stream event count for observability
+                stream_info = ""
+                if session_id:
+                    stream_path = get_stream_path(session_id)
+                    event_count = get_event_count(stream_path)
+                    if event_count > 0:
+                        stream_info = f"\nStream Events: {event_count}"
                 context = f"""➡️ CONTINUING WORKFLOW: {current_state}
-Working Memory: {wm_file or 'None'}
+Working Memory: {wm_file or 'None'}{stream_info}
 
 Continue with the current workflow step.
 If you need to review instructions: mcp__plugin_swe_serena__read_memory(memory_file_name="{current_state}")
@@ -240,8 +248,15 @@ If you need to review instructions: mcp__plugin_swe_serena__read_memory(memory_f
         
         elif prompt_intent == 'addition':
             # User is adding to current task - stay in current state
+            # Get stream event count for observability
+            stream_info = ""
+            if session_id:
+                stream_path = get_stream_path(session_id)
+                event_count = get_event_count(stream_path)
+                if event_count > 0:
+                    stream_info = f"\nStream Events: {event_count}"
             context = f"""➕ TASK ADDITION - WORKFLOW STATE: {current_state}
-Working Memory: {wm_file or 'None'}
+Working Memory: {wm_file or 'None'}{stream_info}
 
 User is adding to the current task. Incorporate this into your current workflow step.
 If scope changes significantly, transition to WF_CLASSIFY.
@@ -249,8 +264,15 @@ If scope changes significantly, transition to WF_CLASSIFY.
         
         elif prompt_intent == 'same_session_new_task':
             # New task in same session after WF_DONE - preserve and update existing working memory
+            # Get stream event count for observability
+            stream_info = ""
+            if session_id:
+                stream_path = get_stream_path(session_id)
+                event_count = get_event_count(stream_path)
+                if event_count > 0:
+                    stream_info = f"\nStream Events: {event_count}"
             context = f"""🔄 NEW TASK IN SAME SESSION - WORKFLOW STATE: {current_state}
-Working Memory: {wm_file}
+Working Memory: {wm_file}{stream_info}
 Session: {session_id}
 
 **IMPORTANT: This is a NEW TASK in the SAME SESSION after completing WF_DONE.**
@@ -274,8 +296,15 @@ Session: {session_id}
                 state_mgr.transition_to('WF_START')
                 current_state = 'WF_START'
 
+            # Get stream event count for observability
+            stream_info = ""
+            if session_id:
+                stream_path = get_stream_path(session_id)
+                event_count = get_event_count(stream_path)
+                if event_count > 0:
+                    stream_info = f"\nStream Events: {event_count}"
             context = f"""🆕 NEW TASK DETECTED - WORKFLOW STATE: {current_state}
-Working Memory: {wm_file or 'None'}
+Working Memory: {wm_file or 'None'}{stream_info}
 
 MANDATORY: Before responding, read and follow the {current_state} workflow instructions.
 Use: mcp__plugin_swe_serena__read_memory(memory_file_name="{current_state}")
@@ -283,9 +312,16 @@ Use: mcp__plugin_swe_serena__read_memory(memory_file_name="{current_state}")
         
         else:
             # Unknown intent - route to WF_CLASSIFY for proper classification
+            # Get stream event count for observability
+            stream_info = ""
+            if session_id:
+                stream_path = get_stream_path(session_id)
+                event_count = get_event_count(stream_path)
+                if event_count > 0:
+                    stream_info = f"\nStream Events: {event_count}"
             if current_state == 'WF_START':
                 context = f"""❓ INTENT UNCLEAR - WORKFLOW STATE: {current_state}
-Working Memory: {wm_file or 'None'}
+Working Memory: {wm_file or 'None'}{stream_info}
 
 MANDATORY: Before responding, read and follow WF_START to initialize.
 Then proceed to WF_CLASSIFY for task classification.
@@ -295,7 +331,7 @@ Use: mcp__plugin_swe_serena__read_memory(memory_file_name="{current_state}")
                 # Transition to WF_CLASSIFY for classification
                 state_mgr.transition_to('WF_CLASSIFY')
                 context = f"""❓ INTENT UNCLEAR - Routing to WF_CLASSIFY
-Working Memory: {wm_file or 'None'}
+Working Memory: {wm_file or 'None'}{stream_info}
 
 MANDATORY: Classify this task using WF_CLASSIFY.
 Use: mcp__plugin_swe_serena__read_memory(memory_file_name="WF_CLASSIFY")

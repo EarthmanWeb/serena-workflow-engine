@@ -1,24 +1,19 @@
 #!/usr/bin/env python3
-"""Stop hook - Check workflow state."""
+"""Stop hook - Check workflow state and log interruption to stream."""
 
 import os
 import sys
 import json
-
-PLUGIN_ROOT = os.environ.get('CLAUDE_PLUGIN_ROOT', '')
-if PLUGIN_ROOT:
-    hooks_dir = os.path.join(PLUGIN_ROOT, 'hooks')
-    if hooks_dir not in sys.path:
-        sys.path.insert(0, hooks_dir)
+import swe_hooks.bootstrap  # Sets up sys.path
 
 try:
     from swe_hooks.core.output import HookOutput, output_empty
     from swe_hooks.core.input import read_stdin_safe, get_input_field
     from swe_hooks.core.state_manager import StateManager
+    from swe_hooks.core.stream import get_stream_path, append_event
+    from swe_hooks.core.session import extract_session_id
 except ImportError as e:
-    output = {"hookSpecificOutput": {"hookEventName": "Stop", "additionalContext": f"SWE import error: {e}"}}
-    print(json.dumps(output), file=sys.stdout)
-    sys.exit(0)
+    swe_hooks.bootstrap.import_error_exit(e, "Stop")
 
 INCOMPLETE = {'WF_EXECUTE', 'WF_DEBUG_TDD', 'WF_VERIFY', 'WF_PLAN_ARCHITECTURE'}
 
@@ -26,14 +21,26 @@ def main():
     try:
         input_data = read_stdin_safe(timeout_seconds=2.0)
         cwd = get_input_field(input_data, 'cwd', default=os.getcwd())
+
+        transcript_path = get_input_field(input_data, 'transcript_path', default='')
+        session_id = extract_session_id(transcript_path)
+
         state_mgr = StateManager(cwd)
         current = state_mgr.get_current_state()
-        if current in ('WF_DONE', 'WF_CLEANUP', 'UNINITIALIZED'):
+
+        if current in ('WF_DONE', 'UNINITIALIZED'):
             output_empty()
+            return
+
         if current in INCOMPLETE:
+            if session_id:
+                stream_path = get_stream_path(session_id)
+                append_event(stream_path, 'interrupted', state=current, s=session_id)
             output = HookOutput(event_name="Stop")
             output.add_message(f"⚠️ Stopping with incomplete work: {current}")
             output.output_and_exit()
+            return
+
         output_empty()
     except Exception as e:
         output = {"hookSpecificOutput": {"hookEventName": "Stop", "additionalContext": f"Stop error: {e}"}}

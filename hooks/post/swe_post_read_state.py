@@ -8,12 +8,7 @@ Uses session isolation to ensure state changes only affect the current session.
 import os
 import sys
 import json
-
-PLUGIN_ROOT = os.environ.get('CLAUDE_PLUGIN_ROOT', '')
-if PLUGIN_ROOT:
-    hooks_dir = os.path.join(PLUGIN_ROOT, 'hooks')
-    if hooks_dir not in sys.path:
-        sys.path.insert(0, hooks_dir)
+import swe_hooks.bootstrap  # Sets up sys.path
 
 try:
     from swe_hooks.core.output import HookOutput, output_empty, output_status
@@ -21,14 +16,12 @@ try:
     from swe_hooks.core.state_manager import StateManager, STATE_ICONS
     from swe_hooks.core.session import extract_session_id, get_project_root, find_working_memory_for_session
     from swe_hooks.core.config import append_transition_to_wm
-    from swe_hooks.core.wm_writer_daemon import async_wm_write
+    from swe_hooks.core.stream import get_stream_path, append_event
     from datetime import datetime
     import re
     import time
 except ImportError as e:
-    output = {"hookSpecificOutput": {"hookEventName": "PostToolUse", "additionalContext": f"SWE import error: {e}"}}
-    print(json.dumps(output), file=sys.stdout)
-    sys.exit(0)
+    swe_hooks.bootstrap.import_error_exit(e)
 
 
 def update_test_docs_timestamp(wm_filepath: str, session_id: str) -> bool:
@@ -65,14 +58,9 @@ def update_test_docs_timestamp(wm_filepath: str, session_id: str) -> bool:
                 # Fallback: append at end
                 updated_content = content.rstrip() + f"\n\n{new_marker}\n"
 
-        # Use async writer for safe background write
-        return async_wm_write(
-            filepath=wm_filepath,
-            content=updated_content,
-            operation_type='edit_tracking',
-            validate=False,
-            session_id=session_id
-        )
+        with open(wm_filepath, 'w', encoding='utf-8') as f:
+            f.write(updated_content)
+        return True
     except Exception:
         return False
 
@@ -160,10 +148,17 @@ def main():
                 state_mgr.set_working_memory(wm_filename.replace('.md', ''))
                 output.add_message(f"✅ Working Memory created: {wm_filename}")
 
+                # Append session start event to stream
+                stream_path = get_stream_path(session_id)
+                append_event(stream_path, 'session_start', s=session_id)
+
             success, msg = state_mgr.transition_to(memory_name)
             if success:
                 output.add_message(f"{icon} ON STEP: {memory_name}")
                 output.add_message(msg)
+                # Append state transition event to stream
+                stream_path = get_stream_path(session_id)
+                append_event(stream_path, 'state', from_s=current, to_s=memory_name, s=session_id)
                 # Auto-log transition to WM Progress section
                 if state_mgr.wm_filepath:
                     append_transition_to_wm(state_mgr.wm_filepath, current, memory_name)
@@ -178,7 +173,7 @@ def main():
                 output.add_message("")
                 output.add_message("**Common fixes:**")
                 output.add_message("- From WF_START: Go to WF_CLASSIFY (for all tasks including operational)")
-                output.add_message("- From WF_CLASSIFY: Go to WF_DETECT_REQ (simple) or WF_PLAN_ARCHITECTURE (complex)")
+                output.add_message("- From WF_CLASSIFY: Go to WF_REQUIREMENTS (simple) or WF_PLAN_ARCHITECTURE (complex)")
                 output.add_message("- From WF_LOAD_FEATURE: Go to WF_ARCH_REVIEW (code changes) or WF_EXECUTE (operational tasks)")
                 output.add_message("- Features must be loaded in WF_CLASSIFY or WF_LOAD_FEATURE before WF_EXECUTE")
         else:

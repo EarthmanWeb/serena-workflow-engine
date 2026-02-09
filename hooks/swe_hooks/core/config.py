@@ -8,35 +8,8 @@ import json
 import os
 import re
 import glob
-from typing import Dict, Any, Optional, List, Tuple, Callable
+from typing import Dict, Any, Optional, List, Tuple
 from datetime import datetime
-
-# Async write support - lazy import to avoid circular dependencies
-_async_writer_available = None
-_use_async_writes = True  # Set to False to disable async writes globally
-
-
-def _get_async_writer():
-    """Lazy import of async writer to avoid circular dependencies."""
-    global _async_writer_available
-    if _async_writer_available is None:
-        try:
-            from .wm_writer_daemon import async_wm_write, async_wm_append
-            _async_writer_available = True
-        except ImportError:
-            _async_writer_available = False
-    return _async_writer_available
-
-
-def set_async_writes_enabled(enabled: bool):
-    """Enable or disable async writes globally."""
-    global _use_async_writes
-    _use_async_writes = enabled
-
-
-def is_async_writes_enabled() -> bool:
-    """Check if async writes are enabled and available."""
-    return _use_async_writes and _get_async_writer()
 
 
 def get_project_root() -> str:
@@ -208,277 +181,13 @@ def update_working_memory_state(content: str, new_state: str, return_step: str =
     return content
 
 
-# =============================================================================
-# WORKING_MEMORY Staleness Detection (for enforcement)
-# =============================================================================
-
-def get_wm_last_updated(content: str) -> Optional[datetime]:
-    """Extract the last updated timestamp from WORKING_MEMORY content.
-    
-    Looks for patterns like:
-    - **Last Updated:** 2026-01-22T14:30:00Z
-    - **Edit Count Since Checkpoint:** N
-    """
-    # Try ISO format first
-    match = re.search(r'\*\*Last Updated\*\*:\s*(\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(?::\d{2})?)', content)
-    if match:
-        try:
-            ts = match.group(1).replace('T', ' ')[:16]  # Normalize to YYYY-MM-DD HH:MM
-            return datetime.strptime(ts, "%Y-%m-%d %H:%M")
-        except ValueError:
-            pass
-    
-    # Try simpler date format
-    match = re.search(r'\*\*Last Updated\*\*:\s*(\d{4}-\d{2}-\d{2} \d{2}:\d{2})', content)
-    if match:
-        try:
-            return datetime.strptime(match.group(1), "%Y-%m-%d %H:%M")
-        except ValueError:
-            pass
-    
-    return None
-
-
-def get_wm_edit_count(content: str) -> int:
-    """Extract the edit count from WORKING_MEMORY content."""
-    match = re.search(r'\*\*Edit Count Since Checkpoint\*\*:\s*(\d+)', content)
-    if match:
-        return int(match.group(1))
-    return 0
-
-
-def update_wm_edit_tracking(content: str, edit_count: int, edited_files: List[str] = None) -> str:
-    """Update edit tracking metadata in WORKING_MEMORY content.
-    
-    Updates or adds:
-    - **Last Updated:** timestamp
-    - **Edit Count Since Checkpoint:** N
-    - **Recent Edits:** list of files
-    """
-    timestamp = datetime.now().strftime("%Y-%m-%dT%H:%M:%SZ")
-    
-    # Update or add Last Updated
-    if re.search(r'\*\*Last Updated\*\*:', content):
-        content = re.sub(
-            r'(\*\*Last Updated\*\*:\s*).*',
-            f'\\g<1>{timestamp}',
-            content
-        )
-    else:
-        # Add to Progress section if it exists
-        if '## Progress' in content:
-            content = re.sub(
-                r'(## Progress\s*\n)',
-                f'\\g<1>\n**Last Updated:** {timestamp}\n',
-                content
-            )
-    
-    # Update or add Edit Count
-    if re.search(r'\*\*Edit Count Since Checkpoint\*\*:', content):
-        content = re.sub(
-            r'(\*\*Edit Count Since Checkpoint\*\*:\s*)\d+',
-            f'\\g<1>{edit_count}',
-            content
-        )
-    else:
-        # Add after Last Updated if present, otherwise to Progress section
-        if re.search(r'\*\*Last Updated\*\*:', content):
-            content = re.sub(
-                r'(\*\*Last Updated\*\*:.*\n)',
-                f'\\g<1>**Edit Count Since Checkpoint:** {edit_count}\n',
-                content
-            )
-    
-    # Update Recent Edits list
-    if edited_files:
-        edits_str = ', '.join([f'`{f}`' for f in edited_files[-5:]])  # Keep last 5
-        if re.search(r'\*\*Recent Edits\*\*:', content):
-            content = re.sub(
-                r'(\*\*Recent Edits\*\*:\s*).*',
-                f'\\g<1>{edits_str}',
-                content
-            )
-        else:
-            if re.search(r'\*\*Edit Count Since Checkpoint\*\*:', content):
-                content = re.sub(
-                    r'(\*\*Edit Count Since Checkpoint\*\*:.*\n)',
-                    f'\\g<1>**Recent Edits:** {edits_str}\n',
-                    content
-                )
-    
-    return content
-
-
-def reset_wm_edit_tracking(content: str) -> str:
-    """Reset edit tracking after a checkpoint (user updated progress)."""
-    timestamp = datetime.now().strftime("%Y-%m-%dT%H:%M:%SZ")
-    
-    # Update Last Updated
-    if re.search(r'\*\*Last Updated\*\*:', content):
-        content = re.sub(
-            r'(\*\*Last Updated\*\*:\s*).*',
-            f'\\g<1>{timestamp}',
-            content
-        )
-    
-    # Reset Edit Count to 0
-    if re.search(r'\*\*Edit Count Since Checkpoint\*\*:', content):
-        content = re.sub(
-            r'(\*\*Edit Count Since Checkpoint\*\*:\s*)\d+',
-            '\\g<1>0',
-            content
-        )
-    
-    # Clear Recent Edits
-    if re.search(r'\*\*Recent Edits\*\*:', content):
-        content = re.sub(
-            r'\*\*Recent Edits\*\*:.*\n',
-            '',
-            content
-        )
-    
-    return content
-
-
-def check_wm_staleness(cwd: str, wm_filepath: str, edit_threshold: int = 3) -> Tuple[bool, int, Optional[datetime]]:
-    """Check if WORKING_MEMORY is stale based on edit tracking.
-    
-    Args:
-        cwd: Working directory
-        wm_filepath: Path to the WORKING_MEMORY file
-        edit_threshold: Number of edits before considered stale
-    
-    Returns:
-        Tuple of (is_stale, edit_count, last_update_time)
-    """
-    if not wm_filepath or not os.path.exists(wm_filepath):
-        return False, 0, None
-    
-    try:
-        with open(wm_filepath, 'r') as f:
-            content = f.read()
-        
-        edit_count = get_wm_edit_count(content)
-        last_updated = get_wm_last_updated(content)
-        
-        is_stale = edit_count >= edit_threshold
-        return is_stale, edit_count, last_updated
-    except IOError:
-        return False, 0, None
-
-
-def check_wm_progress_updated(cwd: str, wm_filepath: str, since_timestamp: datetime = None) -> bool:
-    """Check if WORKING_MEMORY Progress section was updated since timestamp.
-    
-    Args:
-        cwd: Working directory
-        wm_filepath: Path to the WORKING_MEMORY file
-        since_timestamp: Check if updated after this time. If None, checks if edit count is 0.
-    
-    Returns:
-        True if progress was updated (edit count is 0 or last_updated > since_timestamp)
-    """
-    if not wm_filepath or not os.path.exists(wm_filepath):
-        return True  # No WM to check - allow operation
-    
-    try:
-        with open(wm_filepath, 'r') as f:
-            content = f.read()
-        
-        edit_count = get_wm_edit_count(content)
-        
-        # If edit count is 0, WM was updated after last checkpoint
-        if edit_count == 0:
-            return True
-        
-        # If we have a timestamp to check against
-        if since_timestamp:
-            last_updated = get_wm_last_updated(content)
-            if last_updated and last_updated > since_timestamp:
-                return True
-        
-        return False
-    except IOError:
-        return True  # On error, allow operation
-
-
-def persist_edit_to_wm(cwd: str, wm_filepath: str, edited_file: str = None,
-                       async_mode: bool = None) -> Tuple[bool, int]:
-    """Persist an edit to WORKING_MEMORY tracking.
-
-    Args:
-        cwd: Working directory
-        wm_filepath: Path to the WORKING_MEMORY file
-        edited_file: Optional file path that was edited
-        async_mode: Override async behavior (None = use global setting)
-
-    Returns:
-        Tuple of (success, new_edit_count)
-    """
-    if not wm_filepath or not os.path.exists(wm_filepath):
-        return False, 0
-
-    try:
-        with open(wm_filepath, 'r') as f:
-            content = f.read()
-
-        # Get current edit count and increment
-        current_count = get_wm_edit_count(content)
-        new_count = current_count + 1
-
-        # Get recent edits list
-        recent_match = re.search(r'\*\*Recent Edits\*\*:\s*(.+)', content)
-        recent_files = []
-        if recent_match:
-            # Parse existing files
-            recent_str = recent_match.group(1)
-            recent_files = [f.strip('`').strip() for f in recent_str.split(',') if f.strip()]
-
-        # Add new file if provided
-        if edited_file:
-            # Clean up file path
-            clean_path = edited_file.replace(cwd, '').lstrip('/')
-            if clean_path not in recent_files:
-                recent_files.append(clean_path)
-
-        # Update content
-        updated_content = update_wm_edit_tracking(content, new_count, recent_files)
-
-        # Determine if async write should be used
-        use_async = async_mode if async_mode is not None else is_async_writes_enabled()
-
-        if use_async:
-            # Use async background writer
-            from .wm_writer_daemon import async_wm_write
-            success = async_wm_write(
-                filepath=wm_filepath,
-                content=updated_content,
-                operation_type='edit_tracking',
-                validate=False,  # Edit tracking doesn't need full validation
-                old_content=content,
-            )
-            return success, new_count
-        else:
-            # Synchronous write (original behavior)
-            with open(wm_filepath, 'w') as f:
-                f.write(updated_content)
-            return True, new_count
-    except IOError:
-        return False, 0
-
-
-def append_transition_to_wm(wm_filepath: str, from_state: str, to_state: str,
-                            async_mode: bool = None) -> bool:
+def append_transition_to_wm(wm_filepath: str, from_state: str, to_state: str) -> bool:
     """Append a state transition note to WORKING_MEMORY Progress section.
-
-    Transition logging is synchronous to avoid race conditions with
-    subsequent state reads in the same hook chain.
 
     Args:
         wm_filepath: Path to the WORKING_MEMORY file
         from_state: Previous workflow state
         to_state: New workflow state
-        async_mode: Ignored. Transition writes are always synchronous.
 
     Returns:
         True if successful, False otherwise
@@ -552,18 +261,16 @@ def read_working_memory_state(cwd: str, wm_filename: str = None) -> Tuple[Option
 
 
 def write_working_memory_state(cwd: str, wm_filepath: str, new_state: str,
-                                return_step: str = None, async_mode: bool = None) -> bool:
+                                return_step: str = None) -> bool:
     """Update state in a WORKING_MEMORY file.
 
     State transitions are ALWAYS synchronous to prevent race conditions.
-    The next hook invocation must see the updated state immediately.
 
     Args:
         cwd: Working directory
         wm_filepath: Full path to the WORKING_MEMORY file
         new_state: New workflow state (e.g., 'WF_EXECUTE')
         return_step: Optional return step to set
-        async_mode: Ignored. State writes are always synchronous.
 
     Returns:
         True if successful, False otherwise
@@ -613,13 +320,6 @@ def load_workflow_state(cwd: str, wm_filename: str = None) -> Optional[Dict[str,
         "edits_since_checkpoint": 0,
         "is_swarm_agent": False,
         "plan_mode": False,
-        "trajectory_id": None,
-        "trajectory_steps": 0,
-        "reward_signals": {
-            "state_transitions": 0,
-            "clarify_count": 0,
-            "edit_count": 0,
-        }
     }
 
 
@@ -696,12 +396,6 @@ def generate_session_id() -> str:
     return datetime.now().strftime("%Y%m%d_%H%M%S")
 
 
-def generate_trajectory_id() -> str:
-    """Generate a trajectory ID for RLVR learning."""
-    import random
-    return f"traj_{int(datetime.now().timestamp())}_{random.randint(10000, 99999)}"
-
-
 def create_initial_state(session_id: str = None) -> Dict[str, Any]:
     """Create initial workflow state."""
     if session_id is None:
@@ -714,22 +408,5 @@ def create_initial_state(session_id: str = None) -> Dict[str, Any]:
         "edits_since_checkpoint": 0,
         "is_swarm_agent": False,
         "plan_mode": False,
-        "plan_mode_entries": 0,
-        "plan_mode_reason": None,
         "working_memory_file": None,
-        "trajectory_id": generate_trajectory_id(),
-        "trajectory_steps": 0,
-        "learning_complete": False,
-        "computed_reward": None,
-        "reward_signals": {
-            "skill_returns": [],
-            "state_transitions": 0,
-            "clarify_count": 0,
-            "edit_count": 0,
-            "checkpoint_compliance": 1.0,
-            "test_pass_rate": None,
-            "arch_review_pass": None,
-            "verify_success": None
-        },
-        "is_claude_flow_agent": True
     }

@@ -8,7 +8,7 @@ Validates WM content against REF_WM specs:
 """
 
 import re
-from typing import Tuple, Optional, List, Set
+from typing import Tuple, Optional, List
 
 
 class WMFormatValidator:
@@ -24,15 +24,6 @@ class WMFormatValidator:
     RECOMMENDED_SECTIONS = [
         'Progress',
         'Previous Task',
-    ]
-
-    # Fields that indicate state-only changes (anti-pattern if changed alone)
-    # These patterns match with or without markdown bold formatting
-    STATE_FIELD_PATTERNS = [
-        r'Current State',
-        r'Calling Step',
-        r'Return Step',
-        r'Invocation Mode',
     ]
 
     # Naming pattern: WM_<SESSION_ID>.md
@@ -89,53 +80,6 @@ class WMFormatValidator:
 
         return len(errors) == 0, errors
 
-    def detect_single_field_edit(self, old_content: str, new_content: str) -> Tuple[bool, str]:
-        """Detect anti-pattern: single-field state edits.
-
-        Per REF_WM: "SINGLE-FIELD STATE EDIT = WORKFLOW VIOLATION"
-
-        Args:
-            old_content: Previous WM content
-            new_content: New WM content
-
-        Returns:
-            Tuple of (is_violation, violation_description)
-        """
-        if not old_content or not new_content:
-            return False, ""
-
-        old_lines = old_content.strip().split('\n')
-        new_lines = new_content.strip().split('\n')
-
-        # Find changed lines
-        old_set = set(old_lines)
-        new_set = set(new_lines)
-
-        removed = old_set - new_set
-        added = new_set - old_set
-
-        # Filter out empty lines and whitespace-only changes
-        removed = {line for line in removed if line.strip()}
-        added = {line for line in added if line.strip()}
-
-        total_changes = len(removed) + len(added)
-
-        # If very few lines changed, check if they're all state fields
-        if total_changes <= 4:
-            all_changes = removed | added
-            state_field_changes = 0
-
-            for line in all_changes:
-                line_stripped = line.strip()
-                if any(field in line_stripped for field in self.STATE_FIELD_PATTERNS):
-                    state_field_changes += 1
-
-            # If ALL changes are state field changes, it's a violation
-            if state_field_changes > 0 and state_field_changes == len(all_changes):
-                return True, f"Single-field state edit detected. Changed only: {', '.join(self.STATE_FIELD_PATTERNS[:state_field_changes])}"
-
-        return False, ""
-
     def validate_session_ownership(self, content: str, expected_session_id: str) -> Tuple[bool, str]:
         """Validate that content belongs to the expected session.
 
@@ -159,59 +103,6 @@ class WMFormatValidator:
 
         return True, ""
 
-    def get_sections_modified(self, old_content: str, new_content: str) -> Set[str]:
-        """Identify which sections were modified between old and new content.
-
-        Args:
-            old_content: Previous WM content
-            new_content: New WM content
-
-        Returns:
-            Set of section names that were modified
-        """
-        modified = set()
-
-        # Define section markers
-        section_markers = [
-            ('Workflow Context', r'##\s*Workflow Context'),
-            ('Current Task', r'##\s*Current Task'),
-            ('Progress', r'###?\s*Progress'),
-            ('Previous Task', r'##\s*Previous Task'),
-            ('Files', r'\*\*Files'),
-            ('Context', r'###?\s*Context'),
-            ('Artifacts', r'\*\*Artifacts'),
-        ]
-
-        for section_name, pattern in section_markers:
-            # Extract section content from both
-            old_section = self._extract_section(old_content, pattern)
-            new_section = self._extract_section(new_content, pattern)
-
-            if old_section != new_section:
-                modified.add(section_name)
-
-        return modified
-
-    def _extract_section(self, content: str, section_pattern: str) -> str:
-        """Extract content of a section from WM content."""
-        if not content:
-            return ""
-
-        # Find section start
-        match = re.search(section_pattern, content, re.IGNORECASE)
-        if not match:
-            return ""
-
-        start = match.end()
-
-        # Find next section (## marker)
-        next_section = re.search(r'\n##\s', content[start:])
-        if next_section:
-            end = start + next_section.start()
-        else:
-            end = len(content)
-
-        return content[start:end].strip()
 
 
 # Singleton instance for reuse

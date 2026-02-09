@@ -11,8 +11,7 @@ from .config import (
     load_workflow_state, save_workflow_state,
     get_most_recent_working_memory, get_working_memory_filename,
     read_working_memory_state, write_working_memory_state,
-    persist_edit_to_wm, check_wm_staleness, get_wm_edit_count,
-    reset_wm_edit_tracking, get_project_root
+    get_project_root
 )
 from .session import (
     extract_session_id, find_working_memory_for_session,
@@ -68,9 +67,11 @@ def is_valid_transition(from_state: str, to_state: str) -> Tuple[bool, str]:
     """
     matrix = load_transition_matrix()
 
-    # If no matrix loaded, allow all transitions (fail open)
+    # FAIL CLOSED: If matrix can't load, only allow init transitions
     if not matrix:
-        return True, ""
+        if from_state in ("WF_INIT", "UNINITIALIZED", "SessionStart"):
+            return True, ""
+        return False, "BLOCKED: State machine unavailable. Only WF_INIT transitions allowed."
 
     # Special case: WF_INIT can go anywhere (session start)
     if from_state in ("WF_INIT", "UNINITIALIZED", "SessionStart"):
@@ -82,8 +83,7 @@ def is_valid_transition(from_state: str, to_state: str) -> Tuple[bool, str]:
 
     # Check if from_state exists in matrix
     if from_state not in matrix:
-        # Unknown state - allow transition but warn
-        return True, f"Warning: Unknown state {from_state}"
+        return False, f"BLOCKED: Unknown state {from_state}. Valid states: {', '.join(matrix.keys())}"
 
     valid_targets = matrix[from_state]
 
@@ -98,7 +98,7 @@ def is_valid_transition(from_state: str, to_state: str) -> Tuple[bool, str]:
     )
 
 
-# State icons for display
+# State icons for display (17 states - v2.0)
 STATE_ICONS = {
     "WF_INIT": "🎬",
     "WF_START": "🚀",
@@ -106,20 +106,16 @@ STATE_ICONS = {
     "WF_CLASSIFY": "🏷️",
     "WF_LOAD_FEATURE": "📂",
     "WF_RESEARCH": "🔍",
-    "WF_DETECT_REQ": "🎯",
-    "WF_REQUIREMENT": "📋",
+    "WF_REQUIREMENTS": "📋",
     "WF_CLARIFY": "❓",
     "WF_PLAN_ARCHITECTURE": "🏗️",
     "WF_ARCH_REVIEW": "🔬",
     "WF_EXECUTE": "⚡",
     "WF_CHECKPOINT": "💾",
     "WF_VERIFY": "✅",
-    "WF_UPDATE_MEMORY": "📝",
     "WF_DEBUG_TDD": "🐛",
     "WF_CONTINUE": "➡️",
     "WF_SWARM_ORCHESTRATE": "🐝",
-    "WF_ASK_PERMISSION": "🔐",
-    "WF_CLEANUP": "🧹",
     "WF_DONE": "🎉",
     "WF_INITIAL_SETUP": "⚙️",
 }
@@ -186,7 +182,6 @@ class StateManager:
         if state_data:
             self.wm_filepath = filepath
             self.wm_filename = filepath.replace('.md', '').split('/')[-1] if filepath else None
-            # Convert to internal state format
             self.state = {
                 "current_state": state_data.get("current_state", "WF_INIT"),
                 "previous_state": None,
@@ -195,10 +190,8 @@ class StateManager:
                 "feature_keys": state_data.get("feature_keys", []),
                 "edits_since_checkpoint": 0,
                 "plan_mode": state_data.get("current_state") in PLAN_MODE_STATES,
-                "reward_signals": {"state_transitions": 0, "edit_count": 0},
             }
         else:
-            # No WM found for this session - use minimal state
             self.state = {
                 "current_state": "WF_INIT",
                 "previous_state": None,
@@ -206,7 +199,6 @@ class StateManager:
                 "working_memory_file": None,
                 "edits_since_checkpoint": 0,
                 "plan_mode": False,
-                "reward_signals": {"state_transitions": 0, "edit_count": 0},
             }
 
     def get_current_state(self) -> str:
@@ -244,8 +236,6 @@ class StateManager:
         # Update in-memory state
         self.state["previous_state"] = old_state
         self.state["current_state"] = new_state
-        self.state["reward_signals"]["state_transitions"] = \
-            self.state["reward_signals"].get("state_transitions", 0) + 1
 
         # Handle plan mode
         if new_state in PLAN_MODE_STATES and not self.state.get("plan_mode"):
@@ -268,44 +258,24 @@ class StateManager:
             return True, f"Transition: {old_state} → {new_state} (in-memory, no WM yet)"
 
     def increment_edits(self, edited_file: str = None) -> int:
-        """Increment edit counter and persist to WM file.
-        
-        Edit counts are now persisted to WM for staleness detection.
-        
+        """Increment in-memory edit counter.
+
+        Persistent edit tracking is handled by the stream layer.
+
         Args:
-            edited_file: Optional path to the file that was edited
-        
+            edited_file: Optional path to the file that was edited (unused,
+                        kept for call-site compatibility)
+
         Returns:
             New edit count
         """
         self.state["edits_since_checkpoint"] = \
             self.state.get("edits_since_checkpoint", 0) + 1
-        self.state["reward_signals"]["edit_count"] = \
-            self.state["reward_signals"].get("edit_count", 0) + 1
-        
-        # Persist to WM file if available
-        if self.wm_filepath:
-            success, wm_count = persist_edit_to_wm(self.cwd, self.wm_filepath, edited_file)
-            if success:
-                # Use the persisted count as source of truth
-                self.state["edits_since_checkpoint"] = wm_count
-        
         return self.state["edits_since_checkpoint"]
 
     def reset_edit_counter(self):
-        """Reset edit counter after checkpoint (user updated WM progress)."""
+        """Reset in-memory edit counter after checkpoint."""
         self.state["edits_since_checkpoint"] = 0
-        
-        # Reset in WM file if available
-        if self.wm_filepath:
-            try:
-                with open(self.wm_filepath, 'r') as f:
-                    content = f.read()
-                updated_content = reset_wm_edit_tracking(content)
-                with open(self.wm_filepath, 'w') as f:
-                    f.write(updated_content)
-            except IOError:
-                pass  # Silent fail - in-memory reset still works
 
     def should_checkpoint(self, threshold: int = 3) -> bool:
         """Check if checkpoint is needed based on edit count."""
@@ -333,14 +303,6 @@ class StateManager:
     def is_plan_mode(self) -> bool:
         """Check if currently in plan mode."""
         return self.state.get("plan_mode", False)
-
-    def increment_trajectory_step(self):
-        """Increment trajectory step counter for RLVR.
-        
-        Trajectory steps are kept in-memory only - they're session-local.
-        """
-        self.state["trajectory_steps"] = self.state.get("trajectory_steps", 0) + 1
-        # Note: Not persisting - trajectory steps are session-local
 
     def save(self) -> bool:
         """Save current state to WM file."""

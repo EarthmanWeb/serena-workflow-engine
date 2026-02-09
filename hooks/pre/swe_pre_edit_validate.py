@@ -2,7 +2,7 @@
 """PreToolUse hook for Edit/Write - Validate state and check staleness.
 
 Ensures edits only happen in appropriate workflow states.
-BLOCKS edits if WM is stale (>3 edits without update).
+BLOCKS edits if stream shows >3 edits since last checkpoint.
 Uses session isolation for state checking.
 
 ENFORCEMENT: This hook adds staleness blocking per SPEC_WM_ENFORCEMENT.
@@ -11,26 +11,19 @@ ENFORCEMENT: This hook adds staleness blocking per SPEC_WM_ENFORCEMENT.
 import os
 import sys
 import json
-
-PLUGIN_ROOT = os.environ.get('CLAUDE_PLUGIN_ROOT', '')
-if PLUGIN_ROOT:
-    hooks_dir = os.path.join(PLUGIN_ROOT, 'hooks')
-    if hooks_dir not in sys.path:
-        sys.path.insert(0, hooks_dir)
+import swe_hooks.bootstrap  # Sets up sys.path
 
 try:
     from swe_hooks.core.output import HookOutput, output_empty, output_block, output_status
     from swe_hooks.core.input import read_stdin_safe, get_input_field
     from swe_hooks.core.state_manager import StateManager
-    from swe_hooks.core.session import extract_session_id, find_working_memory_for_session
-    from swe_hooks.core.config import check_wm_staleness
+    from swe_hooks.core.session import extract_session_id
+    from swe_hooks.core.stream import get_stream_path, count_edits_since_checkpoint
 except ImportError as e:
-    output = {"hookSpecificOutput": {"hookEventName": "PreToolUse", "additionalContext": f"SWE import error: {e}"}}
-    print(json.dumps(output), file=sys.stdout)
-    sys.exit(0)
+    swe_hooks.bootstrap.import_error_exit(e, "PreToolUse")
 
 # States where edits are allowed
-EDIT_ALLOWED = {'WF_EXECUTE', 'WF_DEBUG_TDD', 'WF_CHECKPOINT', 'WF_UPDATE_MEMORY', 'WF_CLEANUP', 'WF_INITIAL_SETUP', 'UNINITIALIZED', 'WF_INIT'}
+EDIT_ALLOWED = {'WF_EXECUTE', 'WF_DEBUG_TDD', 'WF_CHECKPOINT', 'WF_INITIAL_SETUP', 'WF_ONBOARD'}
 
 # States where edits should show a warning
 WARN_STATES = {'WF_PLAN_ARCHITECTURE', 'WF_ARCH_REVIEW', 'WF_RESEARCH'}
@@ -48,21 +41,16 @@ def main():
         transcript_path = get_input_field(input_data, 'transcript_path', default='')
         session_id = extract_session_id(transcript_path)
 
-        # Find working memory for this session
-        wm_filepath = find_working_memory_for_session(cwd, session_id)
+        # Check staleness via stream (replaces WM-based check)
+        if session_id:
+            stream_path = get_stream_path(session_id)
+            edit_count = count_edits_since_checkpoint(stream_path)
 
-        # Check staleness FIRST (before state check)
-        if wm_filepath:
-            is_stale, edit_count, last_updated = check_wm_staleness(
-                cwd, wm_filepath, STALENESS_THRESHOLD
-            )
-            
-            if is_stale:
-                # BLOCK: WM is stale
+            if edit_count >= STALENESS_THRESHOLD:
                 output = HookOutput(event_name="PreToolUse")
                 output.block(f"""🛑 WM STALE
 
-Your WM is outdated ({edit_count} edits since last update).
+{edit_count} edits since last checkpoint.
 
 **UPDATE WM before continuing edits:**
 1. Update `## Progress` section with completed work
@@ -89,8 +77,10 @@ After updating WM, you may continue editing.""")
             output.output_and_exit()
             return
 
-        # Default: allow the edit (don't block workflow)
-        output_status(f"✓ Edit allowed ({current})", event="PreToolUse")
+        # BLOCK: editing not allowed in this state
+        output = HookOutput(event_name="PreToolUse")
+        output.block(f"🛑 Edit blocked in state {current}. Move to WF_EXECUTE first.")
+        output.output_and_exit()
 
     except Exception as e:
         output = {"hookSpecificOutput": {"hookEventName": "PreToolUse", "additionalContext": f"Pre-edit error: {e}"}}

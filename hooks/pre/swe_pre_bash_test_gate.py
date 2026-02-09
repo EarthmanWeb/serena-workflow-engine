@@ -11,12 +11,7 @@ import sys
 import json
 import re
 import time
-
-PLUGIN_ROOT = os.environ.get('CLAUDE_PLUGIN_ROOT', '')
-if PLUGIN_ROOT:
-    hooks_dir = os.path.join(PLUGIN_ROOT, 'hooks')
-    if hooks_dir not in sys.path:
-        sys.path.insert(0, hooks_dir)
+import swe_hooks.bootstrap  # Sets up sys.path
 
 try:
     from swe_hooks.core.output import HookOutput, output_empty, output_block, output_message
@@ -24,9 +19,7 @@ try:
     from swe_hooks.core.state_manager import StateManager
     from swe_hooks.core.session import extract_session_id, find_working_memory_for_session
 except ImportError as e:
-    output = {"hookSpecificOutput": {"hookEventName": "PreToolUse", "additionalContext": f"SWE import error: {e}"}}
-    print(json.dumps(output), file=sys.stdout)
-    sys.exit(0)
+    swe_hooks.bootstrap.import_error_exit(e, "PreToolUse")
 
 # Test command patterns
 TEST_COMMAND_PATTERNS = [

@@ -9,12 +9,7 @@ import os
 import sys
 import json
 from datetime import datetime
-
-PLUGIN_ROOT = os.environ.get('CLAUDE_PLUGIN_ROOT', '')
-if PLUGIN_ROOT:
-    hooks_dir = os.path.join(PLUGIN_ROOT, 'hooks')
-    if hooks_dir not in sys.path:
-        sys.path.insert(0, hooks_dir)
+import swe_hooks.bootstrap  # Sets up sys.path
 
 try:
     from swe_hooks.core.config import (
@@ -23,10 +18,8 @@ try:
         read_working_memory_state, get_paths
     )
     from swe_hooks.core.state_manager import StateManager
-    from swe_hooks.core.wm_writer_daemon import async_wm_write
 except ImportError as e:
-    print(json.dumps({"systemMessage": f"SWE import error: {e}"}), file=sys.stdout)
-    sys.exit(0)
+    swe_hooks.bootstrap.import_error_exit(e, "SessionStart")
 
 
 
