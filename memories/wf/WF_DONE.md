@@ -11,10 +11,11 @@ OUTPUT THE ABOVE LINE IMMEDIATELY. Do not read further until you have reported y
 **Before completing, you MUST update WM with final status.**
 
 ```
-mcp__plugin_swe_serena__write_memory("WM_<timestamp>_<descriptor>", "<content>")
+mcp__plugin_swe_serena__write_memory("WM_<timestamp>", "<content>")
 ```
 
 Include:
+
 - Final status: Completed
 - Summary of what was done
 - Any follow-up items for next conversation
@@ -27,7 +28,7 @@ Include:
 ## Checklist Before Finishing
 
 - [ ] **WM updated with final status** (REQUIRED)
-- [ ] Feature memories updated if needed (DOM_*, SYS_*, INDEX_*)
+- [ ] Feature memories updated if needed (DOM__, SYS__, INDEX_*)
 - [ ] No pending violations
 - [ ] User informed of any follow-up items
 
@@ -68,15 +69,19 @@ This session's WM should be PRESERVED and UPDATED, not replaced.
 
 ```markdown
 ## Workflow Context
+
 - **Current State**: WF_CLASSIFY
 - **Task Iteration**: [INCREMENT PREVIOUS VALUE]
 - **Edit Count Since Checkpoint:** 0
 
 ## Active Task
+
 [NEW TASK DESCRIPTION]
 
 ## Completed Tasks (This Session)
+
 ### Iteration 1: [Previous Task Title]
+
 - Status: ✅ Completed
 - Summary: [What was done]
 ```

@@ -91,6 +91,10 @@ mcp__ruv-swarm__task_orchestrate({
 | ref | `ref/REF_*.md` | Reference documentation |
 | all | `*/*.md` | All memory files |
 
+**Never Sync (Exclusions):**
+- `_INDEX.md` — Local-only file, managed per-project. Never overwrite from plugin.
+- `WM_*.md` — Working memory files, session-specific.
+
 **Comparison Logic:**
 ```bash
 # For each plugin file in category:

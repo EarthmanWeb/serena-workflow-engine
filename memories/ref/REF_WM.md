@@ -2,18 +2,18 @@
 
 ## Naming
 
-`WM_<SESSION_ID>_<descriptor>.md`
+`WM_<SESSION_ID>.md`
 
 - **Session ID**: 8-char from transcript_path UUID (e.g., `3fe6b3c5`)
 - **Descriptor**: 2-4 words, snake_case (e.g., `theme_refactor`)
 
 ## Lifecycle
 
-| Stage | When | What Happens |
-|-------|------|--------------|
-| **Auto-Create** | WF_START transition | Hook creates `WM_{session}.md` placeholder |
-| **Load** | Session resume | Read file → verify session ID matches → echo to chat |
-| **Update** | After edits/transitions | Write changes → echo: `📋 Updated Working Memory: WM_<filename>` |
+| Stage           | When                    | What Happens                                                     |
+| --------------- | ----------------------- | ---------------------------------------------------------------- |
+| **Auto-Create** | WF_START transition     | Hook creates `WM_{session}.md` placeholder                       |
+| **Load**        | Session resume          | Read file → verify session ID matches → echo to chat             |
+| **Update**      | After edits/transitions | Write changes → echo: `📋 Updated Working Memory: WM_<filename>` |
 
 **⚠️ Rename is MANDATORY in WF_CLASSIFY before transitioning to next state.**
 
@@ -26,6 +26,7 @@
 ### ❌ Multiple edit_memory Calls
 
 **THIS IS WRONG - DO NOT DO THIS:**
+
 ```python
 # ❌ WRONG: Multiple daemon calls!
 edit_memory("WM_...", "Task: old", "Task: new", "literal")
@@ -64,12 +65,12 @@ mcp__plugin_swe_serena__write_memory("WM_{session}", """
 
 ### Required Sections for ANY Update:
 
-| Section | What to Update |
-|---------|----------------|
-| `Current State` | New workflow state |
-| `Task` | Current task description |
-| `Feature(s)` | Active feature keys |
-| `Progress` | Updated checklist with `[x]` for done items |
+| Section         | What to Update                              |
+| --------------- | ------------------------------------------- |
+| `Current State` | New workflow state                          |
+| `Task`          | Current task description                    |
+| `Feature(s)`    | Active feature keys                         |
+| `Progress`      | Updated checklist with `[x]` for done items |
 
 **ONE WRITE CALL = ONE DAEMON CALL = CORRECT**
 
@@ -81,9 +82,11 @@ mcp__plugin_swe_serena__write_memory("WM_{session}", """
 # Working Memory
 
 ## Chat: <descriptor>
+
 Session: <SESSION_ID>
 
 ## Workflow Context
+
 - **Calling Step**: WF_CLASSIFY
 - **Feature Key(s)**: BLOCKS
 - **Session ID**: 3fe6b3c5
@@ -94,26 +97,34 @@ Session: <SESSION_ID>
 - **Edit Count Since Checkpoint:** 0
 
 ## Current Task
+
 **[STATUS]**: [Task Name]
 
 ### Context
+
 [1-2 sentences]
 
 ### Feature(s)
+
 [Single feature key OR comma-separated list]
 
 ### Progress
+
 - [ ] Step 1
 - [x] Step 2
 
 **Files:** `path/to/file.php` - [note]
 
 ## Previous Task
+
 **[OUTCOME]**: [Task name] - [summary]
 
 ## Completed Tasks (This Session)
+
 <!-- Used when multiple tasks are completed in same session -->
+
 ### Iteration 1: [Task Title]
+
 - Status: ✅ Completed
 - Summary: [What was done]
 - Files Modified: [list]
@@ -123,22 +134,22 @@ Session: <SESSION_ID>
 
 ## Workflow Context (REQUIRED for Stop Hook)
 
-| Field | Purpose |
-|-------|---------|
-| `Calling Step` | Which WF_* invoked current action |
-| `Current State` | **CRITICAL** - Active state (used by stop hook) |
-| `Feature Key(s)` | Active feature(s) from INDEX_FEATURES |
-| `Session ID` | 8-char unique ID |
-| `Return Step` | Where to return after completion |
-| `Invocation Mode` | `workflow` \| `standalone` \| `swarm_agent` |
-| `Task Iteration` | Counter for tasks in same session (starts at 1) |
+| Field                         | Purpose                                                    |
+| ----------------------------- | ---------------------------------------------------------- |
+| `Calling Step`                | Which WF_* invoked current action                          |
+| `Current State`               | **CRITICAL** - Active state (used by stop hook)            |
+| `Feature Key(s)`              | Active feature(s) from INDEX_FEATURES                      |
+| `Session ID`                  | 8-char unique ID                                           |
+| `Return Step`                 | Where to return after completion                           |
+| `Invocation Mode`             | `workflow` \| `standalone` \| `swarm_agent`                |
+| `Task Iteration`              | Counter for tasks in same session (starts at 1)            |
 | `Edit Count Since Checkpoint` | Edits since last working memory update (reset on new task) |
 
 **Stop Hook Behavior:**
 
-| State | Behavior |
-|-------|----------|
-| `WF_DONE`, `WF_CLEANUP` | Clean exit |
+| State                                     | Behavior                    |
+| ----------------------------------------- | --------------------------- |
+| `WF_DONE`, `WF_CLEANUP`                   | Clean exit                  |
 | `WF_EXECUTE`, `WF_DEBUG_TDD`, `WF_VERIFY` | ⚠️ Warning: incomplete work |
 
 ---
@@ -147,6 +158,7 @@ Session: <SESSION_ID>
 
 ```markdown
 ## Skill Return
+
 - **Skill**: research
 - **Status**: success_with_findings
 - **Findings Summary**: [brief]

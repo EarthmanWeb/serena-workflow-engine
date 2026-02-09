@@ -11,35 +11,42 @@ OUTPUT THE ABOVE LINE IMMEDIATELY. Do not read further until you have reported y
 **This step exists specifically to update WM. You MUST do this.**
 
 **MANDATORY: Read REF_WM BEFORE updating:**
+
 ```
 mcp__plugin_swe_serena__read_memory("REF_WM")
 ```
 
 Then update:
+
 ```
-mcp__plugin_swe_serena__write_memory("WM_<timestamp>_<descriptor>", "<content>")
+mcp__plugin_swe_serena__write_memory("WM_<timestamp>", "<content>")
 ```
 
 **⛔ NEVER do single-field state edits. Follow anti-pattern warnings in REF_WM.**
 
 **Format** (see `REF_WM` for full details):
+
 ```markdown
 # WM - [Date] [Descriptor]
 
 ## Session Context
+
 - **Task**: [Brief description]
 - **Feature**: [Feature key from INDEX_FEATURES]
 - **Status**: In Progress / Completed / Blocked
 
 ## Progress Tracking
+
 - ✅ Completed items
 - 🔄 Current item
 - ⏳ Pending items
 
 ## Notes
+
 [Any blockers, decisions, findings]
 
 ## Last Updated
+
 [Timestamp]
 ```
 
@@ -48,6 +55,7 @@ mcp__plugin_swe_serena__write_memory("WM_<timestamp>_<descriptor>", "<content>")
 ---
 
 ## Triggers for this state
+
 - Created/deleted a file
 - Modified multiple symbols
 - Completed a phase
@@ -57,10 +65,10 @@ mcp__plugin_swe_serena__write_memory("WM_<timestamp>_<descriptor>", "<content>")
 
 **YOU ARE NOT FINISHED.** Before responding to user:
 
-| Condition | MUST Read Next |
-|-----------|----------------|
-| More work remains | `WF_EXECUTE` |
-| All work complete | `WF_VERIFY` |
+| Condition         | MUST Read Next |
+| ----------------- | -------------- |
+| More work remains | `WF_EXECUTE`   |
+| All work complete | `WF_VERIFY`    |
 
 1. **VERIFY** you updated WM
 2. Determine which condition applies

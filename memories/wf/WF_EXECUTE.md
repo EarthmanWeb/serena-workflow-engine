@@ -18,11 +18,11 @@ Look at your WM's `Feature Key(s)` field (e.g., `- **Feature Key(s)**: [KEY1], [
 
 **Ask yourself:** "Did I read `FEATURE_[KEY]` for every key listed in my WM?"
 
-| If... | Then... |
-|-------|---------|
-| You read all feature memories | ✅ Continue to WM section |
-| You skipped feature loading | ❌ **STOP - Read them NOW** |
-| WM has no Feature Key(s) | ❌ **STOP - Go to WF_START** |
+| If...                         | Then...                      |
+| ----------------------------- | ---------------------------- |
+| You read all feature memories | ✅ Continue to WM section    |
+| You skipped feature loading   | ❌ **STOP - Read them NOW**  |
+| WM has no Feature Key(s)      | ❌ **STOP - Go to WF_START** |
 
 ### 3. If Features Not Loaded - DO THIS NOW
 
@@ -41,6 +41,7 @@ mcp__plugin_swe_serena__read_memory("FEATURE_[KEY2]")
 **⛔ EXECUTING WITHOUT FEATURE MEMORIES = WORKFLOW VIOLATION**
 
 You CANNOT understand the architecture, file locations, testing patterns, or coding standards without the feature memory. Skipping this leads to:
+
 - Writing code in wrong locations
 - Missing architectural patterns
 - Ignoring feature-specific requirements
@@ -53,18 +54,21 @@ You CANNOT understand the architecture, file locations, testing patterns, or cod
 **Before starting any work, verify WM exists and is current.**
 
 **BEFORE any WM update, you MUST read:**
+
 ```
 mcp__plugin_swe_serena__read_memory("REF_WM")
 ```
 
 If WM is stale or doesn't reflect current task:
+
 ```
-mcp__plugin_swe_serena__write_memory("WM_<timestamp>_<descriptor>", "<content>")
+mcp__plugin_swe_serena__write_memory("WM_<timestamp>", "<content>")
 ```
 
 Echo to chat: `📋 Working Memory: WM_<filename>`
 
 **WM must be updated:**
+
 - Before starting significant work
 - After completing each subtask
 - When task state changes
@@ -79,10 +83,13 @@ Echo to chat: `📋 Working Memory: WM_<filename>`
 **Is this multi-layer work?** (touches >1 architectural layer as defined in FEATURE_[KEY])
 
 If YES, you MUST first:
+
 ```
 mcp__plugin_swe_serena__read_memory("ARCH_INDEX")
 ```
+
 Then for EACH layer involved, read:
+
 ```
 # Feature-specific (from FEATURE_[KEY]):
 mcp__plugin_swe_serena__read_memory("SYS_[SYSTEM]")     # For system components
@@ -99,15 +106,18 @@ mcp__plugin_swe_serena__read_memory("REF_DEV_STANDARDS") # For coding standards
 ## For Multi-Layer Work
 
 ### Step 1: Read Architecture Documentation
+
 - Read ARCH_INDEX
 - Read relevant SYS_* memories for system understanding
 - Read relevant DOM_* memories for domain understanding
 - Understand the data flow pattern from ARCH_INDEX
 
 ### Step 2: Implementation
+
 For each layer, follow patterns from relevant SYS_* and REF_* memories.
 
 ### Step 3: Testing
+
 - Read REF_TESTING for testing patterns
 - Implement tests for functional code
 - Run tests and verify (commands from FEATURE_[KEY] or REF_DEV_STANDARDS)
@@ -117,6 +127,7 @@ For each layer, follow patterns from relevant SYS_* and REF_* memories.
 ## For Single-Layer Work
 
 Use Serena tools directly:
+
 1. `mcp__plugin_swe_serena__find_symbol` - locate code
 2. `mcp__plugin_swe_serena__get_symbols_overview` - file structure
 3. `Edit` / `mcp__plugin_swe_serena__replace_symbol_body` - make changes
@@ -131,17 +142,27 @@ Use Serena tools directly:
 
 ```javascript
 // Launch work agents via Claude Code Task tool (ALL in ONE message)
-Task({ subagent_type: "Explore", run_in_background: true, prompt: "..." })
-Task({ subagent_type: "general-purpose", run_in_background: true, prompt: "..." })
+Task({ subagent_type: "Explore", run_in_background: true, prompt: "..." });
+Task({
+  subagent_type: "general-purpose",
+  run_in_background: true,
+  prompt: "...",
+});
 
 // Monitor swarm status (non-blocking)
-mcp__claude-flow__swarm_status({})
+mcp__claude - flow__swarm_status({});
 
 // Store progress to memory
-mcp__claude-flow__memory_usage({ action: "store", namespace: "swarm", key: "progress", value: "..." })
+mcp__claude -
+  flow__memory_usage({
+    action: "store",
+    namespace: "swarm",
+    key: "progress",
+    value: "...",
+  });
 
 // Collect results (blocking)
-TaskOutput({ task_id: "...", block: true })
+TaskOutput({ task_id: "...", block: true });
 ```
 
 ### Swarm Coordination During Execution
@@ -168,11 +189,11 @@ TaskOutput({ task_id: "...", block: true })
 
 **YOU ARE NOT FINISHED.** After each significant action:
 
-| Condition | MUST Read Next |
-|-----------|----------------|
-| Created/modified file | `WF_CHECKPOINT` |
-| Completed a phase | `WF_CHECKPOINT` |
-| All work done (including tests) | `WF_VERIFY` |
+| Condition                       | MUST Read Next  |
+| ------------------------------- | --------------- |
+| Created/modified file           | `WF_CHECKPOINT` |
+| Completed a phase               | `WF_CHECKPOINT` |
+| All work done (including tests) | `WF_VERIFY`     |
 
 1. Determine which condition applies
 2. **UPDATE WM** with current progress

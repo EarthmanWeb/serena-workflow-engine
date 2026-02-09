@@ -110,14 +110,14 @@ def check_working_memory_exists(session_id):
         return False, "No .serena/memories directory found"
 
     if session_id:
-        pattern = os.path.join(memories_dir, f'WM_{session_id}_*.md')
+        pattern = os.path.join(memories_dir, f'WM_{session_id}.md')
         working_memories = glob.glob(pattern)
     else:
         pattern = os.path.join(memories_dir, 'WM_*.md')
         working_memories = glob.glob(pattern)
 
     if not working_memories:
-        return False, f"No WM_{session_id}_*.md file found"
+        return False, f"No WM_{session_id}.md file found"
 
     latest = max(working_memories, key=os.path.getmtime)
     filename = os.path.basename(latest)
