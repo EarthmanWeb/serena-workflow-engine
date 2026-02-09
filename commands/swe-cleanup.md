@@ -11,17 +11,19 @@ Archive completed work to `.serena/archive-*` directories.
 ## Options
 
 - `/swe-cleanup` - Scan and prompt for confirmation
-- `/swe-cleanup memories` - Archive WORKING_MEMORY_* files with status: Completed
+- `/swe-cleanup memories` - Archive WM_* files with status: Completed
 - `/swe-cleanup specs` - Archive SPEC_* files (requires confirmation)
 - `/swe-cleanup all` - Archive both
 
 ## Archivable Criteria
 
 ### Working Memories
+
 - Status field contains "Completed"
 - Task marked as done
 
 ### Specs
+
 - User confirmation required
 - Typically after implementation complete
 
@@ -45,25 +47,25 @@ AskUserQuestion({
       options: [
         {
           label: "Archive all",
-          description: "Move all listed files to archive directories"
+          description: "Move all listed files to archive directories",
         },
         {
           label: "Archive memories only",
-          description: "Only archive completed WORKING_MEMORY files"
+          description: "Only archive completed WORKING_MEMORY files",
         },
         {
           label: "Archive specs only",
-          description: "Only archive SPEC_* files"
+          description: "Only archive SPEC_* files",
         },
         {
           label: "Cancel",
-          description: "Don't archive anything"
-        }
+          description: "Don't archive anything",
+        },
       ],
-      multiSelect: false
-    }
-  ]
-})
+      multiSelect: false,
+    },
+  ],
+});
 ```
 
 4. Move files with timestamp prefix based on selection

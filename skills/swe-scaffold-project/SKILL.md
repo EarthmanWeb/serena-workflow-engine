@@ -92,7 +92,7 @@ Create from templates:
 | REF_ | Reference docs |
 | INDEX_ | Navigation |
 | WF_ | Workflow states |
-| WORKING_MEMORY_ | Session state |
+| WM_ | Session state |
 ```
 
 2. **INDEX_FEATURES** - Empty feature registry

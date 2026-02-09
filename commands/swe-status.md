@@ -11,17 +11,18 @@ Display current workflow state information.
 
 **📊 WORKFLOW STATUS**
 
-| Field | Value |
-|-------|-------|
-| Session ID | [session_id] |
-| Current State | [WF_STATE] |
-| Previous State | [WF_STATE] |
-| Plan Mode | [true/false] |
-| Working Memory | [WORKING_MEMORY_file] |
-| Feature(s) | [active features] |
-| Edits Since Checkpoint | [count]/3 |
+| Field                  | Value             |
+| ---------------------- | ----------------- |
+| Session ID             | [session_id]      |
+| Current State          | [WF_STATE]        |
+| Previous State         | [WF_STATE]        |
+| Plan Mode              | [true/false]      |
+| Working Memory         | [WM_file]         |
+| Feature(s)             | [active features] |
+| Edits Since Checkpoint | [count]/3         |
 
 **Valid Transitions:**
+
 - → [state1]
 - → [state2]
 

@@ -69,7 +69,7 @@ from wm_writer_daemon import async_wm_write, async_wm_append, get_wm_writer
 
 # Queue a full WM write (non-blocking)
 async_wm_write(
-    filepath=".serena/memories/WM_{session}_session.md",
+    filepath=".serena/memories/WM_{session}.md",
     content=full_wm_content,
     operation_type='full_write',  # or 'state_update', 'edit_tracking', 'transition_log'
     validate=True,
@@ -78,7 +78,7 @@ async_wm_write(
 
 # Append to existing WM (reads current, appends, queues write)
 async_wm_append(
-    filepath=".serena/memories/WM_{session}_session.md",
+    filepath=".serena/memories/WM_{session}.md",
     append_content="\n## New Section\n...",
     session_id="a7380848"
 )
@@ -143,7 +143,7 @@ The hooks automatically use the daemon. When updating WM from workflow:
 ```python
 # Hooks call this internally - writes are non-blocking
 async_wm_write(
-    filepath=f".serena/memories/WM_{session_id}_session.md",
+    filepath=f".serena/memories/WM_{session_id}.md",
     content=wm_content,
     operation_type='full_write',
     validate=True,
@@ -155,7 +155,7 @@ async_wm_write(
 
 ### Step 4: Confirm
 
-Output: `📋 Updated Working Memory: WM_{session_id}_session`
+Output: `📋 Updated Working Memory: WM_{session_id}`
 
 ## Operation Types
 

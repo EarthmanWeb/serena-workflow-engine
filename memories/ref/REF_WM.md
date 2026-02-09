@@ -5,17 +5,15 @@
 `WM_<SESSION_ID>.md`
 
 - **Session ID**: 8-char from transcript_path UUID (e.g., `3fe6b3c5`)
-- **Descriptor**: 2-4 words, snake_case (e.g., `theme_refactor`)
-
 ## Lifecycle
 
 | Stage           | When                    | What Happens                                                     |
 | --------------- | ----------------------- | ---------------------------------------------------------------- |
-| **Auto-Create** | WF_START transition     | Hook creates `WM_{session}.md` placeholder                       |
+| **Auto-Create** | WF_START transition     | Hook creates `WM_{session_id}.md`                                |
 | **Load**        | Session resume          | Read file → verify session ID matches → echo to chat             |
-| **Update**      | After edits/transitions | Write changes → echo: `📋 Updated Working Memory: WM_<filename>` |
+| **Update**      | After edits/transitions | Write changes → echo: `📋 Updated Working Memory: WM_{session_id}` |
 
-**⚠️ Rename is MANDATORY in WF_CLASSIFY before transitioning to next state.**
+**The WM filename is always `WM_{session_id}` — no suffix, no renaming.**
 
 **Update is MANDATORY after:** memory edits, file edits, workflow transitions, state changes.
 
@@ -177,4 +175,4 @@ Session: <SESSION_ID>
 3. Verify session ID on load
 4. Update after significant actions
 5. **NEVER do single-field state edits**
-6. **MUST rename from `_session` to meaningful descriptor in WF_CLASSIFY** (before transitioning)
+6. **WM filename is always `WM_{session_id}` — never add suffixes or rename**

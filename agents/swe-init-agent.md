@@ -30,8 +30,8 @@ Autonomous agent for initializing the swe plugin. Completes all setup tasks and 
 Task({
   subagent_type: "general-purpose",
   description: "SWE plugin initialization",
-  prompt: `[See TASKS section below]`
-})
+  prompt: `[See TASKS section below]`,
+});
 ```
 
 ## TASKS
@@ -39,14 +39,18 @@ Task({
 Execute ALL tasks (1-10) in order, then verify.
 
 ### Task 1: Detect Environment
+
 Report:
+
 - Project root (cwd)
 - Git repo status
 - Existing .serena/ directory
 - Existing .claude/ directory
 
 ### Task 2: Verify MCP Servers
+
 Test these MCP tools respond:
+
 - `mcp__plugin_swe_serena__list_memories`
 - `mcp__claude-flow__system_status`
 - `mcp__plugin_swe_ruv-swarm__swarm_status`
@@ -54,6 +58,7 @@ Test these MCP tools respond:
 If any fail, report which ones and stop.
 
 ### Task 3: Serena Onboarding
+
 ```javascript
 const status = await mcp__plugin_swe_serena__check_onboarding_performed();
 if (!status.performed) {
@@ -62,6 +67,7 @@ if (!status.performed) {
 ```
 
 ### Task 4: Verify Claude-Flow Plugin Installation
+
 **Check if the claude-flow plugin is installed. If not, guide user to install it.**
 
 ```bash
@@ -85,9 +91,11 @@ fi
 ```
 
 ### Task 5: Review CLAUDE.md for Conflicting Workflow Commands
+
 **Check CLAUDE.md for any workflow/session start instructions that conflict with SWE.**
 
 Read CLAUDE.md and look for:
+
 - References to `WF_START`, `WF_INIT`, or workflow initialization
 - Instructions to read workflow memories on startup
 - Session start procedures that duplicate SWE hooks
@@ -110,6 +118,7 @@ fi
 If conflicts found, edit CLAUDE.md to remove the conflicting sections. SWE's SessionStart hook handles all workflow initialization.
 
 ### Task 6: Migrate Claude-Flow Settings to settings.local.json
+
 **CRITICAL: Move claude-flow config from settings.json to settings.local.json**
 
 ```bash
@@ -135,6 +144,7 @@ echo "Migrated claudeFlow settings to settings.local.json"
 ```
 
 ### Task 7: Verify SWE Plugin is Enabled
+
 **SWE hooks load directly from the plugin folder - no copying needed.**
 
 The plugin's `hooks/hooks.json` uses `${CLAUDE_PLUGIN_ROOT}` which is automatically resolved by Claude Code's plugin system.
@@ -165,6 +175,7 @@ fi
 **IMPORTANT: This plugin uses a forked version of Serena that supports subdirectory organization.**
 
 Memory files are organized in subdirectories and MUST be copied preserving this structure:
+
 - `wf/` - Workflow state instructions (WF_*.md)
 - `claude/` - Claude behavior docs (CLAUDE.md, CLAUDE_OBLIGATIONS.md)
 - `ref/` - Reference documentation (REF_*.md)
@@ -199,11 +210,14 @@ find .serena/memories -name "*.md" -type f | wc -l
 ```
 
 ### Task 9: Create and Customize Core Memories
+
 Check for and create if missing:
+
 - `.serena/memories/_INDEX.md` (from memories/_INDEX.md)
 - `.serena/memories/INDEX_FEATURES.md`
 
 **IMPORTANT: Customize _INDEX.md after copying:**
+
 1. List actual FEATURE_* files in `## Active Features` section
 2. Remove the `<!-- TEMPLATE: ... -->` comment block
 3. Clear placeholder text from `## Current Session`
@@ -218,11 +232,14 @@ ls .serena/memories/FEATURE_*.md 2>/dev/null | xargs -I{} basename {} .md
 ```
 
 Then edit `.serena/memories/_INDEX.md`:
+
 - Replace `[FEATURE_X](FEATURE_X) - Description` with actual features
 - Remove template comment block
 
 ### Task 10: Configure Gitignore
+
 Add these entries to .gitignore if not present:
+
 ```
 # Claude Code Plugin - Local files
 CLAUDE.local.md
@@ -236,7 +253,7 @@ CLAUDE.local.md
 **/.swarm
 
 # Session memories
-.serena/memories/WORKING_MEMORY_*.md
+.serena/memories/WM_*.md
 .serena/archive-memories/
 .serena/archive-specs/
 ```
@@ -317,6 +334,7 @@ EOF
 ## Troubleshooting
 
 ### MCP Won't Connect
+
 ```bash
 which uvx && which npx
 cat ~/.claude.json | jq
@@ -324,18 +342,22 @@ claude mcp logs [server-name]
 ```
 
 ### Serena Language Server Error
+
 ```bash
 rm -rf ~/.serena/language_servers/static/BashLanguageServer
 # Then restart Claude Code
 ```
 
 ### Verification Fails
+
 Identify which check failed, return to that task, fix, and re-verify.
 
 ### Hooks Not Firing
+
 **Cause:** Plugin not enabled or hooks.json missing.
 
 **Fix:**
+
 ```bash
 # Verify plugin enabled
 jq '.enabledPlugins' .claude/settings.local.json
