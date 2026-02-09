@@ -213,6 +213,16 @@ For contributing to or modifying the plugin itself.
 git submodule update --init .claude/plugins/serena-workflow-engine
 ```
 
+### Install Git Hooks
+
+After cloning or initializing the submodule, install the pre-commit hook to auto-bump version numbers on each commit:
+
+```bash
+bash .claude/plugins/serena-workflow-engine/scripts/install-hooks.sh
+```
+
+This symlinks the pre-commit hook into the submodule's git hooks directory. It must be run once per clone — the symlink is local and not stored in git.
+
 ### Update
 
 ```bash
