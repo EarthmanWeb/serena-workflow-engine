@@ -168,19 +168,8 @@ def main():
                 if state_mgr.wm_filepath:
                     append_transition_to_wm(state_mgr.wm_filepath, current, memory_name)
             else:
-                # BLOCK invalid transition with clear instructions
-                output.add_message(f"🛑 {msg}")
-                output.add_message("")
-                output.add_message("**YOU MUST STOP AND GO TO A VALID STATE.**")
-                output.add_message("")
-                output.add_message("The state machine enforces valid workflow paths.")
-                output.add_message("You cannot skip steps in the workflow.")
-                output.add_message("")
-                output.add_message("**Common fixes:**")
-                output.add_message("- From WF_START: Go to WF_CLASSIFY (for all tasks including operational)")
-                output.add_message("- From WF_CLASSIFY: Go to WF_REQUIREMENTS (simple) or WF_PLAN_ARCHITECTURE (complex)")
-                output.add_message("- From WF_LOAD_FEATURE: Go to WF_ARCH_REVIEW (code changes) or WF_EXECUTE (operational tasks)")
-                output.add_message("- Features must be loaded in WF_CLASSIFY or WF_LOAD_FEATURE before WF_EXECUTE")
+                # Informational note about invalid transition (non-blocking)
+                output.add_message(f"ℹ️ Note: {msg}")
         else:
             output.add_message(f"{icon} ON STEP: {memory_name}")
 

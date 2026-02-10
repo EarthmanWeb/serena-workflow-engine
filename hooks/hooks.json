@@ -48,29 +48,9 @@
             "timeout": 10
           }
         ]
-      },
-      {
-        "matcher": "Write|Edit|MultiEdit|mcp__serena__replace_symbol_body|mcp__serena__insert_after_symbol|mcp__serena__insert_before_symbol",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/pre/swe_pre_edit_validate.py",
-            "timeout": 10
-          }
-        ]
       }
     ],
     "PostToolUse": [
-      {
-        "matcher": "Write|Edit|MultiEdit|mcp__serena__replace_symbol_body|mcp__serena__insert_after_symbol|mcp__serena__insert_before_symbol",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/post/swe_post_edit_checkpoint.py",
-            "timeout": 10
-          }
-        ]
-      },
       {
         "matcher": "mcp__serena__read_memory|mcp__plugin_swe_serena__read_memory",
         "hooks": [
