@@ -31,7 +31,7 @@ Archive completed work - terminal state.
 
 ```bash
 # Move WM to archive
-mv .serena/memories/wm/WM_*.md .serena/archive-memories/
+mv .serena/swe/wm/WM_*.md .serena/archive-memories/
 
 # Clean up any temp files
 rm -f .claude-flow/workflow-state.json
@@ -39,9 +39,9 @@ rm -f .claude-flow/workflow-state.json
 
 ## Transitions
 
-| Condition | Next State |
-|-----------|------------|
-| complete | null (terminal) |
+| Condition | Next State      |
+| --------- | --------------- |
+| complete  | null (terminal) |
 
 **This is a terminal state - workflow ends here.**
 

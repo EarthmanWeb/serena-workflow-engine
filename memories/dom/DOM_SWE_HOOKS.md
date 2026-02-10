@@ -55,48 +55,53 @@ hooks/
 ## Hook Inventory (13 Python Scripts)
 
 ### Session Hooks (`session/`)
-| Hook | Event | Purpose |
-|------|-------|---------|
+
+| Hook                   | Event        | Purpose                                   |
+| ---------------------- | ------------ | ----------------------------------------- |
 | `swe_session_start.py` | SessionStart | Initialize workflow state, create WM file |
 
 ### User Prompt Hooks (`prompt/`)
-| Hook | Event | Purpose |
-|------|-------|---------|
+
+| Hook                          | Event            | Purpose                                          |
+| ----------------------------- | ---------------- | ------------------------------------------------ |
 | `swe_user_prompt_workflow.py` | UserPromptSubmit | WF_INIT gate, intent analysis, state transitions |
-| `swe_user_prompt_swarm.py` | UserPromptSubmit | Detect swarm keywords in prompts |
+| `swe_user_prompt_swarm.py`    | UserPromptSubmit | Detect swarm keywords in prompts                 |
 
 ### Pre-Tool Hooks (`pre/`) - Gatekeepers
-| Hook | Event | Purpose |
-|------|-------|---------|
-| `swe_pre_tool_init_gate.py` | PreToolUse | Block ALL tools until WF_INIT is read |
-| `swe_pre_edit_validate.py` | PreToolUse (Edit/Write/Serena) | Block edits in planning states |
-| `swe_pre_bash_test_gate.py` | PreToolUse (Bash) | Validate test commands against WF_DEBUG_TDD |
+
+| Hook                        | Event                          | Purpose                                     |
+| --------------------------- | ------------------------------ | ------------------------------------------- |
+| `swe_pre_tool_init_gate.py` | PreToolUse                     | Block ALL tools until WF_INIT is read       |
+| `swe_pre_edit_validate.py`  | PreToolUse (Edit/Write/Serena) | Block edits in planning states              |
+| `swe_pre_bash_test_gate.py` | PreToolUse (Bash)              | Validate test commands against WF_DEBUG_TDD |
 
 ### Post-Tool Hooks (`post/`) - Observers/Learners
-| Hook | Event | Purpose |
-|------|-------|---------|
-| `swe_post_read_state.py` | PostToolUse (read_memory) | State transitions, plan mode |
-| `swe_post_edit_checkpoint.py` | PostToolUse (Edit/Write/Serena) | Edit counting, checkpoint triggers |
-| `swe_post_serena_replace_fallback.py` | PostToolUse (Serena replace) | Symbol replace error handling |
-| `swe_post_task_learn.py` | PostToolUse (read_memory) | RLVR trajectory tracking |
-| `swe_post_ruv_swarm_init.py` | PostToolUse (ruv_swarm) | RUV-Swarm initialization |
+
+| Hook                                  | Event                           | Purpose                            |
+| ------------------------------------- | ------------------------------- | ---------------------------------- |
+| `swe_post_read_state.py`              | PostToolUse (read_memory)       | State transitions, plan mode       |
+| `swe_post_edit_checkpoint.py`         | PostToolUse (Edit/Write/Serena) | Edit counting, checkpoint triggers |
+| `swe_post_serena_replace_fallback.py` | PostToolUse (Serena replace)    | Symbol replace error handling      |
+| `swe_post_task_learn.py`              | PostToolUse (read_memory)       | RLVR trajectory tracking           |
+| `swe_post_ruv_swarm_init.py`          | PostToolUse (ruv_swarm)         | RUV-Swarm initialization           |
 
 ### Stop Hooks (`stop/`)
-| Hook | Event | Purpose |
-|------|-------|---------|
-| `swe_stop_workflow_check.py` | Stop | Verify WF_DONE before session end |
+
+| Hook                         | Event | Purpose                           |
+| ---------------------------- | ----- | --------------------------------- |
+| `swe_stop_workflow_check.py` | Stop  | Verify WF_DONE before session end |
 
 ## Prompt Intent Analysis (swe_user_prompt_workflow.py)
 
 The `swe_user_prompt_workflow.py` hook analyzes each user prompt to determine
 intent:
 
-| Intent | Detection Patterns | Behavior |
-|--------|-------------------|----------|
-| **continuation** | "yes", "continue", "proceed", "go ahead", "ok", "sounds good" | Stay in current state, brief reminder |
-| **addition** | "also", "additionally", "can you also", "one more thing" | Stay in state, incorporate addition |
-| **new_task** | "help me build", "create", "fix", "implement", action verbs at start | Transition to WF_START |
-| **unknown** | Doesn't match patterns | Provide full workflow instructions |
+| Intent           | Detection Patterns                                                   | Behavior                              |
+| ---------------- | -------------------------------------------------------------------- | ------------------------------------- |
+| **continuation** | "yes", "continue", "proceed", "go ahead", "ok", "sounds good"        | Stay in current state, brief reminder |
+| **addition**     | "also", "additionally", "can you also", "one more thing"             | Stay in state, incorporate addition   |
+| **new_task**     | "help me build", "create", "fix", "implement", action verbs at start | Transition to WF_START                |
+| **unknown**      | Doesn't match patterns                                               | Provide full workflow instructions    |
 
 **State-Aware Responses:**
 
@@ -119,7 +124,7 @@ Blocks ALL tool calls until `read_memory("WF_INIT")` has been called:
 
 - Hooks no longer read and echo instruction file contents
 - Instead, hooks point agent to use `mcp__serena__read_memory("WF_*")`
-- Instruction files are copied to `.serena/memories/` during `/swe-init`
+- Instruction files are copied to `.serena/swe/` during `/swe-init`
 
 **Benefits:**
 
@@ -256,6 +261,7 @@ section_content = get_wm_section(wm_content, "Workflow Context")
 The plugin's `hooks/hooks.json` uses `${CLAUDE_PLUGIN_ROOT}` which is resolved by Claude Code's plugin system. No copying to settings.json is needed.
 
 **Verify hooks are loading:**
+
 ```bash
 jq '.hooks | keys' .claude/plugins/serena-workflow-engine/hooks/hooks.json
 # Expected: ["PostToolUse", "PreToolUse", "SessionStart", "Stop", "UserPromptSubmit"]

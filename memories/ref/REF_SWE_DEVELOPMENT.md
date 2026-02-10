@@ -1,36 +1,37 @@
 # REF_SWE_DEVELOPMENT - Plugin Development Standards
 
 ## Purpose
+
 Standards for developing and maintaining the Serena Workflow Engine plugin.
 
 ## Dual-Location Architecture
 
 SWE operates with files in TWO locations:
 
-| Location | Path | Purpose |
-|----------|------|---------|
-| **Plugin Folder** | `.claude/plugins/serena-workflow-engine/` | Generic/portable code |
-| **Local Memories** | `.serena/memories/wm/` | Project-specific adaptations |
+| Location           | Path                                      | Purpose                      |
+| ------------------ | ----------------------------------------- | ---------------------------- |
+| **Plugin Folder**  | `.claude/plugins/serena-workflow-engine/` | Generic/portable code        |
+| **Local Memories** | `.serena/swe/wm/`                         | Project-specific adaptations |
 
 ## Change Classification
 
 ### Generic Changes → Update BOTH Locations
 
-| Change Type | Plugin File | Local Memory | Action |
-|-------------|-------------|--------------|--------|
-| New workflow state | `memories/WF_*.md` | `WF_*.md` | Create in plugin, copy to memories |
-| Reference doc | `memories/REF_*.md` | `REF_*.md` | Create in plugin, copy to memories |
-| Hook behavior | `hooks/*.py` | N/A | Edit plugin only |
-| New skill/command | `skills/` or `commands/` | N/A | Plugin only |
+| Change Type        | Plugin File              | Local Memory | Action                             |
+| ------------------ | ------------------------ | ------------ | ---------------------------------- |
+| New workflow state | `memories/WF_*.md`       | `WF_*.md`    | Create in plugin, copy to memories |
+| Reference doc      | `memories/REF_*.md`      | `REF_*.md`   | Create in plugin, copy to memories |
+| Hook behavior      | `hooks/*.py`             | N/A          | Edit plugin only                   |
+| New skill/command  | `skills/` or `commands/` | N/A          | Plugin only                        |
 
 ### Project-Specific Changes → Local Only
 
-| Change Type | Where |
-|-------------|-------|
-| Custom DOM_* docs | `.serena/memories/wm/` only |
-| Custom SYS_* docs | `.serena/memories/wm/` only |
-| Project REF_* docs | `.serena/memories/wm/` only |
-| FEATURE_* configs | `.serena/memories/wm/` only |
+| Change Type        | Where                  |
+| ------------------ | ---------------------- |
+| Custom DOM_* docs  | `.serena/swe/wm/` only |
+| Custom SYS_* docs  | `.serena/swe/wm/` only |
+| Project REF_* docs | `.serena/swe/wm/` only |
+| FEATURE_* configs  | `.serena/swe/wm/` only |
 
 ## Hook Sync Requirements (CRITICAL)
 
@@ -44,8 +45,8 @@ When modifying hooks, THREE files must stay synchronized:
 
 ### Path Translation Table
 
-| hooks.json | settings.json |
-|------------|---------------|
+| hooks.json                            | settings.json                                          |
+| ------------------------------------- | ------------------------------------------------------ |
 | `${CLAUDE_PLUGIN_ROOT}/hooks/file.py` | `.claude/plugins/serena-workflow-engine/hooks/file.py` |
 
 ### Verification
@@ -61,7 +62,7 @@ diff <(jq -S '.hooks' .claude/plugins/serena-workflow-engine/hooks/hooks.json) \
 
 1. Create instruction: `memories/WF_NEWSTATE.md`
 2. Update `states.json` with state definition
-3. Copy to local memories: `cp ... .serena/memories/wm/WF_NEWSTATE.md`
+3. Copy to local memories: `cp ... .serena/swe/wm/WF_NEWSTATE.md`
 4. Document in DOM_SWE_STATE_MACHINE
 
 ## Adding New Hook
@@ -82,6 +83,7 @@ diff <(jq -S '.hooks' .claude/plugins/serena-workflow-engine/hooks/hooks.json) \
 - [ ] Tests pass: `jq . state-machine/states.json`
 
 ## Related Docs
+
 - `DOM_SWE_DEVELOPMENT` - Project-specific development docs
 - `DOM_SWE_HOOKS` - Hook architecture details
 - `DOM_SWE_STATE_MACHINE` - State transition logic

@@ -29,7 +29,7 @@ Detect:
 Create required directories:
 
 ```bash
-mkdir -p .serena/memories
+mkdir -p .serena/swe
 mkdir -p .claude/skills
 mkdir -p .claude/hooks
 ```
@@ -105,7 +105,7 @@ Create from templates:
 
 Created:
 
-- .serena/memories/
+- .serena/swe/
 - _INDEX
 - INDEX_FEATURES
 - ARCH_INDEX

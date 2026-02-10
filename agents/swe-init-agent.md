@@ -21,7 +21,7 @@ Autonomous agent for initializing the swe plugin. Completes all setup tasks and 
 4. **Claude-Flow Verification** - Verify plugin is installed
 5. **Settings Migration** - Move claudeFlow config to settings.local.json
 6. **Plugin Verification** - Verify SWE plugin is enabled
-7. **Memory Installation** - Copy instruction files to .serena/memories/
+7. **Memory Installation** - Copy instruction files to .serena/swe/
 8. **Verification** - Confirm all tasks completed correctly
 
 ## Agent Spawn
@@ -186,10 +186,10 @@ Memory files are organized in subdirectories and MUST be copied preserving this 
 
 ```bash
 # Create directory structure (preserving subdirectory organization)
-mkdir -p .serena/memories/{wf,claude,ref,dom,feature,arch,index,archived}
+mkdir -p .serena/swe/{wf,claude,ref,dom,feature,arch,index,archived}
 
 # Archive existing files in subdirectories
-cd .serena/memories
+cd .serena/swe
 for dir in wf claude ref dom feature arch; do
   if [ -d "$dir" ]; then
     for f in "$dir"/*.md; do
@@ -200,21 +200,21 @@ done
 cd - >/dev/null
 
 # Recursively copy ALL memories preserving directory structure
-cp -r .claude/plugins/serena-workflow-engine/memories/* .serena/memories/
+cp -r .claude/plugins/serena-workflow-engine/memories/* .serena/swe/
 
 echo "Installed instruction files with directory structure"
 echo "Subdirectories:"
-ls -d .serena/memories/*/ 2>/dev/null
+ls -d .serena/swe/*/ 2>/dev/null
 echo "Total files:"
-find .serena/memories -name "*.md" -type f | wc -l
+find .serena/swe -name "*.md" -type f | wc -l
 ```
 
 ### Task 9: Create and Customize Core Memories
 
 Check for and create if missing:
 
-- `.serena/memories/_INDEX.md` (from memories/_INDEX.md)
-- `.serena/memories/INDEX_FEATURES.md`
+- `.serena/swe/_INDEX.md` (from memories/_INDEX.md)
+- `.serena/swe/INDEX_FEATURES.md`
 
 **IMPORTANT: Customize _INDEX.md after copying:**
 
@@ -224,14 +224,14 @@ Check for and create if missing:
 
 ```bash
 # Copy _INDEX if missing
-[ ! -f ".serena/memories/_INDEX.md" ] && cp .claude/plugins/serena-workflow-engine/memories/_INDEX.md .serena/memories/
+[ ! -f ".serena/swe/_INDEX.md" ] && cp .claude/plugins/serena-workflow-engine/memories/_INDEX.md .serena/swe/
 
 # List existing FEATURE_* files to populate Active Features
 echo "Available features to add to _INDEX:"
-ls .serena/memories/FEATURE_*.md 2>/dev/null | xargs -I{} basename {} .md
+ls .serena/swe/FEATURE_*.md 2>/dev/null | xargs -I{} basename {} .md
 ```
 
-Then edit `.serena/memories/_INDEX.md`:
+Then edit `.serena/swe/_INDEX.md`:
 
 - Replace `[FEATURE_X](FEATURE_X) - Description` with actual features
 - Remove template comment block
@@ -253,7 +253,7 @@ CLAUDE.local.md
 **/.swarm
 
 # Session memories
-.serena/memories/WM_*.md
+.serena/swe/WM_*.md
 .serena/archive-memories/
 .serena/archive-specs/
 ```
@@ -286,9 +286,9 @@ After all tasks, verify these 8 conditions:
 6. **Instruction Files**: >= 26 files with subdirectory structure
    ```bash
    # Verify subdirectories exist
-   ls -d .serena/memories/{wf,claude,ref,dom,feature,arch}/ 2>/dev/null && echo "✅ Subdirectories exist"
+   ls -d .serena/swe/{wf,claude,ref,dom,feature,arch}/ 2>/dev/null && echo "✅ Subdirectories exist"
    # Count total instruction files
-   find .serena/memories -name "*.md" -type f | wc -l
+   find .serena/swe -name "*.md" -type f | wc -l
    ```
 7. **Core Memories**: _INDEX.md and INDEX_FEATURES.md exist
 8. **Serena Onboarding**: Complete
@@ -322,7 +322,7 @@ EOF
 - Claude-Flow Plugin: Verified installed
 - Settings Migration: claudeFlow config moved to settings.local.json
 - SWE Plugin: Enabled (hooks load from plugin folder)
-- Instruction Files: Copied to .serena/memories/
+- Instruction Files: Copied to .serena/swe/
 - Core Memories: Created
 - Gitignore: Configured
 

@@ -81,7 +81,7 @@ def is_working_memory_write(tool_name, tool_input):
     if tool_name != 'Write':
         return False
     file_path = tool_input.get('file_path', '')
-    return '.serena/memories/WM_' in file_path and file_path.endswith('.md')
+    return '.serena/swe/WM_' in file_path and file_path.endswith('.md')
 
 
 def check_lite_mode(session_id):
@@ -107,7 +107,7 @@ def check_working_memory_exists(session_id):
         project_root = _get_project_root()
     memories_dir = os.path.join(project_root, '.serena', 'memories')
     if not os.path.exists(memories_dir):
-        return False, "No .serena/memories directory found"
+        return False, "No .serena/swe directory found"
 
     if session_id:
         pattern = os.path.join(memories_dir, f'WM_{session_id}.md')

@@ -74,7 +74,7 @@ def find_project_root(start_dir: str) -> str:
 
 
 def get_serena_memories_dir(cwd: str = None) -> str:
-    """Get the .serena/memories directory path for WM files.
+    """Get the .serena/swe directory path for WM files.
 
     Args:
         cwd: Ignored - kept for backward compatibility. Uses get_project_root() instead.

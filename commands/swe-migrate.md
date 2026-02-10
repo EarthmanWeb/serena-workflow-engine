@@ -9,7 +9,7 @@ Migrate existing project from legacy WF_* memories and CLAUDE.md-based workflow 
 
 ## When to Use
 
-- Projects with existing `.serena/memories/WF_*.md` files (legacy format)
+- Projects with existing `.serena/swe/WF_*.md` files (legacy format)
 - Migrating from CLAUDE.md-based workflow instructions
 - After installing swe plugin
 - When legacy WF_* files don't match plugin's states.json
@@ -21,7 +21,7 @@ Migrate existing project from legacy WF_* memories and CLAUDE.md-based workflow 
 ```bash
 # Backup legacy WF_* memories
 mkdir -p .serena/archive-memories/
-cp .serena/memories/WF_*.md .serena/archive-memories/
+cp .serena/swe/WF_*.md .serena/archive-memories/
 
 # Backup CLAUDE.md
 cp CLAUDE.md CLAUDE.md.bak
@@ -31,25 +31,27 @@ cp CLAUDE.md CLAUDE.md.bak
 
 For each existing WF_*.md, verify against `states.json`:
 
-| Check | Action if Missing |
-|-------|-------------------|
-| `requiredActions` complete? | Add missing from states.json |
-| Transitions correct? | Update to match `transitionMatrix` |
-| `planMode` documented? | Add from states.json |
-| RLVR signal present? | Add `signalType` and `rewardImpact` |
-| Permissions stated? | Add `allowEdit`/`allowWrite` |
-| ≤100 lines? | Condense, move detail to cross-refs |
-| Icon correct? | Use icon from states.json |
+| Check                       | Action if Missing                   |
+| --------------------------- | ----------------------------------- |
+| `requiredActions` complete? | Add missing from states.json        |
+| Transitions correct?        | Update to match `transitionMatrix`  |
+| `planMode` documented?      | Add from states.json                |
+| RLVR signal present?        | Add `signalType` and `rewardImpact` |
+| Permissions stated?         | Add `allowEdit`/`allowWrite`        |
+| ≤100 lines?                 | Condense, move detail to cross-refs |
+| Icon correct?               | Use icon from states.json           |
 
 ### Step 3: Clean CLAUDE.md
 
 Remove workflow sections from CLAUDE.md:
+
 - Entry point instructions ("BEFORE responding to ANY user message...")
 - Step reporting enforcement
 - Workflow state transition rules
 - WF_* reading requirements
 
 Keep in CLAUDE.md:
+
 - Project-specific instructions
 - Coding standards
 - Non-workflow guidance
@@ -61,6 +63,7 @@ Ensure hooks are configured in `.claude/settings.local.json`
 ### Step 5: Test Workflow
 
 Run a simple test to verify workflow functions:
+
 1. Start new session
 2. Verify WF_START is read
 3. Verify step reporting works
@@ -70,14 +73,17 @@ Run a simple test to verify workflow functions:
 **✅ WORKFLOW MIGRATION**
 
 **Backup:**
+
 - Legacy WF_* → .serena/archive-memories/ ([count] files)
 - CLAUDE.md → CLAUDE.md.bak
 
 **Migration:**
+
 - Legacy WF_* files archived (now provided via plugin hooks)
 - CLAUDE.md cleaned
 
 **Verification:**
+
 - Plugin hooks configured
 - Workflow functions correctly
 
@@ -89,7 +95,7 @@ If migration fails:
 
 ```bash
 # Restore legacy WF_* files
-cp .serena/archive-memories/WF_*.md .serena/memories/
+cp .serena/archive-memories/WF_*.md .serena/swe/
 
 # Restore CLAUDE.md
 mv CLAUDE.md.bak CLAUDE.md
@@ -97,11 +103,11 @@ mv CLAUDE.md.bak CLAUDE.md
 
 ## Differences: Legacy vs Plugin Format
 
-| Aspect | Legacy | Plugin |
-|--------|--------|--------|
-| Location | .serena/memories/ | Plugin instructions/ → injected via hooks |
-| Format | Variable | Standardized ≤100 lines |
-| RLVR | Missing | Required per state |
-| planMode | Often missing | Required per state |
-| Permissions | Implicit | Explicit allowEdit/allowWrite |
-| Icons | Ad-hoc emoji | states.json defined |
+| Aspect      | Legacy        | Plugin                                    |
+| ----------- | ------------- | ----------------------------------------- |
+| Location    | .serena/swe/  | Plugin instructions/ → injected via hooks |
+| Format      | Variable      | Standardized ≤100 lines                   |
+| RLVR        | Missing       | Required per state                        |
+| planMode    | Often missing | Required per state                        |
+| Permissions | Implicit      | Explicit allowEdit/allowWrite             |
+| Icons       | Ad-hoc emoji  | states.json defined                       |

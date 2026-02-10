@@ -35,7 +35,7 @@ Initialize workflow system for new or empty projects.
 ## Detection Triggers
 
 Automatically suggested when:
-- No `.serena/memories/` directory exists
+- No `.serena/swe/` directory exists
 - No `INDEX_FEATURES.md` file exists
 - `INDEX_FEATURES.md` has zero features registered
 
@@ -65,7 +65,7 @@ find . -name "*.go" | head -1                   # Go
 ### Stage 2: Directory Setup
 
 ```bash
-mkdir -p .serena/memories
+mkdir -p .serena/swe
 mkdir -p .claude/skills
 mkdir -p .claude/hooks
 ```
@@ -129,7 +129,7 @@ Create from templates:
 **PROJECT SCAFFOLDED**
 
 **Created:**
-- .serena/memories/
+- .serena/swe/
 - _INDEX
 - INDEX_FEATURES
 - ARCH_INDEX

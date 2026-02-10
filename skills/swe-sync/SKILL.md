@@ -82,7 +82,7 @@ mcp__ruv-swarm__task_orchestrate({
 ### Step 4: Execute File Comparison
 
 **Plugin Path:** `.claude/plugins/serena-workflow-engine/memories/`
-**Local Path:** `.serena/memories/`
+**Local Path:** `.serena/swe/`
 
 **Categories:**
 | Category | Pattern | Description |
@@ -135,21 +135,21 @@ Output a structured table:
 **⚠️ CRITICAL: Preserve subdirectory structure!**
 
 Files MUST be copied to their matching subdirectory:
-- `memories/wf/WF_*.md` → `.serena/memories/wf/WF_*.md`
-- `memories/ref/REF_*.md` → `.serena/memories/ref/REF_*.md`
-- `memories/claude/CLAUDE*.md` → `.serena/memories/claude/CLAUDE*.md`
+- `memories/wf/WF_*.md` → `.serena/swe/wf/WF_*.md`
+- `memories/ref/REF_*.md` → `.serena/swe/ref/REF_*.md`
+- `memories/claude/CLAUDE*.md` → `.serena/swe/claude/CLAUDE*.md`
 
 **Direction: plugin-to-local (default)**
 ```bash
 # Create subdirectory if needed
-mkdir -p .serena/memories/{category}
+mkdir -p .serena/swe/{category}
 # Copy preserving subdirectory
-cp -f .claude/plugins/serena-workflow-engine/memories/{category}/{file} .serena/memories/{category}/{file}
+cp -f .claude/plugins/serena-workflow-engine/memories/{category}/{file} .serena/swe/{category}/{file}
 ```
 
 **Direction: local-to-plugin**
 ```bash
-cp -f .serena/memories/{category}/{file} .claude/plugins/serena-workflow-engine/memories/{category}/{file}
+cp -f .serena/swe/{category}/{file} .claude/plugins/serena-workflow-engine/memories/{category}/{file}
 ```
 
 **Direction: bidirectional**
@@ -159,12 +159,12 @@ cp -f .serena/memories/{category}/{file} .claude/plugins/serena-workflow-engine/
 
 **❌ WRONG - DO NOT flatten to root:**
 ```bash
-cp memories/wf/WF_START.md .serena/memories/WF_START.md  # WRONG!
+cp memories/wf/WF_START.md .serena/swe/WF_START.md  # WRONG!
 ```
 
 **✅ CORRECT - Preserve subdirectory:**
 ```bash
-cp memories/wf/WF_START.md .serena/memories/wf/WF_START.md  # CORRECT!
+cp memories/wf/WF_START.md .serena/swe/wf/WF_START.md  # CORRECT!
 ```
 
 ### Step 7: Verify Sync

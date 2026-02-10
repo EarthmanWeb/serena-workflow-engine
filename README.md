@@ -26,7 +26,6 @@ Key features:
 
 MIT
 
-
 ---
 # Plugin Installation
 
@@ -98,7 +97,7 @@ After restart, use this command in CLaude Code:
 This will:
 
 - Run Serena onboarding
-- Copy plugin memories to `.serena/memories/`
+- Copy plugin memories to `.serena/swe/`
 - Create core memories for your codebase
 - Configure .gitignore
 
@@ -109,10 +108,9 @@ After setup, the workflow guides you automatically. Type any task to begin.
 Recommend to start with Onboarding your first feature:
 
 ```
-/swe-feature-onboard FEATURE_[YOURSHORTNAME] 
+/swe-feature-onboard FEATURE_[YOURSHORTNAME]
 ```
 The onboarding wizard will help you register existing code features for management.
-
 ---
 
 ## Onboarding Features / Scaffolding New Apps
@@ -128,7 +126,7 @@ For empty or new projects:
 8-stage wizard: app type → platform config → goals → assets → recommendations →
 architecture → memories → analysis.
 
-Creates: `.serena/memories/`, core memories, architecture folders.
+Creates: `.serena/swe/`, core memories, architecture folders.
 
 ### Onboarding an Existing Feature
 
@@ -174,7 +172,6 @@ Example: `/swe-onboard-quick AUTH "Authentication" src/auth/`
    - CLI: Start new session
    - VSCode: Reload window
 
-
 ### Plugin not auto-updating to latest version
 
 If auto-update is enabled but new sessions keep loading a stale version:
@@ -189,6 +186,7 @@ rm -rf ~/.claude/plugins/marketplaces/EarthmanWeb/
 ```
 
 This forces a fresh clone from GitHub on next startup. Common causes:
+
 - Marketplace was originally added via local directory instead of git
 - Stale clone from a previous source configuration
 
@@ -200,7 +198,6 @@ claude plugin marketplace list
 
 # If not listed, add it again - see above
 ```
-
 
 ### Debug mode
 
@@ -214,10 +211,10 @@ Shows plugin loading details, manifest validation errors, and hook registration.
 
 ---
 
-
 # **STOP READING HERE IF YOU ARE NOT CONTRIBUTING TO THE PLUGIN**
 
 ---
+
 ---
 
 ## Local Development Installation
@@ -267,20 +264,17 @@ version control)
 
 ---
 
-
 ### Troubleshooting
 
 If you experience issues after changing files in dev, be sure to clear the cache and reinstall:
 
 ```bash
-
 rm -rf ~/.claude/plugins/cache/serena-workflow-engine/
 rm -rf ~/.claude/plugins/cache/swe/
 claude plugin install swe@EarthmanWeb --scope local
-
 ```
----
 
+---
 
 ## Development Standards
 
@@ -292,7 +286,7 @@ contributing:
 | Location           | Path                                      | Purpose                      |
 | ------------------ | ----------------------------------------- | ---------------------------- |
 | **Plugin Folder**  | `.claude/plugins/serena-workflow-engine/` | Generic/portable code        |
-| **Local Memories** | `.serena/memories/`                       | Project-specific adaptations |
+| **Local Memories** | `.serena/swe/`                            | Project-specific adaptations |
 
 ### Change Classification
 
@@ -302,7 +296,6 @@ contributing:
 | Generic hook behavior     | ✅ YES        | ❌ No                |
 | Project-specific patterns | ❌ No         | ✅ YES               |
 | New skill/command         | ✅ YES        | ❌ No                |
-
 
 ### Development Docs
 
