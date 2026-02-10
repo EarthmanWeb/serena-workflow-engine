@@ -4,7 +4,12 @@
 import os
 import sys
 import json
-import swe_hooks.bootstrap  # Sets up sys.path
+PLUGIN_ROOT = os.environ.get('CLAUDE_PLUGIN_ROOT', '')
+if PLUGIN_ROOT:
+    hooks_dir = os.path.join(PLUGIN_ROOT, 'hooks')
+    if hooks_dir not in sys.path:
+        sys.path.insert(0, hooks_dir)
+import swe_hooks.bootstrap  # noqa: E402
 
 try:
     from swe_hooks.core.output import HookOutput, output_empty
