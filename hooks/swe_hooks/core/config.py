@@ -48,7 +48,7 @@ def get_paths(cwd: str = None) -> Dict[str, str]:
         "plugin_dir": os.path.join(project_root, ".claude", "plugins", "swe"),
         "instructions_dir": os.path.join(project_root, ".claude", "plugins", "swe", "memories", "instructions"),
         "references_dir": os.path.join(project_root, ".claude", "plugins", "swe", "memories", "references"),
-        "serena_memories": os.path.join(project_root, ".serena", "memories"),
+        "serena_memories": os.path.join(project_root, ".serena", "swe"),
     }
 
 

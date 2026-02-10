@@ -80,7 +80,7 @@ def get_serena_memories_dir(cwd: str = None) -> str:
         cwd: Ignored - kept for backward compatibility. Uses get_project_root() instead.
     """
     project_root = get_project_root()
-    return os.path.join(project_root, '.serena', 'memories')
+    return os.path.join(project_root, '.serena', 'swe')
 
 
 def find_working_memory_for_session(cwd: str, session_id: Optional[str]) -> Optional[str]:

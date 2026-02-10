@@ -92,7 +92,7 @@ def check_lite_mode(session_id):
         project_root = get_project_root() if _STREAM_AVAILABLE else _get_project_root()
     except Exception:
         project_root = _get_project_root()
-    memories_dir = os.path.join(project_root, '.serena', 'memories')
+    memories_dir = os.path.join(project_root, '.serena', 'swe')
     return os.path.exists(os.path.join(memories_dir, f'LITE_MODE_{session_id}.md'))
 
 
@@ -105,7 +105,7 @@ def check_working_memory_exists(session_id):
         project_root = get_project_root() if _STREAM_AVAILABLE else _get_project_root()
     except Exception:
         project_root = _get_project_root()
-    memories_dir = os.path.join(project_root, '.serena', 'memories')
+    memories_dir = os.path.join(project_root, '.serena', 'swe')
     if not os.path.exists(memories_dir):
         return False, "No .serena/swe directory found"
 
