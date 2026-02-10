@@ -41,15 +41,17 @@ def main():
             if session_id:
                 stream_path = get_stream_path(session_id)
                 append_event(stream_path, 'interrupted', state=current, s=session_id)
-            output = HookOutput(event_name="Stop")
-            output.add_message(f"⚠️ Stopping with incomplete work: {current}")
-            output.output_and_exit()
+            # Stop hooks use top-level fields, not hookSpecificOutput
+            result = {"stopReason": f"⚠️ Stopping with incomplete work: {current}"}
+            print(json.dumps(result), file=sys.stdout)
+            sys.exit(0)
             return
 
         output_empty()
     except Exception as e:
-        output = {"hookSpecificOutput": {"hookEventName": "Stop", "additionalContext": f"Stop error: {e}"}}
-        print(json.dumps(output), file=sys.stdout)
+        # Stop hooks use top-level fields, not hookSpecificOutput
+        result = {"stopReason": f"Stop error: {e}"}
+        print(json.dumps(result), file=sys.stdout)
         sys.exit(0)
 
 if __name__ == '__main__':
