@@ -175,6 +175,23 @@ Example: `/swe-onboard-quick AUTH "Authentication" src/auth/`
    - VSCode: Reload window
 
 
+### Plugin not auto-updating to latest version
+
+If auto-update is enabled but new sessions keep loading a stale version:
+
+```bash
+# 1. Remove the cached plugin and marketplace clone
+rm -rf ~/.claude/plugins/cache/EarthmanWeb/
+rm -rf ~/.claude/plugins/marketplaces/EarthmanWeb/
+
+# 2. Start a new Claude Code session
+# Claude Code will re-clone the marketplace and install the latest version
+```
+
+This forces a fresh clone from GitHub on next startup. Common causes:
+- Marketplace was originally added via local directory instead of git
+- Stale clone from a previous source configuration
+
 ### Marketplace not loading
 
 ```bash
