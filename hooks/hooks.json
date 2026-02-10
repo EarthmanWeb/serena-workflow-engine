@@ -1,5 +1,5 @@
 {
-  "description": "SWE v2 - Stream-based workflow with enforcement",
+  "description": "SWE v2 - Stream-based workflow (lightweight enforcement)",
   "hooks": {
     "SessionStart": [
       {
