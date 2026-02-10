@@ -1,6 +1,6 @@
-# WF_REQUIREMENT - Handle Requirement
+# WF_REQUIREMENTS - Handle Requirement
 
-> **On step WF_REQUIREMENT**
+> **On step WF_REQUIREMENTS**
 
 OUTPUT THE ABOVE LINE IMMEDIATELY. Do not read further until you have reported your step to the user.
 

@@ -80,7 +80,7 @@ Each workflow state includes a reporting line with a distinct icon:
 | WF_CLASSIFY          | **On step WF_CLASSIFY**          |
 | WF_PLAN_ARCHITECTURE | **On step WF_PLAN_ARCHITECTURE** |
 | WF_DETECT_REQ        | **On step WF_DETECT_REQ**        |
-| WF_REQUIREMENT       | **On step WF_REQUIREMENT**       |
+| WF_REQUIREMENTS       | **On step WF_REQUIREMENTS**       |
 | WF_UPDATE_MEMORY     | **On step WF_UPDATE_MEMORY**     |
 | WF_CLARIFY           | **On step WF_CLARIFY**           |
 | WF_LOAD_FEATURE      | **On step WF_LOAD_FEATURE**      |
@@ -273,7 +273,7 @@ Key verification points that can't be skipped:
 
 ### 5. Requirement Detection
 
-`WF_DETECT_REQ` scans every user message for requirement language and routes to `WF_REQUIREMENT` to update domain memories.
+`WF_DETECT_REQ` scans every user message for requirement language and routes to `WF_REQUIREMENTS` to update domain memories.
 
 ---
 

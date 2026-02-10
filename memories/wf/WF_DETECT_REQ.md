@@ -26,7 +26,7 @@
 
 | Condition | MUST Read Next |
 |-----------|----------------|
-| Requirement found | `WF_REQUIREMENT` |
+| Requirement found | `WF_REQUIREMENTS` |
 | No requirement | `WF_LOAD_FEATURE` |
 
 1. Determine which condition applies

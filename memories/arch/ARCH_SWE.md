@@ -40,7 +40,7 @@ WM provides session continuity across conversation turns and enables WF_CONTINUE
                             ▼
 ┌─────────────────────────────────────────────────────────┐
 │                  PREPARATION LAYER                      │
-│  WF_DETECT_REQ → WF_REQUIREMENT → WF_UPDATE_MEMORY      │
+│  WF_DETECT_REQ → WF_REQUIREMENTS → WF_UPDATE_MEMORY      │
 │  WF_LOAD_FEATURE → WF_ARCH_REVIEW                       │
 └─────────────────────────────────────────────────────────┘
                             │

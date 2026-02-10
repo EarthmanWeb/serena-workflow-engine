@@ -60,7 +60,7 @@ WF_START → WF_CLASSIFY → WF_DETECT_REQ/WF_PLAN_ARCHITECTURE/WF_SWARM_ORCHEST
 | ---------- | -------------------------------------------------------------------------- |
 | Setup      | WF_INITIAL_SETUP, WF_ONBOARD                                               |
 | Entry      | WF_INIT, WF_START, WF_CLASSIFY, WF_CONTINUE                                |
-| Analysis   | WF_RESEARCH, WF_RESEARCH_LITE, WF_DETECT_REQ, WF_REQUIREMENT               |
+| Analysis   | WF_RESEARCH, WF_RESEARCH_LITE, WF_DETECT_REQ, WF_REQUIREMENTS               |
 | Planning   | WF_PLAN_ARCHITECTURE, WF_ARCH_REVIEW, WF_SWARM_ORCHESTRATE                 |
 | Gates      | WF_CLARIFY, WF_ASK_PERMISSION                                              |
 | Execution  | WF_LOAD_FEATURE, WF_UPDATE_MEMORY, WF_EXECUTE, WF_CHECKPOINT, WF_DEBUG_TDD |

@@ -113,7 +113,7 @@ AskUserQuestion({
 | Return To | MUST Read Next |
 |-----------|----------------|
 | From CLASSIFY | `WF_CLASSIFY` |
-| From REQUIREMENT | `WF_REQUIREMENT` |
+| From REQUIREMENT | `WF_REQUIREMENTS` |
 | From PLAN_ARCHITECTURE | `WF_PLAN_ARCHITECTURE` |
 | From ASK_PERMISSION | `WF_ASK_PERMISSION` |
 
