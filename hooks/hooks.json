@@ -40,6 +40,16 @@
         ]
       },
       {
+        "matcher": "mcp__ruv-swarm__swarm_init",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/pre/swe_pre_swarm_feature_gate.py",
+            "timeout": 10
+          }
+        ]
+      },
+      {
         "matcher": "Bash",
         "hooks": [
           {

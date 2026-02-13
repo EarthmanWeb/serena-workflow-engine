@@ -88,8 +88,19 @@ def main():
             output_status(f"📖 Read: {memory_name}")
             return
 
-        # Handle FEATURE_SWARM read - emit swarm directive
+        # Handle FEATURE_SWARM read - emit swarm directive + create sentinel
         if memory_name == 'FEATURE_SWARM':
+            # Create sentinel so pre-swarm gate allows swarm_init
+            transcript_path = get_input_field(input_data, 'transcript_path', default='')
+            swarm_session_id = extract_session_id(transcript_path)
+            if swarm_session_id:
+                sentinel = os.path.join(get_stream_path(swarm_session_id).rsplit('/', 1)[0], f'.swarm_feature_{swarm_session_id}')
+                try:
+                    os.makedirs(os.path.dirname(sentinel), exist_ok=True)
+                    open(sentinel, 'w').close()
+                except IOError:
+                    pass
+
             output = HookOutput(event_name="PostToolUse")
             output.add_message(f"📖 Read: {memory_name}")
             output.add_message("")

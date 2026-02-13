@@ -34,13 +34,19 @@ and the Serena Workflow Engine (SWE) plugin for Claude.
 
 ## Install
 
-### 1. Install Claude Flow:
+### 1. Install Claude Flow and other MCP servers (if not already):
 
 ```bash
+npm install -g claude-flow@alpha
+claude mcp add claude-flow npx claude-flow@alpha mcp start
+claude mcp add sequential-thinking -s local -- npx -y @modelcontextprotocol/server-sequential-thinking
+claude mcp add playwright -s local -- npx -y @playwright/mcp-server
+claude mcp add ruv-swarm -s local -- npx -y @ruv/mcp-swarm
+```
 
-claude plugin marketplace add https://github.com/EarthmanWeb/claude-flow-plugin.git#plugin
-
-claude plugin install claude-flow@claude-flow-plugin  --scope local
+Verify with:
+```bash
+claude mcp list
 ```
 
 ### 2. Install SWE (production):
@@ -229,13 +235,15 @@ git submodule update --init .claude/plugins/serena-workflow-engine
 
 ### Install Git Hooks
 
-After cloning or initializing the submodule, install the pre-commit hook to auto-bump version numbers on each commit:
+After cloning or initializing the submodule, install the pre-commit hook to
+auto-bump version numbers on each commit:
 
 ```bash
 bash .claude/plugins/serena-workflow-engine/scripts/install-hooks.sh
 ```
 
-This symlinks the pre-commit hook into the submodule's git hooks directory. It must be run once per clone — the symlink is local and not stored in git.
+This symlinks the pre-commit hook into the submodule's git hooks directory. It
+must be run once per clone — the symlink is local and not stored in git.
 
 ### Update
 
@@ -243,8 +251,8 @@ This symlinks the pre-commit hook into the submodule's git hooks directory. It m
 git submodule update --remote .claude/plugins/serena-workflow-engine
 ```
 
-**Recommended scope**: `local` for development plugins (installs into settings.local.json and keeps them out of
-version control)
+**Recommended scope**: `local` for development plugins (installs into
+settings.local.json and keeps them out of version control)
 
 ---
 
@@ -266,7 +274,8 @@ version control)
 
 ### Troubleshooting
 
-If you experience issues after changing files in dev, be sure to clear the cache and reinstall:
+If you experience issues after changing files in dev, be sure to clear the cache
+and reinstall:
 
 ```bash
 rm -rf ~/.claude/plugins/cache/serena-workflow-engine/
