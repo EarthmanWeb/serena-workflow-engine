@@ -314,27 +314,51 @@ npx claude-flow init
 
 ## Agent Execution via Task Tool
 
-**MCP coordinates, Claude Code Task tool executes:**
+**MCP coordinates, Claude Code Task tool executes.**
 
+### ⛔ CRITICAL: Register Tasks in Coordination Layer
+
+**After spawning MCP agents, you MUST use `task_create` with `assignToAgent` to register each task in the coordination layer BEFORE launching Task tool agents.** This links the MCP coordination metadata to the actual work, enabling monitoring via `task_status` / `task_results` instead of tailing output files.
+
+**FAILURE MODE TO AVOID:**
+```
+❌ Spawn MCP agents → Launch Task tool agents → Tail output files manually
+```
+
+**CORRECT PATTERN:**
 ```javascript
-// After MCP swarm setup, launch ACTUAL work agents
-Task({ 
-  subagent_type: "Explore", 
-  run_in_background: true, 
-  prompt: "Research module A patterns..." 
+// Step 1: Spawn MCP coordination agents
+mcp__claude-flow__agent_spawn({ agentType: "coder", agentId: "agent-data-layer" })
+mcp__claude-flow__agent_spawn({ agentType: "coder", agentId: "agent-chat-ui" })
+
+// Step 2: Register tasks and assign to agents (THIS IS THE CRITICAL STEP)
+mcp__claude-flow__task_create({
+  type: "implement",
+  description: "Implement data layer: CPT, roles, AJAX handlers",
+  assignToAgent: "agent-data-layer",
+  priority: 8
 })
-Task({ 
-  subagent_type: "general-purpose", 
-  run_in_background: true, 
-  prompt: "Implement feature X..." 
+mcp__claude-flow__task_create({
+  type: "implement",
+  description: "Implement chat UI: panel, CSS, JS",
+  assignToAgent: "agent-chat-ui",
+  priority: 8
 })
 
-// Monitor progress
-mcp__claude-flow__swarm_status({})
+// Step 3: Launch ACTUAL work via Task tool (in background)
+Task({ subagent_type: "coder", run_in_background: true, prompt: "..." })
+Task({ subagent_type: "coder", run_in_background: true, prompt: "..." })
 
-// Collect results
+// Step 4: Monitor via coordination layer (NOT tailing files)
+mcp__claude-flow__task_status({ taskId: "task-xxx" })
+mcp__claude-flow__swarm_status({ includeAgents: true, includeMetrics: true })
+
+// Step 5: Collect results
+mcp__claude-flow__task_results({ taskId: "task-xxx", format: "detailed" })
 TaskOutput({ task_id: "...", block: true })
 ```
+
+**Why this matters:** Without `task_create` + `assignToAgent`, the MCP coordination layer has no visibility into what Task tool agents are doing. You end up with two disconnected layers — MCP agents that know nothing, and Task agents whose status you can only check by tailing output files. The entire point of the coordination layer is lost.
 
 ---
 
