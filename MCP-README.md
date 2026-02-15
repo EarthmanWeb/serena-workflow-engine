@@ -17,7 +17,7 @@ Create `.claude/plugins/serena-workflow-engine/.mcp.json`:
       "type": "stdio",
       "command": "uvx",
       "args": [
-        "--refresh",
+        "--reinstall",
         "--from",
         "git+https://github.com/EarthmanWeb/serena@feature-multiplefoldersupport",
         "serena",
@@ -79,7 +79,23 @@ The version is defined in two places that must stay in sync:
 If `uvx` reports an old version despite the fork being updated:
 
 ```bash
-# Remove stale uv environments
+# 1. Remove ALL relevant uv caches (environments alone is not enough)
 rm -rf ~/.cache/uv/environments-v2/
-# Or use --reinstall in .mcp.json args instead of --refresh
+rm -rf ~/.cache/uv/git-v0/
+rm -rf ~/.cache/uv/builds-v0/
+
+# 2. Clear the Claude plugin cache
+rm -rf ~/.claude/plugins/cache/EarthmanWeb/
+
+# 3. Reinstall the plugin
+claude plugin install swe@EarthmanWeb --scope local
+
+# 4. Restart Claude Code
 ```
+
+**Why all three uv directories?**
+- `git-v0/` — cached git clone of the fork (won't pull new commits if stale)
+- `builds-v0/` — cached wheel built from the old clone
+- `environments-v2/` — installed environment using the old wheel
+
+Clearing only `environments-v2` still uses the stale git clone and build artifacts.
