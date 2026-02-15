@@ -23,7 +23,7 @@ If you are thinking of going to WF_EXECUTE from here:
 - ❌ "The WM has the feature key" - **Having the key ≠ loading the FEATURE_[KEY] memory.**
 
 **Valid paths to WF_EXECUTE (ALL go through classification first):**
-1. **Code changes:** WF_START → WF_CLASSIFY → WF_DETECT_REQ → WF_LOAD_FEATURE → WF_ARCH_REVIEW → WF_ASK_PERMISSION → WF_EXECUTE
+1. **Code changes:** WF_START → WF_CLASSIFY → WF_DETECT_REQ → WF_LOAD_FEATURE → WF_ARCH_REVIEW → WF_EXECUTE
 2. **Operational tasks:** WF_START → WF_CLASSIFY → WF_DETECT_REQ → WF_LOAD_FEATURE → WF_EXECUTE
 3. **Medium complexity:** WF_START → WF_CLASSIFY → WF_PLAN_ARCHITECTURE → ... → WF_EXECUTE
 4. **Large/swarm:** WF_START → WF_CLASSIFY → WF_SWARM_ORCHESTRATE → WF_EXECUTE

@@ -33,7 +33,7 @@
 ```
 SessionStart → WF_INITIAL_SETUP (first time) OR WF_START
 WF_START → WF_CLASSIFY → WF_DETECT_REQ/WF_PLAN_ARCHITECTURE/WF_SWARM_ORCHESTRATE
-         → WF_LOAD_FEATURE → WF_ARCH_REVIEW → WF_ASK_PERMISSION
+         → WF_LOAD_FEATURE → WF_ARCH_REVIEW
          → WF_EXECUTE ↔ WF_CHECKPOINT → WF_VERIFY → WF_DONE → WF_CLEANUP
 ```
 
@@ -62,7 +62,7 @@ WF_START → WF_CLASSIFY → WF_DETECT_REQ/WF_PLAN_ARCHITECTURE/WF_SWARM_ORCHEST
 | Entry      | WF_INIT, WF_START, WF_CLASSIFY, WF_CONTINUE                                |
 | Analysis   | WF_RESEARCH, WF_RESEARCH_LITE, WF_DETECT_REQ, WF_REQUIREMENTS               |
 | Planning   | WF_PLAN_ARCHITECTURE, WF_ARCH_REVIEW, WF_SWARM_ORCHESTRATE                 |
-| Gates      | WF_CLARIFY, WF_ASK_PERMISSION                                              |
+| Gates      | WF_CLARIFY                                                                  |
 | Execution  | WF_LOAD_FEATURE, WF_UPDATE_MEMORY, WF_EXECUTE, WF_CHECKPOINT, WF_DEBUG_TDD |
 | Completion | WF_VERIFY, WF_DONE, WF_CLEANUP                                             |
 

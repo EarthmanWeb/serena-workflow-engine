@@ -11,6 +11,7 @@ from .config import (
     load_workflow_state, save_workflow_state,
     get_most_recent_working_memory, get_working_memory_filename,
     read_working_memory_state, write_working_memory_state,
+    read_state_file, write_state_file,
     get_project_root
 )
 from .session import (
@@ -163,12 +164,17 @@ class StateManager:
 
         if wm_filename:
             # Specific filename provided - use it
-            state_data, filepath = read_working_memory_state(cwd, wm_filename)
+            state_data, filepath = read_working_memory_state(cwd, wm_filename, session_id=session_id)
         elif session_id:
             # Session ID provided - find working memory for this session only
             filepath = find_working_memory_for_session(cwd, session_id)
             if filepath:
-                state_data, filepath = read_working_memory_state(cwd, filepath.replace('.md', '').split('/')[-1])
+                state_data, filepath = read_working_memory_state(cwd, filepath.replace('.md', '').split('/')[-1], session_id=session_id)
+            else:
+                # No WM found — fallback to decoupled state file
+                sf = read_state_file(session_id)
+                if sf:
+                    state_data = {'current_state': sf['current_state'], 'session_id': session_id}
         else:
             # No session context - fall back to most recent (legacy behavior)
             state_data, filepath = read_working_memory_state(cwd)
@@ -246,15 +252,21 @@ class StateManager:
             self.state["plan_mode"] = False
             self.state["plan_mode_reason"] = None
 
-        # Save state to WM if it exists
+        # Save state — decoupled state file is authoritative
+        sid = self.session_id or self.state.get("session_id")
+
         if self.wm_filepath:
-            if write_working_memory_state(self.cwd, self.wm_filepath, new_state):
+            if write_working_memory_state(self.cwd, self.wm_filepath, new_state, session_id=sid):
                 return True, f"Transition: {old_state} → {new_state}"
             else:
                 return False, f"Failed to save state transition to WM"
+        elif sid:
+            # No WM yet — write state file only
+            if write_state_file(sid, new_state, prev_state=old_state):
+                return True, f"Transition: {old_state} → {new_state} (state file only)"
+            return False, "Failed to write state file"
         else:
-            # No WM yet - state change is in-memory only
-            # This is expected at session start before WM is created
+            # No WM and no session — in-memory only
             return True, f"Transition: {old_state} → {new_state} (in-memory, no WM yet)"
 
     def increment_edits(self, edited_file: str = None) -> int:
@@ -305,11 +317,18 @@ class StateManager:
         return self.state.get("plan_mode", False)
 
     def save(self) -> bool:
-        """Save current state to WM file."""
+        """Save current state to WM file and/or state file."""
+        sid = self.session_id or self.state.get("session_id")
         if self.wm_filepath:
             return write_working_memory_state(
-                self.cwd, 
-                self.wm_filepath, 
+                self.cwd,
+                self.wm_filepath,
+                self.state.get("current_state", "WF_INIT"),
+                session_id=sid
+            )
+        elif sid:
+            return write_state_file(
+                sid,
                 self.state.get("current_state", "WF_INIT")
             )
-        return False  # No WM to save to
+        return False  # No WM or session to save to

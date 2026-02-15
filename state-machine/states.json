@@ -127,13 +127,14 @@
       "id": "WF_ARCH_REVIEW",
       "category": "planning",
       "icon": "🔎",
-      "description": "Review architecture compliance and request permission before execution",
+      "description": "Review architecture compliance, get approval, then execute",
       "planMode": "always",
       "allowEdit": false,
       "allowWrite": false,
       "transitions": {
         "approved": "WF_EXECUTE",
-        "needs_revision": "WF_PLAN_ARCHITECTURE"
+        "needs_revision": "WF_PLAN_ARCHITECTURE",
+        "needs_clarification": "WF_CLARIFY"
       }
     },
 
@@ -251,7 +252,7 @@
     "WF_RESEARCH": ["WF_REQUIREMENTS"],
     "WF_REQUIREMENTS": ["WF_LOAD_FEATURE", "WF_CLARIFY"],
     "WF_PLAN_ARCHITECTURE": ["WF_SWARM_ORCHESTRATE", "WF_REQUIREMENTS", "WF_CLARIFY"],
-    "WF_ARCH_REVIEW": ["WF_EXECUTE", "WF_PLAN_ARCHITECTURE"],
+    "WF_ARCH_REVIEW": ["WF_EXECUTE", "WF_PLAN_ARCHITECTURE", "WF_CLARIFY"],
     "WF_SWARM_ORCHESTRATE": ["WF_EXECUTE"],
     "WF_CLARIFY": ["(return_to_caller)"],
     "WF_LOAD_FEATURE": ["WF_ARCH_REVIEW", "WF_EXECUTE"],

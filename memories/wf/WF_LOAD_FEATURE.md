@@ -100,7 +100,7 @@ Before proceeding, confirm:
 
 1. Invoke `/arch-review` skill (or read `WF_ARCH_REVIEW` directly)
 2. The skill verifies approach against architecture patterns
-3. On approval → `WF_ASK_PERMISSION` → `WF_EXECUTE`
+3. On approval → `WF_EXECUTE`
 
 ### Operational Tasks → Direct Execute
 

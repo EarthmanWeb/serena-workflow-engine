@@ -7,7 +7,7 @@ workflow:
   callable_from:
     - WF_LOAD_FEATURE
     - WF_CONTINUE
-  default_return: WF_ASK_PERMISSION
+  default_return: WF_EXECUTE
   supports_standalone: false
   auto_transition: true
 ---
@@ -56,10 +56,10 @@ Review proposed changes against architecture standards.
 - **Status**: [success|success_with_findings|blocked]
 - **Findings Summary**: [architecture compliance assessment]
 - **Artifacts**: [patterns checked, issues found]
-- **Next Step Hint**: [WF_ASK_PERMISSION if approved, WF_PLAN_ARCHITECTURE if revision needed]
+- **Next Step Hint**: [WF_EXECUTE if approved, WF_PLAN_ARCHITECTURE if revision needed]
 ```
 
 ## Exit
 
-On approval: `> **Skill /swe-workflow-arch-review passed** - returning to WF_ASK_PERMISSION`
+On approval: `> **Skill /swe-workflow-arch-review passed** - returning to WF_EXECUTE`
 On revision needed: `> **Skill /swe-workflow-arch-review needs revision** - returning to WF_PLAN_ARCHITECTURE`

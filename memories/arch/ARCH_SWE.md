@@ -47,7 +47,7 @@ WM provides session continuity across conversation turns and enables WF_CONTINUE
                             ▼
 ┌─────────────────────────────────────────────────────────┐
 │                    GATE LAYER                           │
-│  WF_ASK_PERMISSION ←→ WF_CLARIFY                        │
+│  WF_ARCH_REVIEW (includes approval) ←→ WF_CLARIFY        │
 └─────────────────────────────────────────────────────────┘
                             │
                             ▼

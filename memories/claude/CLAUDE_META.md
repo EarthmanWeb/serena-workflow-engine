@@ -84,7 +84,7 @@ Each workflow state includes a reporting line with a distinct icon:
 | WF_UPDATE_MEMORY     | **On step WF_UPDATE_MEMORY**     |
 | WF_CLARIFY           | **On step WF_CLARIFY**           |
 | WF_LOAD_FEATURE      | **On step WF_LOAD_FEATURE**      |
-| WF_ASK_PERMISSION    | **On step WF_ASK_PERMISSION**    |
+| ~~WF_ASK_PERMISSION~~ | *(merged into WF_ARCH_REVIEW)*  |
 | WF_EXECUTE           | **On step WF_EXECUTE**           |
 | WF_CHECKPOINT        | **On step WF_CHECKPOINT**        |
 | WF_VERIFY            | **On step WF_VERIFY**            |

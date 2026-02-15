@@ -30,7 +30,7 @@ def main():
         transcript_path = get_input_field(input_data, 'transcript_path', default='')
         session_id = extract_session_id(transcript_path)
 
-        state_mgr = StateManager(cwd)
+        state_mgr = StateManager(cwd, session_id=session_id)
         current = state_mgr.get_current_state()
 
         if current in ('WF_DONE', 'UNINITIALIZED'):

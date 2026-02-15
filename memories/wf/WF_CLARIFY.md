@@ -115,7 +115,7 @@ AskUserQuestion({
 | From CLASSIFY | `WF_CLASSIFY` |
 | From REQUIREMENT | `WF_REQUIREMENTS` |
 | From PLAN_ARCHITECTURE | `WF_PLAN_ARCHITECTURE` |
-| From ASK_PERMISSION | `WF_ASK_PERMISSION` |
+| From ARCH_REVIEW | `WF_ARCH_REVIEW` |
 
 1. Note where you came from
 2. After user responds via AskUserQuestion, read that WF_* memory

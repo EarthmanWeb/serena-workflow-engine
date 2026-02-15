@@ -20,7 +20,7 @@ try:
     from swe_hooks.core.input import read_stdin_safe, get_input_field
     from swe_hooks.core.state_manager import StateManager, STATE_ICONS
     from swe_hooks.core.session import extract_session_id, get_project_root, find_working_memory_for_session
-    from swe_hooks.core.config import append_transition_to_wm
+    from swe_hooks.core.config import append_transition_to_wm, write_state_file
     from swe_hooks.core.stream import get_stream_path, append_event
     from datetime import datetime
     import re
@@ -159,6 +159,9 @@ def main():
                 os.makedirs(os.path.dirname(wm_filepath), exist_ok=True)
                 with open(wm_filepath, 'w', encoding='utf-8') as f:
                     f.write(wm_content)
+
+                # Write initial decoupled state file
+                write_state_file(session_id, 'WF_START', prev_state='WF_INIT')
 
                 # Update state manager with new WM
                 state_mgr.set_working_memory(wm_filename.replace('.md', ''))

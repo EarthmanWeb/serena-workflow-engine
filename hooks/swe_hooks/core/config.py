@@ -53,6 +53,65 @@ def get_paths(cwd: str = None) -> Dict[str, str]:
 
 
 # =============================================================================
+# Decoupled State File Management
+# State files live in .claude/swe-state/ and are the authoritative source
+# of workflow state, immune to Serena's MCP file caching.
+# =============================================================================
+
+def get_state_dir() -> str:
+    return os.path.join(get_project_root(), '.claude', 'swe-state')
+
+
+def get_state_file_path(session_id: str) -> str:
+    return os.path.join(get_state_dir(), f'{session_id}.state')
+
+
+def read_state_file(session_id: str) -> Optional[Dict[str, str]]:
+    """Read decoupled state. Returns None if no file."""
+    path = get_state_file_path(session_id)
+    if not os.path.exists(path):
+        return None
+    try:
+        with open(path, 'r') as f:
+            lines = f.read().strip().split('\n')
+        if not lines or not lines[0].strip():
+            return None
+        result = {'current_state': lines[0].strip()}
+        for line in lines[1:]:
+            if '=' in line:
+                k, _, v = line.partition('=')
+                result[k.strip()] = v.strip()
+        return result
+    except IOError:
+        return None
+
+
+def write_state_file(session_id: str, new_state: str,
+                     prev_state: str = None,
+                     return_step: str = None) -> bool:
+    """Atomic write to state file."""
+    state_dir = get_state_dir()
+    os.makedirs(state_dir, exist_ok=True)
+    path = get_state_file_path(session_id)
+    tmp = path + '.tmp'
+    lines = [new_state]
+    if prev_state:
+        lines.append(f'prev={prev_state}')
+    lines.append(f'ts={int(datetime.now().timestamp())}')
+    if return_step:
+        lines.append(f'return={return_step}')
+    try:
+        with open(tmp, 'w') as f:
+            f.write('\n'.join(lines) + '\n')
+        os.replace(tmp, path)
+        return True
+    except (IOError, OSError):
+        try: os.unlink(tmp)
+        except OSError: pass
+        return False
+
+
+# =============================================================================
 # WORKING_MEMORY-based State Management (Session-Isolated)
 # =============================================================================
 
@@ -203,7 +262,7 @@ def append_transition_to_wm(wm_filepath: str, from_state: str, to_state: str) ->
         transition_note = f"- [{timestamp}] Transitioned: {from_state} → {to_state}"
 
         # Find Progress section and append transition note
-        progress_match = re.search(r'(## Progress\s*\n)(.*?)(?=\n## |\Z)', content, re.DOTALL)
+        progress_match = re.search(r'(## Progress[^\n]*\n)(.*?)(?=\n## |\Z)', content, re.DOTALL)
         updated_content = content
 
         if progress_match:
@@ -230,53 +289,75 @@ def append_transition_to_wm(wm_filepath: str, from_state: str, to_state: str) ->
         return False
 
 
-def read_working_memory_state(cwd: str, wm_filename: str = None) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+def read_working_memory_state(cwd: str, wm_filename: str = None,
+                               session_id: str = None) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
     """Read state from a WORKING_MEMORY file.
-    
+
     Args:
         cwd: Working directory
         wm_filename: Optional specific WORKING_MEMORY filename (without .md)
                     If None, uses most recent WORKING_MEMORY file
-    
+        session_id: Optional session ID. If provided, overrides state from
+                   decoupled state file (authoritative source).
+
     Returns:
         Tuple of (state_dict, wm_filepath) or (None, None) if not found
     """
     paths = get_paths(cwd)
-    
+
     if wm_filename:
         filepath = os.path.join(paths["serena_memories"], f"{wm_filename}.md")
     else:
         filepath = get_most_recent_working_memory(cwd)
-    
+
     if not filepath or not os.path.exists(filepath):
         return None, None
-    
+
     try:
         with open(filepath, 'r') as f:
             content = f.read()
         state = parse_working_memory_state(content)
+
+        # Override with decoupled state file if available
+        sid = session_id or state.get('session_id')
+        if sid:
+            sf = read_state_file(sid)
+            if sf:
+                state['current_state'] = sf['current_state']
+                if 'return' in sf:
+                    state['return_step'] = sf['return']
+
         return state, filepath
     except IOError:
         return None, None
 
 
 def write_working_memory_state(cwd: str, wm_filepath: str, new_state: str,
-                                return_step: str = None) -> bool:
+                                return_step: str = None,
+                                session_id: str = None) -> bool:
     """Update state in a WORKING_MEMORY file.
 
-    State transitions are ALWAYS synchronous to prevent race conditions.
+    Writes to decoupled state file FIRST (authoritative), then best-effort WM.
 
     Args:
         cwd: Working directory
         wm_filepath: Full path to the WORKING_MEMORY file
         new_state: New workflow state (e.g., 'WF_EXECUTE')
         return_step: Optional return step to set
+        session_id: Optional session ID for decoupled state file
 
     Returns:
         True if successful, False otherwise
     """
+    # 1. State file first (authoritative)
+    if session_id:
+        current = read_state_file(session_id)
+        prev = current.get('current_state') if current else None
+        write_state_file(session_id, new_state, prev_state=prev, return_step=return_step)
+
+    # 2. WM update (best-effort, for display)
     if not os.path.exists(wm_filepath):
-        return False
+        return session_id is not None
 
     try:
         with open(wm_filepath, 'r') as f:
@@ -284,15 +365,11 @@ def write_working_memory_state(cwd: str, wm_filepath: str, new_state: str,
 
         updated_content = update_working_memory_state(content, new_state, return_step)
 
-        # State transitions are ALWAYS synchronous — the next hook call
-        # (which creates a new StateManager) must read the updated state.
-        # Async writes caused race conditions where the next hook read
-        # stale state before the daemon thread flushed.
         with open(wm_filepath, 'w') as f:
             f.write(updated_content)
         return True
     except IOError:
-        return False
+        return session_id is not None
 
 
 # =============================================================================

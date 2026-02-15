@@ -140,7 +140,7 @@ def main():
             wm_filepath = find_working_memory_for_session(cwd, session_id)
             if wm_filepath:
                 wm_file = os.path.basename(wm_filepath).replace('.md', '')
-                state_data, _ = read_working_memory_state(cwd, wm_file)
+                state_data, _ = read_working_memory_state(cwd, wm_file, session_id=session_id)
                 if state_data:
                     wm_session_id = state_data.get("session_id")
 
@@ -159,7 +159,7 @@ def main():
             current_state = state_data.get("current_state", "WF_INIT")
         
         # Create StateManager for potential transitions
-        state_mgr = StateManager(cwd)
+        state_mgr = StateManager(cwd, session_id=session_id)
         
         # Analyze prompt intent
         prompt_intent = analyze_prompt(prompt, current_state)

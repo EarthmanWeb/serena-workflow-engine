@@ -1,4 +1,4 @@
-# WF_ARCH_REVIEW - Architecture Compliance Check
+# WF_ARCH_REVIEW - Architecture Compliance Check & Approval
 
 > **On step WF_ARCH_REVIEW**
 
@@ -48,12 +48,67 @@ OUTPUT THE ABOVE LINE IMMEDIATELY. Do not read further until you have reported y
 
 **Read REF_* memories (codebase-shared) for correct patterns.**
 
+---
+
+## Approval - Ask User Before Code Changes
+
+### Template Check (For New Files)
+
+Before proposing new files:
+1. Check existing patterns in similar files
+2. Read relevant SYS_* or REF_* memory for the file type
+3. Follow established feature conventions (from FEATURE_[KEY])
+
+### MANDATORY - Present Plan and Get Approval
+
+**Use the `AskUserQuestion` tool for interactive approval:**
+
+```javascript
+AskUserQuestion({
+  questions: [
+    {
+      question: "I plan to make the following changes. May I proceed?",
+      header: "Approval",
+      options: [
+        {
+          label: "Yes, proceed",
+          description: "Approve the proposed changes and continue to implementation"
+        },
+        {
+          label: "No, let's discuss",
+          description: "Stop and clarify requirements before making changes"
+        },
+        {
+          label: "Modify approach",
+          description: "I want to suggest a different approach"
+        }
+      ],
+      multiSelect: false
+    }
+  ]
+})
+```
+
+**Before calling AskUserQuestion, present your plan clearly** including files to modify/create, data flow, and test coverage.
+
+### Handle User Response
+
+| User Selection | Action |
+|----------------|--------|
+| "Yes, proceed" | Read `WF_EXECUTE` |
+| "No, let's discuss" | Read `WF_CLARIFY` |
+| "Modify approach" | Read `WF_PLAN_ARCHITECTURE` |
+| Custom text (Other) | Parse feedback, go to `WF_CLARIFY` |
+
+---
+
 ## MANDATORY NEXT STEP
 
 | Condition | MUST Read Next |
 |-----------|----------------|
-| Approach is compliant | `WF_ASK_PERMISSION` |
+| User approves | `WF_EXECUTE` |
 | Needs redesign | `WF_PLAN_ARCHITECTURE` |
+| User declines | `WF_CLARIFY` |
 
 **SKIPPING THIS TRANSITION = WORKFLOW VIOLATION**
 

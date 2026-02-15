@@ -32,7 +32,7 @@
 
 1. Read `WF_DETECT_REQ` NOW
 2. This allows seamless transition to implementation if user wants
-3. User gets prompted at ASK_PERMISSION anyway
+3. User gets prompted at ARCH_REVIEW anyway
 
 **SKIPPING THIS TRANSITION = WORKFLOW VIOLATION**
 
