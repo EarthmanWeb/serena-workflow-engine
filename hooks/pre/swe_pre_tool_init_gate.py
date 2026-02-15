@@ -48,6 +48,12 @@ ALLOWED_TOOLS = frozenset([
     'mcp__serena__list_projects',
     'mcp__plugin_swe_serena__add_project',
     'mcp__serena__add_project',
+    'mcp__plugin_swe_serena__get_symbols_overview',
+    'mcp__serena__get_symbols_overview',
+    'mcp__plugin_swe_serena__find_symbol',
+    'mcp__serena__find_symbol',
+    'mcp__plugin_swe_serena__find_referencing_symbols',
+    'mcp__serena__find_referencing_symbols',
 ])
 
 # Tools to skip in stream logging (too noisy, low value)

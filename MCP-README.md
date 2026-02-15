@@ -56,3 +56,30 @@ claude plugin install swe@EarthmanWeb --scope local
 ```
 
 Then restart Claude Code.
+
+---
+
+# Checking Serena Fork Version
+
+## Quick Check
+
+```bash
+uvx --from "git+https://github.com/EarthmanWeb/serena@feature-multiplefoldersupport" python -c "from serena import __version__; print(__version__)"
+```
+
+## Version Sources
+
+The version is defined in two places that must stay in sync:
+
+- `pyproject.toml` → `version = "x.y.z"` (build metadata)
+- `src/serena/__init__.py` → `__version__ = "x.y.z"` (runtime version)
+
+## Stale Cache
+
+If `uvx` reports an old version despite the fork being updated:
+
+```bash
+# Remove stale uv environments
+rm -rf ~/.cache/uv/environments-v2/
+# Or use --reinstall in .mcp.json args instead of --refresh
+```
