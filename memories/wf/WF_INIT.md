@@ -34,6 +34,30 @@ Common rationalizations that are **NEVER VALID**:
 
 If you respond without first reading WF_START, you have failed to follow instructions.
 
+## MANDATORY: PREFER SYMBOL EXTRACTION OVER FILE READS
+
+**When looking for specific references, all supported file types MUST be parsed with Serena's symbolic tools instead of reading entire files.**
+
+This applies to:
+- **Markdown files** (`.md`) — including WM files, memories, and documentation
+- **PHP files** — classes, functions, hooks
+- **JavaScript/TypeScript files** — modules, classes, functions
+- **Python files** — classes, functions, variables
+
+**Use these tools FIRST:**
+- `get_symbols_overview` — understand file structure without reading it
+- `find_symbol` with `include_body=True` — read only the symbol you need
+- `find_referencing_symbols` — trace dependencies between symbols
+- `search_for_pattern` — targeted search when symbol name is unknown
+
+**NEVER read an entire file when you can extract the specific symbols you need.**
+The only exceptions are:
+- Config files (`.json`, `.env`) that have no symbolic structure
+- Files where the language server is unavailable or not responding
+- When you explicitly need the full file context (e.g. reviewing a template's complete layout)
+
+**Rationale:** Symbol extraction is token-efficient, precise, and leverages the language servers that Serena maintains for this project. Reading full files wastes context window and risks missing the relevant code in noise.
+
 ## CRITICAL: STEP REPORTING ENFORCEMENT
 
 **After reading ANY WF_* memory, your IMMEDIATE FIRST output MUST be the step report line.**

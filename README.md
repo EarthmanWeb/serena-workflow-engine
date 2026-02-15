@@ -87,12 +87,45 @@ Should show:
     Status: ✔ enabled
 ```
 
-### 5. Restart Claude Code
+
+### 5. Markdown language server (marksman)
+
+Serena's `markdown` language requires [marksman](https://github.com/artempyanykh/marksman) to be installed. Without it, symbol extraction for `.md` files will fail silently.
+
+**macOS (Homebrew):**
+
+```bash
+brew install marksman
+```
+
+**macOS (binary):**
+
+```bash
+# Download from https://github.com/artempyanykh/marksman/releases
+mv marksman-macos marksman
+chmod +x marksman
+mv marksman ~/.local/bin/
+
+# If macOS blocks the binary:
+xattr -d com.apple.quarantine ~/.local/bin/marksman
+```
+
+Then enable `markdown` in `.serena/project.yml`:
+
+```yaml
+languages:
+  - markdown
+  - php
+  # ... other languages
+```
+
+
+### 6. Restart Claude Code
 
 - **CLI**: Start a new `claude` session
 - **VSCode**: Reload the window (`Cmd+Shift+P` → "Developer: Reload Window")
 
-### 6. Initialize the plugin
+### 7. Initialize the plugin
 
 After restart, use this command in CLaude Code:
 
@@ -107,7 +140,7 @@ This will:
 - Create core memories for your codebase
 - Configure .gitignore
 
-### 7. Start working
+### 8. Start working
 
 After setup, the workflow guides you automatically. Type any task to begin.
 

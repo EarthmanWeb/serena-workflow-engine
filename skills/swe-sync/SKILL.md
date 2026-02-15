@@ -101,9 +101,14 @@ mcp__ruv-swarm__task_orchestrate({
 for file in plugin_path/category/*.md; do
   local_file="local_path/category/$(basename $file)"
   if [ ! -f "$local_file" ]; then
-    echo "MISSING: $file"
+    echo "MISSING_LOCAL: $file"
   elif ! diff -q "$file" "$local_file"; then
-    echo "DIFF: $file"
+    # Determine which version is newer using modification time
+    if [ "$file" -nt "$local_file" ]; then
+      echo "PLUGIN_NEWER: $file"   # Local is older → will overwrite
+    else
+      echo "LOCAL_NEWER: $file"    # Local is newer → report only
+    fi
   fi
 done
 
@@ -127,8 +132,19 @@ Output a structured table:
 |----------|------|--------|--------|
 | wf | WF_INIT.md | SYNCED | - |
 | wf | WF_NEW.md | MISSING_LOCAL | Copy to local |
-| ref | REF_WM.md | DIFF | Update local |
+| ref | REF_WM.md | PLUGIN_NEWER | Overwrite local |
+| wf | WF_CUSTOM.md | LOCAL_NEWER | ⚠️ Skip (local has changes) |
+| ref | REF_CUSTOM.md | LOCAL_ONLY | - (no plugin source) |
 ```
+
+**Status meanings:**
+| Status | Meaning | Action |
+|--------|---------|--------|
+| SYNCED | Files are identical | None |
+| MISSING_LOCAL | File exists in plugin but not locally | Copy to local |
+| PLUGIN_NEWER | Plugin version is newer than local | **Always overwrite local** |
+| LOCAL_NEWER | Local version is newer than plugin | **Report only — do NOT overwrite** |
+| LOCAL_ONLY | File exists locally but not in plugin | None (preserve) |
 
 ### Step 6: Execute Sync (if not dry-run)
 
@@ -140,11 +156,20 @@ Files MUST be copied to their matching subdirectory:
 - `memories/claude/CLAUDE*.md` → `.serena/swe/claude/CLAUDE*.md`
 
 **Direction: plugin-to-local (default)**
+
+**⚠️ CRITICAL SYNC RULES:**
+- **PLUGIN_NEWER / MISSING_LOCAL** → Always overwrite local (no prompting)
+- **LOCAL_NEWER** → **Never overwrite.** Report the difference to the user and skip the file.
+
 ```bash
 # Create subdirectory if needed
 mkdir -p .serena/swe/{category}
-# Copy preserving subdirectory
+
+# For PLUGIN_NEWER and MISSING_LOCAL files — always overwrite:
 cp -f .claude/plugins/serena-workflow-engine/memories/{category}/{file} .serena/swe/{category}/{file}
+
+# For LOCAL_NEWER files — SKIP and report:
+echo "⚠️ SKIPPED: {category}/{file} — local version is newer. Review manually if plugin changes are needed."
 ```
 
 **Direction: local-to-plugin**
