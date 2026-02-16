@@ -117,13 +117,14 @@ WF_START → WF_CLASSIFY → WF_DETECT_REQ/WF_PLAN_ARCHITECTURE/WF_SWARM_ORCHEST
 | ---------------------------- | ------- | ---------------------- |
 | `swe_stop_workflow_check.py` | Stop    | Verify WF_DONE reached |
 
-### Skills (12 total)
+### Skills (13 total)
 
 | Skill                      | Purpose                         |
 | -------------------------- | ------------------------------- |
 | `swe-feature-onboard`      | Onboard new feature to workflow |
 | `swe-feature-update`       | Update feature memory files     |
 | `swe-scaffold-project`     | Initialize new project          |
+| `swe-symbol-index`         | Generate symbol index table for feature linked docs |
 | `swe-sync`                 | Sync plugin to local memories   |
 | `swe-wm-update`            | Update Working Memory sections  |
 | `swe-swarm-orchestrate`    | Multi-agent swarm coordination  |

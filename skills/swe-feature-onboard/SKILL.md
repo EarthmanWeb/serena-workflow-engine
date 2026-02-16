@@ -320,7 +320,25 @@ mcp__plugin_swe_serena__write_memory("SYS_[KEY]_[SYSTEM]", "<content>")
 
 ---
 
-## Stage 6: Index Update
+## Stage 6: Symbol Index (Related Docs)
+
+**After creating FEATURE_[KEY] and any DOM_*/SYS_* memories, generate the Related Docs table.**
+
+Invoke the `/swe-symbol-index` skill:
+```
+/swe-symbol-index [KEY]
+```
+
+This will:
+1. Read all linked memories listed in FEATURE_[KEY]'s Related Memories section
+2. Extract heading symbols from each via `get_symbols_overview`
+3. Build a summary table and insert it as `## Related Docs` after Feature Overview
+
+**Skip if no Related Memories were created** (e.g., quick mode with no DOM_*/SYS_*).
+
+---
+
+## Stage 7: Index Update
 
 Update INDEX_FEATURES.md:
 

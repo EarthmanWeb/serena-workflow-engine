@@ -173,7 +173,25 @@ Check and update as needed:
 
 ---
 
-## Stage 6: Summary Report
+## Stage 6: Symbol Index (Related Docs)
+
+**After updating FEATURE_[KEY] and related memories, regenerate the Related Docs table.**
+
+Invoke the `/swe-symbol-index` skill:
+```
+/swe-symbol-index [KEY]
+```
+
+This will:
+1. Read all linked memories listed in FEATURE_[KEY]'s Related Memories section
+2. Extract heading symbols from each via `get_symbols_overview`
+3. Build/replace the `## Related Docs` table after Feature Overview
+
+**This ensures the symbol index stays in sync with any memory changes.**
+
+---
+
+## Stage 7: Summary Report
 
 Output to user:
 

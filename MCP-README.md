@@ -90,12 +90,16 @@ rm -rf ~/.claude/plugins/cache/EarthmanWeb/
 # 3. Reinstall the plugin
 claude plugin install swe@EarthmanWeb --scope local
 
-#4. Restart the mcp server (if not automatically restarted by the plugin install)
+
+#4. CONFIRM VERSION: 
+uvx --from "git+https://github.com/EarthmanWeb/serena@feature-multiplefoldersupport" python -c "from serena import __version__; print(__version__)"
+
+#THEN:  Restart the mcp server (if not automatically restarted by the plugin install)
 
 claude /mcp
 ## find the plugin:swe:serena server and reconnect it
 
-# 4. Restart Claude Code
+# 5. Restart Claude Code
 ```
 
 **Why all three uv directories?**
