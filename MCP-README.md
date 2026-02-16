@@ -90,6 +90,11 @@ rm -rf ~/.claude/plugins/cache/EarthmanWeb/
 # 3. Reinstall the plugin
 claude plugin install swe@EarthmanWeb --scope local
 
+#4. Restart the mcp server (if not automatically restarted by the plugin install)
+
+claude /mcp
+## find the plugin:swe:serena server and reconnect it
+
 # 4. Restart Claude Code
 ```
 
