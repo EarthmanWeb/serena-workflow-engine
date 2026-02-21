@@ -240,13 +240,26 @@ Session: {session_id}
 
 ---
 
-## Step 5: Confirm
+## Step 5: Confirm & Resume
 
 Output: `📋 Updated Working Memory: WM_{session_id}`
+
+**⚠️ CRITICAL: DO NOT STOP HERE. This skill is a utility — you MUST continue.**
 
 ---
 
 ## Exit
 
-Return to the calling WF_* step's next transition. This is a utility skill —
-no state change occurs.
+**IMMEDIATELY resume the workflow step you were on before invoking this skill.**
+This is a utility skill — no state change occurs. Your calling step's instructions
+told you to invoke `/swe-wm-update` as a sub-step, NOT as a stopping point.
+
+After outputting the confirmation line above:
+
+1. **Do NOT wait for user input**
+2. **Do NOT end your response**
+3. **Continue with the next action from the calling WF_* step**
+
+If you were invoked from a WF_* step's "MANDATORY NEXT STEP" table, proceed to
+the transition listed there. If you were invoked mid-step, continue where you
+left off in that step's instructions.
