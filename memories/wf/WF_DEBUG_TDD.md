@@ -47,9 +47,9 @@ Test-driven debugging workflow for failing tests or bugs.
 
 ## Transitions
 
-| Condition | Next State |
-|-----------|------------|
-| fixed | WF_EXECUTE |
+| Condition  | Next State |
+| ---------- | ---------- |
+| fixed      | WF_EXECUTE |
 | needs_help | WF_CLARIFY |
 
 ## RLVR Signal
@@ -58,10 +58,10 @@ Test-driven debugging workflow for failing tests or bugs.
 
 ## MANDATORY NEXT STEP
 
-| Condition | MUST Read Next |
-|-----------|----------------|
-| Bug fixed | `WF_EXECUTE` |
-| Stuck/unclear | `WF_CLARIFY` |
+| Condition     | MUST Read Next |
+| ------------- | -------------- |
+| Bug fixed     | `WF_EXECUTE`   |
+| Stuck/unclear | `WF_CLARIFY`   |
 
 **SKIPPING THIS TRANSITION = WORKFLOW VIOLATION**
 

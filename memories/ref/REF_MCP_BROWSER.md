@@ -13,6 +13,7 @@ mcp__serena__read_memory("SYS_MCP_BROWSER_CONFIG")
 ```
 
 The config contains:
+
 - Login URLs and credential locations
 - Feature-to-login mappings
 - Available MCP tool prefix (DevTools vs Playwright)
@@ -26,10 +27,10 @@ The config contains:
 
 Two browser MCP options may be available. Check SYS_MCP_BROWSER_CONFIG for which is configured:
 
-| MCP | Tool Prefix | Best For |
-|-----|-------------|----------|
+| MCP             | Tool Prefix               | Best For                                      |
+| --------------- | ------------------------- | --------------------------------------------- |
 | Chrome DevTools | `mcp__chrome-devtools__*` | Runtime debugging, console/network inspection |
-| Playwright | `mcp__playwright__*` | Automated testing, form filling, screenshots |
+| Playwright      | `mcp__playwright__*`      | Automated testing, form filling, screenshots  |
 
 **Use whichever is available.** Both provide similar core functionality.
 
@@ -38,6 +39,7 @@ Two browser MCP options may be available. Check SYS_MCP_BROWSER_CONFIG for which
 ## When to Use Browser MCP
 
 ### Use For:
+
 - 500/API errors requiring runtime inspection
 - Visual/CSS issues requiring rendered output
 - JavaScript debugging in browser
@@ -46,6 +48,7 @@ Two browser MCP options may be available. Check SYS_MCP_BROWSER_CONFIG for which
 - Screenshots for documentation
 
 ### When NOT to Use:
+
 - Syntax errors → read error message, find file:line
 - Logic bugs with clear stack trace → read function, trace data flow
 - Build errors → check build output
@@ -56,20 +59,21 @@ Two browser MCP options may be available. Check SYS_MCP_BROWSER_CONFIG for which
 
 ## Context Strategy
 
-| Action | Context Cost | Use When |
-|--------|--------------|----------|
-| `snapshot` | ~500 tokens | Page structure discovery |
-| `click` | ~20 tokens | Known element interaction |
-| `fill` | ~20 tokens | Form input |
-| `evaluate` | ~50 tokens | Querying specific data |
-| `wait` | ~10 tokens | Confirming text/state |
-| `screenshot` | ~100 tokens | Visual verification |
+| Action       | Context Cost | Use When                  |
+| ------------ | ------------ | ------------------------- |
+| `snapshot`   | ~500 tokens  | Page structure discovery  |
+| `click`      | ~20 tokens   | Known element interaction |
+| `fill`       | ~20 tokens   | Form input                |
+| `evaluate`   | ~50 tokens   | Querying specific data    |
+| `wait`       | ~10 tokens   | Confirming text/state     |
+| `screenshot` | ~100 tokens  | Visual verification       |
 
 ---
 
 ## Common Tool Patterns
 
 ### Navigation
+
 ```
 # Chrome DevTools
 mcp__chrome-devtools__navigate_page({ "url": "https://..." })
@@ -79,6 +83,7 @@ mcp__playwright__browser_navigate({ "url": "https://..." })
 ```
 
 ### Page Inspection
+
 ```
 # Chrome DevTools
 mcp__chrome-devtools__take_snapshot()
@@ -90,6 +95,7 @@ mcp__playwright__browser_take_screenshot({ "fullPage": true })
 ```
 
 ### Element Interaction
+
 ```
 # Chrome DevTools (uses UID from snapshot)
 mcp__chrome-devtools__click({ "uid": "button-uid" })
@@ -101,12 +107,14 @@ mcp__playwright__browser_type({ "element": "Username field", "ref": "s1e3", "tex
 ```
 
 ### Console/Network (DevTools only)
+
 ```
 mcp__chrome-devtools__list_console_messages({ "types": ["error", "warn"] })
 mcp__chrome-devtools__list_network_requests({ "resourceTypes": ["fetch", "xhr"] })
 ```
 
 ### JavaScript Evaluation
+
 ```
 # Chrome DevTools
 mcp__chrome-devtools__evaluate_script({ "function": "() => document.title" })

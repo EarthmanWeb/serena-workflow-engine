@@ -33,9 +33,9 @@ First-time plugin setup - install MCPs, configure environment.
 ## Transitions
 
 | Condition | Next State |
-|-----------|------------|
-| complete | WF_START |
-| issues | WF_CLARIFY |
+| --------- | ---------- |
+| complete  | WF_START   |
+| issues    | WF_CLARIFY |
 
 ## RLVR Signal
 
@@ -43,10 +43,10 @@ First-time plugin setup - install MCPs, configure environment.
 
 ## MANDATORY NEXT STEP
 
-| Condition | MUST Read Next |
-|-----------|----------------|
-| Setup complete | `WF_START` |
-| Issues encountered | `WF_CLARIFY` |
+| Condition          | MUST Read Next |
+| ------------------ | -------------- |
+| Setup complete     | `WF_START`     |
+| Issues encountered | `WF_CLARIFY`   |
 
 **SKIPPING THIS TRANSITION = WORKFLOW VIOLATION**
 

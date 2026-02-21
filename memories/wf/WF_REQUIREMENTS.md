@@ -29,11 +29,11 @@ OUTPUT THE ABOVE LINE IMMEDIATELY. Do not read further until you have reported y
 
 **YOU ARE NOT FINISHED.** Before responding to user:
 
-| Condition | MUST Read Next |
-|-----------|----------------|
+| Condition              | MUST Read Next     |
+| ---------------------- | ------------------ |
 | New requirement to add | `WF_UPDATE_MEMORY` |
-| Requirement conflicts | `WF_CLARIFY` |
-| Requirement exists | `WF_LOAD_FEATURE` |
+| Requirement conflicts  | `WF_CLARIFY`       |
+| Requirement exists     | `WF_LOAD_FEATURE`  |
 
 1. Determine which condition applies
 2. Read that WF_* memory NOW

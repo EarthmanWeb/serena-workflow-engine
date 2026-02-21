@@ -11,6 +11,7 @@
 **You CANNOT proceed to WF_EXECUTE without loading feature memories.**
 
 This step exists because feature memories contain:
+
 - Architecture patterns specific to the feature
 - File locations and directory structure
 - Testing requirements and commands
@@ -51,13 +52,13 @@ mcp__plugin_swe_serena__read_memory("FEATURE_[KEY3]")
 
 Each FEATURE_[KEY] memory lists related memories. Read those that are relevant:
 
-| Memory Type | When to Read |
-|-------------|--------------|
+| Memory Type    | When to Read                               |
+| -------------- | ------------------------------------------ |
 | `DOM_[DOMAIN]` | Always - contains domain-specific patterns |
-| `SYS_[SYSTEM]` | For system/infrastructure work |
-| `REF_[TOPIC]` | For coding standards and patterns |
-| `INDEX_[TYPE]` | For locating specific files/classes |
-| `ARCH_[AREA]` | For multi-layer architecture work |
+| `SYS_[SYSTEM]` | For system/infrastructure work             |
+| `REF_[TOPIC]`  | For coding standards and patterns          |
+| `INDEX_[TYPE]` | For locating specific files/classes        |
+| `ARCH_[AREA]`  | For multi-layer architecture work          |
 
 ```
 # Example - read whatever is listed in your FEATURE_[KEY]:
@@ -68,6 +69,7 @@ mcp__plugin_swe_serena__read_memory("REF_DEV_STANDARDS")
 ### 4. Note Key Information for Implementation
 
 From the feature memory, record in your understanding:
+
 - Key file paths and directories
 - Important class/function names for Serena lookups
 - Testing commands
@@ -78,9 +80,10 @@ From the feature memory, record in your understanding:
 ## Verification Checklist
 
 Before proceeding, confirm:
+
 - [ ] Read INDEX_FEATURES
 - [ ] Read FEATURE_[KEY] for EACH feature in WM
-- [ ] Read relevant DOM_*, SYS_*, REF_* memories
+- [ ] Read relevant DOM__, SYS__, REF_* memories
 - [ ] Understand file locations and patterns
 
 **If any checkbox is unchecked, DO NOT PROCEED.**
@@ -91,10 +94,10 @@ Before proceeding, confirm:
 
 **YOU ARE NOT FINISHED.** After loading features, route based on what the task actually does:
 
-| Task Type | Examples | MUST Read Next |
-|-----------|----------|----------------|
-| **Code changes** | Bug fix, new feature, refactor, config change in code | `WF_ARCH_REVIEW` |
-| **Operational** | Send test request, run CLI command, check config, verify endpoint, test webhook, run migration | `WF_EXECUTE` |
+| Task Type        | Examples                                                                                       | MUST Read Next   |
+| ---------------- | ---------------------------------------------------------------------------------------------- | ---------------- |
+| **Code changes** | Bug fix, new feature, refactor, config change in code                                          | `WF_ARCH_REVIEW` |
+| **Operational**  | Send test request, run CLI command, check config, verify endpoint, test webhook, run migration | `WF_EXECUTE`     |
 
 ### Code Changes → Architecture Review
 
@@ -105,6 +108,7 @@ Before proceeding, confirm:
 ### Operational Tasks → Direct Execute
 
 Operational tasks **do not modify source code**. They use feature context (URLs, config keys, data formats) to perform actions like:
+
 - Sending test HTTP requests to endpoints
 - Running WP-CLI commands
 - Checking database state

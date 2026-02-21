@@ -7,18 +7,23 @@ The workflow system is a **finite state machine** implemented through Serena mem
 ## Core Principles
 
 ### 1. Single State Focus
+
 Claude reads ONE WF_* memory at a time, executes its steps, then transitions to the next state. This prevents context overflow and ensures predictable behavior.
 
 ### 2. Mandatory Transitions
+
 Every WF_* memory ends with a "MANDATORY NEXT STEP" section. Skipping transitions is a workflow violation.
 
 ### 3. Step Reporting
+
 Each state begins with a step report line that must be output immediately:
+
 ```
 > **🚀 On step WF_START**
 ```
 
 ### 4. Session Persistence
+
 WM provides session continuity across conversation turns and enables WF_CONTINUE to resume work.
 
 ## Architecture Layers
@@ -66,7 +71,9 @@ WM provides session continuity across conversation turns and enables WF_CONTINUE
 ## Integration Points
 
 ### Skill Integration (WCP/SRP)
+
 Workflow-aware skills can be invoked from WF_* states:
+
 1. Calling state sets `## Workflow Context` in WM
 2. Skill executes and writes `## Skill Return`
 3. Calling state reads return status and routes accordingly
@@ -74,7 +81,9 @@ Workflow-aware skills can be invoked from WF_* states:
 See: `REF_SKILL_PROTOCOLS`, `SPEC_WORKFLOW_SKILLS`
 
 ### Swarm Integration
+
 WF_SWARM_ORCHESTRATE coordinates multi-agent work:
+
 - Spawns specialized agents (researcher, coder, analyst)
 - Each agent can follow workflow or receive direct instructions
 - Results aggregated back to main workflow
@@ -82,7 +91,9 @@ WF_SWARM_ORCHESTRATE coordinates multi-agent work:
 See: `REF_SWARM_PATTERNS`, `CLAUDE_FLOW`
 
 ### Memory Integration
+
 Workflows interact with feature memories:
+
 - `_INDEX` for navigation
 - `FEATURE_*` for scope
 - `DOM_*`, `SYS_*` for domain/system context
@@ -108,9 +119,9 @@ OUTPUT THE ABOVE LINE IMMEDIATELY...
 
 ## MANDATORY NEXT STEP
 
-| Condition | MUST Read Next |
-|-----------|----------------|
-| [condition] | `WF_[STATE]` |
+| Condition   | MUST Read Next |
+| ----------- | -------------- |
+| [condition] | `WF_[STATE]`   |
 
 **SKIPPING THIS TRANSITION = WORKFLOW VIOLATION**
 ```
@@ -130,11 +141,11 @@ When modifying the workflow system:
 
 ## Dependencies
 
-| Component | Depends On |
-|-----------|------------|
-| WF_START | CLAUDE_OBLIGATIONS, INDEX_FEATURES, WM |
-| WF_CLASSIFY | _INDEX, FEATURE_*, REF_SWARM_PATTERNS |
-| WF_LOAD_FEATURE | _INDEX, DOM_*, SYS_*, INDEX_* |
-| WF_ARCH_REVIEW | ARCH_INDEX, ARCH_*, REF_* |
-| WF_VERIFY | CLAUDE_OBLIGATIONS, ARCH_INDEX |
-| Skills | REF_SKILL_PROTOCOLS, WM |
+| Component       | Depends On                             |
+| --------------- | -------------------------------------- |
+| WF_START        | CLAUDE_OBLIGATIONS, INDEX_FEATURES, WM |
+| WF_CLASSIFY     | _INDEX, FEATURE_*, REF_SWARM_PATTERNS  |
+| WF_LOAD_FEATURE | _INDEX, DOM_ _, SYS__, INDEX_*         |
+| WF_ARCH_REVIEW  | ARCH_INDEX, ARCH__, REF__              |
+| WF_VERIFY       | CLAUDE_OBLIGATIONS, ARCH_INDEX         |
+| Skills          | REF_SKILL_PROTOCOLS, WM                |

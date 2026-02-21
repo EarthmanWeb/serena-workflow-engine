@@ -18,6 +18,7 @@
 3. **Report findings to user.**
 
 ## Rules
+
 - NO code changes in this path
 - NO file creation
 - Information gathering only
@@ -26,8 +27,8 @@
 
 **YOU ARE NOT FINISHED.** After reporting findings:
 
-| Condition | MUST Read Next |
-|-----------|----------------|
+| Condition         | MUST Read Next  |
+| ----------------- | --------------- |
 | Research complete | `WF_DETECT_REQ` |
 
 1. Read `WF_DETECT_REQ` NOW

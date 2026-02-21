@@ -130,11 +130,11 @@ Use Serena tools directly:
 
 ```javascript
 // Launch work agents via Claude Code Task tool (ALL in ONE message)
-Task({ subagent_type: "Explore", run_in_background: true, prompt: "..." });
+Task({ subagent_type: 'Explore', run_in_background: true, prompt: '...' });
 Task({
-  subagent_type: "general-purpose",
+  subagent_type: 'general-purpose',
   run_in_background: true,
-  prompt: "...",
+  prompt: '...',
 });
 
 // Monitor swarm status (non-blocking)
@@ -143,14 +143,14 @@ mcp__claude - flow__swarm_status({});
 // Store progress to memory
 mcp__claude -
   flow__memory_usage({
-    action: "store",
-    namespace: "swarm",
-    key: "progress",
-    value: "...",
+    action: 'store',
+    namespace: 'swarm',
+    key: 'progress',
+    value: '...',
   });
 
 // Collect results (blocking)
-TaskOutput({ task_id: "...", block: true });
+TaskOutput({ task_id: '...', block: true });
 ```
 
 ### Swarm Coordination During Execution

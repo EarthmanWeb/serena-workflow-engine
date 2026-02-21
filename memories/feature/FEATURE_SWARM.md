@@ -2,10 +2,10 @@
 
 ## Overview
 
-| Property | Value |
-|----------|-------|
-| **Key** | SWARM |
-| **Type** | Workflow Routing Feature |
+| Property    | Value                                                           |
+| ----------- | --------------------------------------------------------------- |
+| **Key**     | SWARM                                                           |
+| **Type**    | Workflow Routing Feature                                        |
 | **Purpose** | Mandatory routing target in WF_CLASSIFY for swarm orchestration |
 
 ---
@@ -14,12 +14,12 @@
 
 **YOU MUST READ THESE MEMORIES IN ORDER. DO NOT PROCEED WITHOUT COMPLETING ALL STEPS.**
 
-| Step | Memory | MUST READ |
-|------|--------|-----------|
+| Step  | Memory                 | MUST READ                            |
+| ----- | ---------------------- | ------------------------------------ |
 | **1** | `WF_SWARM_ORCHESTRATE` | ⛔ REQUIRED FIRST - Primary workflow |
-| **2** | `REF_SWARM_PATTERNS` | ⛔ REQUIRED - MCP tool patterns |
-| **3** | `CLAUDE_FLOW` | ⛔ REQUIRED - Coordination reference |
-| **4** | `REF_AGENTS` | ⛔ REQUIRED - Agent types |
+| **2** | `REF_SWARM_PATTERNS`   | ⛔ REQUIRED - MCP tool patterns      |
+| **3** | `CLAUDE_FLOW`          | ⛔ REQUIRED - Coordination reference |
+| **4** | `REF_AGENTS`           | ⛔ REQUIRED - Agent types            |
 
 ```
 mcp__plugin_swe_serena__read_memory("WF_SWARM_ORCHESTRATE")
@@ -45,13 +45,13 @@ This directive activates when FEATURE_SWARM is loaded. It overrides other routin
 
 Route to SWARM when ANY apply:
 
-| Condition | Threshold |
-|-----------|-----------|
-| File Scale | 6+ files affected |
-| Layer Scale | 3+ architectural layers |
+| Condition     | Threshold                                 |
+| ------------- | ----------------------------------------- |
+| File Scale    | 6+ files affected                         |
+| Layer Scale   | 3+ architectural layers                   |
 | Parallel Work | Independent subtasks can run concurrently |
-| Multi-Domain | Coordination across domains required |
-| User Request | Explicit swarm/parallel agents request |
+| Multi-Domain  | Coordination across domains required      |
+| User Request  | Explicit swarm/parallel agents request    |
 
 ### Keyword Detection
 
@@ -61,11 +61,11 @@ Trigger on: `swarm`, `parallel agents`, `multi-agent`, `hive-mind`, `ruv-swarm`,
 
 ## Available Systems
 
-| System | Use Case | Details In |
-|--------|----------|------------|
-| Claude-Flow | General orchestration | CLAUDE_FLOW |
-| RUV-Swarm | Task orchestration, DAA learning | REF_SWARM_PATTERNS |
-| Hive-Mind | Consensus, collective intelligence | CLAUDE_FLOW |
+| System      | Use Case                           | Details In         |
+| ----------- | ---------------------------------- | ------------------ |
+| Claude-Flow | General orchestration              | CLAUDE_FLOW        |
+| RUV-Swarm   | Task orchestration, DAA learning   | REF_SWARM_PATTERNS |
+| Hive-Mind   | Consensus, collective intelligence | CLAUDE_FLOW        |
 
 **Tool patterns documented in CLAUDE_FLOW and REF_SWARM_PATTERNS.**
 
@@ -73,9 +73,9 @@ Trigger on: `swarm`, `parallel agents`, `multi-agent`, `hive-mind`, `ruv-swarm`,
 
 ## Related Memories
 
-| Memory | Content |
-|--------|---------|
+| Memory               | Content                 |
+| -------------------- | ----------------------- |
 | WF_SWARM_ORCHESTRATE | Complete swarm workflow |
-| REF_SWARM_PATTERNS | MCP tool reference |
-| CLAUDE_FLOW | Coordination patterns |
-| REF_AGENTS | Agent selection guide |
+| REF_SWARM_PATTERNS   | MCP tool reference      |
+| CLAUDE_FLOW          | Coordination patterns   |
+| REF_AGENTS           | Agent selection guide   |

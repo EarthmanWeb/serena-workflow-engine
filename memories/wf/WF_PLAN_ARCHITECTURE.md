@@ -56,11 +56,11 @@ OUTPUT THE ABOVE LINE IMMEDIATELY. Do not read further until you have reported y
 
 **YOU ARE NOT FINISHED.** Before responding to user:
 
-| Condition | MUST Read Next |
-|-----------|----------------|
-| User approves design (simple) | `WF_DETECT_REQ` |
+| Condition                           | MUST Read Next         |
+| ----------------------------------- | ---------------------- |
+| User approves design (simple)       | `WF_DETECT_REQ`        |
 | User approves design (swarm needed) | `WF_SWARM_ORCHESTRATE` |
-| User rejects/modifies | `WF_CLARIFY` |
+| User rejects/modifies               | `WF_CLARIFY`           |
 
 1. Wait for user approval
 2. Read that WF_* memory NOW

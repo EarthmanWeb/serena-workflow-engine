@@ -5,6 +5,7 @@ Project-specific AI guidance for development patterns and architecture.
 ## Mandatory Hook Actions
 
 Hooks will send you data to guide you. ALWAYS LISTEN TO THEM.
+
 - Did you follow hook instructions exactly?
 - Did you read all references mentioned in hook responses COMPLETELY?
 - Did you check INDEX_FEATURES or _INDEX for existing features?
@@ -15,6 +16,7 @@ Hooks will send you data to guide you. ALWAYS LISTEN TO THEM.
 ## 🎯 Core Principles
 
 **KISS → DRY → YAGNI** (priority order)
+
 - Simple, readable code
 - Extract at 3+ occurrences
 - Build only when needed

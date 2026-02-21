@@ -14,31 +14,31 @@ mcp__ruv-swarm__swarm_init(topology: "mesh", maxAgents: 10, strategy: "balanced"
 
 Spawn specialized research agents:
 
-| Agent Type | Focus Area |
-|------------|------------|
-| php-standards | PHP coding patterns, class structure |
-| js-standards | JavaScript patterns, module structure |
-| scss-standards | SCSS/CSS patterns, variables |
-| template-standards | Template engine patterns |
-| test-standards | Test framework patterns |
-| naming-conventions | File/class/function naming |
-| file-organization | Directory structure |
-| build-tooling | Build system, scripts |
-| class-structure | OOP patterns, inheritance |
-| hooks-filters | Framework integration patterns |
+| Agent Type         | Focus Area                            |
+| ------------------ | ------------------------------------- |
+| php-standards      | PHP coding patterns, class structure  |
+| js-standards       | JavaScript patterns, module structure |
+| scss-standards     | SCSS/CSS patterns, variables          |
+| template-standards | Template engine patterns              |
+| test-standards     | Test framework patterns               |
+| naming-conventions | File/class/function naming            |
+| file-organization  | Directory structure                   |
+| build-tooling      | Build system, scripts                 |
+| class-structure    | OOP patterns, inheritance             |
+| hooks-filters      | Framework integration patterns        |
 
 ## Phase 2: Analyze Configuration Files
 
 Research these config sources (adapt to project):
 
-| Config Type | Common Files |
-|-------------|--------------|
-| PHP linting | `ruleset.xml`, `phpcs.xml`, `.php-cs-fixer.php` |
-| JS linting | `biome.json`, `.eslintrc`, `prettier.config.js` |
-| SCSS formatting | `.prettierrc`, `stylelint.config.js` |
-| Template formatting | `.bladeformatterrc.json`, `.twigcs.yml` |
-| Package config | `composer.json`, `package.json` |
-| Build config | `gulpfile.js`, `webpack.config.js`, `vite.config.js` |
+| Config Type         | Common Files                                         |
+| ------------------- | ---------------------------------------------------- |
+| PHP linting         | `ruleset.xml`, `phpcs.xml`, `.php-cs-fixer.php`      |
+| JS linting          | `biome.json`, `.eslintrc`, `prettier.config.js`      |
+| SCSS formatting     | `.prettierrc`, `stylelint.config.js`                 |
+| Template formatting | `.bladeformatterrc.json`, `.twigcs.yml`              |
+| Package config      | `composer.json`, `package.json`                      |
+| Build config        | `gulpfile.js`, `webpack.config.js`, `vite.config.js` |
 
 ## Phase 3: Sample Code Analysis
 
@@ -51,6 +51,7 @@ For each language/area, analyze representative files:
 5. **Tests**: Find test files, examine fixtures, assertions, setup
 
 Use swarm orchestration:
+
 ```
 mcp__ruv-swarm__task_orchestrate(task: "[specific research task]", strategy: "parallel")
 ```
@@ -60,6 +61,7 @@ mcp__ruv-swarm__task_orchestrate(task: "[specific research task]", strategy: "pa
 ### Create Index Entry Point
 
 Create `REF_DEV_STANDARDS` as short index (~50 lines):
+
 - Quick reference table linking to subsections
 - Universal standards (indentation, line endings, encoding)
 - Lint command reference
@@ -69,40 +71,46 @@ Create `REF_DEV_STANDARDS` as short index (~50 lines):
 
 Split detailed standards into ~100-120 line files:
 
-| Memory | Content |
-|--------|---------|
-| `DEV_PHP` | PHP standards, class naming, method naming |
-| `DEV_JAVASCRIPT` | JS standards, linter config, module patterns |
-| `DEV_SCSS` | SCSS standards, variables, formatting |
-| `DEV_[TEMPLATE_ENGINE]` | Template patterns (BladeOne, Twig, etc.) |
-| `DEV_TESTS` | Test framework patterns, fixtures, assertions |
-| `DEV_BUILD` | Build system, commands, scripts |
-| `DEV_PATTERNS` | High-level architecture patterns |
+| Memory                  | Content                                       |
+| ----------------------- | --------------------------------------------- |
+| `DEV_PHP`               | PHP standards, class naming, method naming    |
+| `DEV_JAVASCRIPT`        | JS standards, linter config, module patterns  |
+| `DEV_SCSS`              | SCSS standards, variables, formatting         |
+| `DEV_[TEMPLATE_ENGINE]` | Template patterns (BladeOne, Twig, etc.)      |
+| `DEV_TESTS`             | Test framework patterns, fixtures, assertions |
+| `DEV_BUILD`             | Build system, commands, scripts               |
+| `DEV_PATTERNS`          | High-level architecture patterns              |
 
 ### Standard Memory Format
 
 Each DEV_* memory should include:
+
 ```markdown
 # DEV_[AREA] - [Area] Standards
 
 ## Tools
+
 - **Linter**: [tool name]
 - **Config**: [config file path]
 
 ## Formatting
+
 - **Indentation**: [spaces/tabs]
 - **Quotes**: [single/double]
 - [other formatting rules]
 
 ## Naming Conventions
+
 - **Files**: [pattern]
 - **Classes**: [pattern]
 - **Functions**: [pattern]
 
 ## Patterns
+
 [Code examples with explanations]
 
 ## Lint Commands
+
 \`\`\`bash
 [relevant commands]
 \`\`\`
@@ -113,16 +121,17 @@ Each DEV_* memory should include:
 ### Update Navigation Index
 
 Add to `_INDEX`:
+
 ```markdown
 ## Development Standards
 
 **Entry Point**: `REF_DEV_STANDARDS`
 
-| Standard | Memory |
-|----------|--------|
-| PHP | `DEV_PHP` |
+| Standard   | Memory           |
+| ---------- | ---------------- |
+| PHP        | `DEV_PHP`        |
 | JavaScript | `DEV_JAVASCRIPT` |
-| [etc.] | [etc.] |
+| [etc.]     | [etc.]           |
 ```
 
 ## Checklist

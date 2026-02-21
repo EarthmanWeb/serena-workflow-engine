@@ -25,6 +25,7 @@ This workflow runs when a feature needs to be registered in the workflow system.
 ```
 
 Or with options:
+
 ```
 /swe-feature-onboard [KEY]        # Pre-fill feature key
 /swe-feature-onboard [KEY] --quick # Quick mode (minimal)
@@ -32,9 +33,9 @@ Or with options:
 
 ## MANDATORY NEXT STEP
 
-| Condition | MUST Read Next |
-|-----------|----------------|
-| Feature configured | `WF_START` |
-| User cancelled | End conversation |
+| Condition          | MUST Read Next   |
+| ------------------ | ---------------- |
+| Feature configured | `WF_START`       |
+| User cancelled     | End conversation |
 
 **SKIPPING THIS TRANSITION = WORKFLOW VIOLATION**

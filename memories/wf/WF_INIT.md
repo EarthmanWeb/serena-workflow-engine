@@ -7,6 +7,7 @@
 **YOU WILL BE TEMPTED TO SKIP STEPS. DO NOT.**
 
 Common rationalizations that are **NEVER VALID**:
+
 - ❌ "This is a simple task" - **Complexity is irrelevant. Follow ALL steps.**
 - ❌ "I already know what to do" - **The workflow exists for consistency, not knowledge.**
 - ❌ "The user wants a quick answer" - **Speed is not a valid reason to skip steps.**
@@ -21,12 +22,14 @@ Common rationalizations that are **NEVER VALID**:
 ## CRITICAL: MANDATORY ENTRY POINT - FOLLOW AND REPORT ALL WORKFLOW STEPS START TO FINISH BY READING WF_START
 
 **BEFORE responding to ANY user message, if you do not remember reading these, you MUST:**
+
 1. READ and COMPLY WITH [CLAUDE_OBLIGATIONS](CLAUDE_OBLIGATIONS.md)
 
 **THEN IN ALL CASES, you MUST:***
 2. READ and COMPLY WITH [WF_START](WF_START.md) fully
 
 **NO EXCEPTIONS.** This includes:
+
 - Meta-work (modifying the workflow itself)
 - Simple questions
 - Continuing previous conversations
@@ -39,12 +42,14 @@ If you respond without first reading WF_START, you have failed to follow instruc
 **When looking for specific references, all supported file types MUST be parsed with Serena's symbolic tools instead of reading entire files.**
 
 This applies to:
+
 - **Markdown files** (`.md`) — including WM files, memories, and documentation
 - **PHP files** — classes, functions, hooks
 - **JavaScript/TypeScript files** — modules, classes, functions
 - **Python files** — classes, functions, variables
 
 **Use these tools FIRST:**
+
 - `get_symbols_overview` — understand file structure without reading it
 - `find_symbol` with `include_body=True` — read only the symbol you need
 - `find_referencing_symbols` — trace dependencies between symbols
@@ -52,6 +57,7 @@ This applies to:
 
 **NEVER read an entire file when you can extract the specific symbols you need.**
 The only exceptions are:
+
 - Config files (`.json`, `.env`) that have no symbolic structure
 - Files where the language server is unavailable or not responding
 - When you explicitly need the full file context (e.g. reviewing a template's complete layout)
@@ -60,14 +66,16 @@ The only exceptions are:
 
 ## CRITICAL: STEP REPORTING ENFORCEMENT
 
-**After reading ANY WF_* memory, your IMMEDIATE FIRST output MUST be the step report line.**
+**After reading ANY WF** memory, your IMMEDIATE FIRST output MUST be the step report line._*
 
 Example:
+
 ```
 > **🚀 On step WF_START**
 ```
 
 **DO NOT:**
+
 - Read tool results and immediately start working
 - Output analysis before the step report
 - Skip the step report because you're "in the middle of something"

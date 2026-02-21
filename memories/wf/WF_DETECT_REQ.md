@@ -17,6 +17,7 @@
 ## Decision
 
 **Requirement found?**
+
 - Yes → contains behavioral/UX requirement
 - No → pure implementation task
 
@@ -24,10 +25,10 @@
 
 **YOU ARE NOT FINISHED.** Before responding to user:
 
-| Condition | MUST Read Next |
-|-----------|----------------|
+| Condition         | MUST Read Next    |
+| ----------------- | ----------------- |
 | Requirement found | `WF_REQUIREMENTS` |
-| No requirement | `WF_LOAD_FEATURE` |
+| No requirement    | `WF_LOAD_FEATURE` |
 
 1. Determine which condition applies
 2. Read that WF_* memory NOW

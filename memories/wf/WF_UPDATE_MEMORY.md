@@ -18,13 +18,13 @@ OUTPUT THE ABOVE LINE IMMEDIATELY. Do not read further until you have reported y
 
 ### 1. Identify Target Memory
 
-| Type | Naming | Purpose |
-|------|--------|---------|
-| Domain | `DOM_[DOMAIN]` | User-facing behavior, constraints, edge cases |
-| System | `SYS_[SYSTEM]` | System documentation |
-| Reference | `REF_[TOPIC]` | Reference documentation |
-| Index | `INDEX_[TYPE]` | File/symbol indexes |
-| Working | `WM_*` | Session task state |
+| Type      | Naming         | Purpose                                       |
+| --------- | -------------- | --------------------------------------------- |
+| Domain    | `DOM_[DOMAIN]` | User-facing behavior, constraints, edge cases |
+| System    | `SYS_[SYSTEM]` | System documentation                          |
+| Reference | `REF_[TOPIC]`  | Reference documentation                       |
+| Index     | `INDEX_[TYPE]` | File/symbol indexes                           |
+| Working   | `WM_*`         | Session task state                            |
 
 ### 2. For WM Updates
 
@@ -51,10 +51,10 @@ mcp__plugin_swe_serena__edit_memory("MEMORY_NAME", "old", "new", "literal")
 
 **YOU ARE NOT FINISHED.** Before responding to user:
 
-| Condition | MUST Read Next |
-|-----------|----------------|
-| Domain memory updated | `WF_LOAD_FEATURE` |
-| WM updated | Return to previous workflow step |
+| Condition             | MUST Read Next                   |
+| --------------------- | -------------------------------- |
+| Domain memory updated | `WF_LOAD_FEATURE`                |
+| WM updated            | Return to previous workflow step |
 
 1. Read the appropriate WF_* memory NOW
 2. Report the new step to user

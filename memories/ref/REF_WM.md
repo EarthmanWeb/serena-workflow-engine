@@ -5,12 +5,13 @@
 `WM_<SESSION_ID>.md`
 
 - **Session ID**: 8-char from transcript_path UUID (e.g., `3fe6b3c5`)
+
 ## Lifecycle
 
-| Stage           | When                    | What Happens                                                     |
-| --------------- | ----------------------- | ---------------------------------------------------------------- |
-| **Auto-Create** | WF_START transition     | Hook creates `WM_{session_id}.md`                                |
-| **Load**        | Session resume          | Read file → verify session ID matches → echo to chat             |
+| Stage           | When                    | What Happens                                                       |
+| --------------- | ----------------------- | ------------------------------------------------------------------ |
+| **Auto-Create** | WF_START transition     | Hook creates `WM_{session_id}.md`                                  |
+| **Load**        | Session resume          | Read file → verify session ID matches → echo to chat               |
 | **Update**      | After edits/transitions | Write changes → echo: `📋 Updated Working Memory: WM_{session_id}` |
 
 **The WM filename is always `WM_{session_id}` — no suffix, no renaming.**

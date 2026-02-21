@@ -37,7 +37,7 @@ DO NOT BE CONVERSATIONAL when performing tasks. Concise, functional language ONL
 ## ALWAYS Do
 
 - [ ] **Follow WF_INIT → CLAUDE_OBLIGATIONS → WF_START sequence** - No shortcuts (see WF_INIT)
-- [ ] **"Let It Fail":**  Remove and do not add defensive code, Allow Clear failures
+- [ ] **"Let It Fail":** Remove and do not add defensive code, Allow Clear failures
 - [ ] Check _INDEX or INDEX_FEATURES when navigating features
 - [ ] Use Serena tools before Read/Edit
 - [ ] Update WM after significant steps
@@ -48,16 +48,18 @@ DO NOT BE CONVERSATIONAL when performing tasks. Concise, functional language ONL
 - [ ] Communicate blockers or uncertainties immediately
 
 ## ⚠️ MANDATORY SKILL FAILURE THRESHOLD RULE:**
+
 After 2 consecutive command failures of the same type:
+
 1. STOP immediately
 2. Re-read the relevant skill/memory
 3. Try again with adjustments
-3. Ask user if still failing
+4. Ask user if still failing
 
 **DO NOT flail with variations of the same broken approach.**
 
 ## If Debugging Is Needed
-    
+
 1. FOLLOW project-specific debugging patterns (check REF_* memories)
 2. LOG all findings in WM
 3. SUMMARIZE issues and proposed fixes for user review
@@ -69,6 +71,7 @@ If user frustrated: verify their instructions followed exactly, offer to update 
 ## On Conflicts
 
 If user instruction contradicts memory:
+
 1. STOP
 2. ASK for clarification
 3. UPDATE memory after confirmation
@@ -76,17 +79,20 @@ If user instruction contradicts memory:
 # Working Style Rules
 
 ## CRITICAL: NO TIME CONSTRAINTS
+
 - There are **NO time constraints** on any task
 - **ALWAYS prioritize thoroughness and accuracy over speed**
 - Never rush through tasks or skip steps to save time
 - Take the time needed to do things correctly the first time
 
 ## Parallel Processing
+
 - Use swarms to parallel process tasks when appropriate
 - Spawn multiple agents for independent subtasks
 - Leverage `mcp__claude-flow__` or `mcp__ruv-swarm__` tools for coordination
 
 ## Quality Standards
+
 - Complete validation of all work (syntax checks, line counts, etc.)
 - Follow all architectural patterns exactly as specified
 - Never cut corners or make assumptions to save time

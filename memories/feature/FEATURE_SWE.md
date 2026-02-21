@@ -60,9 +60,9 @@ WF_START → WF_CLASSIFY → WF_DETECT_REQ/WF_PLAN_ARCHITECTURE/WF_SWARM_ORCHEST
 | ---------- | -------------------------------------------------------------------------- |
 | Setup      | WF_INITIAL_SETUP, WF_ONBOARD                                               |
 | Entry      | WF_INIT, WF_START, WF_CLASSIFY, WF_CONTINUE                                |
-| Analysis   | WF_RESEARCH, WF_RESEARCH_LITE, WF_DETECT_REQ, WF_REQUIREMENTS               |
+| Analysis   | WF_RESEARCH, WF_RESEARCH_LITE, WF_DETECT_REQ, WF_REQUIREMENTS              |
 | Planning   | WF_PLAN_ARCHITECTURE, WF_ARCH_REVIEW, WF_SWARM_ORCHESTRATE                 |
-| Gates      | WF_CLARIFY                                                                  |
+| Gates      | WF_CLARIFY                                                                 |
 | Execution  | WF_LOAD_FEATURE, WF_UPDATE_MEMORY, WF_EXECUTE, WF_CHECKPOINT, WF_DEBUG_TDD |
 | Completion | WF_VERIFY, WF_DONE, WF_CLEANUP                                             |
 
@@ -119,21 +119,21 @@ WF_START → WF_CLASSIFY → WF_DETECT_REQ/WF_PLAN_ARCHITECTURE/WF_SWARM_ORCHEST
 
 ### Skills (13 total)
 
-| Skill                      | Purpose                         |
-| -------------------------- | ------------------------------- |
-| `swe-feature-onboard`      | Onboard new feature to workflow |
-| `swe-feature-update`       | Update feature memory files     |
-| `swe-scaffold-project`     | Initialize new project          |
+| Skill                      | Purpose                                             |
+| -------------------------- | --------------------------------------------------- |
+| `swe-feature-onboard`      | Onboard new feature to workflow                     |
+| `swe-feature-update`       | Update feature memory files                         |
+| `swe-scaffold-project`     | Initialize new project                              |
 | `swe-symbol-index`         | Generate symbol index table for feature linked docs |
-| `swe-sync`                 | Sync plugin to local memories   |
-| `swe-wm-update`            | Update Working Memory sections  |
-| `swe-swarm-orchestrate`    | Multi-agent swarm coordination  |
-| `swe-swarm-analyze`        | DAA-powered codebase analysis   |
-| `swe-workflow-debug-tdd`   | Test-driven debugging           |
-| `swe-workflow-detect-req`  | Detect implicit requirements    |
-| `swe-workflow-verify`      | Verify implementation           |
-| `swe-workflow-research`    | Code exploration/research       |
-| `swe-workflow-arch-review` | Architecture compliance review  |
+| `swe-sync`                 | Sync plugin to local memories                       |
+| `swe-wm-update`            | Update Working Memory sections                      |
+| `swe-swarm-orchestrate`    | Multi-agent swarm coordination                      |
+| `swe-swarm-analyze`        | DAA-powered codebase analysis                       |
+| `swe-workflow-debug-tdd`   | Test-driven debugging                               |
+| `swe-workflow-detect-req`  | Detect implicit requirements                        |
+| `swe-workflow-verify`      | Verify implementation                               |
+| `swe-workflow-research`    | Code exploration/research                           |
+| `swe-workflow-arch-review` | Architecture compliance review                      |
 
 ### Commands (9 total)
 

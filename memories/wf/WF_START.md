@@ -17,12 +17,14 @@ The anti-rationalization block is in WF_INIT. If you skipped WF_INIT to get here
 There is **NO VALID PATH** from WF_START directly to WF_EXECUTE.
 
 If you are thinking of going to WF_EXECUTE from here:
+
 - ❌ **STOP. That path does not exist.**
 - ❌ "The task is simple enough" - **NO. Simple tasks still go through WF_CLASSIFY.**
 - ❌ "I already know what to do" - **NO. WF_CLASSIFY loads features. You need them.**
 - ❌ "The WM has the feature key" - **Having the key ≠ loading the FEATURE_[KEY] memory.**
 
 **Valid paths to WF_EXECUTE (ALL go through classification first):**
+
 1. **Code changes:** WF_START → WF_CLASSIFY → WF_DETECT_REQ → WF_LOAD_FEATURE → WF_ARCH_REVIEW → WF_EXECUTE
 2. **Operational tasks:** WF_START → WF_CLASSIFY → WF_DETECT_REQ → WF_LOAD_FEATURE → WF_EXECUTE
 3. **Medium complexity:** WF_START → WF_CLASSIFY → WF_PLAN_ARCHITECTURE → ... → WF_EXECUTE
@@ -37,6 +39,7 @@ If you are thinking of going to WF_EXECUTE from here:
 **How to know if you are a spawned agent:** Your prompt contains explicit agent role assignment (e.g., "You are the researcher agent") and task-specific instructions from a coordinator.
 
 **IF you are an agent spawned as part of a swarm initiated from a workflow:**
+
 - ✅ You MAY bypass this workflow entirely
 - ✅ Adhere ONLY to the specific instructions provided by the initiating agent
 - ✅ Read CLAUDE_FLOW, CLAUDE_OBLIGATIONS, _INDEX, and only read other memories if they assist with your specific task
@@ -61,6 +64,7 @@ mcp__plugin_swe_serena__read_memory("INDEX_FEATURES")
 ```
 
 **If INDEX_FEATURES doesn't exist or has no registered features:**
+
 - Go to `WF_ONBOARD` immediately
 - Do not proceed with other steps
 
@@ -92,6 +96,7 @@ mcp__plugin_swe_serena__read_memory("CLAUDE_OBLIGATIONS")
 #### ⚙️ HOW WM STATE UPDATES WORK
 
 **The hook daemon manages `Current State` automatically.** When you read any `WF_*` memory, the `swe_post_read_state` hook:
+
 1. Validates the transition against `states.json`
 2. Updates `**Current State**:` in the WM file
 3. Appends a transition log entry to the Progress section
@@ -99,11 +104,13 @@ mcp__plugin_swe_serena__read_memory("CLAUDE_OBLIGATIONS")
 **YOU MUST NOT manually rewrite the WM file just to update `Current State`.** The daemon does this. If you overwrite the WM with `write_memory`, you may clobber the daemon's format and cause the init gate to reject the file.
 
 **What YOU own in WM:**
+
 - `## Current Task` — task description, affected features
 - `## Progress` — status updates on work done (but NOT `### Transitions`)
 - `## Previous Task` — completed tasks
 
 **What the DAEMON owns in WM:**
+
 - `**Current State**:` — updated automatically on each WF_* read
 - `**Previous State**:` — updated automatically
 - `### Transitions` — appended automatically
@@ -121,6 +128,7 @@ mcp__plugin_swe_serena__read_memory("CLAUDE_OBLIGATIONS")
 **DO NOT create your own WM file from scratch.** The auto-created file has the exact format the init gate expects (`**Current State**:` with double-asterisk bold markers inside `## Workflow Context`).
 
 After auto-creation, update the task-specific sections only:
+
 ```
 mcp__plugin_swe_serena__edit_memory("WM_{session}", "update task description and features")
 ```
@@ -150,17 +158,17 @@ See routing table below.
 
 **YOU ARE NOT FINISHED.** Before responding to user:
 
-| Condition | MUST Read Next |
-|-----------|----------------|
-| No features registered | `WF_ONBOARD` |
-| Feature not found | `WF_ONBOARD` |
-| Simple lookup ("find X", "show Y") | `WF_RESEARCH` |
-| WM not created/updated | **CREATE IT NOW** |
-| Continue previous work | `WF_CONTINUE` |
-| Research/question only | `WF_RESEARCH` |
-| **Code change/feature/bug** | **`WF_CLASSIFY`** ← THIS IS MANDATORY |
+| Condition                                | MUST Read Next                                              |
+| ---------------------------------------- | ----------------------------------------------------------- |
+| No features registered                   | `WF_ONBOARD`                                                |
+| Feature not found                        | `WF_ONBOARD`                                                |
+| Simple lookup ("find X", "show Y")       | `WF_RESEARCH`                                               |
+| WM not created/updated                   | **CREATE IT NOW**                                           |
+| Continue previous work                   | `WF_CONTINUE`                                               |
+| Research/question only                   | `WF_RESEARCH`                                               |
+| **Code change/feature/bug**              | **`WF_CLASSIFY`** ← THIS IS MANDATORY                       |
 | **Operational task (test, run, verify)** | **`WF_CLASSIFY`** ← STILL MANDATORY (needs feature context) |
-| New task after WF_DONE (same session) | **UPDATE existing WM** → `WF_CLASSIFY` |
+| New task after WF_DONE (same session)    | **UPDATE existing WM** → `WF_CLASSIFY`                      |
 
 **⚡ LITE MODE (User-Requested Only):** `WF_RESEARCH_LITE` is ONLY available when the user explicitly requests it.
 
@@ -168,12 +176,12 @@ See routing table below.
 
 ## 🛑 BLOCKED PATHS - These Do NOT Exist
 
-| Invalid Path | Why It's Invalid |
-|--------------|------------------|
-| WF_START → WF_EXECUTE | **Features not loaded. WF_CLASSIFY must run first.** |
-| WF_START → WF_LOAD_FEATURE | **Classification must happen first.** |
-| WF_START → WF_CHECKPOINT | **No work has been done yet.** |
-| WF_START → WF_VERIFY | **Nothing to verify yet.** |
+| Invalid Path               | Why It's Invalid                                     |
+| -------------------------- | ---------------------------------------------------- |
+| WF_START → WF_EXECUTE      | **Features not loaded. WF_CLASSIFY must run first.** |
+| WF_START → WF_LOAD_FEATURE | **Classification must happen first.**                |
+| WF_START → WF_CHECKPOINT   | **No work has been done yet.**                       |
+| WF_START → WF_VERIFY       | **Nothing to verify yet.**                           |
 
 **If you find yourself wanting to go to any of these, STOP. Go to WF_CLASSIFY.**
 
