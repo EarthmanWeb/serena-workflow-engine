@@ -28,17 +28,13 @@ OUTPUT THE ABOVE LINE IMMEDIATELY. Do not read further until you have reported y
 
 ### 2. For WM Updates
 
-**MANDATORY: Read `REF_WM` first** - it contains:
-- Naming conventions
-- Required template format
-- Anti-patterns to avoid (especially single-field state edits)
-- Stop hook behavior
+**Invoke `/swe-wm-update --from {calling_step}`** — provides the complete
+checklist and template. The skill handles reading, validating, and writing WM
+comprehensively. Do NOT manually construct WM content or read REF_WM separately.
 
-```
-mcp__plugin_swe_serena__read_memory("REF_WM")
-```
+### 3. For Non-WM Memory Updates
 
-### 3. Update Using Serena Tools
+Use Serena tools directly:
 
 ```python
 mcp__plugin_swe_serena__write_memory("MEMORY_NAME", "content")

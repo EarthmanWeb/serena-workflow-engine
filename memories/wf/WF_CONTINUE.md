@@ -40,14 +40,10 @@ OUTPUT THE ABOVE LINE IMMEDIATELY. Do not read further until you have reported y
 
 ## ⚠️ MANDATORY: WM UPDATE
 
-**Before transitioning to another state, you MUST:**
-
-1. Update `## Progress` with completed steps
-2. Update `**Files:**` with new files edited
-3. Verify `## Workflow Context` is current
+**Before transitioning, invoke `/swe-wm-update --from WF_CONTINUE`** — provides the
+step-specific checklist ensuring no fields are missed. Do NOT manually update WM
+without it.
 
 **SKIPPING WM UPDATE = WORKFLOW VIOLATION**
-
-The hooks will BLOCK your next action if WM is stale.
 
 [CRITICAL: Are you on a WF_* workflow step? Did you report on it?]

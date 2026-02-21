@@ -40,20 +40,9 @@ If any violations found, fix them before proceeding.
 
 ## 5. ⚠️ MANDATORY: Update WM
 
-**BEFORE updating, you MUST read:**
-```
-mcp__plugin_swe_serena__read_memory("REF_WM")
-```
-
-**Follow the anti-pattern warnings and multi-section update requirements in REF_WM.**
-
-Include in your update:
-- Status: `[COMPLETED]` or `[VERIFY_COMPLETE]`
-- Progress: All items marked `[x]`
-- Files: All files modified
-- Current State: `WF_VERIFY` → `WF_DONE`
-
-**Echo to chat**: `📋 Updated Working Memory: WM_<filename>`
+**Invoke `/swe-wm-update --from WF_VERIFY`** — provides the complete checklist
+and template. The skill handles reading, validating, and writing WM
+comprehensively. Do NOT manually construct WM content or read REF_WM separately.
 
 ### Also update if needed:
 - **DOM_[X]:** If domain architecture changed
@@ -68,11 +57,10 @@ Include in your update:
 |-----------|----------------|
 | Violations found | `WF_EXECUTE` (fix them) |
 | Tests missing | `WF_EXECUTE` (add them) |
-| WM not updated comprehensively | **READ REF_WM, then UPDATE** |
+| WM not updated comprehensively | **Invoke `/swe-wm-update --from WF_VERIFY`** |
 | All clean, tests pass, WM fully updated | `WF_DONE` |
 
-**SKIPPING REF_WM READ = WORKFLOW VIOLATION**
-**SINGLE-FIELD STATE EDIT = WORKFLOW VIOLATION**
+**SKIPPING WM UPDATE = WORKFLOW VIOLATION**
 **SKIPPING THIS TRANSITION = WORKFLOW VIOLATION**
 
-[CRITICAL: Did you read REF_WM? Did you update comprehensively? Did you report your step?]
+[CRITICAL: Did you invoke `/swe-wm-update`? Did you update comprehensively? Did you report your step?]

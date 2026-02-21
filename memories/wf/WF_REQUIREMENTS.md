@@ -41,6 +41,6 @@ OUTPUT THE ABOVE LINE IMMEDIATELY. Do not read further until you have reported y
 
 **SKIPPING THIS TRANSITION = WORKFLOW VIOLATION**
 
-📋 **WM:** Update if task state changed (see `REF_WM`)
+📋 **WM:** If task state changed, invoke `/swe-wm-update --from WF_REQUIREMENTS`
 
 [CRITICAL: Are you on a WF_* workflow step? Did you report on it?]

@@ -8,20 +8,9 @@ OUTPUT THE ABOVE LINE IMMEDIATELY. Do not read further until you have reported y
 
 ## ⚠️ FINAL WM UPDATE - MANDATORY
 
-**Before completing, you MUST update WM with final status.**
-
-```
-mcp__plugin_swe_serena__write_memory("WM_<timestamp>", "<content>")
-```
-
-Include:
-
-- Final status: Completed
-- Summary of what was done
-- Any follow-up items for next conversation
-- Memories updated during session
-
-**Echo to chat**: `Working Memory: WM_<filename>`
+**Invoke `/swe-wm-update --from WF_DONE`** — provides the complete checklist and
+template for final status. The skill handles reading, validating, and writing WM
+comprehensively. Do NOT manually construct WM content or read REF_WM separately.
 
 ---
 

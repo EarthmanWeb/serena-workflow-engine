@@ -265,10 +265,9 @@ This check happens AFTER features are loaded because swarm coordination requires
 
 ## ⚠️ MANDATORY: WM UPDATE
 
-**Before transitioning to another state, you MUST:**
-1. Update `## Progress` with completed steps
-2. Update `## Affected Features` with loaded features
-3. Verify `## Workflow Context` is current
+**Before transitioning, invoke `/swe-wm-update --from WF_CLASSIFY`** — provides the
+step-specific checklist ensuring no fields are missed. Do NOT manually update WM
+without it.
 
 **SKIPPING WM UPDATE = WORKFLOW VIOLATION**
 

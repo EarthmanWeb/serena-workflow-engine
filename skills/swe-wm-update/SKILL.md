@@ -1,201 +1,252 @@
 ---
 name: swe-wm-update
-version: 2.0.0
-description: Single-operation Working Memory update via background daemon
+version: 3.0.0
+description: Comprehensive Working Memory update with per-step checklists
 workflow:
   aware: true
   callable_from:
     - WF_START
     - WF_CLASSIFY
+    - WF_DETECT_REQ
+    - WF_RESEARCH
+    - WF_CONTINUE
+    - WF_PLAN_ARCHITECTURE
+    - WF_ARCH_REVIEW
+    - WF_SWARM_ORCHESTRATE
     - WF_EXECUTE
     - WF_CHECKPOINT
     - WF_VERIFY
     - WF_DONE
+    - WF_CLARIFY
+    - WF_REQUIREMENTS
+    - WF_UPDATE_MEMORY
   default_return: null
   supports_standalone: false
   auto_transition: false
 args:
-  - name: session_id
-    description: 8-char session ID (required)
+  - name: from
+    description: Current WF_* step name — identifies which checklist to use (required)
     required: true
-  - name: task
-    description: Task description (required)
-    required: true
-  - name: feature
-    description: Feature key(s) from INDEX_FEATURES (required)
-    required: true
-  - name: state
-    description: Current workflow state WF_* (required)
-    required: true
-  - name: progress
-    description: Progress items as markdown list (required)
-    required: true
-  - name: complexity
-    description: simple|medium|large (optional, default medium)
-    required: false
 ---
 
 # /swe-wm-update
 
-**CRITICAL: This skill uses the background daemon for non-blocking WM writes.**
+**Single source of truth for WM updates. Replaces manual REF_WM reads.**
 
-The daemon is located at:
+This skill ensures comprehensive WM updates with nothing missed. Every WF_*
+transition MUST use this skill instead of manual updates.
+
+---
+
+## Step 1: Read Current WM
+
 ```
-.claude/plugins/serena-workflow-engine/hooks/swe_hooks/core/wm_writer_daemon.py
-```
-
-## Why Use the Daemon?
-
-- **Non-blocking**: Writes queued asynchronously, won't slow down workflow
-- **Write coalescing**: Rapid updates to same file are batched
-- **Format validation**: Validates against REF_WM specs before writing
-- **Anti-pattern detection**: Rejects single-field edits (use full writes)
-
-## Anti-Pattern (DO NOT DO THIS)
-
-```python
-# WRONG - Multiple blocking Serena calls!
-edit_memory("WM_...", "Task: old", "Task: new", "literal")
-edit_memory("WM_...", "Feature: old", "Feature: new", "literal")
-edit_memory("WM_...", "State: old", "State: new", "literal")
+mcp__plugin_swe_serena__read_memory("WM_{session_id}")
 ```
 
-## Correct Pattern - Using the Daemon
+Note these **daemon-managed fields** exactly as they appear (DO NOT MODIFY):
 
-The daemon exposes these functions:
+- `**Current State**:` — daemon updates on WF_* reads
+- `**Previous State**:` — daemon updates automatically
+- `### Transitions` — daemon appends automatically
+- `**Edit Count Since Checkpoint**:` — daemon increments on file edits
+- `**Last Updated**:` — daemon timestamps automatically
 
-```python
-from wm_writer_daemon import async_wm_write, async_wm_append, get_wm_writer
+---
 
-# Queue a full WM write (non-blocking)
-async_wm_write(
-    filepath=".serena/swe/WM_{session}.md",
-    content=full_wm_content,
-    operation_type='full_write',  # or 'state_update', 'edit_tracking', 'transition_log'
-    validate=True,
-    session_id="a7380848"
-)
+## Step 2: Gather Data Using Step-Specific Checklist
 
-# Append to existing WM (reads current, appends, queues write)
-async_wm_append(
-    filepath=".serena/swe/WM_{session}.md",
-    append_content="\n## New Section\n...",
-    session_id="a7380848"
-)
+**Find the checklist matching your `--from` argument below. Complete ALL items.**
+
+### WF_CLASSIFY
+
+- [ ] Features identified from INDEX_FEATURES
+- [ ] FEATURE_[KEY] loaded for each feature
+- [ ] Task type classified (simple / medium / large / operational)
+- [ ] `### Affected Features` populated with Primary / Secondary
+- [ ] `### Progress` updated with classification steps completed
+
+### WF_DETECT_REQ
+
+- [ ] Requirements detected (or "none — pure implementation")
+- [ ] `**Files:**` lists files examined
+- [ ] `### Progress` updated with detection findings
+
+### WF_RESEARCH
+
+- [ ] Research findings summarized in `### Notes`
+- [ ] Symbols / patterns discovered noted
+- [ ] `**Files:**` lists files examined
+- [ ] `### Progress` updated with research outcomes
+
+### WF_CONTINUE
+
+- [ ] Previous state verified from WM
+- [ ] Resume point identified
+- [ ] Progress carried forward from previous session
+- [ ] `**Files:**` lists files from previous work
+
+### WF_PLAN_ARCHITECTURE
+
+- [ ] Architectural decisions documented in `### Notes`
+- [ ] `**Files:**` lists files affected by design
+- [ ] Layer analysis complete
+- [ ] Swarm recommendation noted (if applicable)
+- [ ] `### Progress` updated with planning outcomes
+
+### WF_ARCH_REVIEW
+
+- [ ] Review outcomes documented (pass / fail per criterion)
+- [ ] `**Files:**` lists files reviewed
+- [ ] Layer compliance verified
+- [ ] User approval status noted
+- [ ] `### Progress` updated with review results
+
+### WF_SWARM_ORCHESTRATE
+
+- [ ] Swarm configuration documented in `### Notes`
+- [ ] Agent assignments noted
+- [ ] Topology selected
+- [ ] `### Progress` updated with orchestration steps
+
+### WF_EXECUTE
+
+- [ ] Current subtask status
+- [ ] `**Files:**` lists files modified / created with descriptions
+- [ ] Tests written / run status
+- [ ] Blockers noted (if any)
+- [ ] `### Progress` updated with implementation steps
+
+### WF_CHECKPOINT
+
+- [ ] All work since last checkpoint summarized
+- [ ] `**Files:**` lists files modified with change descriptions
+- [ ] Current phase / subtask status
+- [ ] `### Progress` updated comprehensively
+
+### WF_VERIFY
+
+- [ ] CLAUDE_OBLIGATIONS compliance verified
+- [ ] Architecture compliance verified
+- [ ] Test coverage verified
+- [ ] All progress items marked complete or noted
+- [ ] `**Files:**` is complete (every file touched in session)
+- [ ] Status set to `[COMPLETED]` or `[VERIFY_COMPLETE]`
+
+### WF_DONE
+
+- [ ] Status set to `[COMPLETED]`
+- [ ] Summary of all work done in `### Context`
+- [ ] All memories updated during session listed in `### Notes`
+- [ ] Follow-up items documented (if any)
+- [ ] `### Progress` — all items checked off
+
+### WF_CLARIFY
+
+- [ ] Clarification question and user response noted
+- [ ] Task description updated if scope changed
+- [ ] `### Progress` updated with clarification outcome
+
+### WF_REQUIREMENTS
+
+- [ ] Requirements documented in `### Notes`
+- [ ] Domain memory updates identified (if any)
+- [ ] `### Progress` updated with requirements captured
+
+---
+
+## Step 3: Write Complete WM
+
+**Use ONE `write_memory` call. Preserve all daemon-managed fields exactly.**
+
+```
+mcp__plugin_swe_serena__write_memory("WM_{session_id}", "<complete content>")
 ```
 
-## Required Data
-
-Before invoking, you MUST have ALL of:
-
-| Field | Source | Example |
-|-------|--------|---------|
-| session_id | From hook output or WM filename | `a7380848` |
-| task | User's request summary | `"Refactor auth module"` |
-| feature | INDEX_FEATURES key | `BACKEND` or `BLOCKS,THEMES` |
-| state | Current WF_* step | `WF_EXECUTE` |
-| progress | Markdown checklist | `"- [x] Step 1\n- [ ] Step 2"` |
-
-## Process
-
-### Step 1: Validate Required Fields
-
-If ANY field is missing, STOP and gather it first:
-- No session_id? → Check hook output or `list_memories()`
-- No task? → Ask user or infer from conversation
-- No feature? → Check `INDEX_FEATURES` or ask user
-- No state? → Determine from workflow position
-- No progress? → Create initial checklist from task
-
-### Step 2: Build Complete WM Content
+### Template — Fill ALL Sections
 
 ```markdown
-# Working Memory: Session {session_id}
+# Working Memory
 
-## Session
-- **ID**: {session_id}
-- **Task**: {task}
-- **Started**: {timestamp}
+## Chat: {descriptor}
+
+Session: {session_id}
 
 ## Workflow Context
-**Current State**: {state}
-**Previous State**: {previous_state or 'None'}
 
-## Task Context
-- **Feature(s)**: {feature}
-- **Complexity**: {complexity}
+- **Calling Step**: {calling_step}
+- **Feature Key(s)**: {feature_keys}
+- **Session ID**: {session_id}
+- **Return Step**: {return_step}
+- **Invocation Mode**: {invocation_mode}
+- **Current State**: {PRESERVE FROM STEP 1}
+- **Previous State**: {PRESERVE FROM STEP 1}
+- **Task Iteration**: {iteration}
+- **Edit Count Since Checkpoint:** {PRESERVE FROM STEP 1}
+- **Last Updated**: {PRESERVE FROM STEP 1}
 
-## Progress Tracking
-### Pending
-{progress}
+### Transitions
 
-## Requirements
-{requirements or '(from user request)'}
+{PRESERVE FROM STEP 1}
 
-## Implementation Notes
-{notes or '(none yet)'}
+## Current Task
+
+**[{STATUS}]**: {task_name}
+
+### Context
+
+{1-2 sentence description of current work}
+
+### Feature(s)
+
+{feature key or comma-separated list}
+
+### Affected Features (if multi-feature)
+
+- **Primary**: {KEY1} - {reason}
+- **Secondary**: {KEY2} - {reason}
+
+### Progress
+
+{updated checklist — mark completed items [x], in-progress items as current}
+
+**Files:**
+
+- `{path1}` - {description}
+- `{path2}` - {description}
+
+### Notes
+
+{blockers, decisions, findings, memories updated — or "None"}
+
+## Previous Task
+
+**[{OUTCOME}]**: {task_name} - {summary}
 ```
 
-### Step 3: Queue Write via Daemon
+---
 
-The hooks automatically use the daemon. When updating WM from workflow:
+## Step 4: Validate Before Writing
 
-```python
-# Hooks call this internally - writes are non-blocking
-async_wm_write(
-    filepath=f".serena/swe/WM_{session_id}.md",
-    content=wm_content,
-    operation_type='full_write',
-    validate=True,
-    session_id=session_id
-)
-```
+**If ANY of these fail, gather the missing data BEFORE calling write_memory:**
 
-**ONE queued operation. Non-blocking. Validated.**
+- [ ] Session ID matches existing WM file (`[a-f0-9]{8}`)
+- [ ] ALL daemon-managed fields preserved exactly as read
+- [ ] `Feature Key(s)` is NOT empty or "(to be determined)"
+- [ ] `Task` description is NOT empty or "(awaiting user task)"
+- [ ] `### Progress` has actual items (not placeholder text)
+- [ ] `**Files:**` lists actual files (if any were touched)
+- [ ] Status reflects reality (`IN_PROGRESS` / `COMPLETED` / `BLOCKED`)
 
-### Step 4: Confirm
+---
+
+## Step 5: Confirm
 
 Output: `📋 Updated Working Memory: WM_{session_id}`
 
-## Operation Types
-
-| Type | Use Case | Validation |
-|------|----------|------------|
-| `full_write` | Complete WM replacement | Full format check |
-| `state_update` | State transition only | Anti-pattern detection |
-| `edit_tracking` | Increment edit counts | Minimal |
-| `transition_log` | Log state changes | Minimal |
-| `append` | Add section to existing | None |
-
-## State Transitions
-
-When updating state, also update progress:
-
-| From → To | Progress Update |
-|-----------|-----------------|
-| WF_START → WF_CLASSIFY | Add classification checklist |
-| WF_CLASSIFY → WF_EXECUTE | Add implementation checklist |
-| WF_EXECUTE → WF_VERIFY | Mark implementation done, add verify checklist |
-| WF_VERIFY → WF_DONE | Mark all complete |
-
-## Validation Rules
-
-The daemon will REJECT writes if:
-1. session_id doesn't match `[a-f0-9]{8}` pattern
-2. state doesn't match `WF_*` pattern
-3. feature is empty or "(to be determined)"
-4. task is empty or "(awaiting user task)"
-5. Single-field edit detected (must do full writes)
-
-## Daemon Stats
-
-Check daemon health:
-```python
-writer = get_wm_writer()
-stats = writer.get_stats()
-# {'queued': N, 'written': N, 'failed': N, 'coalesced': N, 'validation_rejected': N}
-```
+---
 
 ## Exit
 
-No explicit exit - this is a utility skill that returns to caller.
+Return to the calling WF_* step's next transition. This is a utility skill —
+no state change occurs.

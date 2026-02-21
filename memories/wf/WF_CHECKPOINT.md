@@ -10,47 +10,11 @@ OUTPUT THE ABOVE LINE IMMEDIATELY. Do not read further until you have reported y
 
 **This step exists specifically to update WM. You MUST do this.**
 
-**MANDATORY: Read REF_WM BEFORE updating:**
+**Invoke `/swe-wm-update --from WF_CHECKPOINT`** — provides the complete checklist and
+template. The skill handles reading, validating, and writing WM comprehensively.
 
-```
-mcp__plugin_swe_serena__read_memory("REF_WM")
-```
-
-Then update:
-
-```
-mcp__plugin_swe_serena__write_memory("WM_<timestamp>", "<content>")
-```
-
-**⛔ NEVER do single-field state edits. Follow anti-pattern warnings in REF_WM.**
-
-**Format** (see `REF_WM` for full details):
-
-```markdown
-# WM - [Date] [Descriptor]
-
-## Session Context
-
-- **Task**: [Brief description]
-- **Feature**: [Feature key from INDEX_FEATURES]
-- **Status**: In Progress / Completed / Blocked
-
-## Progress Tracking
-
-- ✅ Completed items
-- 🔄 Current item
-- ⏳ Pending items
-
-## Notes
-
-[Any blockers, decisions, findings]
-
-## Last Updated
-
-[Timestamp]
-```
-
-**Echo to chat**: `Working Memory: WM_<filename>`
+Do NOT manually construct WM content or read REF_WM separately — the skill
+contains everything needed.
 
 ---
 

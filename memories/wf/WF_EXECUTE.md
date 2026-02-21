@@ -53,28 +53,16 @@ You CANNOT understand the architecture, file locations, testing patterns, or cod
 
 **Before starting any work, verify WM exists and is current.**
 
-**BEFORE any WM update, you MUST read:**
+If WM is stale or doesn't reflect current task, invoke
+`/swe-wm-update --from WF_EXECUTE` — provides the step-specific checklist and template.
+Do NOT manually construct WM content or read REF_WM separately.
 
-```
-mcp__plugin_swe_serena__read_memory("REF_WM")
-```
-
-If WM is stale or doesn't reflect current task:
-
-```
-mcp__plugin_swe_serena__write_memory("WM_<timestamp>", "<content>")
-```
-
-Echo to chat: `📋 Working Memory: WM_<filename>`
-
-**WM must be updated:**
+**WM must be updated (via the skill):**
 
 - Before starting significant work
 - After completing each subtask
 - When task state changes
 - Before transitioning to another WF_* step
-
-**⛔ NEVER do single-field state edits. See REF_WM for anti-patterns.**
 
 ---
 
