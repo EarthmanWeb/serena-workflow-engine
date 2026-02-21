@@ -22,56 +22,31 @@
 
 ## ⛔ ANTI-PATTERNS
 
-### ❌ Multiple edit_memory Calls
+### ❌ Manual WM Updates (edit_memory / write_memory)
 
-**THIS IS WRONG - DO NOT DO THIS:**
+**DO NOT manually update WM with `edit_memory` or `write_memory`.**
 
 ```python
-# ❌ WRONG: Multiple daemon calls!
+# ❌ WRONG: Manual edits
 edit_memory("WM_...", "Task: old", "Task: new", "literal")
-edit_memory("WM_...", "Feature: old", "Feature: new", "literal")
-edit_memory("WM_...", "State: old", "State: new", "literal")
+write_memory("WM_...", "...full content...")
 ```
 
-**Why it's wrong:** Each `edit_memory` call triggers the daemon. 4 edits = 4 daemon calls = inefficient.
-
-### ❌ State-Only Edits
-
-```python
-# ❌ WRONG: Only changing Current State field
-edit_memory("WM_...", "Current State: WF_EXECUTE", "Current State: WF_VERIFY", "literal")
-```
-
-**Why it's wrong:** Captures no progress, no completed work, no context.
+**Why it's wrong:** Manual updates bypass step-specific checklists and risk clobbering daemon-managed fields.
 
 ---
 
-## ✅ CORRECT: Single write_memory Call
+## ✅ CORRECT: Use /swe-wm-update Skill
 
-**Use ONE `write_memory` call with complete content:**
+**Always invoke the skill to update WM:**
 
-```python
-# ✅ CORRECT: Single write with all sections
-mcp__plugin_swe_serena__write_memory("WM_{session}", """
-# Working Memory: Session {session}
-
-## Session
-- **ID**: {session}
-- **Task**: {complete task description}
-...full content...
-""")
+```
+/swe-wm-update --from WF_CLASSIFY
 ```
 
-### Required Sections for ANY Update:
+The skill provides step-specific checklists ensuring no fields are missed and handles daemon coordination correctly.
 
-| Section         | What to Update                              |
-| --------------- | ------------------------------------------- |
-| `Current State` | New workflow state                          |
-| `Task`          | Current task description                    |
-| `Feature(s)`    | Active feature keys                         |
-| `Progress`      | Updated checklist with `[x]` for done items |
-
-**ONE WRITE CALL = ONE DAEMON CALL = CORRECT**
+**ONE SKILL CALL = CORRECT**
 
 ---
 

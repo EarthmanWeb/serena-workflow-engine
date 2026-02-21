@@ -117,7 +117,7 @@ mcp__plugin_swe_serena__read_memory("CLAUDE_OBLIGATIONS")
 - `**Edit Count Since Checkpoint**:` — incremented on each file edit
 - `**Last Updated**:` — timestamp updated automatically
 
-**If you need to update task context** (not state), use `edit_memory` to change specific sections, or `write_memory` with the FULL content including all daemon-managed fields intact.
+**If you need to update task context** (not state), invoke `/swe-wm-update` which provides step-specific checklists ensuring no fields are missed. Do NOT manually update WM with `edit_memory` or `write_memory`.
 
 ---
 
@@ -127,10 +127,10 @@ mcp__plugin_swe_serena__read_memory("CLAUDE_OBLIGATIONS")
 
 **DO NOT create your own WM file from scratch.** The auto-created file has the exact format the init gate expects (`**Current State**:` with double-asterisk bold markers inside `## Workflow Context`).
 
-After auto-creation, update the task-specific sections only:
+After auto-creation, update the task-specific sections by invoking:
 
 ```
-mcp__plugin_swe_serena__edit_memory("WM_{session}", "update task description and features")
+/swe-wm-update --from WF_START
 ```
 
 **DO NOT rename the WM file.** The `WM_{session}` name is permanent for the session. Renaming breaks state tracking.
