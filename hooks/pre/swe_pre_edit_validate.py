@@ -27,7 +27,7 @@ except ImportError as e:
 EDIT_ALLOWED = {'WF_EXECUTE', 'WF_DEBUG_TDD', 'WF_CHECKPOINT', 'WF_INITIAL_SETUP', 'WF_ONBOARD'}
 
 # States where edits should show a warning
-WARN_STATES = {'WF_PLAN_ARCHITECTURE', 'WF_ARCH_REVIEW', 'WF_RESEARCH'}
+WARN_STATES = {'WF_ARCH_REVIEW', 'WF_RESEARCH'}
 
 # Edit threshold for staleness check
 STALENESS_THRESHOLD = 3

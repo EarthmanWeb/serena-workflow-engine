@@ -27,13 +27,14 @@
 
 **YOU ARE NOT FINISHED.** After reporting findings:
 
-| Condition         | MUST Read Next  |
-| ----------------- | --------------- |
-| Research complete | `WF_DETECT_REQ` |
+| Condition                                | MUST Read Next   |
+| ---------------------------------------- | ---------------- |
+| Research complete, user wants changes    | `WF_LOAD_FEATURE` |
+| Research complete, no changes needed     | `WF_DONE`        |
 
-1. Read `WF_DETECT_REQ` NOW
-2. This allows seamless transition to implementation if user wants
-3. User gets prompted at ARCH_REVIEW anyway
+If the user wants to proceed with implementation based on research findings, route to `WF_LOAD_FEATURE` to load feature context before any code changes.
+
+If research answered the user's question with no further action needed, route to `WF_DONE`.
 
 **SKIPPING THIS TRANSITION = WORKFLOW VIOLATION**
 

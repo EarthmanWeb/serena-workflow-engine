@@ -92,7 +92,7 @@ def is_valid_transition(from_state: str, to_state: str) -> Tuple[bool, str]:
     )
 
 
-# State icons for display (17 states - v2.0)
+# State icons for display (15 states - v3.0)
 STATE_ICONS = {
     "WF_INIT": "🎬",
     "WF_START": "🚀",
@@ -100,9 +100,7 @@ STATE_ICONS = {
     "WF_CLASSIFY": "🏷️",
     "WF_LOAD_FEATURE": "📂",
     "WF_RESEARCH": "🔍",
-    "WF_REQUIREMENTS": "📋",
     "WF_CLARIFY": "❓",
-    "WF_PLAN_ARCHITECTURE": "🏗️",
     "WF_ARCH_REVIEW": "🔬",
     "WF_EXECUTE": "⚡",
     "WF_CHECKPOINT": "💾",
@@ -116,7 +114,6 @@ STATE_ICONS = {
 
 # States that require plan mode
 PLAN_MODE_STATES = {
-    "WF_PLAN_ARCHITECTURE",
     "WF_ARCH_REVIEW",
 }
 

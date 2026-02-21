@@ -7,10 +7,9 @@ workflow:
   callable_from:
     - WF_START
     - WF_CLASSIFY
-    - WF_DETECT_REQ
+    - WF_LOAD_FEATURE
     - WF_RESEARCH
     - WF_CONTINUE
-    - WF_PLAN_ARCHITECTURE
     - WF_ARCH_REVIEW
     - WF_SWARM_ORCHESTRATE
     - WF_EXECUTE
@@ -18,8 +17,6 @@ workflow:
     - WF_VERIFY
     - WF_DONE
     - WF_CLARIFY
-    - WF_REQUIREMENTS
-    - WF_UPDATE_MEMORY
   default_return: null
   supports_standalone: false
   auto_transition: false
@@ -66,11 +63,14 @@ Note these **daemon-managed fields** exactly as they appear (DO NOT MODIFY):
 - [ ] `### Affected Features` populated with Primary / Secondary
 - [ ] `### Progress` updated with classification steps completed
 
-### WF_DETECT_REQ
+### WF_LOAD_FEATURE
 
-- [ ] Requirements detected (or "none — pure implementation")
-- [ ] `**Files:**` lists files examined
-- [ ] `### Progress` updated with detection findings
+- [ ] INDEX_FEATURES read
+- [ ] FEATURE_[KEY] loaded for each feature
+- [ ] Supporting memories loaded (DOM_*, SYS_*, REF_*)
+- [ ] Requirements validated against domain memories (or "none detected")
+- [ ] `**Files:**` lists key file paths from feature memories
+- [ ] `### Progress` updated with feature loading outcomes
 
 ### WF_RESEARCH
 
@@ -86,19 +86,12 @@ Note these **daemon-managed fields** exactly as they appear (DO NOT MODIFY):
 - [ ] Progress carried forward from previous session
 - [ ] `**Files:**` lists files from previous work
 
-### WF_PLAN_ARCHITECTURE
-
-- [ ] Architectural decisions documented in `### Notes`
-- [ ] `**Files:**` lists files affected by design
-- [ ] Layer analysis complete
-- [ ] Swarm recommendation noted (if applicable)
-- [ ] `### Progress` updated with planning outcomes
-
 ### WF_ARCH_REVIEW
 
-- [ ] Review outcomes documented (pass / fail per criterion)
-- [ ] `**Files:**` lists files reviewed
-- [ ] Layer compliance verified
+- [ ] Design documented with explicit file paths in `### Notes`
+- [ ] `**Files:**` lists files to modify/create
+- [ ] Layer compliance verified (pass / fail per criterion)
+- [ ] Swarm assessment completed (needed / not needed)
 - [ ] User approval status noted
 - [ ] `### Progress` updated with review results
 
@@ -146,12 +139,6 @@ Note these **daemon-managed fields** exactly as they appear (DO NOT MODIFY):
 - [ ] Clarification question and user response noted
 - [ ] Task description updated if scope changed
 - [ ] `### Progress` updated with clarification outcome
-
-### WF_REQUIREMENTS
-
-- [ ] Requirements documented in `### Notes`
-- [ ] Domain memory updates identified (if any)
-- [ ] `### Progress` updated with requirements captured
 
 ---
 

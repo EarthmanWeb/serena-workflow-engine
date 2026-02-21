@@ -1,12 +1,12 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "version": "2.0.0",
-  "description": "Serena Workflow Engine - 17 State Machine with Stream-Based Enforcement",
+  "version": "3.0.0",
+  "description": "Serena Workflow Engine - 15 State Machine with Simplified Planning Flow",
 
   "complexityThresholds": {
-    "simple": { "files": [1, 2], "layers": 1, "expectedTransitions": 8 },
-    "medium": { "files": [2, 5], "layers": [2, 3], "expectedTransitions": 12 },
-    "large": { "files": [6, 999], "layers": [3, 999], "expectedTransitions": 18 }
+    "simple": { "files": [1, 2], "layers": 1, "expectedTransitions": 7 },
+    "medium": { "files": [2, 5], "layers": [2, 3], "expectedTransitions": 8 },
+    "large": { "files": [6, 999], "layers": [3, 999], "expectedTransitions": 10 }
   },
 
   "states": {
@@ -52,14 +52,12 @@
       "id": "WF_CLASSIFY",
       "category": "entry",
       "icon": "🔍",
-      "description": "Classify task complexity and route appropriately",
+      "description": "Classify task complexity, detect requirements, load features, route to implementation",
       "planMode": "conditional",
       "allowEdit": false,
       "allowWrite": false,
       "transitions": {
-        "simple": "WF_REQUIREMENTS",
-        "medium": "WF_PLAN_ARCHITECTURE",
-        "large": "WF_SWARM_ORCHESTRATE",
+        "implementation": "WF_LOAD_FEATURE",
         "research_needed": "WF_RESEARCH",
         "debug_needed": "WF_DEBUG_TDD",
         "needs_clarification": "WF_CLARIFY"
@@ -90,36 +88,9 @@
       "planMode": "never",
       "allowEdit": false,
       "allowWrite": false,
-      "transitions": { "complete": "WF_REQUIREMENTS" }
-    },
-
-    "WF_REQUIREMENTS": {
-      "id": "WF_REQUIREMENTS",
-      "category": "analysis",
-      "icon": "📋",
-      "description": "Detect, document, and confirm requirements",
-      "planMode": "conditional",
-      "allowEdit": false,
-      "allowWrite": false,
       "transitions": {
-        "confirmed": "WF_LOAD_FEATURE",
-        "needs_clarification": "WF_CLARIFY"
-      }
-    },
-
-    "WF_PLAN_ARCHITECTURE": {
-      "id": "WF_PLAN_ARCHITECTURE",
-      "category": "planning",
-      "icon": "🏗️",
-      "description": "Design implementation approach for medium+ complexity",
-      "planMode": "always",
-      "allowEdit": false,
-      "allowWrite": false,
-      "transitions": {
-        "approved": "WF_SWARM_ORCHESTRATE",
-        "simple_enough": "WF_REQUIREMENTS",
-        "needs_revision": "WF_PLAN_ARCHITECTURE",
-        "needs_clarification": "WF_CLARIFY"
+        "needs_implementation": "WF_LOAD_FEATURE",
+        "complete": "WF_DONE"
       }
     },
 
@@ -127,13 +98,14 @@
       "id": "WF_ARCH_REVIEW",
       "category": "planning",
       "icon": "🔎",
-      "description": "Review architecture compliance, get approval, then execute",
+      "description": "Design implementation, review architecture compliance, assess swarm need, get approval",
       "planMode": "always",
       "allowEdit": false,
       "allowWrite": false,
       "transitions": {
         "approved": "WF_EXECUTE",
-        "needs_revision": "WF_PLAN_ARCHITECTURE",
+        "swarm_needed": "WF_SWARM_ORCHESTRATE",
+        "needs_revision": "WF_ARCH_REVIEW",
         "needs_clarification": "WF_CLARIFY"
       }
     },
@@ -146,7 +118,10 @@
       "planMode": "always",
       "allowEdit": false,
       "allowWrite": false,
-      "transitions": { "complete": "WF_EXECUTE" }
+      "transitions": {
+        "complete": "WF_EXECUTE",
+        "simpler_approach": "WF_ARCH_REVIEW"
+      }
     },
 
     "WF_CLARIFY": {
@@ -164,13 +139,14 @@
       "id": "WF_LOAD_FEATURE",
       "category": "execution",
       "icon": "📦",
-      "description": "Load feature context from memories",
+      "description": "Load feature context, validate requirements against domain memories",
       "planMode": "never",
       "allowEdit": false,
       "allowWrite": false,
       "transitions": {
         "code_changes": "WF_ARCH_REVIEW",
-        "operational": "WF_EXECUTE"
+        "operational": "WF_EXECUTE",
+        "needs_clarification": "WF_CLARIFY"
       }
     },
 
@@ -247,15 +223,13 @@
     "SessionStart": ["WF_INITIAL_SETUP", "WF_START"],
     "WF_INITIAL_SETUP": ["WF_START", "WF_CLARIFY"],
     "WF_START": ["WF_CLASSIFY", "WF_CONTINUE", "WF_RESEARCH", "WF_ONBOARD"],
-    "WF_CLASSIFY": ["WF_CLARIFY", "WF_RESEARCH", "WF_REQUIREMENTS", "WF_PLAN_ARCHITECTURE", "WF_SWARM_ORCHESTRATE", "WF_DEBUG_TDD"],
+    "WF_CLASSIFY": ["WF_LOAD_FEATURE", "WF_RESEARCH", "WF_DEBUG_TDD", "WF_CLARIFY"],
     "WF_CONTINUE": ["WF_ARCH_REVIEW", "WF_EXECUTE", "WF_CLARIFY", "WF_CLASSIFY"],
-    "WF_RESEARCH": ["WF_REQUIREMENTS"],
-    "WF_REQUIREMENTS": ["WF_LOAD_FEATURE", "WF_CLARIFY"],
-    "WF_PLAN_ARCHITECTURE": ["WF_SWARM_ORCHESTRATE", "WF_REQUIREMENTS", "WF_CLARIFY"],
-    "WF_ARCH_REVIEW": ["WF_EXECUTE", "WF_PLAN_ARCHITECTURE", "WF_CLARIFY"],
-    "WF_SWARM_ORCHESTRATE": ["WF_EXECUTE"],
+    "WF_RESEARCH": ["WF_LOAD_FEATURE", "WF_DONE"],
+    "WF_ARCH_REVIEW": ["WF_EXECUTE", "WF_SWARM_ORCHESTRATE", "WF_ARCH_REVIEW", "WF_CLARIFY"],
+    "WF_SWARM_ORCHESTRATE": ["WF_EXECUTE", "WF_ARCH_REVIEW"],
     "WF_CLARIFY": ["(return_to_caller)"],
-    "WF_LOAD_FEATURE": ["WF_ARCH_REVIEW", "WF_EXECUTE"],
+    "WF_LOAD_FEATURE": ["WF_ARCH_REVIEW", "WF_EXECUTE", "WF_CLARIFY"],
     "WF_EXECUTE": ["WF_CHECKPOINT", "WF_VERIFY"],
     "WF_CHECKPOINT": ["WF_EXECUTE", "WF_VERIFY"],
     "WF_DEBUG_TDD": ["WF_EXECUTE", "WF_CLARIFY"],

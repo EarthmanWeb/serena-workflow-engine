@@ -16,7 +16,7 @@ try:
 except ImportError as e:
     swe_hooks.bootstrap.import_error_exit(e, "Stop")
 
-INCOMPLETE = {'WF_EXECUTE', 'WF_DEBUG_TDD', 'WF_VERIFY', 'WF_PLAN_ARCHITECTURE'}
+INCOMPLETE = {'WF_EXECUTE', 'WF_DEBUG_TDD', 'WF_VERIFY', 'WF_ARCH_REVIEW'}
 
 def main():
     try:

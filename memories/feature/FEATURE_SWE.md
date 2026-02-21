@@ -32,8 +32,8 @@
 
 ```
 SessionStart → WF_INITIAL_SETUP (first time) OR WF_START
-WF_START → WF_CLASSIFY → WF_DETECT_REQ/WF_PLAN_ARCHITECTURE/WF_SWARM_ORCHESTRATE
-         → WF_LOAD_FEATURE → WF_ARCH_REVIEW
+WF_START → WF_CLASSIFY → WF_LOAD_FEATURE → WF_ARCH_REVIEW → WF_EXECUTE
+                                          → WF_SWARM_ORCHESTRATE → WF_EXECUTE
          → WF_EXECUTE ↔ WF_CHECKPOINT → WF_VERIFY → WF_DONE → WF_CLEANUP
 ```
 
@@ -54,17 +54,17 @@ WF_START → WF_CLASSIFY → WF_DETECT_REQ/WF_PLAN_ARCHITECTURE/WF_SWARM_ORCHEST
 
 ## Core Components
 
-### States (21 total)
+### States (15 in states.json)
 
 | Category   | States                                                                     |
 | ---------- | -------------------------------------------------------------------------- |
 | Setup      | WF_INITIAL_SETUP, WF_ONBOARD                                               |
-| Entry      | WF_INIT, WF_START, WF_CLASSIFY, WF_CONTINUE                                |
-| Analysis   | WF_RESEARCH, WF_RESEARCH_LITE, WF_DETECT_REQ, WF_REQUIREMENTS              |
-| Planning   | WF_PLAN_ARCHITECTURE, WF_ARCH_REVIEW, WF_SWARM_ORCHESTRATE                 |
+| Entry      | WF_START, WF_CLASSIFY, WF_CONTINUE                                         |
+| Analysis   | WF_RESEARCH                                                                |
+| Planning   | WF_ARCH_REVIEW, WF_SWARM_ORCHESTRATE                                       |
 | Gates      | WF_CLARIFY                                                                 |
-| Execution  | WF_LOAD_FEATURE, WF_UPDATE_MEMORY, WF_EXECUTE, WF_CHECKPOINT, WF_DEBUG_TDD |
-| Completion | WF_VERIFY, WF_DONE, WF_CLEANUP                                             |
+| Execution  | WF_LOAD_FEATURE, WF_EXECUTE, WF_CHECKPOINT, WF_DEBUG_TDD                   |
+| Completion | WF_VERIFY, WF_DONE                                                         |
 
 ### Core Modules (swe_hooks/core/)
 
@@ -110,6 +110,7 @@ WF_START → WF_CLASSIFY → WF_DETECT_REQ/WF_PLAN_ARCHITECTURE/WF_SWARM_ORCHEST
 | `swe_post_serena_replace_fallback.py` | PostToolUse (Serena replace)    | Symbol replace fallback handling |
 | `swe_post_task_learn.py`              | PostToolUse (read_memory)       | RLVR learning                    |
 | `swe_post_ruv_swarm_init.py`          | PostToolUse (ruv_swarm)         | RUV-Swarm initialization         |
+| `swe_post_todo_wm_sync.py`           | PostToolUse (TodoWrite)         | WM sync reminder on todo changes |
 
 #### Stop Hooks (`hooks/stop/`)
 
@@ -117,7 +118,7 @@ WF_START → WF_CLASSIFY → WF_DETECT_REQ/WF_PLAN_ARCHITECTURE/WF_SWARM_ORCHEST
 | ---------------------------- | ------- | ---------------------- |
 | `swe_stop_workflow_check.py` | Stop    | Verify WF_DONE reached |
 
-### Skills (13 total)
+### Skills (11 total)
 
 | Skill                      | Purpose                                             |
 | -------------------------- | --------------------------------------------------- |
@@ -130,7 +131,6 @@ WF_START → WF_CLASSIFY → WF_DETECT_REQ/WF_PLAN_ARCHITECTURE/WF_SWARM_ORCHEST
 | `swe-swarm-orchestrate`    | Multi-agent swarm coordination                      |
 | `swe-swarm-analyze`        | DAA-powered codebase analysis                       |
 | `swe-workflow-debug-tdd`   | Test-driven debugging                               |
-| `swe-workflow-detect-req`  | Detect implicit requirements                        |
 | `swe-workflow-verify`      | Verify implementation                               |
 | `swe-workflow-research`    | Code exploration/research                           |
 | `swe-workflow-arch-review` | Architecture compliance review                      |
@@ -174,9 +174,9 @@ Memories are organized in subdirectories:
 
 | Mode        | States                                                                               |
 | ----------- | ------------------------------------------------------------------------------------ |
-| Always      | WF_PLAN_ARCHITECTURE, WF_ARCH_REVIEW, WF_SWARM_ORCHESTRATE                           |
-| Never       | WF_DEBUG_TDD, WF_CHECKPOINT, WF_VERIFY, WF_DONE, WF_CLEANUP, WF_RESEARCH, WF_EXECUTE |
-| Conditional | WF_CLASSIFY (complexity >= medium), WF_DETECT_REQ (architectural)                    |
+| Always      | WF_ARCH_REVIEW, WF_SWARM_ORCHESTRATE                                                  |
+| Never       | WF_DEBUG_TDD, WF_CHECKPOINT, WF_VERIFY, WF_DONE, WF_RESEARCH, WF_EXECUTE              |
+| Conditional | WF_CLASSIFY (complexity >= medium)                                                     |
 
 ## RLVR Learning
 

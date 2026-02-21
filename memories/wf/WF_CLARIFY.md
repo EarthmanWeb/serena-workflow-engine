@@ -116,8 +116,7 @@ AskUserQuestion({
 | Return To              | MUST Read Next         |
 | ---------------------- | ---------------------- |
 | From CLASSIFY          | `WF_CLASSIFY`          |
-| From REQUIREMENT       | `WF_REQUIREMENTS`      |
-| From PLAN_ARCHITECTURE | `WF_PLAN_ARCHITECTURE` |
+| From LOAD_FEATURE      | `WF_LOAD_FEATURE`      |
 | From ARCH_REVIEW       | `WF_ARCH_REVIEW`       |
 
 1. Note where you came from

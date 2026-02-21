@@ -54,7 +54,7 @@ This applies to:
 When work spans multiple layers:
 
 ```
-WF_PLAN_ARCHITECTURE:
+WF_ARCH_REVIEW:
   1. Read ARCH_INDEX (overview only)
   2. Propose which layers are needed
   3. User approves
@@ -78,9 +78,6 @@ Each workflow state includes a reporting line with a distinct icon:
 | --------------------- | -------------------------------- |
 | WF_START              | **On step WF_START**             |
 | WF_CLASSIFY           | **On step WF_CLASSIFY**          |
-| WF_PLAN_ARCHITECTURE  | **On step WF_PLAN_ARCHITECTURE** |
-| WF_DETECT_REQ         | **On step WF_DETECT_REQ**        |
-| WF_REQUIREMENTS       | **On step WF_REQUIREMENTS**      |
 | WF_UPDATE_MEMORY      | **On step WF_UPDATE_MEMORY**     |
 | WF_CLARIFY            | **On step WF_CLARIFY**           |
 | WF_LOAD_FEATURE       | **On step WF_LOAD_FEATURE**      |
@@ -273,7 +270,7 @@ Key verification points that can't be skipped:
 
 ### 5. Requirement Detection
 
-`WF_DETECT_REQ` scans every user message for requirement language and routes to `WF_REQUIREMENTS` to update domain memories.
+`WF_CLASSIFY` scans every user message for requirement language inline and notes requirements for validation at `WF_LOAD_FEATURE` against domain memories.
 
 ---
 

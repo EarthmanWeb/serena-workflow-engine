@@ -1,5 +1,5 @@
 {
-  "description": "SWE v2 - Stream-based workflow (lightweight enforcement)",
+  "description": "SWE v3 - 15-state simplified workflow with TodoWrite WM sync",
   "hooks": {
     "SessionStart": [
       {
@@ -68,6 +68,16 @@
             "type": "command",
             "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/post/swe_post_read_state.py",
             "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "TodoWrite",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/post/swe_post_todo_wm_sync.py",
+            "timeout": 5
           }
         ]
       }

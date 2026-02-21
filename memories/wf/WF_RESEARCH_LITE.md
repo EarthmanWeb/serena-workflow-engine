@@ -86,4 +86,4 @@ Total: ~2,000 tokens ✓
 
 ## NO Workflow Transitions Required
 
-This is a terminal state for simple research. No WF_DETECT_REQ needed.
+This is a terminal state for simple research. No further workflow transitions needed.

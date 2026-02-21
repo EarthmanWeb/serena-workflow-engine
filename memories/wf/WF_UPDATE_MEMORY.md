@@ -12,7 +12,7 @@ OUTPUT THE ABOVE LINE IMMEDIATELY. Do not read further until you have reported y
 - Updating system or reference documentation (`SYS_*`, `REF_*`)
 - Creating/updating index files (`INDEX_*`)
 - Updating `WM_*` with task progress
-- Capturing architectural decisions after WF_ARCH_REVIEW or WF_PLAN_ARCHITECTURE
+- Capturing architectural decisions after WF_ARCH_REVIEW
 
 ## Execute These Steps
 

@@ -56,10 +56,10 @@ Review proposed changes against architecture standards.
 - **Status**: [success|success_with_findings|blocked]
 - **Findings Summary**: [architecture compliance assessment]
 - **Artifacts**: [patterns checked, issues found]
-- **Next Step Hint**: [WF_EXECUTE if approved, WF_PLAN_ARCHITECTURE if revision needed]
+- **Next Step Hint**: [WF_EXECUTE if approved, WF_ARCH_REVIEW if revision needed]
 ```
 
 ## Exit
 
 On approval: `> **Skill /swe-workflow-arch-review passed** - returning to WF_EXECUTE`
-On revision needed: `> **Skill /swe-workflow-arch-review needs revision** - returning to WF_PLAN_ARCHITECTURE`
+On revision needed: `> **Skill /swe-workflow-arch-review needs revision** - returning to WF_ARCH_REVIEW`

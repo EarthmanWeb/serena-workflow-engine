@@ -1,4 +1,4 @@
-# WF_LOAD_FEATURE - Load Feature Context
+# WF_LOAD_FEATURE - Load Feature Context & Validate Requirements
 
 > **📂 On step WF_LOAD_FEATURE**
 
@@ -43,7 +43,6 @@ mcp__plugin_swe_serena__read_memory("FEATURE_[KEY]")
 # Multiple features:
 mcp__plugin_swe_serena__read_memory("FEATURE_[KEY1]")
 mcp__plugin_swe_serena__read_memory("FEATURE_[KEY2]")
-mcp__plugin_swe_serena__read_memory("FEATURE_[KEY3]")
 ```
 
 **⛔ DO NOT PROCEED without reading ALL feature memories for your task.**
@@ -66,7 +65,21 @@ mcp__plugin_swe_serena__read_memory("DOM_[DOMAIN]")
 mcp__plugin_swe_serena__read_memory("REF_DEV_STANDARDS")
 ```
 
-### 4. Note Key Information for Implementation
+### 4. Validate Requirements Against Domain Memories
+
+**If WF_CLASSIFY detected requirements** (noted in WM), compare them to loaded domain memories:
+
+1. **Check for existing domain memory:**
+   Look for `DOM_*` memories that relate to the detected requirements.
+
+2. **Compare requirement to domain knowledge:**
+   - **NEW requirement**: Note it — will be added to domain memory after implementation
+   - **CONFLICTING requirement**: Route to `WF_CLARIFY` — ask user before overriding existing domain rules
+   - **EXISTING requirement**: Acknowledge — the domain already documents this behavior
+
+3. **If no requirements were detected at WF_CLASSIFY**: Skip this step — pure implementation task.
+
+### 5. Note Key Information for Implementation
 
 From the feature memory, record in your understanding:
 
@@ -83,8 +96,9 @@ Before proceeding, confirm:
 
 - [ ] Read INDEX_FEATURES
 - [ ] Read FEATURE_[KEY] for EACH feature in WM
-- [ ] Read relevant DOM__, SYS__, REF_* memories
+- [ ] Read relevant DOM_*, SYS_*, REF_* memories
 - [ ] Understand file locations and patterns
+- [ ] Requirements validated against domain memories (or "none detected")
 
 **If any checkbox is unchecked, DO NOT PROCEED.**
 
@@ -94,16 +108,16 @@ Before proceeding, confirm:
 
 **YOU ARE NOT FINISHED.** After loading features, route based on what the task actually does:
 
-| Task Type        | Examples                                                                                       | MUST Read Next   |
-| ---------------- | ---------------------------------------------------------------------------------------------- | ---------------- |
-| **Code changes** | Bug fix, new feature, refactor, config change in code                                          | `WF_ARCH_REVIEW` |
-| **Operational**  | Send test request, run CLI command, check config, verify endpoint, test webhook, run migration | `WF_EXECUTE`     |
+| Task Type                     | Examples                                                                                       | MUST Read Next   |
+| ----------------------------- | ---------------------------------------------------------------------------------------------- | ---------------- |
+| **Code changes**              | Bug fix, new feature, refactor, config change in code                                          | `WF_ARCH_REVIEW` |
+| **Operational**               | Send test request, run CLI command, check config, verify endpoint, test webhook, run migration | `WF_EXECUTE`     |
+| **Conflicting requirement**   | Requirement conflicts with existing domain rule                                                | `WF_CLARIFY`     |
 
 ### Code Changes → Architecture Review
 
-1. Invoke `/arch-review` skill (or read `WF_ARCH_REVIEW` directly)
-2. The skill verifies approach against architecture patterns
-3. On approval → `WF_EXECUTE`
+1. Read `WF_ARCH_REVIEW` (which handles design, compliance, swarm assessment, and approval)
+2. On approval → `WF_EXECUTE`
 
 ### Operational Tasks → Direct Execute
 
@@ -120,5 +134,13 @@ These skip architecture review because there is no architecture to review — no
 **SKIPPING FEATURE LOADING IS STILL A VIOLATION** — operational tasks need feature context to know endpoints, config keys, data formats, etc.
 
 📋 **WM:** The hook daemon auto-updates `Current State` when you read the next WF_* step. You do NOT need to manually update `Current State`.
+
+## ⚠️ MANDATORY: WM UPDATE
+
+**Before transitioning, invoke `/swe-wm-update --from WF_LOAD_FEATURE`** — provides
+the step-specific checklist ensuring no fields are missed. Do NOT manually update WM
+without it.
+
+**SKIPPING WM UPDATE = WORKFLOW VIOLATION**
 
 [CRITICAL: Did you load ALL FEATURE_[KEY] memories? Did you route correctly based on task type?]

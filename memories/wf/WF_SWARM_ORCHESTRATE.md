@@ -410,7 +410,7 @@ npx claude-flow@alpha hooks session-end --export-metrics true
 | Condition                   | MUST Read Next                   |
 | --------------------------- | -------------------------------- |
 | User approves swarm plan    | `WF_EXECUTE` (with swarm active) |
-| User wants simpler approach | `WF_PLAN_ARCHITECTURE`           |
+| User wants simpler approach | `WF_ARCH_REVIEW`                 |
 | Need clarification          | `WF_CLARIFY`                     |
 | Swarm work complete         | `WF_VERIFY`                      |
 

@@ -1,4 +1,4 @@
-# WF_ARCH_REVIEW - Architecture Compliance Check & Approval
+# WF_ARCH_REVIEW - Design, Compliance Review & Approval
 
 > **On step WF_ARCH_REVIEW**
 
@@ -6,29 +6,55 @@ OUTPUT THE ABOVE LINE IMMEDIATELY. Do not read further until you have reported y
 
 ---
 
+## Purpose
+
+This is the **single planning gate** for all code changes. It combines:
+
+1. **Design** — define which files/components are affected, with explicit paths
+2. **Architecture compliance** — verify layer boundaries and patterns
+3. **Swarm assessment** — determine if multi-agent orchestration is needed
+4. **User approval** — present plan and get sign-off before execution
+
+---
+
 ## Execute These Steps
 
-1. **Get feature architecture:**
-   ```
-   mcp__plugin_swe_serena__read_memory("INDEX_FEATURES")   # Get active feature
-   mcp__plugin_swe_serena__read_memory("FEATURE_[KEY]")    # Get feature config with layers
-   ```
+### 1. Get Feature Architecture
 
-2. **Identify layers touched** by proposed change:
-   - Check which architectural layers from FEATURE_[KEY] are affected
+If not already loaded at WF_LOAD_FEATURE (check WM):
 
-3. **For each layer, read its documentation:**
-   ```
-   # Read relevant SYS_* (feature-specific) and REF_* (codebase-shared) memories
-   mcp__plugin_swe_serena__read_memory("SYS_[SYSTEM]")     # System documentation (feature-specific)
-   mcp__plugin_swe_serena__read_memory("REF_[TOPIC]")      # Reference patterns (codebase-shared)
-   mcp__plugin_swe_serena__read_memory("REF_DEV_STANDARDS") # Coding standards (codebase-shared)
-   ```
+```
+mcp__plugin_swe_serena__read_memory("INDEX_FEATURES")   # Get active feature
+mcp__plugin_swe_serena__read_memory("FEATURE_[KEY]")    # Get feature config with layers
+```
 
-4. **Answer these questions:**
-   - [ ] Which layer OWNS this logic?
-   - [ ] Am I putting logic in the correct layer?
-   - [ ] Am I following the project's documented data flow pattern?
+### 2. Read Layer Documentation
+
+**For EACH layer in the design, read its rules:**
+
+```
+mcp__plugin_swe_serena__read_memory("SYS_[SYSTEM]")     # System documentation (feature-specific)
+mcp__plugin_swe_serena__read_memory("REF_[TOPIC]")      # Reference patterns (codebase-shared)
+mcp__plugin_swe_serena__read_memory("REF_DEV_STANDARDS") # Coding standards (codebase-shared)
+mcp__plugin_swe_serena__read_memory("DOM_[DOMAIN]")     # Domain-specific context (feature-specific)
+```
+
+### 3. Design With Explicit File Paths
+
+Define which files/components are affected:
+
+- Files to be modified (with what changes)
+- Files to be created (with justification)
+- Data flow between components
+- Test coverage plan
+
+### 4. Architecture Compliance Check
+
+**Answer these questions:**
+
+- [ ] Which layer OWNS this logic?
+- [ ] Am I putting logic in the correct layer?
+- [ ] Am I following the project's documented data flow pattern?
 
 ## STOP CONDITIONS
 
@@ -48,7 +74,28 @@ OUTPUT THE ABOVE LINE IMMEDIATELY. Do not read further until you have reported y
 - View imports services/functions directly instead of using provided context
 - View is doing more than display/formatting
 
-**Read REF** memories (codebase-shared) for correct patterns._*
+**Read REF_* memories (codebase-shared) for correct patterns.**
+
+---
+
+### 5. Swarm Assessment
+
+**Assess whether this task needs multi-agent orchestration:**
+
+| Condition     | Threshold                                 |
+| ------------- | ----------------------------------------- |
+| File Scale    | 6+ files affected                         |
+| Layer Scale   | 3+ architectural layers                   |
+| Parallel Work | Independent subtasks can run concurrently |
+| Multi-Domain  | Coordination across domains required      |
+
+**If ANY threshold is met AND WM has `swarm_candidate: true` from WF_CLASSIFY:**
+
+- Include swarm recommendation in plan presentation
+- Note topology, agent types, parallelization strategy
+- Route to `WF_SWARM_ORCHESTRATE` after user approval
+
+**If thresholds NOT met:** Proceed as single-agent implementation.
 
 ---
 
@@ -63,6 +110,14 @@ Before proposing new files:
 3. Follow established feature conventions (from FEATURE_[KEY])
 
 ### MANDATORY - Present Plan and Get Approval
+
+**Present your plan clearly** including:
+
+- Files to modify/create table
+- Key architectural constraints applied
+- Data flow description
+- Test coverage plan
+- **Swarm recommendation** (if applicable): topology, agent types, parallelization strategy
 
 **Use the `AskUserQuestion` tool for interactive approval:**
 
@@ -92,26 +147,25 @@ AskUserQuestion({
 });
 ```
 
-**Before calling AskUserQuestion, present your plan clearly** including files to modify/create, data flow, and test coverage.
-
 ### Handle User Response
 
-| User Selection      | Action                             |
-| ------------------- | ---------------------------------- |
-| "Yes, proceed"      | Read `WF_EXECUTE`                  |
-| "No, let's discuss" | Read `WF_CLARIFY`                  |
-| "Modify approach"   | Read `WF_PLAN_ARCHITECTURE`        |
-| Custom text (Other) | Parse feedback, go to `WF_CLARIFY` |
+| User Selection      | Action                                                          |
+| ------------------- | --------------------------------------------------------------- |
+| "Yes, proceed"      | Read `WF_EXECUTE` (or `WF_SWARM_ORCHESTRATE` if swarm planned) |
+| "No, let's discuss" | Read `WF_CLARIFY`                                               |
+| "Modify approach"   | Re-run this step (`WF_ARCH_REVIEW`) with modified design        |
+| Custom text (Other) | Parse feedback, go to `WF_CLARIFY`                              |
 
 ---
 
 ## MANDATORY NEXT STEP
 
-| Condition      | MUST Read Next         |
-| -------------- | ---------------------- |
-| User approves  | `WF_EXECUTE`           |
-| Needs redesign | `WF_PLAN_ARCHITECTURE` |
-| User declines  | `WF_CLARIFY`           |
+| Condition                              | MUST Read Next         |
+| -------------------------------------- | ---------------------- |
+| User approves (simple implementation)  | `WF_EXECUTE`           |
+| User approves (swarm needed)           | `WF_SWARM_ORCHESTRATE` |
+| Needs redesign / user modifies         | `WF_ARCH_REVIEW`       |
+| User declines / needs clarification    | `WF_CLARIFY`           |
 
 **SKIPPING THIS TRANSITION = WORKFLOW VIOLATION**
 

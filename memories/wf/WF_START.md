@@ -23,12 +23,11 @@ If you are thinking of going to WF_EXECUTE from here:
 - ❌ "I already know what to do" - **NO. WF_CLASSIFY loads features. You need them.**
 - ❌ "The WM has the feature key" - **Having the key ≠ loading the FEATURE_[KEY] memory.**
 
-**Valid paths to WF_EXECUTE (ALL go through classification first):**
+**Valid paths to WF_EXECUTE (ALL go through classification and feature loading first):**
 
-1. **Code changes:** WF_START → WF_CLASSIFY → WF_DETECT_REQ → WF_LOAD_FEATURE → WF_ARCH_REVIEW → WF_EXECUTE
-2. **Operational tasks:** WF_START → WF_CLASSIFY → WF_DETECT_REQ → WF_LOAD_FEATURE → WF_EXECUTE
-3. **Medium complexity:** WF_START → WF_CLASSIFY → WF_PLAN_ARCHITECTURE → ... → WF_EXECUTE
-4. **Large/swarm:** WF_START → WF_CLASSIFY → WF_SWARM_ORCHESTRATE → WF_EXECUTE
+1. **Code changes:** WF_START → WF_CLASSIFY → WF_LOAD_FEATURE → WF_ARCH_REVIEW → WF_EXECUTE
+2. **Operational tasks:** WF_START → WF_CLASSIFY → WF_LOAD_FEATURE → WF_EXECUTE
+3. **Large/swarm:** WF_START → WF_CLASSIFY → WF_LOAD_FEATURE → WF_ARCH_REVIEW → WF_SWARM_ORCHESTRATE → WF_EXECUTE
 
 **If your next step is WF_EXECUTE, you have violated the workflow.**
 

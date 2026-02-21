@@ -8,7 +8,7 @@ workflow:
     - WF_ONBOARD
     - WF_RESEARCH
     - WF_SWARM_ORCHESTRATE
-  default_return: WF_DETECT_REQ
+  default_return: WF_LOAD_FEATURE
   supports_standalone: true
   auto_transition: false
 allowed-tools: Read, Grep, Glob, mcp__ruv-swarm__*, mcp__claude-flow__*
@@ -243,7 +243,7 @@ mcp__ruv-swarm__daa_knowledge_share({
 - **Memories Created**: [list]
 - **Domains Found**: [count]
 - **Systems Found**: [count]
-- **Next Step Hint**: WF_DETECT_REQ
+- **Next Step Hint**: WF_LOAD_FEATURE
 ```
 
 ## Fallback: Sequential Analysis

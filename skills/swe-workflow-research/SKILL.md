@@ -8,7 +8,7 @@ workflow:
     - WF_CLASSIFY
     - WF_CONTINUE
     - WF_START
-  default_return: WF_DETECT_REQ
+  default_return: WF_LOAD_FEATURE
   supports_standalone: true
   auto_transition: true
 ---
@@ -55,9 +55,9 @@ Explore and analyze codebase without making any changes.
 - **Status**: [success|success_with_findings|needs_clarification]
 - **Findings Summary**: [2-3 sentences describing what was found]
 - **Artifacts**: [list of relevant files, patterns discovered]
-- **Next Step Hint**: WF_DETECT_REQ
+- **Next Step Hint**: WF_LOAD_FEATURE
 ```
 
 ## Exit
 
-Output: `> **Skill /swe-workflow-research complete** - returning to WF_DETECT_REQ`
+Output: `> **Skill /swe-workflow-research complete** - returning to WF_LOAD_FEATURE`

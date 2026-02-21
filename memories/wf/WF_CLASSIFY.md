@@ -1,4 +1,4 @@
-# WF_CLASSIFY - Analyze Request
+# WF_CLASSIFY - Classify, Detect Requirements & Load Features
 
 > **On step WF_CLASSIFY**
 
@@ -12,18 +12,18 @@ OUTPUT THE ABOVE LINE IMMEDIATELY. Do not read further until you have reported y
 
 If you are thinking of skipping to WF_EXECUTE because:
 
-- ❌ "The task is simple" - **Complexity doesn't matter. ALL code changes go through WF_CLASSIFY.**
+- ❌ "The task is simple" - **Complexity doesn't matter. ALL tasks go through WF_CLASSIFY.**
 - ❌ "I already know what to do" - **You still need to load features and verify.**
 - ❌ "WM already has the feature" - **Having the key != having loaded the memory.**
 - ❌ "I'll load features later" - **NO. Features are loaded HERE, at the END of this step.**
 
 **The ONLY valid paths to WF_EXECUTE are:**
 
-1. WF_CLASSIFY → WF_DETECT_REQ → WF_LOAD_FEATURE → /arch-review → WF_EXECUTE
-2. WF_CLASSIFY → WF_PLAN_ARCHITECTURE → WF_EXECUTE
-3. WF_CLASSIFY → WF_SWARM_ORCHESTRATE → WF_EXECUTE
+1. WF_CLASSIFY → WF_LOAD_FEATURE → WF_ARCH_REVIEW → WF_EXECUTE (code changes)
+2. WF_CLASSIFY → WF_LOAD_FEATURE → WF_ARCH_REVIEW → WF_SWARM_ORCHESTRATE → WF_EXECUTE (swarm)
+3. WF_CLASSIFY → WF_LOAD_FEATURE → WF_EXECUTE (operational tasks only)
 
-**There is NO direct path from WF_START to WF_EXECUTE.**
+**There is NO direct path from WF_CLASSIFY to WF_EXECUTE.**
 
 ---
 
@@ -34,7 +34,21 @@ If you are thinking of skipping to WF_EXECUTE because:
 - No → go to WF_CLARIFY
 - Yes → continue
 
-### 2. Assess task type and complexity:
+### 2. Detect Requirements (inline)
+
+Scan user message for behavioral/UX requirements:
+
+- "should", "must", "needs to", "has to"
+- "users want", "behavior should be"
+- "always do X", "never do Y"
+- Corrections to current behavior
+- UX preferences or constraints
+
+**If requirements detected:** Note them in WM for validation at WF_LOAD_FEATURE (where they'll be checked against DOM_* memories).
+
+**If no requirements:** Pure implementation task — continue.
+
+### 3. Assess task type and complexity:
 
 #### Research Tasks (Skill-Based)
 
@@ -42,14 +56,14 @@ If you are thinking of skipping to WF_EXECUTE because:
 - Exploring patterns or architecture
 - Finding files or symbols
 - No code changes needed
-  → **Invoke `/research` skill** (see Skill Invocation below)
+  → **WF_RESEARCH**
 
 #### Debugging Tasks (Skill-Based)
 
 - Tests failing on one environment but passing on another
 - Behavior differences between environments
 - Test-driven debugging needed
-  → **Invoke `/debug-tdd` skill** (see Skill Invocation below)
+  → **WF_DEBUG_TDD**
 
 #### Operational Tasks (No Code Changes)
 
@@ -60,18 +74,18 @@ If you are thinking of skipping to WF_EXECUTE because:
 - Run existing test suites
 - Verify deployment or environment state
 
-These tasks need **feature context** (endpoints, config keys, data formats) but do **not modify source code**. They follow the same path as simple tasks but skip arch review at WF_LOAD_FEATURE.
-→ **WF_DETECT_REQ** (mark task as `operational` in WM)
+These tasks need **feature context** (endpoints, config keys, data formats) but do **not modify source code**. They skip arch review at WF_LOAD_FEATURE.
+→ **WF_LOAD_FEATURE** (mark task as `operational` in WM)
 
-#### Simple Tasks (Single Agent, Code Changes)
+#### Simple Tasks (Code Changes, 1-2 files)
 
 - Bug fix in one file
 - Small code change
 - Documentation update
 - Single function modification
-  → **WF_DETECT_REQ**
+  → **WF_LOAD_FEATURE**
 
-#### Medium Tasks (Architecture Required)
+#### Medium Tasks (Code Changes, 2-5 files)
 
 **⚠️ MANDATORY: Development Standards**
 
@@ -96,45 +110,39 @@ mcp__plugin_swe_serena__read_memory("_INDEX")  # Full navigation hub
 - New feature spanning 2-5 files
 - Refactoring existing code structure
 - Multi-layer design changes
-  → **WF_PLAN_ARCHITECTURE**
+  → **WF_LOAD_FEATURE** (swarm assessment happens at WF_ARCH_REVIEW)
 
-#### Large Tasks (Swarm Orchestration Required)
+#### Large Tasks (Potential Swarm)
 
-**⚠️ MANDATORY: Load FEATURE_SWARM first:**
-
-```
-mcp__plugin_swe_serena__read_memory("FEATURE_SWARM")
-```
-
-FEATURE_SWARM mandates reading ALL swarm documents in order:
-
-1. WF_SWARM_ORCHESTRATE (primary)
-2. REF_SWARM_PATTERNS (MCP tools)
-3. CLAUDE_FLOW (coordination)
-4. REF_AGENTS (agent types)
-
-Use swarms when ANY of these apply:
+When ANY of these apply, note `swarm_candidate: true` in WM:
 
 - **Scale**: 6+ files affected OR 3+ architectural layers
 - **Parallel Work**: Independent subtasks that can run concurrently
 - **Research-Heavy**: Requires analyzing multiple areas simultaneously
 - **Complexity**: Multi-domain coordination needed
 - **Keywords**: "swarm", "parallel agents", "multi-agent", "hive-mind", "ruv-swarm", "DAA"
-  → **Load FEATURE_SWARM** → **WF_SWARM_ORCHESTRATE**
+
+**⚠️ MANDATORY: Load FEATURE_SWARM:**
+
+```
+mcp__plugin_swe_serena__read_memory("FEATURE_SWARM")
+```
+
+→ **WF_LOAD_FEATURE** (swarm routing confirmed at WF_ARCH_REVIEW after feature context is loaded)
 
 ---
 
-## 🛑 BLOCKING GATE: Feature Loading (STEP 3)
+## 🛑 BLOCKING GATE: Feature Loading (STEP 4)
 
 **⛔ YOU CANNOT PROCEED TO ANY NEXT STEP WITHOUT COMPLETING THIS SECTION.**
 
-### 3a. Read Feature Registry
+### 4a. Read Feature Registry
 
 ```
 mcp__plugin_swe_serena__read_memory("INDEX_FEATURES")
 ```
 
-### 3b. Identify ALL Affected Features
+### 4b. Identify ALL Affected Features
 
 Scan request for feature indicators:
 
@@ -143,7 +151,7 @@ Scan request for feature indicators:
 - Cross-cutting concerns (e.g., "theme templates that use blocks")
 - Domain terminology from multiple features
 
-### 3c. 🛑 MANDATORY: Load FEATURE_[KEY] for EACH Feature
+### 4c. 🛑 MANDATORY: Load FEATURE_[KEY] for EACH Feature
 
 **For EVERY feature identified, you MUST call:**
 
@@ -151,21 +159,9 @@ Scan request for feature indicators:
 mcp__plugin_swe_serena__read_memory("FEATURE_[KEY]")
 ```
 
-**Examples (replace [KEY] with actual feature key from INDEX_FEATURES):**
-
-```
-# Single feature:
-mcp__plugin_swe_serena__read_memory("FEATURE_[KEY]")
-
-# Multiple features:
-mcp__plugin_swe_serena__read_memory("FEATURE_[KEY1]")
-mcp__plugin_swe_serena__read_memory("FEATURE_[KEY2]")
-mcp__plugin_swe_serena__read_memory("FEATURE_[KEY3]")
-```
-
 **⛔ SKIPPING FEATURE MEMORY LOAD = WORKFLOW VIOLATION**
 
-### 3d. Load Supporting Memories
+### 4d. Load Supporting Memories
 
 From each FEATURE_[KEY], load relevant:
 
@@ -175,7 +171,7 @@ From each FEATURE_[KEY], load relevant:
 | `ARCH_[KEY]` or shared `ARCH_*` | Architecture patterns   |
 | `INDEX_[KEY]_*`                 | File/symbol indexes     |
 
-### 3e. Update WM with Features
+### 4e. Update WM with Features
 
 ```markdown
 ## Affected Features
@@ -193,25 +189,11 @@ From each FEATURE_[KEY], load relevant:
 - [ ] Read INDEX_FEATURES
 - [ ] Identified ALL features for this task
 - [ ] Called `read_memory("FEATURE_[KEY]")` for EACH feature
-- [ ] Loaded relevant DOM__, ARCH__, INDEX_* memories
+- [ ] Loaded relevant DOM_*, ARCH_*, INDEX_* memories
 - [ ] Updated WM with feature information
+- [ ] Requirements noted (or "none — pure implementation")
 
 **If ANY box is unchecked: STOP and complete it NOW.**
-
----
-
-## Swarm Type Selection Guide
-
-| Task Type                | Recommended Swarm  | Topology     |
-| ------------------------ | ------------------ | ------------ |
-| Codebase analysis        | Claude-Flow        | mesh         |
-| Feature implementation   | Claude-Flow        | hierarchical |
-| Research + implement     | RUV-Swarm DAA      | mesh         |
-| Pattern discovery        | RUV-Swarm + neural | adaptive     |
-| Distributed refactoring  | Hive-Mind          | hierarchical |
-| Consensus-required tasks | Hive-Mind          | mesh         |
-
-**Read `REF_SWARM_PATTERNS` for detailed swarm usage patterns.**
 
 ---
 
@@ -227,24 +209,23 @@ When routing to a workflow-aware skill (e.g., `/research`):
 - **Calling Step**: WF_CLASSIFY
 - **Feature Key**: [from INDEX_FEATURES or detected]
 - **Session ID**: [from WM filename]
-- **Return Step**: WF_DETECT_REQ
+- **Return Step**: WF_LOAD_FEATURE
 - **Invocation Mode**: workflow
 ```
 
 ### 2. Inform User
 
 ```
-> Routing to /research skill for exploration. Will return to WF_DETECT_REQ on completion.
+> Routing to /research skill for exploration. Will return to WF_LOAD_FEATURE on completion.
 ```
 
 ### 3. Handle Skill Return
 
-| Status                              | Action                       |
-| ----------------------------------- | ---------------------------- |
-| `success` / `success_with_findings` | Continue to `return_step`    |
-| `needs_clarification`               | Go to `WF_CLARIFY`           |
-| `blocked`                           | Go to `WF_CLARIFY`           |
-| `escalate_complexity`               | Go to `WF_SWARM_ORCHESTRATE` |
+| Status                              | Action                    |
+| ----------------------------------- | ------------------------- |
+| `success` / `success_with_findings` | Continue to `return_step` |
+| `needs_clarification`               | Go to `WF_CLARIFY`        |
+| `blocked`                           | Go to `WF_CLARIFY`        |
 
 ---
 
@@ -259,26 +240,21 @@ When routing to a workflow-aware skill (e.g., `/research`):
 1. Did you load INDEX_FEATURES? (YES/NO)
 2. Did you call `read_memory("FEATURE_[KEY]")` for EACH feature? (YES/NO)
 3. Did you update WM with features? (YES/NO)
+4. Did you detect requirements (or note "none")? (YES/NO)
 
 **If ANY answer is NO: STOP and do it NOW.**
 
-### 🐝 Swarm Check (After Feature Loading)
-
-**If FEATURE_SWARM was loaded in step 3:**
-
-> 🐝 SWARM DETECTED - You MUST use ruv-swarm or hive-mind swarm orchestration. Go to WF_SWARM_ORCHESTRATE.
-
-This check happens AFTER features are loaded because swarm coordination requires feature context.
-
 ### Routing Table
 
-| Condition                | MUST Read Next                                                   |
-| ------------------------ | ---------------------------------------------------------------- |
-| Request unclear          | `WF_CLARIFY`                                                     |
-| Test debugging needed    | `WF_DEBUG_TDD`                                                   |
-| Needs architecture       | `WF_PLAN_ARCHITECTURE`                                           |
-| Simple change            | `WF_DETECT_REQ`                                                  |
-| **FEATURE_SWARM loaded** | **`WF_SWARM_ORCHESTRATE`** ← Always last, overrides other routes |
+| Condition             | MUST Read Next   |
+| --------------------- | ---------------- |
+| Request unclear       | `WF_CLARIFY`     |
+| Test debugging needed | `WF_DEBUG_TDD`   |
+| Research only         | `WF_RESEARCH`    |
+| **All other tasks**   | `WF_LOAD_FEATURE` |
+
+**ALL implementation tasks (simple, medium, large, operational) go to WF_LOAD_FEATURE.**
+Swarm assessment happens later at WF_ARCH_REVIEW where feature context is available.
 
 1. Determine which condition applies
 2. Read that WF_* memory NOW

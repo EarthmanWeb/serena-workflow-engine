@@ -37,16 +37,16 @@ WM provides session continuity across conversation turns and enables WF_CONTINUE
         ┌───────────────────┼───────────────────┐
         ▼                   ▼                   ▼
 ┌───────────────┐  ┌───────────────┐  ┌───────────────┐
-│ RESEARCH PATH │  │ PLANNING PATH │  │  SWARM PATH   │
-│  WF_RESEARCH  │  │ WF_PLAN_ARCH  │  │ WF_SWARM_ORCH │
-└───────────────┘  └───────────────┘  └───────────────┘
-        │                   │                   │
-        └───────────────────┼───────────────────┘
+│ RESEARCH PATH │  │  ALL CODE TASKS  │
+│  WF_RESEARCH  │  │  WF_LOAD_FEATURE │
+└───────────────┘  └──────────────────┘
+        │                   │
+        └───────────────────┘
                             ▼
 ┌─────────────────────────────────────────────────────────┐
-│                  PREPARATION LAYER                      │
-│  WF_DETECT_REQ → WF_REQUIREMENTS → WF_UPDATE_MEMORY      │
-│  WF_LOAD_FEATURE → WF_ARCH_REVIEW                       │
+│              REVIEW & PLANNING LAYER                    │
+│  WF_ARCH_REVIEW (design + compliance + swarm assess)   │
+│            ↓ swarm needed? → WF_SWARM_ORCHESTRATE      │
 └─────────────────────────────────────────────────────────┘
                             │
                             ▼
