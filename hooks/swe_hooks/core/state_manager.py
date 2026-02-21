@@ -35,16 +35,9 @@ def load_transition_matrix() -> Dict[str, List[str]]:
     if _transition_matrix_cache is not None:
         return _transition_matrix_cache
 
-    # Try to find states.json
-    plugin_root = os.environ.get('CLAUDE_PLUGIN_ROOT', '')
-    if plugin_root:
-        states_file = os.path.join(plugin_root, 'state-machine', 'states.json')
-    else:
-        project_root = get_project_root()
-        states_file = os.path.join(
-            project_root, '.claude', 'plugins', 'serena-workflow-engine',
-            'state-machine', 'states.json'
-        )
+    # Derive plugin root from __file__: core/ -> swe_hooks/ -> hooks/ -> plugin root
+    plugin_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+    states_file = os.path.join(plugin_root, 'state-machine', 'states.json')
 
     try:
         with open(states_file, 'r') as f:

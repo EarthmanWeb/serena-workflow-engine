@@ -6,10 +6,9 @@ import os, sys, json
 
 # Setup sys.path at import time
 PLUGIN_ROOT = os.environ.get('CLAUDE_PLUGIN_ROOT', '')
-if PLUGIN_ROOT:
-    hooks_dir = os.path.join(PLUGIN_ROOT, 'hooks')
-    if hooks_dir not in sys.path:
-        sys.path.insert(0, hooks_dir)
+hooks_dir = os.path.join(PLUGIN_ROOT, 'hooks') if PLUGIN_ROOT else os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if hooks_dir not in sys.path:
+    sys.path.insert(0, hooks_dir)
 
 
 def import_error_exit(error, event_name="PostToolUse"):
