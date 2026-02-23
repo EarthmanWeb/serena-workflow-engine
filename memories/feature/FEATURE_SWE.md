@@ -56,15 +56,15 @@ WF_START → WF_CLASSIFY → WF_LOAD_FEATURE → WF_ARCH_REVIEW → WF_EXECUTE
 
 ### States (15 in states.json)
 
-| Category   | States                                                                     |
-| ---------- | -------------------------------------------------------------------------- |
-| Setup      | WF_INITIAL_SETUP, WF_ONBOARD                                               |
-| Entry      | WF_START, WF_CLASSIFY, WF_CONTINUE                                         |
-| Analysis   | WF_RESEARCH                                                                |
-| Planning   | WF_ARCH_REVIEW, WF_SWARM_ORCHESTRATE                                       |
-| Gates      | WF_CLARIFY                                                                 |
-| Execution  | WF_LOAD_FEATURE, WF_EXECUTE, WF_CHECKPOINT, WF_DEBUG_TDD                   |
-| Completion | WF_VERIFY, WF_DONE                                                         |
+| Category   | States                                                   |
+| ---------- | -------------------------------------------------------- |
+| Setup      | WF_INITIAL_SETUP, WF_ONBOARD                             |
+| Entry      | WF_START, WF_CLASSIFY, WF_CONTINUE                       |
+| Analysis   | WF_RESEARCH                                              |
+| Planning   | WF_ARCH_REVIEW, WF_SWARM_ORCHESTRATE                     |
+| Gates      | WF_CLARIFY                                               |
+| Execution  | WF_LOAD_FEATURE, WF_EXECUTE, WF_CHECKPOINT, WF_DEBUG_TDD |
+| Completion | WF_VERIFY, WF_DONE                                       |
 
 ### Core Modules (swe_hooks/core/)
 
@@ -95,11 +95,12 @@ WF_START → WF_CLASSIFY → WF_LOAD_FEATURE → WF_ARCH_REVIEW → WF_EXECUTE
 
 #### Pre-Tool Hooks (`hooks/pre/`)
 
-| Hook                        | Trigger                        | Purpose                            |
-| --------------------------- | ------------------------------ | ---------------------------------- |
-| `swe_pre_tool_init_gate.py` | PreToolUse                     | Block ALL tools until WF_INIT read |
-| `swe_pre_edit_validate.py`  | PreToolUse (Edit/Write/Serena) | Validate edit permissions          |
-| `swe_pre_bash_test_gate.py` | PreToolUse (Bash)              | Validate test commands             |
+| Hook                            | Trigger                        | Purpose                            |
+| ------------------------------- | ------------------------------ | ---------------------------------- |
+| `swe_pre_tool_init_gate.py`     | PreToolUse                     | Block ALL tools until WF_INIT read |
+| `swe_pre_edit_validate.py`      | PreToolUse (Edit/Write/Serena) | Validate edit permissions          |
+| `swe_pre_bash_test_gate.py`     | PreToolUse (Bash)              | Feature gate: FEATURE_TESTS        |
+| `swe_pre_swarm_feature_gate.py` | PreToolUse (ruv-swarm)         | Feature gate: FEATURE_SWARM        |
 
 #### Post-Tool Hooks (`hooks/post/`)
 
@@ -110,7 +111,7 @@ WF_START → WF_CLASSIFY → WF_LOAD_FEATURE → WF_ARCH_REVIEW → WF_EXECUTE
 | `swe_post_serena_replace_fallback.py` | PostToolUse (Serena replace)    | Symbol replace fallback handling |
 | `swe_post_task_learn.py`              | PostToolUse (read_memory)       | RLVR learning                    |
 | `swe_post_ruv_swarm_init.py`          | PostToolUse (ruv_swarm)         | RUV-Swarm initialization         |
-| `swe_post_todo_wm_sync.py`           | PostToolUse (TodoWrite)         | WM sync reminder on todo changes |
+| `swe_post_todo_wm_sync.py`            | PostToolUse (TodoWrite)         | WM sync reminder on todo changes |
 
 #### Stop Hooks (`hooks/stop/`)
 
@@ -170,13 +171,43 @@ Memories are organized in subdirectories:
 | `memories/feature/` | Feature configs (FEATURE_SWE.md)                             |
 | `memories/index/`   | Index files (if any)                                         |
 
+## Feature Gate Pattern
+
+Feature gates block specific tools until the relevant FEATURE_* memory has been
+read. All feature gates use **session-scoped sentinel files** for O(1) checks.
+
+### How It Works
+
+1. **Pre-tool hook** checks for sentinel file:
+   `.serena/streams/.{gate}_feature_{session_id}`
+2. If missing → **block** with instruction to read FEATURE_* memory
+3. **Post-read hook** (`swe_post_read_state.py`) creates sentinel via
+   `create_feature_sentinel(session_id, gate_name)`
+4. Subsequent tool calls pass instantly (file existence check)
+
+### Registered Gates
+
+| Gate Name | Pre-Hook                        | Blocks                 | Sentinel                   | Feature Memory |
+| --------- | ------------------------------- | ---------------------- | -------------------------- | -------------- |
+| `test`    | `swe_pre_bash_test_gate.py`     | `npx playwright test`  | `.test_feature_{session}`  | FEATURE_TESTS  |
+| `swarm`   | `swe_pre_swarm_feature_gate.py` | `ruv-swarm swarm_init` | `.swarm_feature_{session}` | FEATURE_SWARM  |
+
+### Adding a New Gate
+
+1. Create pre-hook: `hooks/pre/swe_pre_{name}_gate.py` — check sentinel, block
+   if missing
+2. Add to `swe_post_read_state.py`: call
+   `create_feature_sentinel(session_id, '{gate_name}')` when FEATURE_* is read
+3. Register in `hooks/hooks.json`
+4. Add directive to FEATURE_* memory documenting the gate
+
 ## Plan Mode Triggers
 
-| Mode        | States                                                                               |
-| ----------- | ------------------------------------------------------------------------------------ |
-| Always      | WF_ARCH_REVIEW, WF_SWARM_ORCHESTRATE                                                  |
-| Never       | WF_DEBUG_TDD, WF_CHECKPOINT, WF_VERIFY, WF_DONE, WF_RESEARCH, WF_EXECUTE              |
-| Conditional | WF_CLASSIFY (complexity >= medium)                                                     |
+| Mode        | States                                                                   |
+| ----------- | ------------------------------------------------------------------------ |
+| Always      | WF_ARCH_REVIEW, WF_SWARM_ORCHESTRATE                                     |
+| Never       | WF_DEBUG_TDD, WF_CHECKPOINT, WF_VERIFY, WF_DONE, WF_RESEARCH, WF_EXECUTE |
+| Conditional | WF_CLASSIFY (complexity >= medium)                                       |
 
 ## RLVR Learning
 
@@ -199,7 +230,8 @@ Memories are organized in subdirectories:
 
 ## Dependencies
 
-- **Internal:** Serena MCP (memory), Claude-Flow MCP (swarm/learning), RUV-Swarm MCP (DAA)
+- **Internal:** Serena MCP (memory), Claude-Flow MCP (swarm/learning), RUV-Swarm
+  MCP (DAA)
 - **External:** jq (JSON parsing), bash, python3
 
 ## Runtime Files
@@ -269,7 +301,9 @@ Contains project-specific adaptations:
 
 ### Hook Loading
 
-**SWE hooks load automatically from the plugin folder** via Claude Code's plugin system. The `${CLAUDE_PLUGIN_ROOT}` variable in `hooks/hooks.json` is resolved automatically - no copying to settings.json needed.
+**SWE hooks load automatically from the plugin folder** via Claude Code's plugin
+system. The `${CLAUDE_PLUGIN_ROOT}` variable in `hooks/hooks.json` is resolved
+automatically - no copying to settings.json needed.
 
 See `DOM_SWE_HOOKS` for hook architecture details.
 

@@ -12,7 +12,8 @@
 
 ## 🛑 STOP - MANDATORY READING BEFORE ANY SWARM WORK
 
-**YOU MUST READ THESE MEMORIES IN ORDER. DO NOT PROCEED WITHOUT COMPLETING ALL STEPS.**
+**YOU MUST READ THESE MEMORIES IN ORDER. DO NOT PROCEED WITHOUT COMPLETING ALL
+STEPS.**
 
 | Step  | Memory                 | MUST READ                            |
 | ----- | ---------------------- | ------------------------------------ |
@@ -28,16 +29,18 @@ mcp__plugin_swe_serena__read_memory("CLAUDE_FLOW")
 mcp__plugin_swe_serena__read_memory("REF_AGENTS")
 ```
 
-**⛔ SKIPPING STEPS 1-4 = WORKFLOW VIOLATION**
-**⛔ PROCEEDING WITHOUT READING = WORKFLOW VIOLATION**
+**⛔ SKIPPING STEPS 1-4 = WORKFLOW VIOLATION** **⛔ PROCEEDING WITHOUT READING =
+WORKFLOW VIOLATION**
 
 ---
 
 ## 🐝 POST-LOAD DIRECTIVE
 
-> 🐝 SWARM DETECTED - You MUST use ruv-swarm or hive-mind swarm orchestration. After completing WF_CLASSIFY feature loading, go to **WF_SWARM_ORCHESTRATE**.
+> 🐝 SWARM DETECTED - You MUST use ruv-swarm or hive-mind swarm orchestration.
+> After completing WF_CLASSIFY feature loading, go to **WF_SWARM_ORCHESTRATE**.
 
-This directive activates when FEATURE_SWARM is loaded. It overrides other routing options in WF_CLASSIFY.
+This directive activates when FEATURE_SWARM is loaded. It overrides other
+routing options in WF_CLASSIFY.
 
 ---
 
@@ -55,7 +58,8 @@ Route to SWARM when ANY apply:
 
 ### Keyword Detection
 
-Trigger on: `swarm`, `parallel agents`, `multi-agent`, `hive-mind`, `ruv-swarm`, `claude-flow swarm`, `DAA`, `orchestrate agents`
+Trigger on: `swarm`, `parallel agents`, `multi-agent`, `hive-mind`, `ruv-swarm`,
+`claude-flow swarm`, `DAA`, `orchestrate agents`
 
 ---
 
