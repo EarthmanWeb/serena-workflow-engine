@@ -22,23 +22,9 @@ try:
 except ImportError as e:
     swe_hooks.bootstrap.import_error_exit(e, "PreToolUse")
 
-# Test command patterns
+# Only gate on actual Playwright test execution via npx
 TEST_COMMAND_PATTERNS = [
-    r'\bplaywright\b',
-    r'\bnpx\s+playwright\b',
-    r'\bnpm\s+(run\s+)?test',
-    r'\byarn\s+test',
-    r'\bpnpm\s+test',
-    r'\bpytest\b',
-    r'\bphpunit\b',
-    r'\bjest\b',
-    r'\bmocha\b',
-    r'\bvitest\b',
-    r'\bava\b',
-    r'\btap\b',
-    r'\.spec\.(ts|js|tsx|jsx)',
-    r'\.test\.(ts|js|tsx|jsx)',
-    r'\btest:',  # npm scripts like "test:e2e"
+    r'\bnpx\s+playwright\s+test\b',
 ]
 
 # States where tests are expected (no reminder needed)
