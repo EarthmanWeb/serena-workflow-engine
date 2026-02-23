@@ -25,44 +25,21 @@ except ImportError as e:
     swe_hooks.bootstrap.import_error_exit(e)
 
 
-def update_test_docs_timestamp(wm_filepath: str, session_id: str) -> bool:
-    """Update or add the Test Docs timestamp in working memory.
+def create_feature_sentinel(session_id: str, gate_name: str) -> bool:
+    """Create a sentinel file for a feature gate.
 
-    Replaces any existing 'Test Docs: Read @<timestamp>' with current timestamp.
-    If none exists, appends after the Workflow Context section.
-
-    Returns True if successful.
+    Pattern: .serena/streams/.{gate_name}_feature_{session_id}
+    Used by: FEATURE_TESTS (test gate), FEATURE_SWARM (swarm gate).
     """
-    if not wm_filepath or not os.path.exists(wm_filepath):
+    if not session_id:
         return False
-
     try:
-        with open(wm_filepath, 'r', encoding='utf-8') as f:
-            content = f.read()
-
-        current_timestamp = int(time.time())
-        new_marker = f"Test Docs: Read @{current_timestamp}"
-
-        # Pattern to match existing timestamp marker
-        pattern = r'Test Docs: Read @\d+'
-
-        if re.search(pattern, content):
-            # Replace existing timestamp
-            updated_content = re.sub(pattern, new_marker, content)
-        else:
-            # Add after Workflow Context section or at end of file
-            context_match = re.search(r'(## Workflow Context\n(?:.*\n)*?)(\n## |\Z)', content)
-            if context_match:
-                insert_pos = context_match.end(1)
-                updated_content = content[:insert_pos] + f"\n{new_marker}\n" + content[insert_pos:]
-            else:
-                # Fallback: append at end
-                updated_content = content.rstrip() + f"\n\n{new_marker}\n"
-
-        with open(wm_filepath, 'w', encoding='utf-8') as f:
-            f.write(updated_content)
+        stream_dir = get_stream_path(session_id).rsplit('/', 1)[0]
+        sentinel = os.path.join(stream_dir, f'.{gate_name}_feature_{session_id}')
+        os.makedirs(os.path.dirname(sentinel), exist_ok=True)
+        open(sentinel, 'w').close()
         return True
-    except Exception:
+    except IOError:
         return False
 
 
@@ -72,30 +49,19 @@ def main():
         cwd = get_input_field(input_data, 'cwd', default=os.getcwd())
         memory_name = get_input_field(input_data, 'tool_input', 'memory_file_name', default='')
 
-        # Handle FEATURE_TESTS read - update timestamp in WM
+        # Handle FEATURE_TESTS read - create sentinel for test gate
         if memory_name == 'FEATURE_TESTS':
             transcript_path = get_input_field(input_data, 'transcript_path', default='')
             session_id = extract_session_id(transcript_path)
-            wm_filepath = find_working_memory_for_session(cwd, session_id)
-            if wm_filepath:
-                update_test_docs_timestamp(wm_filepath, session_id)
-                output_status(f"📖 Read: {memory_name} (timestamp updated)")
-                return
+            create_feature_sentinel(session_id, 'test')
             output_status(f"📖 Read: {memory_name}")
             return
 
-        # Handle FEATURE_SWARM read - emit swarm directive + create sentinel
+        # Handle FEATURE_SWARM read - create sentinel for swarm gate + emit directive
         if memory_name == 'FEATURE_SWARM':
-            # Create sentinel so pre-swarm gate allows swarm_init
             transcript_path = get_input_field(input_data, 'transcript_path', default='')
-            swarm_session_id = extract_session_id(transcript_path)
-            if swarm_session_id:
-                sentinel = os.path.join(get_stream_path(swarm_session_id).rsplit('/', 1)[0], f'.swarm_feature_{swarm_session_id}')
-                try:
-                    os.makedirs(os.path.dirname(sentinel), exist_ok=True)
-                    open(sentinel, 'w').close()
-                except IOError:
-                    pass
+            session_id = extract_session_id(transcript_path)
+            create_feature_sentinel(session_id, 'swarm')
 
             output = HookOutput(event_name="PostToolUse")
             output.add_message(f"📖 Read: {memory_name}")
