@@ -29,7 +29,7 @@
       "planMode": "never",
       "allowEdit": true,
       "allowWrite": true,
-      "transitions": { "complete": "WF_START" }
+      "transitions": { "complete": "WF_START", "swarm_needed": "WF_SWARM_ORCHESTRATE", "classify": "WF_CLASSIFY" }
     },
 
     "WF_START": {
@@ -235,6 +235,6 @@
     "WF_DEBUG_TDD": ["WF_EXECUTE", "WF_CLARIFY"],
     "WF_VERIFY": ["WF_DONE", "WF_EXECUTE"],
     "WF_DONE": [null],
-    "WF_ONBOARD": ["WF_START"]
+    "WF_ONBOARD": ["WF_START", "WF_SWARM_ORCHESTRATE", "WF_CLASSIFY"]
   }
 }

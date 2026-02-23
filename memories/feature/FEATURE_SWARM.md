@@ -75,6 +75,47 @@ Trigger on: `swarm`, `parallel agents`, `multi-agent`, `hive-mind`, `ruv-swarm`,
 
 ---
 
+## 🧠 DAA (Dynamic Autonomous Agents) Quick Reference
+
+DAA provides autonomous learning agents that adapt from feedback. Use DAA for analysis-heavy tasks like feature onboarding, codebase exploration, and pattern detection.
+
+**MCP Prefix:** `mcp__plugin_claude-flow_ruv-swarm__`
+
+### DAA Initialization
+
+```javascript
+ToolSearch({ query: '+ruv-swarm daa' })  // Load DAA tools first
+
+daa_init({ enableLearning: true, enableCoordination: true, persistenceMode: 'memory' })
+```
+
+### DAA Agent Creation
+
+```javascript
+daa_agent_create({ id: 'agent-1', cognitivePattern: 'adaptive', enableMemory: true, learningRate: 0.1 })
+daa_agent_create({ id: 'agent-2', cognitivePattern: 'critical', enableMemory: true, learningRate: 0.1 })
+```
+
+**Cognitive patterns:** `adaptive`, `critical`, `convergent`, `divergent`, `lateral`, `systems`
+
+### DAA Workflow Execution
+
+```javascript
+daa_workflow_create({ id: 'wf-1', name: 'Feature Analysis', strategy: 'adaptive', steps: [...] })
+daa_workflow_execute({ workflowId: 'wf-1' })
+```
+
+### DAA Feedback Loop
+
+```javascript
+daa_agent_adapt({ agentId: 'agent-1', feedback: 'description of results', performanceScore: 0.9 })
+daa_learning_status({ detailed: true })
+```
+
+**⚠️ DAA agents ≠ Swarm agents** — Use `daa_workflow_execute`, NOT `task_orchestrate`. See `CLAUDE_FLOW` for full tool reference.
+
+---
+
 ## Related Memories
 
 | Memory               | Content                 |

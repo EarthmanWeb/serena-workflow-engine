@@ -185,6 +185,12 @@ AskUserQuestion({
 
 ### If "Full DAA Swarm" selected:
 
+**⚠️ MANDATORY: Load swarm coordination context first:**
+```javascript
+mcp__plugin_swe_serena__read_memory("FEATURE_SWARM")
+```
+This loads swarm patterns, agent definitions, and coordination protocols needed for DAA orchestration. Without it, swarm agents lack the project's coordination standards.
+
 ```javascript
 mcp__ruv-swarm__daa_init({ enableLearning: true })
 
@@ -362,8 +368,12 @@ mcp__plugin_swe_serena__edit_memory(
 - **Feature Key**: [KEY]
 - **Mode**: [full|quick]
 - **Memories Created**: FEATURE_[KEY], [DOM_*, SYS_* if applicable]
-- **Next Step Hint**: WF_START
+- **Next Step Hint**: [WF_SWARM_ORCHESTRATE if DAA swarm was used, WF_START otherwise]
 ```
+
+**Routing after onboarding:**
+- If DAA swarm analysis was used → `WF_SWARM_ORCHESTRATE` (swarm context is already loaded)
+- If quick mode or manual → `WF_START` (normal entry)
 
 ---
 
