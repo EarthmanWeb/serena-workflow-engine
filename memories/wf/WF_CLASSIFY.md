@@ -48,6 +48,27 @@ Scan user message for behavioral/UX requirements:
 
 **If no requirements:** Pure implementation task — continue.
 
+### 2b. Auto-Approve Detection
+
+**Scan user's initial message for intent to skip the WF_ARCH_REVIEW approval gate.**
+
+Fuzzy-match for phrases indicating the user wants uninterrupted execution:
+
+- "complete without stopping" / "finish without stopping"
+- "don't stop for anything" / "do not stop"
+- "don't ask for approval" / "do not ask for approval"
+- "no approval needed" / "skip approval"
+- "just do it" / "just execute" / "just implement"
+- "proceed without asking" / "don't ask me"
+- "run unattended" / "autonomous mode"
+- "without interruption" / "no interruptions"
+
+**Match loosely** — the user may phrase it differently. The intent is: "I trust you to proceed through the entire workflow without blocking for my approval at WF_ARCH_REVIEW."
+
+**If detected:** Note `auto_approve: true` in WM. The plan will still be **presented** at WF_ARCH_REVIEW for transparency, but the `AskUserQuestion` approval gate will be skipped.
+
+**If not detected:** Normal flow — approval will be required at WF_ARCH_REVIEW.
+
 ### 3. Assess task type and complexity:
 
 #### Research Tasks (Skill-Based)

@@ -17,6 +17,21 @@ This is the **single planning gate** for all code changes. It combines:
 
 ---
 
+## SPEC Fast-Path: Skip Design If SPEC Already Exists
+
+**If a `SPEC_*` memory has already been loaded for this task (check WM):**
+
+The SPEC contains the pre-approved architecture, file paths, data flow, and implementation plan. In this case:
+
+- ✅ **SKIP steps 1–4** (feature architecture, layer docs, design, compliance check) — the SPEC already covers these
+- ✅ **Reference the SPEC by name** (e.g., "Plan per SPEC_TICKETS_FRONTEND") — do NOT re-present or reiterate its contents
+- ✅ Proceed directly to the **Swarm Assessment** (step 5) and then **Approval** (or auto-approve bypass)
+- ❌ Do NOT re-derive file paths, layer assignments, or data flow — use exactly what the SPEC provides
+
+**If no SPEC loaded:** Follow steps 1–4 as normal below.
+
+---
+
 ## Execute These Steps
 
 ### 1. Get Feature Architecture
@@ -109,7 +124,7 @@ Before proposing new files:
 2. Read relevant SYS_* or REF_* memory for the file type
 3. Follow established feature conventions (from FEATURE_[KEY])
 
-### MANDATORY - Present Plan and Get Approval
+### MANDATORY - Present Plan
 
 **Present your plan clearly** including:
 
@@ -118,6 +133,21 @@ Before proposing new files:
 - Data flow description
 - Test coverage plan
 - **Swarm recommendation** (if applicable): topology, agent types, parallelization strategy
+
+### Auto-Approve Bypass Check
+
+**Check WM for `auto_approve: true`** (set at WF_CLASSIFY step 2b).
+
+**If `auto_approve: true` in WM:**
+
+- ✅ The plan has been presented above (transparency preserved)
+- ✅ **SKIP the `AskUserQuestion` approval gate below**
+- ✅ Treat as "Yes, proceed" — go directly to `WF_EXECUTE` (or `WF_SWARM_ORCHESTRATE` if swarm planned)
+- ℹ️ The user explicitly requested uninterrupted execution in their initial message
+
+**If `auto_approve` is NOT set (or false):** Continue to the approval gate below.
+
+### Get Approval (when auto_approve is NOT set)
 
 **Use the `AskUserQuestion` tool for interactive approval:**
 
@@ -162,6 +192,8 @@ AskUserQuestion({
 
 | Condition                              | MUST Read Next         |
 | -------------------------------------- | ---------------------- |
+| Auto-approve bypass (simple)           | `WF_EXECUTE`           |
+| Auto-approve bypass (swarm needed)     | `WF_SWARM_ORCHESTRATE` |
 | User approves (simple implementation)  | `WF_EXECUTE`           |
 | User approves (swarm needed)           | `WF_SWARM_ORCHESTRATE` |
 | Needs redesign / user modifies         | `WF_ARCH_REVIEW`       |
