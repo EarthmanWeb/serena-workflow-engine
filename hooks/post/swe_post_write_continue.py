@@ -43,11 +43,7 @@ def main():
                 if state_data:
                     current_state = state_data.get("current_state")
 
-        # Build enhanced result with continuation directive
-        state_info = f" | Workflow: {current_state} — continue with current step." if current_state else ""
-        enhanced_result = f"{tool_result}{state_info}"
-
-        # Context message for additionalContext (belt-and-suspenders)
+        # Context message only - never mask the actual tool result
         context = f"💾 Memory written: {memory_name}"
         if current_state:
             context += f" | State: {current_state} — continue working on current task."
@@ -55,7 +51,6 @@ def main():
         output = {
             "hookSpecificOutput": {
                 "hookEventName": "PostToolUse",
-                "updatedMCPToolOutput": enhanced_result,
                 "additionalContext": context
             }
         }
