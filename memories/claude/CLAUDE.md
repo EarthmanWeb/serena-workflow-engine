@@ -13,7 +13,7 @@ Hooks will send you data to guide you. ALWAYS LISTEN TO THEM.
 - Did you log findings to WM?
 - Did you update WM after significant steps?
 
-## 🎯 Core Principles
+## Core Principles
 
 **KISS → DRY → YAGNI** (priority order)
 
