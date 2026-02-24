@@ -14,9 +14,11 @@ workflow:
 ## ⚠️ WORKFLOW INITIALIZATION
 
 **If starting a new session**, first read workflow initialization:
+
 ```
 mcp__plugin_swe_serena__read_memory("WF_INIT")
 ```
+
 Follow WF_INIT instructions before executing this skill.
 
 ---
@@ -52,6 +54,7 @@ Test-driven debugging workflow for rapid iteration.
 
 ```markdown
 ## Skill Return
+
 - **Skill**: swe-workflow-debug-tdd
 - **Status**: [success|needs_clarification|blocked]
 - **Findings Summary**: [bug description and fix applied]

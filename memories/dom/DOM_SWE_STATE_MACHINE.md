@@ -41,9 +41,9 @@ Documents the 21-state workflow FSM and transition rules.
 
 ### Complexity Routing (WF_CLASSIFY)
 
-| Complexity | Files | Layers | Route To         |
-| ---------- | ----- | ------ | ---------------- |
-| All        | Any   | Any    | WF_LOAD_FEATURE  |
+| Complexity | Files | Layers | Route To        |
+| ---------- | ----- | ------ | --------------- |
+| All        | Any   | Any    | WF_LOAD_FEATURE |
 
 Swarm assessment happens at WF_ARCH_REVIEW after feature context is loaded.
 

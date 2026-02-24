@@ -15,9 +15,11 @@ workflow:
 ## ⚠️ WORKFLOW INITIALIZATION
 
 **If starting a new session**, first read workflow initialization:
+
 ```
 mcp__plugin_swe_serena__read_memory("WF_INIT")
 ```
+
 Follow WF_INIT instructions before executing this skill.
 
 ---
@@ -35,6 +37,7 @@ Initialize workflow system for new or empty projects.
 ## Detection Triggers
 
 Automatically suggested when:
+
 - No `.serena/swe/` directory exists
 - No `INDEX_FEATURES.md` file exists
 - `INDEX_FEATURES.md` has zero features registered
@@ -75,52 +78,63 @@ mkdir -p .claude/hooks
 Create from templates:
 
 1. **_INDEX** - Navigation hub
+
 ```markdown
 # _INDEX - Memory Navigation
 
 ## Quick Reference
+
 - Features: INDEX_FEATURES
 - Architecture: ARCH_INDEX
 - Workflows: INDEX_WORKFLOWS_STATES
 
 ## Memory Types
-| Prefix | Purpose |
-|--------|---------|
-| FEATURE_ | Feature configs |
-| DOM_ | Domain behaviors |
-| SYS_ | System references |
-| REF_ | Reference docs |
-| INDEX_ | Navigation |
-| WF_ | Workflow states |
-| WM_ | Session state |
+
+| Prefix   | Purpose           |
+| -------- | ----------------- |
+| FEATURE_ | Feature configs   |
+| DOM_     | Domain behaviors  |
+| SYS_     | System references |
+| REF_     | Reference docs    |
+| INDEX_   | Navigation        |
+| WF_      | Workflow states   |
+| WM_      | Session state     |
 ```
 
 2. **INDEX_FEATURES** - Empty feature registry
+
 ```markdown
 # INDEX_FEATURES
 
 ## Registered Features
+
 (none yet - run /swe-feature-onboard to add)
 
 ## Quick Start
+
 1. `/swe-feature-onboard [KEY]` - Full wizard
 2. `/swe-onboard-quick [KEY]` - Fast setup
 ```
 
 3. **ARCH_INDEX** - Basic architecture placeholder
+
 ```markdown
 # ARCH_INDEX - Architecture Overview
 
 ## Project Type
+
 [Detected or unknown]
 
 ## Primary Language
+
 [Detected]
 
 ## Framework
+
 [Detected or none]
 
 ## Structure
+
 (Run /swe-feature-onboard to populate)
 ```
 
@@ -129,6 +143,7 @@ Create from templates:
 **PROJECT SCAFFOLDED**
 
 **Created:**
+
 - .serena/swe/
 - _INDEX
 - INDEX_FEATURES
@@ -137,11 +152,13 @@ Create from templates:
 Your project needs at least one feature to enable code changes.
 
 **What is the main codebase?**
+
 - Name: [e.g., "Backend API"]
 - Key: [e.g., "BACKEND"]
 - Path: [e.g., "src/"]
 
 **Options:**
+
 - **[A]** Set up now with /swe-feature-onboard (recommended)
 - **[B]** Quick setup with /swe-onboard-quick
 - **[C]** Skip - add features later (research-only mode)
@@ -149,6 +166,7 @@ Your project needs at least one feature to enable code changes.
 ### Stage 5: Optional Swarm Analysis
 
 If swarm MCP available:
+
 ```
 AI-powered codebase analysis available.
 
@@ -174,6 +192,7 @@ If user skips feature setup, enable minimal mode:
 
 ```markdown
 ## Skill Return
+
 - **Skill**: swe-scaffold-project
 - **Status**: [success|needs_clarification]
 - **Project Root**: [path]

@@ -14,9 +14,11 @@ workflow:
 ## ⚠️ WORKFLOW INITIALIZATION
 
 **If starting a new session**, first read workflow initialization:
+
 ```
 mcp__plugin_swe_serena__read_memory("WF_INIT")
 ```
+
 Follow WF_INIT instructions before executing this skill.
 
 ---
@@ -33,13 +35,13 @@ Coordinate multi-agent swarm for complex tasks.
 
 ## Agent Types
 
-| Agent | Purpose |
-|-------|---------|
-| researcher | Explore codebase |
-| coder | Implement changes |
-| analyst | Review patterns |
-| optimizer | Performance tuning |
-| coordinator | Orchestrate tasks |
+| Agent       | Purpose            |
+| ----------- | ------------------ |
+| researcher  | Explore codebase   |
+| coder       | Implement changes  |
+| analyst     | Review patterns    |
+| optimizer   | Performance tuning |
+| coordinator | Orchestrate tasks  |
 
 ## Swarm Topologies
 

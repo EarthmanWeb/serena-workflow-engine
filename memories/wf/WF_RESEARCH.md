@@ -27,10 +27,10 @@
 
 **YOU ARE NOT FINISHED.** After reporting findings:
 
-| Condition                                | MUST Read Next   |
-| ---------------------------------------- | ---------------- |
-| Research complete, user wants changes    | `WF_LOAD_FEATURE` |
-| Research complete, no changes needed     | `WF_DONE`        |
+| Condition                             | MUST Read Next    |
+| ------------------------------------- | ----------------- |
+| Research complete, user wants changes | `WF_LOAD_FEATURE` |
+| Research complete, no changes needed  | `WF_DONE`         |
 
 If the user wants to proceed with implementation based on research findings, route to `WF_LOAD_FEATURE` to load feature context before any code changes.
 

@@ -33,12 +33,12 @@ Or with options:
 
 ## MANDATORY NEXT STEP
 
-| Condition                              | MUST Read Next         |
-| -------------------------------------- | ---------------------- |
-| Feature configured (DAA swarm used)    | `WF_SWARM_ORCHESTRATE` |
-| Feature configured (quick/manual)      | `WF_START`             |
-| Feature configured (task pending)      | `WF_CLASSIFY`          |
-| User cancelled                         | End conversation       |
+| Condition                           | MUST Read Next         |
+| ----------------------------------- | ---------------------- |
+| Feature configured (DAA swarm used) | `WF_SWARM_ORCHESTRATE` |
+| Feature configured (quick/manual)   | `WF_START`             |
+| Feature configured (task pending)   | `WF_CLASSIFY`          |
+| User cancelled                      | End conversation       |
 
 **If DAA swarm analysis was used during onboarding**, the swarm context is already loaded — route directly to `WF_SWARM_ORCHESTRATE` to continue with swarm coordination rather than restarting from `WF_START`.
 

@@ -20,9 +20,11 @@ args:
 ## ⚠️ WORKFLOW INITIALIZATION
 
 **If starting a new session**, first read workflow initialization:
+
 ```
 mcp__plugin_swe_serena__read_memory("WF_INIT")
 ```
+
 Follow WF_INIT instructions before executing this skill.
 
 ---
@@ -46,7 +48,7 @@ Synchronize feature documentation with actual codebase:
 - Update directory listings and file inventories
 - Refresh architecture layers and patterns
 - Update entry points and key files
-- Sync related memories (ARCH_*, INDEX_*, DOM_*)
+- Sync related memories (ARCH__, INDEX__, DOM_*)
 
 ---
 
@@ -61,9 +63,11 @@ mcp__plugin_swe_serena__read_memory("INDEX_FEATURES")
 **Check:** Feature key exists in registered features table.
 
 **If not found:**
+
 ```
 > Feature [KEY] not registered. Use /swe-feature-onboard [KEY] to register it first.
 ```
+
 Exit skill with `needs_clarification` status.
 
 ---
@@ -75,6 +79,7 @@ mcp__plugin_swe_serena__read_memory("FEATURE_[KEY]")
 ```
 
 **Extract from current memory:**
+
 - Root path(s)
 - Primary language
 - Framework
@@ -103,6 +108,7 @@ mcp__plugin_swe_serena__get_symbols_overview({ relative_path: "[root_path]" })
 ### 3.3 Pattern Detection
 
 Use Serena tools to detect:
+
 - Entry points (main files, index files)
 - Configuration files
 - Test files
@@ -114,15 +120,16 @@ Use Serena tools to detect:
 
 **Compare current state vs. documented state:**
 
-| Aspect | Check For |
-|--------|-----------|
-| Directories | New directories, removed directories |
-| Key files | New files, renamed files, removed files |
-| Layers | Layer changes, new components |
-| Dependencies | New internal/external dependencies |
-| Entry points | Changed entry points |
+| Aspect       | Check For                               |
+| ------------ | --------------------------------------- |
+| Directories  | New directories, removed directories    |
+| Key files    | New files, renamed files, removed files |
+| Layers       | Layer changes, new components           |
+| Dependencies | New internal/external dependencies      |
+| Entry points | Changed entry points                    |
 
 **Report changes found:**
+
 ```
 Changes detected for [KEY]:
 - [+] Added: [new items]
@@ -152,11 +159,13 @@ mcp__plugin_swe_serena__write_memory("FEATURE_[KEY]", "<updated content>")
 ```
 
 **Preserve:**
+
 - Feature name and metadata
 - Workflow context sections
 - Related memories list
 
 **Update:**
+
 - Directory listings
 - Key files table
 - Architecture layers (if changed)
@@ -165,6 +174,7 @@ mcp__plugin_swe_serena__write_memory("FEATURE_[KEY]", "<updated content>")
 ### 5.2 Update Related Memories (if needed)
 
 Check and update as needed:
+
 - `ARCH_[KEY]` - Architecture documentation
 - `INDEX_[KEY]_*` - File/symbol indexes
 - `DOM_[KEY]_*` - Domain documentation
@@ -178,11 +188,13 @@ Check and update as needed:
 **After updating FEATURE_[KEY] and related memories, regenerate the Related Docs table.**
 
 Invoke the `/swe-symbol-index` skill:
+
 ```
 /swe-symbol-index [KEY]
 ```
 
 This will:
+
 1. Read all linked memories listed in FEATURE_[KEY]'s Related Memories section
 2. Extract heading symbols from each via `get_symbols_overview`
 3. Build/replace the `## Related Docs` table after Feature Overview
@@ -199,14 +211,16 @@ Output to user:
 ## Feature Update Complete: [KEY]
 
 ### Changes Applied
+
 - FEATURE_[KEY]: [summary of changes]
-- [Other memories updated]: [summary]
+-
 
 ### Current State
-| Property | Value |
-|----------|-------|
-| Root Path(s) | [paths] |
-| Key Files | [count] |
+
+| Property     | Value       |
+| ------------ | ----------- |
+| Root Path(s) | [paths]     |
+| Key Files    | [count]     |
 | Last Updated | [timestamp] |
 ```
 
@@ -216,6 +230,7 @@ Output to user:
 
 ```markdown
 ## Skill Return
+
 - **Skill**: swe-feature-update
 - **Status**: success
 - **Feature Key**: [KEY]
@@ -237,18 +252,22 @@ Output to user:
 ## Troubleshooting
 
 ### Feature not found
+
 ```
 Feature [KEY] is not registered in INDEX_FEATURES.
 Run: /swe-feature-onboard [KEY]
 ```
 
 ### Root path doesn't exist
+
 - Check if paths have moved
 - Update FEATURE_[KEY] with correct paths
 - Suggest re-onboarding if structure changed significantly
 
 ### No changes detected
+
 ```
 > Feature [KEY] is up to date. No changes needed.
 ```
+
 Exit with `success` status (no changes to make is still success).

@@ -12,35 +12,68 @@
 
 ## 🛑 STOP - MANDATORY READING BEFORE ANY SWARM WORK
 
-**YOU MUST READ THESE MEMORIES IN ORDER. DO NOT PROCEED WITHOUT COMPLETING ALL
-STEPS.**
+**Read these memories IN ORDER before swarm work:**
 
-| Step  | Memory                 | MUST READ                            |
-| ----- | ---------------------- | ------------------------------------ |
-| **1** | `WF_SWARM_ORCHESTRATE` | ⛔ REQUIRED FIRST - Primary workflow |
-| **2** | `REF_SWARM_PATTERNS`   | ⛔ REQUIRED - MCP tool patterns      |
-| **3** | `CLAUDE_FLOW`          | ⛔ REQUIRED - Coordination reference |
-| **4** | `REF_AGENTS`           | ⛔ REQUIRED - Agent types            |
+| Step  | Memory                 | Purpose                         |
+| ----- | ---------------------- | ------------------------------- |
+| **1** | `WF_SWARM_ORCHESTRATE` | ⛔ REQUIRED - Primary workflow  |
+| **2** | `REF_SWARM_PATTERNS`   | ⛔ REQUIRED - MCP tool patterns |
+| **3** | `CLAUDE_FLOW`          | ⛔ REQUIRED - Coordination ref  |
 
+**⛔ SKIPPING = WORKFLOW VIOLATION**
+
+**Note:** REF_AGENTS is a template file — skip it unless customized.
+
+---
+
+## ⚠️ VERIFIED MCP TOOL PREFIXES (2026-02-23)
+
+| System          | Actual MCP Prefix              |
+| --------------- | ------------------------------ |
+| **Claude-Flow** | `mcp__claude-flow__`           |
+| **RUV-Swarm**   | `mcp__ruv-swarm__`             |
+| **Hive-Mind**   | `mcp__claude-flow__hive-mind_` |
+
+**⛔ OLD WRONG PREFIXES (never use these):**
+
+- ~~`mcp__plugin_claude-flow_claude-flow__`~~
+- ~~`mcp__plugin_claude-flow_ruv-swarm__`~~
+- ~~`mcp__plugin_swe_ruv-swarm__`~~
+
+---
+
+## ⚠️ CONTEXT BUDGET WARNING
+
+**Previous swarm sessions failed from context overload.** Root causes:
+
+1. Loading 12+ memory files before work starts (~30-50K tokens)
+2. Loading too many MCP tools via ToolSearch
+3. Using verbose/detailed flags on MCP responses
+4. MCP coordinator doing file reads instead of delegating to Task agents
+
+**Environment Variables (set BEFORE launching claude):**
+
+```bash
+export MAX_MCP_OUTPUT_TOKENS=5000    # Cap responses (default 25K causes overflow)
+export ENABLE_TOOL_SEARCH=auto:5     # Aggressive tool deferral
 ```
-mcp__plugin_swe_serena__read_memory("WF_SWARM_ORCHESTRATE")
-mcp__plugin_swe_serena__read_memory("REF_SWARM_PATTERNS")
-mcp__plugin_swe_serena__read_memory("CLAUDE_FLOW")
-mcp__plugin_swe_serena__read_memory("REF_AGENTS")
-```
 
-**⛔ SKIPPING STEPS 1-4 = WORKFLOW VIOLATION** **⛔ PROCEEDING WITHOUT READING =
-WORKFLOW VIOLATION**
+**Rules to prevent overload:**
+
+- Load max 3-5 MCP tools per session
+- NEVER use verbose/detailed flags
+- NEVER call memory_stats
+- Delegate ALL file work to Task agents (separate context)
+- Load memories BEFORE swarm init, not during
+- Batch init+spawn+task into ONE message
+- Skip status checks unless actually needed
 
 ---
 
 ## 🐝 POST-LOAD DIRECTIVE
 
-> 🐝 SWARM DETECTED - You MUST use ruv-swarm or hive-mind swarm orchestration.
+> 🐝 SWARM DETECTED - Use MCP swarm orchestration.
 > After completing WF_CLASSIFY feature loading, go to **WF_SWARM_ORCHESTRATE**.
-
-This directive activates when FEATURE_SWARM is loaded. It overrides other
-routing options in WF_CLASSIFY.
 
 ---
 
@@ -58,69 +91,44 @@ Route to SWARM when ANY apply:
 
 ### Keyword Detection
 
-Trigger on: `swarm`, `parallel agents`, `multi-agent`, `hive-mind`, `ruv-swarm`,
-`claude-flow swarm`, `DAA`, `orchestrate agents`
+Trigger on: `swarm`, `parallel agents`, `multi-agent`, `hive-mind`, `ruv-swarm`, `claude-flow swarm`, `DAA`, `orchestrate agents`
 
 ---
 
 ## Available Systems
 
-| System      | Use Case                           | Details In         |
-| ----------- | ---------------------------------- | ------------------ |
-| Claude-Flow | General orchestration              | CLAUDE_FLOW        |
-| RUV-Swarm   | Task orchestration, DAA learning   | REF_SWARM_PATTERNS |
-| Hive-Mind   | Consensus, collective intelligence | CLAUDE_FLOW        |
-
-**Tool patterns documented in CLAUDE_FLOW and REF_SWARM_PATTERNS.**
+| System      | Use Case                           | Tools | Details In         |
+| ----------- | ---------------------------------- | ----- | ------------------ |
+| Claude-Flow | General orchestration              | ~241  | CLAUDE_FLOW        |
+| RUV-Swarm   | Task orchestration, DAA learning   | 25    | REF_SWARM_PATTERNS |
+| Hive-Mind   | Consensus, collective intelligence | 9     | CLAUDE_FLOW        |
 
 ---
 
-## 🧠 DAA (Dynamic Autonomous Agents) Quick Reference
-
-DAA provides autonomous learning agents that adapt from feedback. Use DAA for analysis-heavy tasks like feature onboarding, codebase exploration, and pattern detection.
-
-**MCP Prefix:** `mcp__plugin_claude-flow_ruv-swarm__`
-
-### DAA Initialization
+## Quick Start (Context-Optimized)
 
 ```javascript
-ToolSearch({ query: '+ruv-swarm daa' })  // Load DAA tools first
+// 1. Load only needed tools
+ToolSearch({ query: "+claude-flow swarm agent task" })
 
-daa_init({ enableLearning: true, enableCoordination: true, persistenceMode: 'memory' })
+// 2. Init + spawn + task (ONE message)
+mcp__claude-flow__swarm_init({ topology: "star", maxAgents: 5 })
+mcp__claude-flow__agent_spawn({ agentType: "coder", agentId: "agent-1" })
+mcp__claude-flow__task_create({ type: "implement", description: "...", assignToAgent: "agent-1" })
+
+// 3. Actual work via Task tool (separate context)
+Task({ subagent_type: "general-purpose", run_in_background: true, prompt: "..." })
+
+// 4. Collect results
+TaskOutput({ task_id: "...", block: true })
 ```
-
-### DAA Agent Creation
-
-```javascript
-daa_agent_create({ id: 'agent-1', cognitivePattern: 'adaptive', enableMemory: true, learningRate: 0.1 })
-daa_agent_create({ id: 'agent-2', cognitivePattern: 'critical', enableMemory: true, learningRate: 0.1 })
-```
-
-**Cognitive patterns:** `adaptive`, `critical`, `convergent`, `divergent`, `lateral`, `systems`
-
-### DAA Workflow Execution
-
-```javascript
-daa_workflow_create({ id: 'wf-1', name: 'Feature Analysis', strategy: 'adaptive', steps: [...] })
-daa_workflow_execute({ workflowId: 'wf-1' })
-```
-
-### DAA Feedback Loop
-
-```javascript
-daa_agent_adapt({ agentId: 'agent-1', feedback: 'description of results', performanceScore: 0.9 })
-daa_learning_status({ detailed: true })
-```
-
-**⚠️ DAA agents ≠ Swarm agents** — Use `daa_workflow_execute`, NOT `task_orchestrate`. See `CLAUDE_FLOW` for full tool reference.
 
 ---
 
 ## Related Memories
 
-| Memory               | Content                 |
-| -------------------- | ----------------------- |
-| WF_SWARM_ORCHESTRATE | Complete swarm workflow |
-| REF_SWARM_PATTERNS   | MCP tool reference      |
-| CLAUDE_FLOW          | Coordination patterns   |
-| REF_AGENTS           | Agent selection guide   |
+| Memory               | Content                       |
+| -------------------- | ----------------------------- |
+| WF_SWARM_ORCHESTRATE | Complete swarm workflow       |
+| REF_SWARM_PATTERNS   | MCP tool reference + patterns |
+| CLAUDE_FLOW          | Coordination patterns + rules |

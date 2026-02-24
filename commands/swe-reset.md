@@ -10,6 +10,7 @@ Reset workflow to WF_START state.
 ## Warning
 
 ⚠️ This will:
+
 - Archive current WORKING_MEMORY
 - Delete workflow-state.json
 - Reset all state tracking

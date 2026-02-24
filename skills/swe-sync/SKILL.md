@@ -27,9 +27,11 @@ args:
 ## ⚠️ WORKFLOW INITIALIZATION
 
 **If starting a new session**, first read workflow initialization:
+
 ```
 mcp__plugin_swe_serena__read_memory("WF_INIT")
 ```
+
 Follow WF_INIT instructions before executing this skill.
 
 ---
@@ -85,17 +87,20 @@ mcp__ruv-swarm__task_orchestrate({
 **Local Path:** `.serena/swe/`
 
 **Categories:**
-| Category | Pattern | Description |
-|----------|---------|-------------|
-| wf | `wf/WF_*.md` | Workflow state files |
-| ref | `ref/REF_*.md` | Reference documentation |
-| all | `*/*.md` | All memory files |
+
+| Category | Pattern        | Description             |
+| -------- | -------------- | ----------------------- |
+| wf       | `wf/WF_*.md`   | Workflow state files    |
+| ref      | `ref/REF_*.md` | Reference documentation |
+| all      | `*/*.md`       | All memory files        |
 
 **Never Sync (Exclusions):**
+
 - `_INDEX.md` — Local-only file, managed per-project. Never overwrite from plugin.
 - `WM_*.md` — Working memory files, session-specific.
 
 **Comparison Logic:**
+
 ```bash
 # For each plugin file in category:
 for file in plugin_path/category/*.md; do
@@ -128,29 +133,31 @@ Output a structured table:
 ```markdown
 ## Sync Report
 
-| Category | File | Status | Action |
-|----------|------|--------|--------|
-| wf | WF_INIT.md | SYNCED | - |
-| wf | WF_NEW.md | MISSING_LOCAL | Copy to local |
-| ref | REF_WM.md | PLUGIN_NEWER | Overwrite local |
-| wf | WF_CUSTOM.md | LOCAL_NEWER | ⚠️ Skip (local has changes) |
-| ref | REF_CUSTOM.md | LOCAL_ONLY | - (no plugin source) |
+| Category | File          | Status        | Action                     |
+| -------- | ------------- | ------------- | -------------------------- |
+| wf       | WF_INIT.md    | SYNCED        | -                          |
+| wf       | WF_NEW.md     | MISSING_LOCAL | Copy to local              |
+| ref      | REF_WM.md     | PLUGIN_NEWER  | Overwrite local            |
+| wf       | WF_CUSTOM.md  | LOCAL_NEWER   | ⚠️ Skip (local has changes) |
+| ref      | REF_CUSTOM.md | LOCAL_ONLY    | - (no plugin source)       |
 ```
 
 **Status meanings:**
-| Status | Meaning | Action |
-|--------|---------|--------|
-| SYNCED | Files are identical | None |
-| MISSING_LOCAL | File exists in plugin but not locally | Copy to local |
-| PLUGIN_NEWER | Plugin version is newer than local | **Always overwrite local** |
-| LOCAL_NEWER | Local version is newer than plugin | **Report only — do NOT overwrite** |
-| LOCAL_ONLY | File exists locally but not in plugin | None (preserve) |
+
+| Status        | Meaning                               | Action                             |
+| ------------- | ------------------------------------- | ---------------------------------- |
+| SYNCED        | Files are identical                   | None                               |
+| MISSING_LOCAL | File exists in plugin but not locally | Copy to local                      |
+| PLUGIN_NEWER  | Plugin version is newer than local    | **Always overwrite local**         |
+| LOCAL_NEWER   | Local version is newer than plugin    | **Report only — do NOT overwrite** |
+| LOCAL_ONLY    | File exists locally but not in plugin | None (preserve)                    |
 
 ### Step 6: Execute Sync (if not dry-run)
 
 **⚠️ CRITICAL: Preserve subdirectory structure!**
 
 Files MUST be copied to their matching subdirectory:
+
 - `memories/wf/WF_*.md` → `.serena/swe/wf/WF_*.md`
 - `memories/ref/REF_*.md` → `.serena/swe/ref/REF_*.md`
 - `memories/claude/CLAUDE*.md` → `.serena/swe/claude/CLAUDE*.md`
@@ -158,6 +165,7 @@ Files MUST be copied to their matching subdirectory:
 **Direction: plugin-to-local (default)**
 
 **⚠️ CRITICAL SYNC RULES:**
+
 - **PLUGIN_NEWER / MISSING_LOCAL** → Always overwrite local (no prompting)
 - **LOCAL_NEWER** → **Never overwrite.** Report the difference to the user and skip the file.
 
@@ -173,21 +181,25 @@ echo "⚠️ SKIPPED: {category}/{file} — local version is newer. Review manua
 ```
 
 **Direction: local-to-plugin**
+
 ```bash
 cp -f .serena/swe/{category}/{file} .claude/plugins/serena-workflow-engine/memories/{category}/{file}
 ```
 
 **Direction: bidirectional**
+
 - Plugin newer → copy to local (preserve subdir)
 - Local newer → copy to plugin (preserve subdir)
 - Same age, different content → CONFLICT (report, don't overwrite)
 
 **❌ WRONG - DO NOT flatten to root:**
+
 ```bash
 cp memories/wf/WF_START.md .serena/swe/WF_START.md  # WRONG!
 ```
 
 **✅ CORRECT - Preserve subdirectory:**
+
 ```bash
 cp memories/wf/WF_START.md .serena/swe/wf/WF_START.md  # CORRECT!
 ```
@@ -199,6 +211,7 @@ Re-run comparison to confirm all files synced.
 ## Exit
 
 Output sync summary:
+
 ```
 ✅ Sync complete: X files synced, Y unchanged, Z conflicts
 ```

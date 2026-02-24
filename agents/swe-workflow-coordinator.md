@@ -59,6 +59,7 @@ switch (swarmSystem) {
 ## RLVR Learning
 
 After task completion:
+
 1. Receive performance score
 2. Adapt via `mcp__ruv-swarm__daa_agent_adapt`
 3. Share knowledge with other agents

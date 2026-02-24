@@ -210,7 +210,7 @@ From each FEATURE_[KEY], load relevant:
 - [ ] Read INDEX_FEATURES
 - [ ] Identified ALL features for this task
 - [ ] Called `read_memory("FEATURE_[KEY]")` for EACH feature
-- [ ] Loaded relevant DOM_*, ARCH_*, INDEX_* memories
+- [ ] Loaded relevant DOM__, ARCH__, INDEX_* memories
 - [ ] Updated WM with feature information
 - [ ] Requirements noted (or "none — pure implementation")
 
@@ -267,11 +267,11 @@ When routing to a workflow-aware skill (e.g., `/research`):
 
 ### Routing Table
 
-| Condition             | MUST Read Next   |
-| --------------------- | ---------------- |
-| Request unclear       | `WF_CLARIFY`     |
-| Test debugging needed | `WF_DEBUG_TDD`   |
-| Research only         | `WF_RESEARCH`    |
+| Condition             | MUST Read Next    |
+| --------------------- | ----------------- |
+| Request unclear       | `WF_CLARIFY`      |
+| Test debugging needed | `WF_DEBUG_TDD`    |
+| Research only         | `WF_RESEARCH`     |
 | **All other tasks**   | `WF_LOAD_FEATURE` |
 
 **ALL implementation tasks (simple, medium, large, operational) go to WF_LOAD_FEATURE.**

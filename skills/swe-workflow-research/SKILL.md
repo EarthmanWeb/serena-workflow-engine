@@ -16,9 +16,11 @@ workflow:
 ## ⚠️ WORKFLOW INITIALIZATION
 
 **If starting a new session**, first read workflow initialization:
+
 ```
 mcp__plugin_swe_serena__read_memory("WF_INIT")
 ```
+
 Follow WF_INIT instructions before executing this skill.
 
 ---
@@ -51,6 +53,7 @@ Explore and analyze codebase without making any changes.
 
 ```markdown
 ## Skill Return
+
 - **Skill**: swe-workflow-research
 - **Status**: [success|success_with_findings|needs_clarification]
 - **Findings Summary**: [2-3 sentences describing what was found]

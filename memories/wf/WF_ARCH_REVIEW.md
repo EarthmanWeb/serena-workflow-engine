@@ -89,7 +89,7 @@ Define which files/components are affected:
 - View imports services/functions directly instead of using provided context
 - View is doing more than display/formatting
 
-**Read REF_* memories (codebase-shared) for correct patterns.**
+**Read REF** memories (codebase-shared) for correct patterns._*
 
 ---
 
@@ -179,25 +179,25 @@ AskUserQuestion({
 
 ### Handle User Response
 
-| User Selection      | Action                                                          |
-| ------------------- | --------------------------------------------------------------- |
+| User Selection      | Action                                                         |
+| ------------------- | -------------------------------------------------------------- |
 | "Yes, proceed"      | Read `WF_EXECUTE` (or `WF_SWARM_ORCHESTRATE` if swarm planned) |
-| "No, let's discuss" | Read `WF_CLARIFY`                                               |
-| "Modify approach"   | Re-run this step (`WF_ARCH_REVIEW`) with modified design        |
-| Custom text (Other) | Parse feedback, go to `WF_CLARIFY`                              |
+| "No, let's discuss" | Read `WF_CLARIFY`                                              |
+| "Modify approach"   | Re-run this step (`WF_ARCH_REVIEW`) with modified design       |
+| Custom text (Other) | Parse feedback, go to `WF_CLARIFY`                             |
 
 ---
 
 ## MANDATORY NEXT STEP
 
-| Condition                              | MUST Read Next         |
-| -------------------------------------- | ---------------------- |
-| Auto-approve bypass (simple)           | `WF_EXECUTE`           |
-| Auto-approve bypass (swarm needed)     | `WF_SWARM_ORCHESTRATE` |
-| User approves (simple implementation)  | `WF_EXECUTE`           |
-| User approves (swarm needed)           | `WF_SWARM_ORCHESTRATE` |
-| Needs redesign / user modifies         | `WF_ARCH_REVIEW`       |
-| User declines / needs clarification    | `WF_CLARIFY`           |
+| Condition                             | MUST Read Next         |
+| ------------------------------------- | ---------------------- |
+| Auto-approve bypass (simple)          | `WF_EXECUTE`           |
+| Auto-approve bypass (swarm needed)    | `WF_SWARM_ORCHESTRATE` |
+| User approves (simple implementation) | `WF_EXECUTE`           |
+| User approves (swarm needed)          | `WF_SWARM_ORCHESTRATE` |
+| Needs redesign / user modifies        | `WF_ARCH_REVIEW`       |
+| User declines / needs clarification   | `WF_CLARIFY`           |
 
 **SKIPPING THIS TRANSITION = WORKFLOW VIOLATION**
 

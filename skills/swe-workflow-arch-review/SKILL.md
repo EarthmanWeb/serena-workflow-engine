@@ -15,9 +15,11 @@ workflow:
 ## ⚠️ WORKFLOW INITIALIZATION
 
 **If starting a new session**, first read workflow initialization:
+
 ```
 mcp__plugin_swe_serena__read_memory("WF_INIT")
 ```
+
 Follow WF_INIT instructions before executing this skill.
 
 ---
@@ -36,7 +38,7 @@ Review proposed changes against architecture standards.
 ## Actions
 
 1. **Read ARCH_INDEX** - Understand current architecture
-2. **Read FEATURE_* memories** - Get feature context
+2. **Read FEATURE** memories_* - Get feature context
 3. **Check patterns** - Verify against established patterns
 4. **Validate approach** - Ensure implementation plan is sound
 
@@ -52,6 +54,7 @@ Review proposed changes against architecture standards.
 
 ```markdown
 ## Skill Return
+
 - **Skill**: swe-workflow-arch-review
 - **Status**: [success|success_with_findings|blocked]
 - **Findings Summary**: [architecture compliance assessment]

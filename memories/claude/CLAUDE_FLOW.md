@@ -1,125 +1,159 @@
 # CLAUDE_FLOW - MCP Swarm Coordination Reference
 
-## ⚠️ VERIFIED MCP TOOL PREFIXES (2026-01-26)
+## ⚠️ VERIFIED MCP TOOL PREFIXES (2026-02-23)
 
-| System          | Actual MCP Prefix                                 |
-| --------------- | ------------------------------------------------- |
-| **Claude-Flow** | `mcp__plugin_claude-flow_claude-flow__`           |
-| **RUV-Swarm**   | `mcp__plugin_claude-flow_ruv-swarm__`             |
-| **Hive-Mind**   | `mcp__plugin_claude-flow_claude-flow__hive-mind_` |
+| System          | Actual MCP Prefix              |
+| --------------- | ------------------------------ |
+| **Claude-Flow** | `mcp__claude-flow__`           |
+| **RUV-Swarm**   | `mcp__ruv-swarm__`             |
+| **Hive-Mind**   | `mcp__claude-flow__hive-mind_` |
 
-**IMPORTANT:** Use `ToolSearch` to load MCP tools before calling them.
+**IMPORTANT:** Use `ToolSearch` to load MCP tools before calling them. Only load what you need (3-5 tools max per session).
+
+---
+
+## ⚠️ CONTEXT BUDGET — READ THIS FIRST
+
+**Swarm sessions fail from context overload.** The coordinator agent shares your context window. Every MCP call, every memory read, every tool schema adds tokens.
+
+**Environment Variables (set BEFORE starting claude):**
+
+```bash
+export MAX_MCP_OUTPUT_TOKENS=5000    # Cap MCP responses (default 25K — way too high for swarm)
+export ENABLE_TOOL_SEARCH=auto:5     # Defer tools at 5% context threshold (default 10%)
+```
+
+**Rules:**
+
+1. Load max 3-5 MCP tools via ONE ToolSearch call
+2. NEVER use `verbose: true` or `detailed: true` flags
+3. NEVER call `memory_stats` (scans 100K entries)
+4. Keep `memory_list` to `limit: 5`
+5. Task agents have SEPARATE context — delegate all file work to them
+6. Load ALL needed memories BEFORE starting swarm (not during)
+7. Batch ALL MCP calls into as few messages as possible (init+spawn+task in ONE message)
+8. Skip `swarm_status` / `task_status` checks unless actually needed — each adds ~1-2K tokens
 
 ---
 
 ## 🎯 MCP vs Task Tool Division
 
-| MCP Tools (Coordination)                    | Task Tool (Execution)             |
-| ------------------------------------------- | --------------------------------- |
-| `swarm_init` - topology setup               | Spawn agents for actual file work |
-| `agent_spawn` - define agent types          | Read/Write/Edit files             |
-| `task_orchestrate` - high-level planning    | Run tests, build commands         |
-| `memory_store/retrieve` - state persistence | Code generation                   |
-| `hive-mind_*` - consensus/broadcast         | Implementation tasks              |
+| MCP Tools (Coordination Layer)       | Task Tool (Execution Layer)       |
+| ------------------------------------ | --------------------------------- |
+| `swarm_init` - topology setup        | Spawn agents for actual file work |
+| `agent_spawn` - register agent types | Read/Write/Edit files             |
+| `task_create` - register tasks       | Run tests, build commands         |
+| `memory_store` - state persistence   | Code generation                   |
 
-**Rule:** MCP coordinates strategy → Task tool executes work
+**Rule:** MCP coordinates strategy → Task tool executes work → TaskOutput collects results
 
 ---
 
-## 🐝 HIVE-MIND (Collective Intelligence)
+## 🚀 Claude-Flow (Primary System)
 
-**Prefix:** `mcp__plugin_claude-flow_claude-flow__hive-mind_`
+**Prefix:** `mcp__claude-flow__`
+**Version:** 3.1.0-alpha.44 (third-party alpha by ruvnet)
+**Tools:** ~241 (deferred-loaded, only load what you need)
 
-| Tool                  | Parameters                      | Purpose                      |
-| --------------------- | ------------------------------- | ---------------------------- |
-| `hive-mind_init`      | `topology`, `queenId`           | Initialize collective        |
-| `hive-mind_spawn`     | `count`, `role`, `agentType`    | Spawn + auto-join workers    |
-| `hive-mind_consensus` | `action`, `type`, `value`       | Propose/vote decisions       |
-| `hive-mind_memory`    | `action`, `key`, `value`        | Shared memory (get/set/list) |
-| `hive-mind_broadcast` | `message`, `priority`, `fromId` | Message all workers          |
-| `hive-mind_status`    | `verbose`                       | Monitor hive health          |
-
-**Pattern:**
+### Minimal Orchestration Pattern
 
 ```javascript
-// 1. Init → 2. Spawn → 3. Memory → 4. Consensus → 5. Broadcast → 6. Status
-hive-mind_init({ topology: "mesh", queenId: "queen-1" })
-hive-mind_spawn({ count: 3, role: "worker", agentType: "analyst" })
-hive-mind_memory({ action: "set", key: "config", value: {...} })
-hive-mind_consensus({ action: "propose", type: "decision", value: {...} })
-hive-mind_broadcast({ message: "...", priority: "high" })
-hive-mind_status({ verbose: true })
+// 1. Load tools (ONE call)
+ToolSearch({ query: "+claude-flow swarm agent task" })
+
+// 2. Init + spawn + task in ONE message
+mcp__claude-flow__swarm_init({ topology: "star", maxAgents: 5 })
+mcp__claude-flow__agent_spawn({ agentType: "coder", agentId: "agent-1" })
+mcp__claude-flow__task_create({ type: "implement", description: "...", assignToAgent: "agent-1", priority: 8 })
+
+// 3. Launch work via Task tool (separate context window)
+Task({ subagent_type: "general-purpose", run_in_background: true, prompt: "..." })
+
+// 4. Collect results
+TaskOutput({ task_id: "...", block: true })
 ```
+
+### Key Tools (Only load what you need)
+
+| Tool              | Purpose                             |
+| ----------------- | ----------------------------------- |
+| `swarm_init`      | Initialize swarm with topology      |
+| `swarm_status`    | Check health (NO verbose flag)      |
+| `agent_spawn`     | Create coordination agent           |
+| `task_create`     | Register task with agent assignment |
+| `task_status`     | Check progress                      |
+| `memory_store`    | Persist state                       |
+| `memory_retrieve` | Recall state                        |
 
 ---
 
 ## 🚀 RUV-SWARM Task Orchestration
 
-**Prefix:** `mcp__plugin_claude-flow_ruv-swarm__`
+**Prefix:** `mcp__ruv-swarm__`
+**Version:** 1.0.20
+**Tools:** 25 total (15 core + 10 DAA)
 
-| Tool               | Parameters                                  | Purpose                            |
-| ------------------ | ------------------------------------------- | ---------------------------------- |
-| `swarm_init`       | `topology`, `strategy`, `maxAgents`         | Initialize swarm                   |
-| `agent_spawn`      | `type`, `name`, `capabilities`              | Create swarm agent                 |
-| `agent_list`       | `filter`                                    | List agents (all/active/idle/busy) |
-| `task_orchestrate` | `task`, `strategy`, `priority`, `maxAgents` | Execute across agents              |
-| `task_status`      | `taskId`, `detailed`                        | Check progress                     |
-| `task_results`     | `taskId`, `format`                          | Get results                        |
+### Minimal Pattern
+
+```javascript
+ToolSearch({ query: "+ruv-swarm agent task" })
+mcp__ruv-swarm__swarm_init({ topology: "mesh", strategy: "balanced", maxAgents: 5 })
+mcp__ruv-swarm__agent_spawn({ type: "researcher", name: "r1" })
+mcp__ruv-swarm__agent_spawn({ type: "coder", name: "c1" })
+mcp__ruv-swarm__task_orchestrate({ task: "...", strategy: "parallel", priority: "high" })
+```
 
 **Agent types:** `researcher`, `analyst`, `coder`, `optimizer`, `coordinator`
 
-**Pattern:**
-
-```javascript
-// 1. Init → 2. Spawn agents → 3. Orchestrate → 4. Status → 5. Results
-swarm_init({ topology: 'mesh', strategy: 'specialized', maxAgents: 5 });
-agent_spawn({ type: 'researcher', name: 'r1' });
-agent_spawn({ type: 'analyst', name: 'a1' });
-agent_spawn({ type: 'coder', name: 'c1' });
-task_orchestrate({ task: '...', strategy: 'parallel', priority: 'high' });
-task_status({ detailed: true });
-task_results({ taskId: 'task-xxx', format: 'detailed' });
-```
+**⚠️ Swarm agents ≠ DAA agents — do NOT mix pools**
 
 ---
 
 ## 🧠 RUV-SWARM DAA (Autonomous Learning)
 
-**Prefix:** `mcp__plugin_claude-flow_ruv-swarm__`
+**Prefix:** `mcp__ruv-swarm__`
 
-| Tool                  | Parameters                                                | Purpose                 |
-| --------------------- | --------------------------------------------------------- | ----------------------- |
-| `daa_init`            | `enableLearning`, `enableCoordination`, `persistenceMode` | Enable DAA              |
-| `daa_agent_create`    | `id`, `cognitivePattern`, `enableMemory`, `learningRate`  | Create DAA agent        |
-| `daa_agent_adapt`     | `agentId`, `feedback`, `performanceScore`                 | Adapt from feedback     |
-| `daa_workflow_create` | `id`, `name`, `strategy`, `steps`                         | Create workflow         |
-| `daa_learning_status` | `detailed`                                                | Check learning progress |
+### Minimal Pattern
+
+```javascript
+ToolSearch({ query: "+ruv-swarm daa" })
+mcp__ruv-swarm__daa_init({ enableLearning: true, enableCoordination: true })
+mcp__ruv-swarm__daa_agent_create({ id: "daa-1", cognitivePattern: "adaptive", enableMemory: true })
+mcp__ruv-swarm__daa_workflow_create({ id: "wf-1", name: "Analysis", strategy: "adaptive" })
+mcp__ruv-swarm__daa_workflow_execute({ workflowId: "wf-1" })
+```
 
 **Cognitive patterns:** `adaptive`, `critical`, `convergent`, `divergent`, `lateral`, `systems`
 
-**⚠️ DAA agents ≠ Swarm agents** - Use `daa_workflow_execute`, NOT `task_orchestrate`
+---
 
-**Pattern:**
+## 🐝 HIVE-MIND (Collective Intelligence)
+
+**Prefix:** `mcp__claude-flow__hive-mind_`
+
+### Minimal Pattern
 
 ```javascript
-// 1. Init → 2. Create agents → 3. Workflow → 4. Adapt → 5. Status
-daa_init({ enableLearning: true, enableCoordination: true });
-daa_agent_create({ id: 'daa-1', cognitivePattern: 'adaptive', enableMemory: true });
-daa_agent_create({ id: 'daa-2', cognitivePattern: 'critical', enableMemory: true });
-daa_workflow_create({ id: 'wf-1', name: 'Analysis', strategy: 'adaptive' });
-daa_agent_adapt({ agentId: 'daa-1', feedback: '...', performanceScore: 0.9 });
-daa_learning_status({ detailed: true });
+ToolSearch({ query: "+claude-flow hive-mind" })
+mcp__claude-flow__hive-mind_init({ topology: "mesh", queenId: "queen-1" })
+mcp__claude-flow__hive-mind_spawn({ count: 3, role: "worker", agentType: "analyst" })
+mcp__claude-flow__hive-mind_memory({ action: "set", key: "config", value: {...} })
+mcp__claude-flow__hive-mind_consensus({ action: "propose", type: "decision", value: {...} })
+mcp__claude-flow__hive-mind_status({})
 ```
 
 ---
 
 ## ⚡ GOLDEN RULES
 
-1. **Batch operations** - All related calls in ONE message
-2. **Init before spawn** - Always initialize swarm/hive first
-3. **ToolSearch first** - Load MCP tools before calling
-4. **MCP = coordination, Task = execution**
-5. **Never run CLI init** - Use MCP tools, not `npx claude-flow init`
+1. **Batch operations** — All related MCP calls in ONE message
+2. **Init before spawn** — Always initialize swarm/hive first
+3. **ToolSearch first** — Load MCP tools before calling (ONE batch call)
+4. **MCP = coordination, Task = execution** — Never do file work in coordinator
+5. **Never run CLI init** — Use MCP tools, not `npx claude-flow init`
+6. **Star topology by default** — Least coordination overhead
+7. **3-5 tools max** — Don't load tools you won't use
+8. **No verbose flags** — Keep responses small
 
 ---
 
@@ -127,26 +161,67 @@ daa_learning_status({ detailed: true });
 
 | Scenario                | System        | Topology     |
 | ----------------------- | ------------- | ------------ |
+| Quick parallel tasks    | Claude-Flow   | star         |
 | Parallel file analysis  | RUV-Swarm     | mesh         |
-| Coordinated refactoring | RUV-Swarm     | hierarchical |
+| Coordinated refactoring | Claude-Flow   | hierarchical |
 | Learning from patterns  | RUV-Swarm DAA | adaptive     |
 | Consensus decisions     | Hive-Mind     | mesh         |
-| Distributed memory      | Hive-Mind     | mesh         |
-| Quick parallel tasks    | Claude-Flow   | star         |
 
 ---
 
 ## 🔧 Loading Tools
 
 ```javascript
-// Search and load tools
-ToolSearch({ query: '+claude-flow hive-mind' });
-ToolSearch({ query: '+ruv-swarm agent task' });
+// Load claude-flow tools (batch)
+ToolSearch({ query: "+claude-flow swarm agent task" })
 
-// Or select specific tool
-ToolSearch({ query: 'select:mcp__plugin_claude-flow_claude-flow__hive-mind_init' });
+// Load ruv-swarm tools (batch)
+ToolSearch({ query: "+ruv-swarm agent task" })
+
+// Load hive-mind tools
+ToolSearch({ query: "+claude-flow hive-mind" })
+
+// Select one specific tool
+ToolSearch({ query: "select:mcp__claude-flow__swarm_init" })
 ```
 
 ---
+
+## 🛡️ "Prompt is too long" Prevention
+
+The #1 failure mode for swarm sessions. This is a **hard context limit** — once hit, the session is permanently broken.
+
+**Root cause:** MCP tool responses accumulate in the coordinator's context window. Each response is pretty-printed JSON (~2x size). After 10-15 MCP calls, context overflows.
+
+**Prevention strategy:**
+
+| Strategy              | How                                                                 | Token Impact                                       |
+| --------------------- | ------------------------------------------------------------------- | -------------------------------------------------- |
+| Cap MCP output        | `MAX_MCP_OUTPUT_TOKENS=5000`                                        | Prevents any single response from being >5K tokens |
+| Aggressive ToolSearch | `ENABLE_TOOL_SEARCH=auto:5`                                         | Defers tool schemas until needed                   |
+| Minimal MCP calls     | Init+spawn+task in ONE message, skip status checks                  | -50% MCP call volume                               |
+| Task agent delegation | ALL file reads/writes in Task agents (separate context)             | Offloads 80%+ of work tokens                       |
+| No verbose flags      | Never `verbose: true`, `detailed: true`, `includeMetrics: true`     | -2x per response                                   |
+| Fire-and-forget       | Don't call `task_results` — use `TaskOutput` on Task agents instead | Skip MCP result retrieval entirely                 |
+
+**If you hit "Prompt is too long":**
+
+1. Session is dead — start a new one
+2. Lower `MAX_MCP_OUTPUT_TOKENS` further (try 3000)
+3. Reduce total MCP calls (combine init+spawn+task into single message)
+
+---
+
+## Known Issues (2026-02-24)
+
+| Issue                                           | Mitigation                                        |
+| ----------------------------------------------- | ------------------------------------------------- |
+| claude-flow is alpha software                   | Use simple patterns only                          |
+| 241 tools cause context bloat                   | Deferred loading + load 3-5 max                   |
+| Pretty-printed JSON doubles response size       | `MAX_MCP_OUTPUT_TOKENS=5000` + keep calls minimal |
+| memory_stats scans all entries                  | NEVER call it                                     |
+| Wrong prefixes in old docs caused 100% failures | Use prefixes from THIS doc                        |
+| ruv-swarm WAL file grows unbounded              | Clear npx cache periodically                      |
+| "Prompt is too long" kills session permanently  | Prevention only — see section above               |
 
 Remember: **MCP coordinates, Task tool executes!**

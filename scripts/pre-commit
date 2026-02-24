@@ -16,3 +16,4 @@ fi
 
 # Stage the bumped files
 git add "$PLUGIN_ROOT/.claude-plugin/plugin.json" "$PLUGIN_ROOT/.claude-plugin/marketplace.json"
+[[ -f "$PLUGIN_ROOT/package.json" ]] && git add "$PLUGIN_ROOT/package.json"

@@ -67,7 +67,7 @@ Note these **daemon-managed fields** exactly as they appear (DO NOT MODIFY):
 
 - [ ] INDEX_FEATURES read
 - [ ] FEATURE_[KEY] loaded for each feature
-- [ ] Supporting memories loaded (DOM_*, SYS_*, REF_*)
+- [ ] Supporting memories loaded (DOM__, SYS__, REF_*)
 - [ ] Requirements validated against domain memories (or "none detected")
 - [ ] `**Files:**` lists key file paths from feature memories
 - [ ] `### Progress` updated with feature loading outcomes
@@ -245,7 +245,7 @@ After outputting the confirmation line above:
 
 1. **Do NOT wait for user input**
 2. **Do NOT end your response**
-3. **Continue with the next action from the calling WF_* step**
+3. **Continue with the next action from the calling WF** step_*
 
 If you were invoked from a WF_* step's "MANDATORY NEXT STEP" table, proceed to
 the transition listed there. If you were invoked mid-step, continue where you

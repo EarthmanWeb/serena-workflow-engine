@@ -96,7 +96,7 @@ Before proceeding, confirm:
 
 - [ ] Read INDEX_FEATURES
 - [ ] Read FEATURE_[KEY] for EACH feature in WM
-- [ ] Read relevant DOM_*, SYS_*, REF_* memories
+- [ ] Read relevant DOM__, SYS__, REF_* memories
 - [ ] Understand file locations and patterns
 - [ ] Requirements validated against domain memories (or "none detected")
 
@@ -108,11 +108,11 @@ Before proceeding, confirm:
 
 **YOU ARE NOT FINISHED.** After loading features, route based on what the task actually does:
 
-| Task Type                     | Examples                                                                                       | MUST Read Next   |
-| ----------------------------- | ---------------------------------------------------------------------------------------------- | ---------------- |
-| **Code changes**              | Bug fix, new feature, refactor, config change in code                                          | `WF_ARCH_REVIEW` |
-| **Operational**               | Send test request, run CLI command, check config, verify endpoint, test webhook, run migration | `WF_EXECUTE`     |
-| **Conflicting requirement**   | Requirement conflicts with existing domain rule                                                | `WF_CLARIFY`     |
+| Task Type                   | Examples                                                                                       | MUST Read Next   |
+| --------------------------- | ---------------------------------------------------------------------------------------------- | ---------------- |
+| **Code changes**            | Bug fix, new feature, refactor, config change in code                                          | `WF_ARCH_REVIEW` |
+| **Operational**             | Send test request, run CLI command, check config, verify endpoint, test webhook, run migration | `WF_EXECUTE`     |
+| **Conflicting requirement** | Requirement conflicts with existing domain rule                                                | `WF_CLARIFY`     |
 
 ### Code Changes → Architecture Review
 

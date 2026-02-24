@@ -17,9 +17,11 @@ allowed-tools: Read, Grep, Glob, mcp__ruv-swarm__*, mcp__claude-flow__*
 ## ⚠️ WORKFLOW INITIALIZATION
 
 **If starting a new session**, first read workflow initialization:
+
 ```
 mcp__plugin_swe_serena__read_memory("WF_INIT")
 ```
+
 Follow WF_INIT instructions before executing this skill.
 
 ---
@@ -38,6 +40,7 @@ Deep codebase analysis using Decentralized Autonomous Agents (DAA).
 ## MCP Requirements
 
 **Required (one of):**
+
 - `ruv-swarm` MCP (preferred for DAA learning)
 - `claude-flow` MCP (alternative)
 
@@ -45,18 +48,18 @@ Deep codebase analysis using Decentralized Autonomous Agents (DAA).
 
 ## Agent Types
 
-| Agent ID | Purpose | Cognitive Pattern |
-|----------|---------|-------------------|
-| config-analyzer | Parse config files | convergent |
-| architecture-mapper | Detect layers | systems |
-| pattern-detector | Find conventions | lateral |
-| domain-extractor | Extract domains | divergent |
-| system-finder | Identify systems | systems |
-| test-analyzer | Test patterns | critical |
-| import-tracer | Dependency graph | convergent |
-| convention-learner | Style detection | adaptive |
-| file-indexer | File inventory | convergent |
-| synthesizer | Compile results | systems |
+| Agent ID            | Purpose            | Cognitive Pattern |
+| ------------------- | ------------------ | ----------------- |
+| config-analyzer     | Parse config files | convergent        |
+| architecture-mapper | Detect layers      | systems           |
+| pattern-detector    | Find conventions   | lateral           |
+| domain-extractor    | Extract domains    | divergent         |
+| system-finder       | Identify systems   | systems           |
+| test-analyzer       | Test patterns      | critical          |
+| import-tracer       | Dependency graph   | convergent        |
+| convention-learner  | Style detection    | adaptive          |
+| file-indexer        | File inventory     | convergent        |
+| synthesizer         | Compile results    | systems           |
 
 ## Process
 
@@ -64,10 +67,10 @@ Deep codebase analysis using Decentralized Autonomous Agents (DAA).
 
 **⚠️ CRITICAL: RUV-Swarm has TWO separate agent pools - choose ONE pattern:**
 
-| Pattern | Agent Creation | Execution | Use When |
-|---------|---------------|-----------|----------|
-| **Swarm** | `agent_spawn` | `task_orchestrate` | Parallel task execution |
-| **DAA** | `daa_agent_create` | `daa_workflow_execute` | Learning/adaptation needed |
+| Pattern   | Agent Creation     | Execution              | Use When                   |
+| --------- | ------------------ | ---------------------- | -------------------------- |
+| **Swarm** | `agent_spawn`      | `task_orchestrate`     | Parallel task execution    |
+| **DAA**   | `daa_agent_create` | `daa_workflow_execute` | Learning/adaptation needed |
 
 ```javascript
 // Option A: RUV-Swarm Task Orchestration (faster, no learning)
@@ -91,6 +94,7 @@ if (mcp_available("claude-flow")) {
 **CRITICAL: Spawn ALL agents in ONE message for parallelism**
 
 **Option A: Swarm Agents (for task_orchestrate)**
+
 ```javascript
 // These go into the SWARM pool - usable by task_orchestrate
 mcp__ruv-swarm__agent_spawn({ type: "analyst", name: "config-analyzer" })
@@ -106,6 +110,7 @@ mcp__ruv-swarm__agent_spawn({ type: "coordinator", name: "synthesizer" })
 ```
 
 **Option B: DAA Agents (for daa_workflow_execute)**
+
 ```javascript
 // These go into the DAA pool - usable by daa_workflow_execute, NOT task_orchestrate
 const agents = [
@@ -135,6 +140,7 @@ agents.forEach(a => mcp__ruv-swarm__daa_agent_create({
 **⚠️ Match execution to agent type!**
 
 **Option A: Swarm Agents → task_orchestrate**
+
 ```javascript
 // ONLY works with agents from agent_spawn
 mcp__ruv-swarm__task_orchestrate({
@@ -146,6 +152,7 @@ mcp__ruv-swarm__task_orchestrate({
 ```
 
 **Option B: DAA Agents → daa_workflow_execute**
+
 ```javascript
 // ONLY works with agents from daa_agent_create
 mcp__ruv-swarm__daa_workflow_create({
@@ -166,6 +173,7 @@ mcp__ruv-swarm__daa_workflow_execute({
 ### Step 4: Collect Results
 
 Each agent produces structured findings:
+
 - **config-analyzer**: package.json, framework configs
 - **architecture-mapper**: layers, directories, data flow
 - **pattern-detector**: naming conventions, import patterns
@@ -209,12 +217,13 @@ mcp__ruv-swarm__daa_knowledge_share({
 
 **SWARM ANALYSIS COMPLETE**
 
-| Metric | Value |
-|--------|-------|
-| Agents Used | 10 |
+| Metric        | Value      |
+| ------------- | ---------- |
+| Agents Used   | 10         |
 | Analysis Time | [duration] |
 
 **Detected:**
+
 - Language: [primary]
 - Framework: [name]
 - Layers: [count]
@@ -222,6 +231,7 @@ mcp__ruv-swarm__daa_knowledge_share({
 - Systems: [count]
 
 **Memories Created:**
+
 - FEATURE_[KEY]
 - DOM_[KEY]_[domain1]
 - DOM_[KEY]_[domain2]
@@ -230,6 +240,7 @@ mcp__ruv-swarm__daa_knowledge_share({
 - ARCH_INDEX (updated)
 
 **DAA Learning:**
+
 - Patterns stored: [count]
 - Confidence: [score]
 
@@ -237,6 +248,7 @@ mcp__ruv-swarm__daa_knowledge_share({
 
 ```markdown
 ## Skill Return
+
 - **Skill**: swe-swarm-analyze
 - **Status**: [success|success_with_findings|blocked]
 - **Agents Used**: [count]

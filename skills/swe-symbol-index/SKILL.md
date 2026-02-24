@@ -21,9 +21,11 @@ args:
 ## Workflow Initialization
 
 **If starting a new session**, first read workflow initialization:
+
 ```
 mcp__plugin_swe_serena__read_memory("WF_INIT")
 ```
+
 Follow WF_INIT instructions before executing this skill.
 
 ---
@@ -59,9 +61,11 @@ mcp__plugin_swe_serena__read_memory("INDEX_FEATURES")
 **Check:** Feature key exists in registered features table.
 
 **If not found:**
+
 ```
 > Feature [KEY] not registered. Use /swe-feature-onboard [KEY] to register it first.
 ```
+
 Exit skill with `needs_clarification` status.
 
 ---
@@ -75,6 +79,7 @@ mcp__plugin_swe_serena__read_memory("FEATURE_[KEY]")
 **Extract the "Related Memories" section** (typically a table at the bottom of the feature memory). This contains the list of linked doc names (e.g., `DOM_CALENDAR_DISTRICT`, `SYS_CALENDAR_ICS`).
 
 **Build linked docs list** from:
+
 1. The `Related Memories` table in FEATURE_[KEY] (Memory column values)
 2. The `Quick Lookup` row for this KEY in INDEX_FEATURES (INDEX Memory column)
 
@@ -93,19 +98,21 @@ mcp__plugin_swe_serena__get_symbols_overview({
 ```
 
 **Memory subdirectory mapping:**
-| Prefix | Subdirectory |
-|--------|-------------|
-| `DOM_` | `dom/` |
-| `SYS_` | `sys/` |
-| `REF_` | `ref/` |
-| `ARCH_` | `arch/` |
-| `INDEX_` | `index/` |
-| `SPEC_` | `spec/` |
-| `MAP_` | `map/` |
-| `FEATURE_` | `feature/` |
-| `WF_` | `wf/` |
+
+| Prefix     | Subdirectory |
+| ---------- | ------------ |
+| `DOM_`     | `dom/`       |
+| `SYS_`     | `sys/`       |
+| `REF_`     | `ref/`       |
+| `ARCH_`    | `arch/`      |
+| `INDEX_`   | `index/`     |
+| `SPEC_`    | `spec/`      |
+| `MAP_`     | `map/`       |
+| `FEATURE_` | `feature/`   |
+| `WF_`      | `wf/`        |
 
 **If `get_symbols_overview` fails** for a memory (file not in .serena/swe/), try the plugin path:
+
 ```javascript
 mcp__plugin_swe_serena__get_symbols_overview({
   relative_path: ".claude/plugins/serena-workflow-engine/memories/[subdir]/[MEMORY_NAME].md"
@@ -113,6 +120,7 @@ mcp__plugin_swe_serena__get_symbols_overview({
 ```
 
 **Collect from each file:**
+
 - All heading symbols (H2 `##` and H3 `###` level)
 - Symbol name (the heading text)
 - Symbol depth/level
@@ -126,14 +134,15 @@ mcp__plugin_swe_serena__get_symbols_overview({
 ```markdown
 ## Related Docs
 
-| Memory | Key Sections | Description |
-|--------|-------------|-------------|
-| [DOM_CALENDAR_DISTRICT](DOM_CALENDAR_DISTRICT) | Board Meetings, School Year Dates, URL Routes | District-specific calendar behavior |
-| [SYS_CALENDAR_ICS](SYS_CALENDAR_ICS) | ICS Feed Generation, Rewrite Rules, School Dates | ICS feed system documentation |
-| ... | ... | ... |
+| Memory                                         | Key Sections                                     | Description                         |
+| ---------------------------------------------- | ------------------------------------------------ | ----------------------------------- |
+| [DOM_CALENDAR_DISTRICT](DOM_CALENDAR_DISTRICT) | Board Meetings, School Year Dates, URL Routes    | District-specific calendar behavior |
+| [SYS_CALENDAR_ICS](SYS_CALENDAR_ICS)           | ICS Feed Generation, Rewrite Rules, School Dates | ICS feed system documentation       |
+| ...                                            | ...                                              | ...                                 |
 ```
 
 **Rules for building the table:**
+
 1. **Memory column:** Memory name as a markdown link `[NAME](NAME)` (Serena memory ref format)
 2. **Key Sections column:** Comma-separated list of H2 heading symbols from that memory (max 5, pick most descriptive). Skip generic headings like "Overview", "Related Memories", "Execute These Steps".
 3. **Description column:** Extract from INDEX_FEATURES or FEATURE_[KEY] Related Memories table description column. If not available, derive from the first H2 heading content.
@@ -147,6 +156,7 @@ mcp__plugin_swe_serena__get_symbols_overview({
 **Check if "## Related Docs" already exists** in FEATURE_[KEY]:
 
 ### If exists — Replace it:
+
 ```javascript
 mcp__plugin_swe_serena__edit_memory("FEATURE_[KEY]", {
   needle: "## Related Docs\\n\\n\\|.*?(?=\\n## |\\Z)",
@@ -157,7 +167,7 @@ mcp__plugin_swe_serena__edit_memory("FEATURE_[KEY]", {
 
 ### If does not exist — Insert it:
 
-Find the insertion point: after `## Feature Overview` section's content (after the metadata table that follows it), before the next `## ` heading.
+Find the insertion point: after `## Feature Overview` section's content (after the metadata table that follows it), before the next `##` heading.
 
 ```javascript
 mcp__plugin_swe_serena__edit_memory("FEATURE_[KEY]", {
@@ -179,15 +189,18 @@ Output to user:
 ## Symbol Index Complete: [KEY]
 
 ### Indexed Memories
+
 | Memory | Symbols Found |
-|--------|--------------|
-| [name] | [count] |
-| ... | ... |
+| ------ | ------------- |
+| [name] | [count]       |
+| ...    | ...           |
 
 ### Related Docs Table
+
 [Show the generated table]
 
 ### Inserted Into
+
 - `FEATURE_[KEY]` — after "Feature Overview" section
 ```
 
@@ -197,6 +210,7 @@ Output to user:
 
 ```markdown
 ## Skill Return
+
 - **Skill**: swe-symbol-index
 - **Status**: success
 - **Feature Key**: [KEY]
@@ -218,24 +232,29 @@ Output to user:
 ## Troubleshooting
 
 ### Feature not found
+
 ```
 Feature [KEY] is not registered in INDEX_FEATURES.
 Run: /swe-feature-onboard [KEY]
 ```
 
 ### No Related Memories section
+
 ```
 FEATURE_[KEY] has no Related Memories section. Cannot determine linked docs.
 Consider running /swe-feature-update [KEY] first.
 ```
 
 ### Symbol extraction fails for a memory
+
 - Memory may not exist in .serena/swe/ or plugin memories/
-- Try `search_for_pattern` as fallback to find heading patterns: `^## `
+- Try `search_for_pattern` as fallback to find heading patterns: `^##`
 - Log skipped memories in the summary report
 
 ### No symbols found
+
 ```
 > No heading symbols found in any linked docs for [KEY]. Table not inserted.
 ```
+
 Exit with `success` status (no symbols is a valid result).

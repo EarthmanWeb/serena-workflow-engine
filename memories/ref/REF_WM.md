@@ -121,9 +121,9 @@ Session: <SESSION_ID>
 
 **Stop Hook Behavior:**
 
-| State                                     | Behavior                    |
-| ----------------------------------------- | --------------------------- |
-| `WF_DONE`, `WF_CLEANUP`                   | Clean exit                  |
+| State                                     | Behavior                   |
+| ----------------------------------------- | -------------------------- |
+| `WF_DONE`, `WF_CLEANUP`                   | Clean exit                 |
 | `WF_EXECUTE`, `WF_DEBUG_TDD`, `WF_VERIFY` | ⚠️ Warning: incomplete work |
 
 ---

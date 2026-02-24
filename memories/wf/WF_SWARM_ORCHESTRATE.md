@@ -12,7 +12,7 @@
 
 | User Says                        | YOU MUST USE                          | NOT                 |
 | -------------------------------- | ------------------------------------- | ------------------- |
-| "launch ruv-swarm" / "ruv swarm" | `mcp__plugin_swe_ruv-swarm__*` tools  | Task/Explore agents |
+| "launch ruv-swarm" / "ruv swarm" | `mcp__ruv-swarm__*` tools             | Task/Explore agents |
 | "launch claude-flow swarm"       | `mcp__claude-flow__*` tools           | Task/Explore agents |
 | "use hive-mind"                  | `mcp__claude-flow__hive-mind_*` tools | Task/Explore agents |
 
@@ -27,7 +27,7 @@
 
 ```
 ✅ User: "Launch ruv-swarm to detect features"
-✅ Agent: [Uses mcp__plugin_swe_ruv-swarm__swarm_init(), etc.]
+✅ Agent: [Uses mcp__ruv-swarm__swarm_init(), etc.]
 ```
 
 **Why this matters:** MCP swarm tools provide coordination metadata, learning, and state persistence. Task agents are for file work AFTER swarm setup. Substituting one for the other breaks the coordination model.
@@ -99,7 +99,7 @@ When spawning agents, include in their prompts:
 | System          | When to Use                                            | MCP Tool Prefix                 |
 | --------------- | ------------------------------------------------------ | ------------------------------- |
 | **Claude-Flow** | General orchestration, parallel tasks                  | `mcp__claude-flow__*`           |
-| **RUV-Swarm**   | Learning/adaptation needed, DAA patterns               | `mcp__plugin_swe_ruv-swarm__*`  |
+| **RUV-Swarm**   | Learning/adaptation needed, DAA patterns               | `mcp__ruv-swarm__*`             |
 | **Hive-Mind**   | Consensus, collective intelligence, distributed memory | `mcp__claude-flow__hive-mind_*` |
 
 ### Step 2: Select Topology
@@ -152,21 +152,21 @@ Claude-Flow V3 orchestration approach:
 
 ```javascript
 // Step 1: Initialize swarm
-mcp__claude - flow__swarm_init({ topology: 'hierarchical-mesh', maxAgents: 15 });
+mcp__claude-flow__swarm_init({ topology: 'hierarchical-mesh', maxAgents: 15 });
 
 // Step 2: Spawn agents IN ONE MESSAGE (parallel)
-mcp__claude - flow__agent_spawn({ agentType: 'researcher', agentId: 'agent-1' });
-mcp__claude - flow__agent_spawn({ agentType: 'coder', agentId: 'agent-2' });
-mcp__claude - flow__agent_spawn({ agentType: 'tester', agentId: 'agent-3' });
+mcp__claude-flow__agent_spawn({ agentType: 'researcher', agentId: 'agent-1' });
+mcp__claude-flow__agent_spawn({ agentType: 'coder', agentId: 'agent-2' });
+mcp__claude-flow__agent_spawn({ agentType: 'tester', agentId: 'agent-3' });
 
 // Step 3: Create tasks and assign to agents (parallel execution)
-mcp__claude - flow__tasks_create({
+mcp__claude-flow__tasks_create({
   type: 'analyze',
   description: 'Analyze codebase patterns',
   assignToAgent: 'agent-1',
   priority: 8,
 });
-mcp__claude - flow__tasks_create({
+mcp__claude-flow__tasks_create({
   type: 'analyze',
   description: 'Review security patterns',
   assignToAgent: 'agent-2',
@@ -174,7 +174,7 @@ mcp__claude - flow__tasks_create({
 });
 
 // Step 4: For sequential execution, add dependencies
-mcp__claude - flow__tasks_dependencies({
+mcp__claude-flow__tasks_dependencies({
   taskId: 'task-2',
   action: 'add',
   dependencies: ['task-1'],
@@ -184,15 +184,15 @@ mcp__claude - flow__tasks_dependencies({
 Task({ subagent_type: 'researcher', run_in_background: true, prompt: '...' });
 
 // Step 6: Monitor status
-mcp__claude - flow__swarm_status({ includeAgents: true, includeMetrics: true });
-mcp__claude - flow__tasks_status({ taskId: 'task-1', includeMetrics: true });
+mcp__claude-flow__swarm_status({ includeAgents: true, includeMetrics: true });
+mcp__claude-flow__tasks_status({ taskId: 'task-1', includeMetrics: true });
 
 // Step 7: Collect results
-mcp__claude - flow__tasks_results({ taskId: 'task-1', format: 'detailed' });
+mcp__claude-flow__tasks_results({ taskId: 'task-1', format: 'detailed' });
 TaskOutput({ task_id: '...', block: true });
 
 // Step 8: Store coordination state
-mcp__claude - flow__memory_store({ key: 'swarm:state', value: { status: 'completed' } });
+mcp__claude-flow__memory_store({ key: 'swarm:state', value: { status: 'completed' } });
 ```
 
 **For complex workflows:** Use `workflow/create` + `workflow/execute` with step definitions.
@@ -203,19 +203,24 @@ mcp__claude - flow__memory_store({ key: 'swarm:state', value: { status: 'complet
 
 ```javascript
 // Step 1: Initialize swarm
-mcp__ruv - swarm__swarm_init({ topology: 'mesh', strategy: 'balanced', maxAgents: 5 });
+mcp__ruv-swarm__swarm_init({ topology: 'mesh', strategy: 'balanced', maxAgents: 5 });
 
 // Step 2: Spawn swarm agents (REQUIRED before task_orchestrate)
-mcp__ruv - swarm__agent_spawn({ type: 'researcher', name: 'researcher-1' });
-mcp__ruv - swarm__agent_spawn({ type: 'analyst', name: 'analyst-1' });
-mcp__ruv - swarm__agent_spawn({ type: 'coder', name: 'coder-1' });
+mcp__ruv-swarm__agent_spawn({ type: 'researcher', name: 'researcher-1' });
+mcp__ruv-swarm__agent_spawn({ type: 'analyst', name: 'analyst-1' });
+mcp__ruv-swarm__agent_spawn({ type: 'coder', name: 'coder-1' });
 
 // Step 3: NOW orchestrate tasks (agents must exist first!)
-mcp__ruv - swarm__task_orchestrate({ task: '...', strategy: 'parallel', priority: 'high', maxAgents: 3 });
+mcp__ruv-swarm__task_orchestrate({
+    task: '...',
+    strategy: 'parallel',
+    priority: 'high',
+    maxAgents: 3,
+  });
 
 // Step 4: Monitor and collect
-mcp__ruv - swarm__task_status({ detailed: true });
-mcp__ruv - swarm__task_results({ taskId: 'task-xxx', format: 'detailed' });
+mcp__ruv-swarm__task_status({ detailed: true });
+mcp__ruv-swarm__task_results({ taskId: 'task-xxx', format: 'detailed' });
 ```
 
 ### Pattern B2: RUV-Swarm DAA Workflow (For autonomous learning)
@@ -224,21 +229,40 @@ mcp__ruv - swarm__task_results({ taskId: 'task-xxx', format: 'detailed' });
 
 ```javascript
 // Step 1: Initialize DAA (no swarm_init needed for pure DAA)
-mcp__ruv - swarm__daa_init({ enableLearning: true, enableCoordination: true });
+mcp__ruv-swarm__daa_init({ enableLearning: true, enableCoordination: true });
 
 // Step 2: Create autonomous agents (these are NOT swarm agents)
-mcp__ruv - swarm__daa_agent_create({ id: 'daa-1', cognitivePattern: 'adaptive', enableMemory: true });
-mcp__ruv - swarm__daa_agent_create({ id: 'daa-2', cognitivePattern: 'critical', enableMemory: true });
+mcp__ruv-swarm__daa_agent_create({
+    id: 'daa-1',
+    cognitivePattern: 'adaptive',
+    enableMemory: true,
+  });
+mcp__ruv-swarm__daa_agent_create({
+    id: 'daa-2',
+    cognitivePattern: 'critical',
+    enableMemory: true,
+  });
 
 // Step 3: Create and execute DAA workflow (NOT task_orchestrate!)
-mcp__ruv - swarm__daa_workflow_create({ id: 'wf-1', name: 'Analysis Workflow', strategy: 'adaptive' });
-mcp__ruv - swarm__daa_workflow_execute({ workflowId: 'wf-1', agentIds: ['daa-1', 'daa-2'], parallelExecution: true });
+mcp__ruv-swarm__daa_workflow_create({
+    id: 'wf-1',
+    name: 'Analysis Workflow',
+    strategy: 'adaptive',
+  });
+mcp__ruv-swarm__daa_workflow_execute({
+    workflowId: 'wf-1',
+    agentIds: ['daa-1', 'daa-2'],
+    parallelExecution: true,
+  });
 
 // Step 4: Share knowledge between DAA agents
-mcp__ruv - swarm__daa_knowledge_share({ sourceAgentId: 'daa-1', targetAgentIds: ['daa-2'] });
+mcp__ruv-swarm__daa_knowledge_share({
+    sourceAgentId: 'daa-1',
+    targetAgentIds: ['daa-2'],
+  });
 
 // Step 5: Check learning progress
-mcp__ruv - swarm__daa_learning_status({ detailed: true });
+mcp__ruv-swarm__daa_learning_status({ detailed: true });
 ```
 
 ### Pattern B3: Hybrid (Swarm + DAA Learning)
@@ -247,38 +271,46 @@ mcp__ruv - swarm__daa_learning_status({ detailed: true });
 
 ```javascript
 // Phase 1: Set up swarm for task orchestration
-mcp__ruv - swarm__swarm_init({ topology: 'mesh', strategy: 'specialized' });
-mcp__ruv - swarm__agent_spawn({ type: 'researcher', name: 'researcher-1' });
-mcp__ruv - swarm__agent_spawn({ type: 'coder', name: 'coder-1' });
+mcp__ruv-swarm__swarm_init({ topology: 'mesh', strategy: 'specialized' });
+mcp__ruv-swarm__agent_spawn({ type: 'researcher', name: 'researcher-1' });
+mcp__ruv-swarm__agent_spawn({ type: 'coder', name: 'coder-1' });
 
 // Phase 2: Set up DAA for learning (separate agent pool)
-mcp__ruv - swarm__daa_init({ enableLearning: true, enableCoordination: true });
-mcp__ruv - swarm__daa_agent_create({ id: 'learner-1', cognitivePattern: 'adaptive', enableMemory: true });
+mcp__ruv-swarm__daa_init({ enableLearning: true, enableCoordination: true });
+mcp__ruv-swarm__daa_agent_create({
+    id: 'learner-1',
+    cognitivePattern: 'adaptive',
+    enableMemory: true,
+  });
 
 // Phase 3: Orchestrate tasks with swarm agents
-mcp__ruv - swarm__task_orchestrate({ task: '...', strategy: 'parallel' });
+mcp__ruv-swarm__task_orchestrate({ task: '...', strategy: 'parallel' });
 
 // Phase 4: Use DAA to learn from results
-mcp__ruv - swarm__daa_agent_adapt({ agentId: 'learner-1', feedback: 'Task completed', performanceScore: 0.9 });
+mcp__ruv-swarm__daa_agent_adapt({
+    agentId: 'learner-1',
+    feedback: 'Task completed',
+    performanceScore: 0.9,
+  });
 ```
 
 ### Pattern C: Hive-Mind (For consensus/collective intelligence)
 
 ```javascript
 // Step 1: Initialize hive
-mcp__claude - flow__hive - mind_init({ topology: 'mesh' });
+mcp__claude-flow__hive-mind_init({ topology: 'mesh' });
 
 // Step 2: Spawn hive workers (combined spawn + join)
-mcp__claude - flow__hive - mind_spawn({ count: 3, role: 'worker', agentType: 'worker' });
+mcp__claude-flow__hive-mind_spawn({ count: 3, role: 'worker', agentType: 'worker' });
 
 // Step 3: Coordinate via consensus
-mcp__claude - flow__hive - mind_consensus({ action: 'propose', type: 'decision', value: '...' });
+mcp__claude-flow__hive-mind_consensus({ action: 'propose', type: 'decision', value: '...' });
 
 // Step 4: Access collective memory
-mcp__claude - flow__hive - mind_memory({ action: 'set', key: '...', value: '...' });
+mcp__claude-flow__hive-mind_memory({ action: 'set', key: '...', value: '...' });
 
 // Step 5: Broadcast to all workers
-mcp__claude - flow__hive - mind_broadcast({ message: '...', priority: 'normal' });
+mcp__claude-flow__hive-mind_broadcast({ message: '...', priority: 'normal' });
 ```
 
 ---
@@ -344,17 +376,17 @@ npx claude-flow init
 
 ```javascript
 // Step 1: Spawn MCP coordination agents
-mcp__claude - flow__agent_spawn({ agentType: 'coder', agentId: 'agent-data-layer' });
-mcp__claude - flow__agent_spawn({ agentType: 'coder', agentId: 'agent-chat-ui' });
+mcp__claude-flow__agent_spawn({ agentType: 'coder', agentId: 'agent-data-layer' });
+mcp__claude-flow__agent_spawn({ agentType: 'coder', agentId: 'agent-chat-ui' });
 
 // Step 2: Register tasks and assign to agents (THIS IS THE CRITICAL STEP)
-mcp__claude - flow__task_create({
+mcp__claude-flow__task_create({
   type: 'implement',
   description: 'Implement data layer: CPT, roles, AJAX handlers',
   assignToAgent: 'agent-data-layer',
   priority: 8,
 });
-mcp__claude - flow__task_create({
+mcp__claude-flow__task_create({
   type: 'implement',
   description: 'Implement chat UI: panel, CSS, JS',
   assignToAgent: 'agent-chat-ui',
@@ -366,11 +398,11 @@ Task({ subagent_type: 'coder', run_in_background: true, prompt: '...' });
 Task({ subagent_type: 'coder', run_in_background: true, prompt: '...' });
 
 // Step 4: Monitor via coordination layer (NOT tailing files)
-mcp__claude - flow__task_status({ taskId: 'task-xxx' });
-mcp__claude - flow__swarm_status({ includeAgents: true, includeMetrics: true });
+mcp__claude-flow__task_status({ taskId: 'task-xxx' });
+mcp__claude-flow__swarm_status({ includeAgents: true, includeMetrics: true });
 
 // Step 5: Collect results
-mcp__claude - flow__task_results({ taskId: 'task-xxx', format: 'detailed' });
+mcp__claude-flow__task_results({ taskId: 'task-xxx', format: 'detailed' });
 TaskOutput({ task_id: '...', block: true });
 ```
 

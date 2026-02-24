@@ -22,9 +22,11 @@ args:
 ## ⚠️ WORKFLOW INITIALIZATION
 
 **If starting a new session**, first read workflow initialization:
+
 ```
 mcp__plugin_swe_serena__read_memory("WF_INIT")
 ```
+
 Follow WF_INIT instructions before executing this skill.
 
 ---
@@ -43,14 +45,14 @@ Interactive wizard for registering features in the workflow system.
 
 ## Quick Mode vs Full Mode
 
-| Aspect | Quick Mode | Full Mode |
-|--------|------------|-----------|
-| Time | ~30 sec | 2-5 min |
-| Swarm analysis | No | Optional (10 agents) |
-| DOM_* memories | No | Yes (if domains found) |
-| SYS_* memories | No | Yes (if systems found) |
-| Layer detection | Basic | Detailed |
-| Best for | Small features, prototyping | Large codebases |
+| Aspect          | Quick Mode                  | Full Mode              |
+| --------------- | --------------------------- | ---------------------- |
+| Time            | ~30 sec                     | 2-5 min                |
+| Swarm analysis  | No                          | Optional (10 agents)   |
+| DOM_* memories  | No                          | Yes (if domains found) |
+| SYS_* memories  | No                          | Yes (if systems found) |
+| Layer detection | Basic                       | Detailed               |
+| Best for        | Small features, prototyping | Large codebases        |
 
 ---
 
@@ -87,6 +89,7 @@ AskUserQuestion({
 ```
 
 **Then ask for paths:**
+
 ```javascript
 AskUserQuestion({
   questions: [
@@ -105,6 +108,7 @@ AskUserQuestion({
 ```
 
 **Validation:**
+
 - Key: UPPERCASE, underscores allowed, 2-20 chars
 - Path: Must exist in project
 
@@ -143,6 +147,7 @@ AskUserQuestion({
 ```
 
 **Auto-detection:** Scan root path for:
+
 - `package.json` → Node/TypeScript
 - `composer.json` → PHP
 - `Cargo.toml` → Rust
@@ -186,9 +191,11 @@ AskUserQuestion({
 ### If "Full DAA Swarm" selected:
 
 **⚠️ MANDATORY: Load swarm coordination context first:**
+
 ```javascript
 mcp__plugin_swe_serena__read_memory("FEATURE_SWARM")
 ```
+
 This loads swarm patterns, agent definitions, and coordination protocols needed for DAA orchestration. Without it, swarm agents lack the project's coordination standards.
 
 ```javascript
@@ -265,21 +272,21 @@ If user selects "No, needs changes", gather corrections manually.
 
 ## Feature Overview
 
-| Property | Value |
-|----------|-------|
-| **Name** | [Feature Name] |
-| **Key** | [KEY] |
-| **Type** | [type] |
-| **Language** | [language] |
+| Property      | Value                 |
+| ------------- | --------------------- |
+| **Name**      | [Feature Name]        |
+| **Key**       | [KEY]                 |
+| **Type**      | [type]                |
+| **Language**  | [language]            |
 | **Framework** | [framework or "none"] |
 
 ## Scope Definition
 
 ### Primary Directories
 
-| Directory | Purpose |
-|-----------|---------|
-| [dir] | [purpose] |
+| Directory | Purpose   |
+| --------- | --------- |
+| [dir]     | [purpose] |
 
 ## Architecture Layers
 
@@ -287,22 +294,22 @@ If user selects "No, needs changes", gather corrections manually.
 
 ## Key Files
 
-| File | Purpose |
-|------|---------|
+| File   | Purpose   |
+| ------ | --------- |
 | [file] | [purpose] |
 
 ## Related Memories
 
-| Memory | Content |
-|--------|---------|
-| DOM_[KEY]_* | Domain behaviors |
-| SYS_[KEY]_* | System references |
-| INDEX_[KEY]_* | Indexes |
+| Memory        | Content           |
+| ------------- | ----------------- |
+| DOM_[KEY]_*   | Domain behaviors  |
+| SYS_[KEY]_*   | System references |
+| INDEX_[KEY]_* | Indexes           |
 
 ## Testing
 
-| Suite | File | Focus |
-|-------|------|-------|
+| Suite   | File   | Focus   |
+| ------- | ------ | ------- |
 | [suite] | [file] | [focus] |
 ```
 
@@ -315,11 +322,13 @@ mcp__plugin_swe_serena__write_memory("FEATURE_[KEY]", "<content>")
 ### Additional memories (full mode only):
 
 If domains detected:
+
 ```javascript
 mcp__plugin_swe_serena__write_memory("DOM_[KEY]_[DOMAIN]", "<content>")
 ```
 
 If systems detected:
+
 ```javascript
 mcp__plugin_swe_serena__write_memory("SYS_[KEY]_[SYSTEM]", "<content>")
 ```
@@ -328,19 +337,21 @@ mcp__plugin_swe_serena__write_memory("SYS_[KEY]_[SYSTEM]", "<content>")
 
 ## Stage 6: Symbol Index (Related Docs)
 
-**After creating FEATURE_[KEY] and any DOM_*/SYS_* memories, generate the Related Docs table.**
+**After creating FEATURE_[KEY] and any DOM__/SYS__ memories, generate the Related Docs table.**
 
 Invoke the `/swe-symbol-index` skill:
+
 ```
 /swe-symbol-index [KEY]
 ```
 
 This will:
+
 1. Read all linked memories listed in FEATURE_[KEY]'s Related Memories section
 2. Extract heading symbols from each via `get_symbols_overview`
 3. Build a summary table and insert it as `## Related Docs` after Feature Overview
 
-**Skip if no Related Memories were created** (e.g., quick mode with no DOM_*/SYS_*).
+**Skip if no Related Memories were created** (e.g., quick mode with no DOM__/SYS__).
 
 ---
 
@@ -363,15 +374,17 @@ mcp__plugin_swe_serena__edit_memory(
 
 ```markdown
 ## Skill Return
+
 - **Skill**: swe-feature-onboard
 - **Status**: success
 - **Feature Key**: [KEY]
 - **Mode**: [full|quick]
-- **Memories Created**: FEATURE_[KEY], [DOM_*, SYS_* if applicable]
+- **Memories Created**: FEATURE_[KEY], [DOM__, SYS__ if applicable]
 - **Next Step Hint**: [WF_SWARM_ORCHESTRATE if DAA swarm was used, WF_START otherwise]
 ```
 
 **Routing after onboarding:**
+
 - If DAA swarm analysis was used → `WF_SWARM_ORCHESTRATE` (swarm context is already loaded)
 - If quick mode or manual → `WF_START` (normal entry)
 
@@ -388,16 +401,21 @@ mcp__plugin_swe_serena__edit_memory(
 ## Troubleshooting
 
 ### Swarm MCP unavailable
+
 Fall back to quick mode or manual configuration.
 
 ### Path doesn't exist
+
 ```bash
 ls -la [path]
 ```
+
 Ask user to correct.
 
 ### INDEX_FEATURES.md missing
+
 Create it first:
+
 ```javascript
 mcp__plugin_swe_serena__write_memory("INDEX_FEATURES", "# INDEX_FEATURES\n\n## Registered Features\n\n| Key | Name | Type | Language | Status |\n|-----|------|------|----------|--------|\n")
 ```

@@ -8,6 +8,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_ROOT="$(dirname "$SCRIPT_DIR")"
 PLUGIN_JSON="$PLUGIN_ROOT/.claude-plugin/plugin.json"
 MARKETPLACE_JSON="$PLUGIN_ROOT/.claude-plugin/marketplace.json"
+PACKAGE_JSON="$PLUGIN_ROOT/package.json"
 
 # Check if jq is available
 if ! command -v jq &> /dev/null; then
@@ -45,8 +46,16 @@ jq --arg v "$NEW_VERSION" '.version = $v' "$PLUGIN_JSON" > "$PLUGIN_JSON.tmp" &&
 # Update marketplace.json (both root version and plugin version)
 jq --arg v "$NEW_VERSION" '.version = $v | .plugins[0].version = $v' "$MARKETPLACE_JSON" > "$MARKETPLACE_JSON.tmp" && mv "$MARKETPLACE_JSON.tmp" "$MARKETPLACE_JSON"
 
+# Update package.json if it exists
+if [[ -f "$PACKAGE_JSON" ]]; then
+    jq --arg v "$NEW_VERSION" '.version = $v' "$PACKAGE_JSON" > "$PACKAGE_JSON.tmp" && mv "$PACKAGE_JSON.tmp" "$PACKAGE_JSON"
+fi
+
 echo "✅ Version bumped to $NEW_VERSION"
 echo ""
 echo "Files updated:"
 echo "  - $PLUGIN_JSON"
 echo "  - $MARKETPLACE_JSON"
+if [[ -f "$PACKAGE_JSON" ]]; then
+    echo "  - $PACKAGE_JSON"
+fi

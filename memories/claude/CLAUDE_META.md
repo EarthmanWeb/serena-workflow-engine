@@ -74,20 +74,20 @@ Each agent has minimal, focused context = fewer hallucinations, faster execution
 
 Each workflow state includes a reporting line with a distinct icon:
 
-| Step                  | Report                           |
-| --------------------- | -------------------------------- |
-| WF_START              | **On step WF_START**             |
-| WF_CLASSIFY           | **On step WF_CLASSIFY**          |
-| WF_UPDATE_MEMORY      | **On step WF_UPDATE_MEMORY**     |
-| WF_CLARIFY            | **On step WF_CLARIFY**           |
-| WF_LOAD_FEATURE       | **On step WF_LOAD_FEATURE**      |
-| ~~WF_ASK_PERMISSION~~ | _(merged into WF_ARCH_REVIEW)_   |
-| WF_EXECUTE            | **On step WF_EXECUTE**           |
-| WF_CHECKPOINT         | **On step WF_CHECKPOINT**        |
-| WF_VERIFY             | **On step WF_VERIFY**            |
-| WF_CONTINUE           | **On step WF_CONTINUE**          |
-| WF_RESEARCH           | **On step WF_RESEARCH**          |
-| WF_DONE               | **On step WF_DONE**              |
+| Step                  | Report                         |
+| --------------------- | ------------------------------ |
+| WF_START              | **On step WF_START**           |
+| WF_CLASSIFY           | **On step WF_CLASSIFY**        |
+| WF_UPDATE_MEMORY      | **On step WF_UPDATE_MEMORY**   |
+| WF_CLARIFY            | **On step WF_CLARIFY**         |
+| WF_LOAD_FEATURE       | **On step WF_LOAD_FEATURE**    |
+| ~~WF_ASK_PERMISSION~~ | _(merged into WF_ARCH_REVIEW)_ |
+| WF_EXECUTE            | **On step WF_EXECUTE**         |
+| WF_CHECKPOINT         | **On step WF_CHECKPOINT**      |
+| WF_VERIFY             | **On step WF_VERIFY**          |
+| WF_CONTINUE           | **On step WF_CONTINUE**        |
+| WF_RESEARCH           | **On step WF_RESEARCH**        |
+| WF_DONE               | **On step WF_DONE**            |
 
 **Benefits:**
 

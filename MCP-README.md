@@ -103,6 +103,7 @@ claude /mcp
 ```
 
 **Why all three uv directories?**
+
 - `git-v0/` — cached git clone of the fork (won't pull new commits if stale)
 - `builds-v0/` — cached wheel built from the old clone
 - `environments-v2/` — installed environment using the old wheel

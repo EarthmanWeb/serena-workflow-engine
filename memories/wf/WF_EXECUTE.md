@@ -138,16 +138,15 @@ Task({
 });
 
 // Monitor swarm status (non-blocking)
-mcp__claude - flow__swarm_status({});
+mcp__claude-flow__swarm_status({});
 
 // Store progress to memory
-mcp__claude -
-  flow__memory_usage({
-    action: 'store',
-    namespace: 'swarm',
-    key: 'progress',
-    value: '...',
-  });
+mcp__claude-flow__memory_usage({
+  action: 'store',
+  namespace: 'swarm',
+  key: 'progress',
+  value: '...',
+});
 
 // Collect results (blocking)
 TaskOutput({ task_id: '...', block: true });
