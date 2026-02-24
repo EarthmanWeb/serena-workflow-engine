@@ -4,6 +4,7 @@ description: Autonomous SWE plugin initialization with verification
 capabilities:
   - environment_detection
   - mcp_verification
+  - lsp_verification
   - settings_migration
   - hook_installation
   - memory_installation
@@ -36,7 +37,7 @@ Task({
 
 ## TASKS
 
-Execute ALL tasks (1-10) in order, then verify.
+Execute ALL tasks (1-11) in order, then verify.
 
 ### Task 1: Detect Environment
 
@@ -66,7 +67,82 @@ if (!status.performed) {
 }
 ```
 
-### Task 4: Verify Claude-Flow Plugin Installation
+### Task 4: Verify and Install Language Servers
+
+**Check which LSP servers are available for languages configured in project.yml.**
+
+```bash
+PROJECT_YML=".serena/project.yml"
+if [ ! -f "$PROJECT_YML" ]; then
+  echo "No project.yml found - skipping LSP check"
+  exit 0
+fi
+
+# Map language names to LSP server commands
+declare -A LSP_COMMANDS=(
+  [ruby]="ruby-lsp"
+  [markdown]="marksman"
+  [php]="intelephense"
+  [typescript]="typescript-language-server"
+  [bash]="bash-language-server"
+  [python]="pylsp"
+  [yaml]="yaml-language-server"
+)
+
+# Map language names to install commands
+declare -A LSP_INSTALL=(
+  [ruby]="gem install ruby-lsp"
+  [markdown]="brew install marksman"
+  [php]="npm install -g @anthropic-ai/intelephense"
+  [typescript]="npm install -g typescript-language-server typescript"
+  [bash]="npm install -g bash-language-server"
+  [python]="pip install python-lsp-server"
+  [yaml]="npm install -g yaml-language-server"
+)
+
+MISSING=()
+INSTALLED=()
+
+for lang in "${!LSP_COMMANDS[@]}"; do
+  cmd="${LSP_COMMANDS[$lang]}"
+  if which "$cmd" > /dev/null 2>&1; then
+    INSTALLED+=("$lang ($cmd)")
+  else
+    MISSING+=("$lang")
+  fi
+done
+
+echo "=== LSP Server Status ==="
+for item in "${INSTALLED[@]}"; do
+  echo "  ✅ $item"
+done
+for lang in "${MISSING[@]}"; do
+  echo "  ❌ $lang - not found (install: ${LSP_INSTALL[$lang]})"
+done
+
+if [ ${#MISSING[@]} -gt 0 ]; then
+  echo ""
+  echo "Installing missing LSP servers..."
+  for lang in "${MISSING[@]}"; do
+    echo "  → Installing $lang: ${LSP_INSTALL[$lang]}"
+    eval "${LSP_INSTALL[$lang]}" 2>&1 || echo "  ⚠️ Failed to install $lang LSP"
+  done
+  echo ""
+  echo "Re-checking after install..."
+  for lang in "${MISSING[@]}"; do
+    cmd="${LSP_COMMANDS[$lang]}"
+    if which "$cmd" > /dev/null 2>&1; then
+      echo "  ✅ $lang ($cmd) - now installed"
+    else
+      echo "  ❌ $lang ($cmd) - still missing (manual install needed)"
+    fi
+  done
+fi
+```
+
+Install missing LSP servers automatically. If any fail to install, log the failure but do NOT block init — Serena is fault-tolerant and will work with partial LSP coverage.
+
+### Task 5: Verify Claude-Flow Plugin Installation
 
 **Check if the claude-flow plugin is installed. If not, guide user to install it.**
 
@@ -90,7 +166,7 @@ else
 fi
 ```
 
-### Task 5: Review CLAUDE.md for Conflicting Workflow Commands
+### Task 6: Review CLAUDE.md for Conflicting Workflow Commands
 
 **Check CLAUDE.md for any workflow/session start instructions that conflict with SWE.**
 
@@ -117,7 +193,7 @@ fi
 
 If conflicts found, edit CLAUDE.md to remove the conflicting sections. SWE's SessionStart hook handles all workflow initialization.
 
-### Task 6: Migrate Claude-Flow Settings to settings.local.json
+### Task 7: Migrate Claude-Flow Settings to settings.local.json
 
 **CRITICAL: Move claude-flow config from settings.json to settings.local.json**
 
@@ -143,7 +219,7 @@ jq 'del(.statusLine, .claudeFlow)' "$SETTINGS" > "${SETTINGS}.tmp" && mv "${SETT
 echo "Migrated claudeFlow settings to settings.local.json"
 ```
 
-### Task 7: Verify SWE Plugin is Enabled
+### Task 8: Verify SWE Plugin is Enabled
 
 **SWE hooks load directly from the plugin folder - no copying needed.**
 
@@ -170,7 +246,7 @@ else
 fi
 ```
 
-### Task 8: Install Instruction Files to Memories
+### Task 9: Install Instruction Files to Memories
 
 **IMPORTANT: This plugin uses a forked version of Serena that supports subdirectory organization.**
 
@@ -209,7 +285,7 @@ echo "Total files:"
 find .serena/swe -name "*.md" -type f | wc -l
 ```
 
-### Task 9: Create and Customize Core Memories
+### Task 10: Create and Customize Core Memories
 
 Check for and create if missing:
 
@@ -236,7 +312,7 @@ Then edit `.serena/swe/_INDEX.md`:
 - Replace `[FEATURE_X](FEATURE_X) - Description` with actual features
 - Remove template comment block
 
-### Task 10: Configure Gitignore
+### Task 11: Configure Gitignore
 
 Add these entries to .gitignore if not present:
 
