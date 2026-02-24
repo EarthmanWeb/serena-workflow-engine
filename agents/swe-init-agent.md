@@ -71,41 +71,44 @@ if (!status.performed) {
 
 **Check which LSP servers are available for languages configured in project.yml.**
 
-```bash
+```zsh
+#!/usr/bin/env zsh
+# NOTE: Uses zsh for associative arrays (macOS ships bash 3.x which lacks declare -A)
+
 PROJECT_YML=".serena/project.yml"
 if [ ! -f "$PROJECT_YML" ]; then
   echo "No project.yml found - skipping LSP check"
   exit 0
 fi
 
-# Map language names to LSP server commands
-declare -A LSP_COMMANDS=(
-  [ruby]="ruby-lsp"
-  [markdown]="marksman"
-  [php]="intelephense"
-  [typescript]="typescript-language-server"
-  [bash]="bash-language-server"
-  [python]="pylsp"
-  [yaml]="yaml-language-server"
+typeset -A LSP_COMMANDS LSP_INSTALL
+
+LSP_COMMANDS=(
+  ruby      "ruby-lsp"
+  markdown  "marksman"
+  php       "intelephense"
+  typescript "typescript-language-server"
+  bash      "bash-language-server"
+  python    "pylsp"
+  yaml      "yaml-language-server"
 )
 
-# Map language names to install commands
-declare -A LSP_INSTALL=(
-  [ruby]="gem install ruby-lsp"
-  [markdown]="brew install marksman"
-  [php]="npm install -g @anthropic-ai/intelephense"
-  [typescript]="npm install -g typescript-language-server typescript"
-  [bash]="npm install -g bash-language-server"
-  [python]="pip install python-lsp-server"
-  [yaml]="npm install -g yaml-language-server"
+LSP_INSTALL=(
+  ruby      "gem install ruby-lsp"
+  markdown  "brew install marksman"
+  php       "npm install -g intelephense"
+  typescript "npm install -g typescript-language-server typescript"
+  bash      "npm install -g bash-language-server"
+  python    "pip3 install python-lsp-server"
+  yaml      "npm install -g yaml-language-server"
 )
 
 MISSING=()
 INSTALLED=()
 
-for lang in "${!LSP_COMMANDS[@]}"; do
+for lang in ${(k)LSP_COMMANDS}; do
   cmd="${LSP_COMMANDS[$lang]}"
-  if which "$cmd" > /dev/null 2>&1; then
+  if whence "$cmd" > /dev/null 2>&1; then
     INSTALLED+=("$lang ($cmd)")
   else
     MISSING+=("$lang")
@@ -113,25 +116,25 @@ for lang in "${!LSP_COMMANDS[@]}"; do
 done
 
 echo "=== LSP Server Status ==="
-for item in "${INSTALLED[@]}"; do
+for item in $INSTALLED; do
   echo "  ✅ $item"
 done
-for lang in "${MISSING[@]}"; do
+for lang in $MISSING; do
   echo "  ❌ $lang - not found (install: ${LSP_INSTALL[$lang]})"
 done
 
 if [ ${#MISSING[@]} -gt 0 ]; then
   echo ""
   echo "Installing missing LSP servers..."
-  for lang in "${MISSING[@]}"; do
+  for lang in $MISSING; do
     echo "  → Installing $lang: ${LSP_INSTALL[$lang]}"
     eval "${LSP_INSTALL[$lang]}" 2>&1 || echo "  ⚠️ Failed to install $lang LSP"
   done
   echo ""
   echo "Re-checking after install..."
-  for lang in "${MISSING[@]}"; do
+  for lang in $MISSING; do
     cmd="${LSP_COMMANDS[$lang]}"
-    if which "$cmd" > /dev/null 2>&1; then
+    if whence "$cmd" > /dev/null 2>&1; then
       echo "  ✅ $lang ($cmd) - now installed"
     else
       echo "  ❌ $lang ($cmd) - still missing (manual install needed)"
@@ -141,6 +144,8 @@ fi
 ```
 
 Install missing LSP servers automatically. If any fail to install, log the failure but do NOT block init — Serena is fault-tolerant and will work with partial LSP coverage.
+
+**Note:** Uses `zsh` (not bash) for macOS compatibility. macOS ships bash 3.x which lacks associative arrays.
 
 ### Task 5: Verify Claude-Flow Plugin Installation
 
