@@ -99,7 +99,7 @@ LSP_INSTALL=(
   php       "npm install -g intelephense"
   typescript "npm install -g typescript-language-server typescript"
   bash      "npm install -g bash-language-server"
-  python    "pip3 install python-lsp-server"
+  python    "pipx install python-lsp-server"
   yaml      "npm install -g yaml-language-server"
 )
 
