@@ -64,7 +64,7 @@ Then restart Claude Code.
 ## Quick Check
 
 ```bash
-uvx --from "git+https://github.com/EarthmanWeb/serena@feature-multiplefoldersupport" python -c "from serena import __version__; print(__version__)"
+uvx --from "git+https://github.com/EarthmanWeb/serena@swe" python -c "from serena import __version__; print(__version__)"
 ```
 
 ## Version Sources
@@ -92,7 +92,7 @@ claude plugin install swe@EarthmanWeb --scope local
 
 
 #4. CONFIRM VERSION: 
-uvx --from "git+https://github.com/EarthmanWeb/serena@feature-multiplefoldersupport" python -c "from serena import __version__; print(__version__)"
+uvx --from "git+https://github.com/EarthmanWeb/serena@swe" python -c "from serena import __version__; print(__version__)"
 
 #THEN:  Restart the mcp server (if not automatically restarted by the plugin install)
 
