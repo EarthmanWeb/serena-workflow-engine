@@ -15,5 +15,15 @@
     "state-machine",
     "memory",
     "hooks"
-  ]
+  ],
+  "mcpServers": {
+    "serena": {
+      "type": "stdio",
+      "command": "${CLAUDE_PLUGIN_ROOT}/scripts/start-serena.sh",
+      "args": [],
+      "env": {
+        "PLUGIN_ROOT": "${CLAUDE_PLUGIN_ROOT}"
+      }
+    }
+  }
 }

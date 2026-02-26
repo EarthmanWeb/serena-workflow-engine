@@ -1,39 +1,29 @@
-## Overriding MCP Configuration
+# Serena Workflow Engine MCP Plugin
 
-You can customize the Serena MCP server configuration by creating a local `.mcp.json` file in the plugin directory. This is useful for:
+### Custom memory paths
 
-- Adding custom memory folder paths
-- Forcing fresh pulls from the remote repository
-- Changing Serena options without modifying the plugin
+The plugin uses a wrapper script (`scripts/start-serena.sh`) that reads memory paths from a project-local config file. Plugin bundled memories are always appended automatically.
 
-### Local .mcp.json Override
+To customize paths, create `.serena/memory-paths.conf` in your project root:
 
-Create `.claude/plugins/serena-workflow-engine/.mcp.json`:
-
-```json
-{
-  "mcpServers": {
-    "plugin:swe:serena": {
-      "type": "stdio",
-      "command": "uvx",
-      "args": [
-        "--reinstall",
-        "--from",
-        "git+https://github.com/EarthmanWeb/serena@swe",
-        "serena",
-        "start-mcp-server",
-        "--context",
-        "ide-assistant",
-        "--project",
-        "./",
-        "--enable-web-dashboard=false",
-        "--memory-folders=./.serena/swe"
-      ],
-      "env": {}
-    }
-  }
-}
 ```
+# one path per line
+./.serena/swe
+./docs
+```
+
+Do NOT include the plugin cache path — it's appended automatically.
+
+After changing paths, clear the cache and restart:
+
+```bash
+rm -rf ~/.claude/plugins/cache/EarthmanWeb/
+claude plugin install swe@EarthmanWeb --scope local
+```
+
+Then restart Claude Code.
+
+If no `.serena/memory-paths.conf` exists, the default is `./.serena/memories`.
 
 ---
 
@@ -41,11 +31,11 @@ Create `.claude/plugins/serena-workflow-engine/.mcp.json`:
 
 ## Problem
 
-Changes to `.claude/plugins/serena-workflow-engine/.mcp.json` like adding new folders don't take effect.
+Changes to plugin config don't take effect.
 
 ## Cause
 
-Claude caches MCP config at: `~/.claude/plugins/cache/EarthmanWeb/swe/<version>/.mcp.json`
+Claude caches plugin config at: `~/.claude/plugins/cache/EarthmanWeb/swe/<version>/`
 
 ## Fix
 
@@ -87,18 +77,14 @@ rm -rf ~/.cache/uv/builds-v0/
 rm -rf ~/.claude/plugins/cache/EarthmanWeb/
 
 # 3. Reinstall the plugin
-# first the marketplace
+claude plugin marketplace remove EarthmanWeb
 claude plugin marketplace add https://github.com/EarthmanWeb/serena-workflow-engine
-
-
 claude plugin install swe@EarthmanWeb --scope local
 
-
-#4. CONFIRM VERSION: 
+#4. CONFIRM VERSION:
 uvx --from "git+https://github.com/EarthmanWeb/serena@swe" python -c "from serena import __version__; print(__version__)"
 
 #THEN:  Restart the mcp server (if not automatically restarted by the plugin install)
-
 claude /mcp
 ## find the plugin:swe:serena server and reconnect it
 
