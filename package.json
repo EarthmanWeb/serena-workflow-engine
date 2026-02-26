@@ -1,10 +1,10 @@
 {
   "name": "serena-workflow-engine",
-  "version": "1.0.61",
+  "version": "1.0.62",
   "private": true,
   "scripts": {
-    "fmt": "dprint fmt",
-    "fmt:check": "dprint check"
+    "fmt": "dprint fmt --config ./dprint.json",
+    "fmt:check": "dprint check --config ./dprint.json"
   },
   "devDependencies": {
     "dprint": "^0.51.1"
