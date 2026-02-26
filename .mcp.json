@@ -14,7 +14,7 @@
         "--project",
         "./",
         "--enable-web-dashboard=false",
-        "--memory-path=./.serena/swe"
+        "--memory-path=./.serena/swe,./docs"
       ],
       "env": {}
     }
