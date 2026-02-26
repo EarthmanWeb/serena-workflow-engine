@@ -88,6 +88,10 @@ rm -rf ~/.cache/uv/builds-v0/
 rm -rf ~/.claude/plugins/cache/EarthmanWeb/
 
 # 3. Reinstall the plugin
+# first the marketplace
+claude plugin marketplace add https://github.com/EarthmanWeb/serena-workflow-engine
+
+
 claude plugin install swe@EarthmanWeb --scope local
 
 

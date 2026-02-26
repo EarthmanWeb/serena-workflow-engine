@@ -47,7 +47,7 @@ def main():
     try:
         input_data = read_stdin_safe(timeout_seconds=2.0)
         cwd = get_input_field(input_data, 'cwd', default=os.getcwd())
-        memory_name = get_input_field(input_data, 'tool_input', 'memory_file_name', default='')
+        memory_name = get_input_field(input_data, 'tool_input', 'memory_name', default='')
 
         # Handle FEATURE_TESTS read - create sentinel for test gate
         if memory_name == 'FEATURE_TESTS':

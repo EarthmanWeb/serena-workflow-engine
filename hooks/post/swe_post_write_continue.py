@@ -25,7 +25,7 @@ def main():
         input_data = read_stdin_safe(timeout_seconds=2.0)
         cwd = get_input_field(input_data, 'cwd', default=os.getcwd())
         tool_name = get_input_field(input_data, 'tool_name', default='')
-        memory_name = get_input_field(input_data, 'tool_input', 'memory_file_name', default='')
+        memory_name = get_input_field(input_data, 'tool_input', 'memory_name', default='')
 
         # Get original tool result
         tool_result = get_input_field(input_data, 'tool_result', default='')

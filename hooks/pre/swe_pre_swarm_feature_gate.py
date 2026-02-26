@@ -67,7 +67,7 @@ FEATURE_SWARM mandates reading these memories IN ORDER:
   4. REF_AGENTS (agent types)
 
 MANDATORY ACTION - Call this tool NOW:
-   → mcp__plugin_swe_serena__read_memory(memory_file_name="FEATURE_SWARM")
+   → mcp__plugin_swe_serena__read_memory(memory_name="FEATURE_SWARM")
 
 Then follow the mandatory reading steps listed in that memory.
 

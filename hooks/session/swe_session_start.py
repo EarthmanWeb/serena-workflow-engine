@@ -96,7 +96,7 @@ Current State: WF_INIT
 
 ═══════════════════════════════════════════════════════════════════════════════
 STEP 1: Read WF_INIT workflow instructions
-   → mcp__plugin_swe_serena__read_memory(memory_file_name="WF_INIT")
+   → mcp__plugin_swe_serena__read_memory(memory_name="WF_INIT")
 
 STEP 2: Follow WF_INIT to classify and execute user's task
 ═══════════════════════════════════════════════════════════════════════════════

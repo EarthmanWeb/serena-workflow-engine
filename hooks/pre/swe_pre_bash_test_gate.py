@@ -67,7 +67,7 @@ def main():
 You MUST read FEATURE_TESTS before running test commands.
 
 MANDATORY ACTION:
-  mcp__plugin_swe_serena__read_memory(memory_file_name="FEATURE_TESTS")
+  mcp__plugin_swe_serena__read_memory(memory_name="FEATURE_TESTS")
 
 Then retry the test command."""
         )
