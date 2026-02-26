@@ -102,7 +102,7 @@ claude /mcp
 # 5. Restart Claude Code
 ```
 
-**Why all three uv directories?**
+**Why all 3 uv directories?**
 
 - `git-v0/` — cached git clone of the fork (won't pull new commits if stale)
 - `builds-v0/` — cached wheel built from the old clone
