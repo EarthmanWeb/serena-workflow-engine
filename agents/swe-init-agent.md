@@ -387,19 +387,28 @@ CLAUDE.local.md
 **Install the VSCode extension that surfaces Serena logs in the Output panel.**
 
 ```bash
-EXT_SOURCE="$SWE_PLUGIN_ROOT/vscode-ext/serena-log-viewer"
+# Resolve absolute path (symlinks must use absolute paths to work from ~/.vscode/extensions/)
+EXT_SOURCE="$(cd "$SWE_PLUGIN_ROOT/vscode-ext/serena-log-viewer" 2>/dev/null && pwd)"
 EXT_TARGET="$HOME/.vscode/extensions/serena-log-viewer"
 
-if [ -L "$EXT_TARGET" ]; then
-  echo "✅ Serena Log Viewer already installed (symlink exists)"
+if [ -z "$EXT_SOURCE" ]; then
+  echo "⚠️ VSCode extension source not found at $SWE_PLUGIN_ROOT/vscode-ext/serena-log-viewer - skipping"
+elif [ -L "$EXT_TARGET" ]; then
+  # Verify existing symlink points to correct location
+  CURRENT=$(readlink "$EXT_TARGET")
+  if [ "$CURRENT" = "$EXT_SOURCE" ]; then
+    echo "✅ Serena Log Viewer already installed (symlink correct)"
+  else
+    rm "$EXT_TARGET"
+    ln -s "$EXT_SOURCE" "$EXT_TARGET"
+    echo "✅ Serena Log Viewer symlink updated to $EXT_SOURCE"
+  fi
 elif [ -d "$EXT_TARGET" ]; then
   echo "✅ Serena Log Viewer already installed (directory exists)"
-elif [ -d "$EXT_SOURCE" ]; then
+else
   ln -s "$EXT_SOURCE" "$EXT_TARGET"
   echo "✅ Installed Serena Log Viewer VSCode extension"
   echo "   Reload VSCode to activate (Cmd+Shift+P > Reload Window)"
-else
-  echo "⚠️ VSCode extension source not found at $EXT_SOURCE - skipping"
 fi
 ```
 

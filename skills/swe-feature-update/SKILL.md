@@ -22,7 +22,7 @@ args:
 **If starting a new session**, first read workflow initialization:
 
 ```
-mcp__plugin_swe_serena__read_memory("WF_INIT")
+mcp__plugin_swe_serena__read_memory("wf/WF_INIT")
 ```
 
 Follow WF_INIT instructions before executing this skill.
@@ -57,7 +57,7 @@ Synchronize feature documentation with actual codebase:
 **Verify feature exists:**
 
 ```javascript
-mcp__plugin_swe_serena__read_memory("INDEX_FEATURES")
+mcp__plugin_swe_serena__read_memory("index/INDEX_FEATURES")
 ```
 
 **Check:** Feature key exists in registered features table.
@@ -75,7 +75,7 @@ Exit skill with `needs_clarification` status.
 ## Stage 2: Load Current Feature Memory
 
 ```javascript
-mcp__plugin_swe_serena__read_memory("FEATURE_[KEY]")
+mcp__plugin_swe_serena__read_memory("feature/FEATURE_[KEY]")
 ```
 
 **Extract from current memory:**

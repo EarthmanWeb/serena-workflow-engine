@@ -9,7 +9,7 @@ OUTPUT THE ABOVE LINE IMMEDIATELY. Do not read further until you have reported y
 ## 1. Re-read CLAUDE_OBLIGATIONS
 
 ```
-mcp__plugin_swe_serena__read_memory("CLAUDE_OBLIGATIONS")
+mcp__plugin_swe_serena__read_memory("claude/CLAUDE_OBLIGATIONS")
 ```
 
 Check for violations:
@@ -21,8 +21,8 @@ Check for violations:
 ## 2. Architecture Check
 
 ```
-mcp__plugin_swe_serena__read_memory("ARCH_INDEX")
-mcp__plugin_swe_serena__read_memory("REF_DEV_STANDARDS")
+mcp__plugin_swe_serena__read_memory("arch/ARCH_INDEX")
+mcp__plugin_swe_serena__read_memory("ref/REF_DEV_STANDARDS")
 ```
 
 Verify:

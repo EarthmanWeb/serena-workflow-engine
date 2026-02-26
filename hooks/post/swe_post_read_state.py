@@ -48,9 +48,11 @@ def main():
         input_data = read_stdin_safe(timeout_seconds=2.0)
         cwd = get_input_field(input_data, 'cwd', default=os.getcwd())
         memory_name = get_input_field(input_data, 'tool_input', 'memory_name', default='')
+        # Bare name without directory prefix (e.g. "wf/WF_START" -> "WF_START")
+        bare_name = memory_name.rsplit('/', 1)[-1] if memory_name else ''
 
         # Handle FEATURE_TESTS read - create sentinel for test gate
-        if memory_name == 'FEATURE_TESTS':
+        if bare_name == 'FEATURE_TESTS':
             transcript_path = get_input_field(input_data, 'transcript_path', default='')
             session_id = extract_session_id(transcript_path)
             create_feature_sentinel(session_id, 'test')
@@ -58,7 +60,7 @@ def main():
             return
 
         # Handle FEATURE_SWARM read - create sentinel for swarm gate + emit directive
-        if memory_name == 'FEATURE_SWARM':
+        if bare_name == 'FEATURE_SWARM':
             transcript_path = get_input_field(input_data, 'transcript_path', default='')
             session_id = extract_session_id(transcript_path)
             create_feature_sentinel(session_id, 'swarm')
@@ -70,9 +72,9 @@ def main():
             output.output_and_exit()
 
         # Only process WF_* memories for state transitions
-        if not memory_name or not memory_name.startswith('WF_'):
+        if not bare_name or not bare_name.startswith('WF_'):
             output_status(f"📖 Read: {memory_name or 'unknown'}")
-            return  # Explicit return for clarity (output_empty exits)
+            return
 
         # Extract session ID for session isolation
         transcript_path = get_input_field(input_data, 'transcript_path', default='')
@@ -82,13 +84,13 @@ def main():
         state_mgr = StateManager(cwd, session_id=session_id)
 
         output = HookOutput(event_name="PostToolUse")
-        icon = STATE_ICONS.get(memory_name, '📍')
+        icon = STATE_ICONS.get(bare_name, '📍')
         current = state_mgr.get_current_state()
 
-        # Only transition if state is different
-        if current != memory_name:
+        # Only transition if state is different (compare bare names)
+        if current != bare_name:
             # Create WM file when transitioning TO WF_START (end of WF_INIT)
-            if memory_name == 'WF_START' and not state_mgr.wm_filepath:
+            if bare_name == 'WF_START' and not state_mgr.wm_filepath:
                 project_root = get_project_root()
                 wm_filename = f"WM_{session_id}.md"
                 wm_filepath = os.path.join(project_root, ".serena", "swe", wm_filename)
@@ -133,21 +135,21 @@ def main():
                 stream_path = get_stream_path(session_id)
                 append_event(stream_path, 'session_start', s=session_id)
 
-            success, msg = state_mgr.transition_to(memory_name)
+            success, msg = state_mgr.transition_to(bare_name)
             if success:
-                output.add_message(f"{icon} ON STEP: {memory_name}")
+                output.add_message(f"{icon} ON STEP: {bare_name}")
                 output.add_message(msg)
                 # Append state transition event to stream
                 stream_path = get_stream_path(session_id)
-                append_event(stream_path, 'state', from_s=current, to_s=memory_name, s=session_id)
+                append_event(stream_path, 'state', from_s=current, to_s=bare_name, s=session_id)
                 # Auto-log transition to WM Progress section
                 if state_mgr.wm_filepath:
-                    append_transition_to_wm(state_mgr.wm_filepath, current, memory_name)
+                    append_transition_to_wm(state_mgr.wm_filepath, current, bare_name)
             else:
                 # Informational note about invalid transition (non-blocking)
                 output.add_message(f"ℹ️ Note: {msg}")
         else:
-            output.add_message(f"{icon} ON STEP: {memory_name}")
+            output.add_message(f"{icon} ON STEP: {bare_name}")
 
         output.output_and_exit()
 

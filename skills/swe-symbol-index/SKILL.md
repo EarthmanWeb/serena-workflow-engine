@@ -23,7 +23,7 @@ args:
 **If starting a new session**, first read workflow initialization:
 
 ```
-mcp__plugin_swe_serena__read_memory("WF_INIT")
+mcp__plugin_swe_serena__read_memory("wf/WF_INIT")
 ```
 
 Follow WF_INIT instructions before executing this skill.
@@ -55,7 +55,7 @@ Generate a tabular view of all symbols found in a feature's linked documentation
 **Verify feature exists:**
 
 ```javascript
-mcp__plugin_swe_serena__read_memory("INDEX_FEATURES")
+mcp__plugin_swe_serena__read_memory("index/INDEX_FEATURES")
 ```
 
 **Check:** Feature key exists in registered features table.
@@ -73,7 +73,7 @@ Exit skill with `needs_clarification` status.
 ## Stage 2: Load Feature Memory
 
 ```javascript
-mcp__plugin_swe_serena__read_memory("FEATURE_[KEY]")
+mcp__plugin_swe_serena__read_memory("feature/FEATURE_[KEY]")
 ```
 
 **Extract the "Related Memories" section** (typically a table at the bottom of the feature memory). This contains the list of linked doc names (e.g., `DOM_CALENDAR_DISTRICT`, `SYS_CALENDAR_ICS`).

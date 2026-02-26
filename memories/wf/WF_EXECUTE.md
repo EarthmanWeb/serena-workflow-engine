@@ -28,11 +28,11 @@ Look at your WM's `Feature Key(s)` field (e.g., `- **Feature Key(s)**: [KEY1], [
 
 ```
 # First, get the feature registry
-mcp__plugin_swe_serena__read_memory("INDEX_FEATURES")
+mcp__plugin_swe_serena__read_memory("index/INDEX_FEATURES")
 
 # Then, for EACH feature key in WM:
-mcp__plugin_swe_serena__read_memory("FEATURE_[KEY1]")
-mcp__plugin_swe_serena__read_memory("FEATURE_[KEY2]")
+mcp__plugin_swe_serena__read_memory("feature/FEATURE_[KEY1]")
+mcp__plugin_swe_serena__read_memory("feature/FEATURE_[KEY2]")
 # ... continue for ALL features in WM
 ```
 
@@ -73,18 +73,18 @@ Do NOT manually construct WM content or read REF_WM separately.
 If YES, you MUST first:
 
 ```
-mcp__plugin_swe_serena__read_memory("ARCH_INDEX")
+mcp__plugin_swe_serena__read_memory("arch/ARCH_INDEX")
 ```
 
 Then for EACH layer involved, read:
 
 ```
 # Feature-specific (from FEATURE_[KEY]):
-mcp__plugin_swe_serena__read_memory("SYS_[SYSTEM]")     # For system components
+mcp__plugin_swe_serena__read_memory("sys/SYS_[SYSTEM]")     # For system components
 
 # Codebase-shared:
-mcp__plugin_swe_serena__read_memory("REF_[PATTERN]")    # For patterns/standards
-mcp__plugin_swe_serena__read_memory("REF_DEV_STANDARDS") # For coding standards
+mcp__plugin_swe_serena__read_memory("ref/REF_[PATTERN]")    # For patterns/standards
+mcp__plugin_swe_serena__read_memory("ref/REF_DEV_STANDARDS") # For coding standards
 ```
 
 **DO NOT write code until you have read the relevant memories.**

@@ -9,7 +9,7 @@ Browser MCP provides programmatic browser control for debugging, testing, and ex
 **BEFORE ANY browser navigation to an authenticated page:**
 
 ```
-mcp__serena__read_memory("SYS_MCP_BROWSER_CONFIG")
+mcp__serena__read_memory("sys/SYS_MCP_BROWSER_CONFIG")
 ```
 
 The config contains:

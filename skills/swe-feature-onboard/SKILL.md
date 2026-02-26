@@ -24,7 +24,7 @@ args:
 **If starting a new session**, first read workflow initialization:
 
 ```
-mcp__plugin_swe_serena__read_memory("WF_INIT")
+mcp__plugin_swe_serena__read_memory("wf/WF_INIT")
 ```
 
 Follow WF_INIT instructions before executing this skill.
@@ -193,7 +193,7 @@ AskUserQuestion({
 **⚠️ MANDATORY: Load swarm coordination context first:**
 
 ```javascript
-mcp__plugin_swe_serena__read_memory("FEATURE_SWARM")
+mcp__plugin_swe_serena__read_memory("feature/FEATURE_SWARM")
 ```
 
 This loads swarm patterns, agent definitions, and coordination protocols needed for DAA orchestration. Without it, swarm agents lack the project's coordination standards.

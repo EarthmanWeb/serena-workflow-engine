@@ -39,8 +39,8 @@ The SPEC contains the pre-approved architecture, file paths, data flow, and impl
 If not already loaded at WF_LOAD_FEATURE (check WM):
 
 ```
-mcp__plugin_swe_serena__read_memory("INDEX_FEATURES")   # Get active feature
-mcp__plugin_swe_serena__read_memory("FEATURE_[KEY]")    # Get feature config with layers
+mcp__plugin_swe_serena__read_memory("index/INDEX_FEATURES")   # Get active feature
+mcp__plugin_swe_serena__read_memory("feature/FEATURE_[KEY]")    # Get feature config with layers
 ```
 
 ### 2. Read Layer Documentation
@@ -48,10 +48,10 @@ mcp__plugin_swe_serena__read_memory("FEATURE_[KEY]")    # Get feature config wit
 **For EACH layer in the design, read its rules:**
 
 ```
-mcp__plugin_swe_serena__read_memory("SYS_[SYSTEM]")     # System documentation (feature-specific)
-mcp__plugin_swe_serena__read_memory("REF_[TOPIC]")      # Reference patterns (codebase-shared)
-mcp__plugin_swe_serena__read_memory("REF_DEV_STANDARDS") # Coding standards (codebase-shared)
-mcp__plugin_swe_serena__read_memory("DOM_[DOMAIN]")     # Domain-specific context (feature-specific)
+mcp__plugin_swe_serena__read_memory("sys/SYS_[SYSTEM]")     # System documentation (feature-specific)
+mcp__plugin_swe_serena__read_memory("ref/REF_[TOPIC]")      # Reference patterns (codebase-shared)
+mcp__plugin_swe_serena__read_memory("ref/REF_DEV_STANDARDS") # Coding standards (codebase-shared)
+mcp__plugin_swe_serena__read_memory("dom/DOM_[DOMAIN]")     # Domain-specific context (feature-specific)
 ```
 
 ### 3. Design With Explicit File Paths

@@ -27,7 +27,7 @@ This step exists because feature memories contain:
 ### 1. Read Feature Index
 
 ```
-mcp__plugin_swe_serena__read_memory("INDEX_FEATURES")
+mcp__plugin_swe_serena__read_memory("index/INDEX_FEATURES")
 ```
 
 Identify which feature key(s) match your WM's `Feature Key(s)` field.
@@ -38,11 +38,11 @@ Identify which feature key(s) match your WM's `Feature Key(s)` field.
 
 ```
 # Single feature:
-mcp__plugin_swe_serena__read_memory("FEATURE_[KEY]")
+mcp__plugin_swe_serena__read_memory("feature/FEATURE_[KEY]")
 
 # Multiple features:
-mcp__plugin_swe_serena__read_memory("FEATURE_[KEY1]")
-mcp__plugin_swe_serena__read_memory("FEATURE_[KEY2]")
+mcp__plugin_swe_serena__read_memory("feature/FEATURE_[KEY1]")
+mcp__plugin_swe_serena__read_memory("feature/FEATURE_[KEY2]")
 ```
 
 **⛔ DO NOT PROCEED without reading ALL feature memories for your task.**
@@ -61,8 +61,8 @@ Each FEATURE_[KEY] memory lists related memories. Read those that are relevant:
 
 ```
 # Example - read whatever is listed in your FEATURE_[KEY]:
-mcp__plugin_swe_serena__read_memory("DOM_[DOMAIN]")
-mcp__plugin_swe_serena__read_memory("REF_DEV_STANDARDS")
+mcp__plugin_swe_serena__read_memory("dom/DOM_[DOMAIN]")
+mcp__plugin_swe_serena__read_memory("ref/REF_DEV_STANDARDS")
 ```
 
 ### 4. Validate Requirements Against Domain Memories

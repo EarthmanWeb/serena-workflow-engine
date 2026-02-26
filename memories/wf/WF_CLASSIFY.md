@@ -113,7 +113,7 @@ These tasks need **feature context** (endpoints, config keys, data formats) but 
 **For tasks involving code changes**, read dev standards:
 
 ```
-mcp__plugin_swe_serena__read_memory("REF_DEV_STANDARDS")
+mcp__plugin_swe_serena__read_memory("ref/REF_DEV_STANDARDS")
 ```
 
 **⚠️ MANDATORY RESEARCH BEFORE ROUTING:**
@@ -146,7 +146,7 @@ When ANY of these apply, note `swarm_candidate: true` in WM:
 **⚠️ MANDATORY: Load FEATURE_SWARM:**
 
 ```
-mcp__plugin_swe_serena__read_memory("FEATURE_SWARM")
+mcp__plugin_swe_serena__read_memory("feature/FEATURE_SWARM")
 ```
 
 → **WF_LOAD_FEATURE** (swarm routing confirmed at WF_ARCH_REVIEW after feature context is loaded)
@@ -160,7 +160,7 @@ mcp__plugin_swe_serena__read_memory("FEATURE_SWARM")
 ### 4a. Read Feature Registry
 
 ```
-mcp__plugin_swe_serena__read_memory("INDEX_FEATURES")
+mcp__plugin_swe_serena__read_memory("index/INDEX_FEATURES")
 ```
 
 ### 4b. Identify ALL Affected Features
@@ -177,7 +177,7 @@ Scan request for feature indicators:
 **For EVERY feature identified, you MUST call:**
 
 ```
-mcp__plugin_swe_serena__read_memory("FEATURE_[KEY]")
+mcp__plugin_swe_serena__read_memory("feature/FEATURE_[KEY]")
 ```
 
 **⛔ SKIPPING FEATURE MEMORY LOAD = WORKFLOW VIOLATION**
@@ -209,7 +209,7 @@ From each FEATURE_[KEY], load relevant:
 
 - [ ] Read INDEX_FEATURES
 - [ ] Identified ALL features for this task
-- [ ] Called `read_memory("FEATURE_[KEY]")` for EACH feature
+- [ ] Called `read_memory("feature/FEATURE_[KEY]")` for EACH feature
 - [ ] Loaded relevant DOM__, ARCH__, INDEX_* memories
 - [ ] Updated WM with feature information
 - [ ] Requirements noted (or "none — pure implementation")
@@ -259,7 +259,7 @@ When routing to a workflow-aware skill (e.g., `/research`):
 **Answer these questions:**
 
 1. Did you load INDEX_FEATURES? (YES/NO)
-2. Did you call `read_memory("FEATURE_[KEY]")` for EACH feature? (YES/NO)
+2. Did you call `read_memory("feature/FEATURE_[KEY]")` for EACH feature? (YES/NO)
 3. Did you update WM with features? (YES/NO)
 4. Did you detect requirements (or note "none")? (YES/NO)
 

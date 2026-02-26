@@ -51,7 +51,7 @@ This session's WM should be PRESERVED and UPDATED, not replaced.
 
 3. **Transition to WF_CLASSIFY** for the new task:
    ```
-   mcp__plugin_swe_serena__read_memory("WF_CLASSIFY")
+   mcp__plugin_swe_serena__read_memory("wf/WF_CLASSIFY")
    ```
 
 ### WM Update Template for New Task:

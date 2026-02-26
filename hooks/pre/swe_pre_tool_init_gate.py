@@ -255,7 +255,7 @@ You must complete the WF_INIT workflow before using other tools.
 DO NOT RATIONALIZE. DO NOT NEGOTIATE. INITIALIZE.
 
 MANDATORY ACTION - Call this tool NOW:
-   → mcp__plugin_swe_serena__read_memory(memory_name="WF_INIT")
+   → mcp__plugin_swe_serena__read_memory(memory_name="wf/WF_INIT")
 
 Then follow WF_INIT instructions to:
 1. Read WF_START (which creates the Working Memory)

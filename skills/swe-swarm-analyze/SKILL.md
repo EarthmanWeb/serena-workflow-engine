@@ -19,7 +19,7 @@ allowed-tools: Read, Grep, Glob, mcp__ruv-swarm__*, mcp__claude-flow__*
 **If starting a new session**, first read workflow initialization:
 
 ```
-mcp__plugin_swe_serena__read_memory("WF_INIT")
+mcp__plugin_swe_serena__read_memory("wf/WF_INIT")
 ```
 
 Follow WF_INIT instructions before executing this skill.

@@ -112,7 +112,7 @@ intent:
 
 ## Init Gate (swe_pre_tool_init_gate.py)
 
-Blocks ALL tool calls until `read_memory("WF_INIT")` has been called:
+Blocks ALL tool calls until `read_memory("wf/WF_INIT")` has been called:
 
 - Ensures workflow instructions are read before any work begins
 - Allows: read_memory tool calls (to enable reading WF_INIT)
@@ -123,7 +123,7 @@ Blocks ALL tool calls until `read_memory("WF_INIT")` has been called:
 **Changed from echoing to memory references:**
 
 - Hooks no longer read and echo instruction file contents
-- Instead, hooks point agent to use `mcp__serena__read_memory("WF_*")`
+- Instead, hooks point agent to use `mcp__serena__read_memory("wf/WF_*")`
 - Instruction files are copied to `.serena/swe/` during `/swe-init`
 
 **Benefits:**

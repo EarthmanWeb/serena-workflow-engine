@@ -59,7 +59,7 @@ OUTPUT THE ABOVE LINE IMMEDIATELY. Do not read further until you have reported y
 ### 1. Check Feature Registry
 
 ```
-mcp__plugin_swe_serena__read_memory("INDEX_FEATURES")
+mcp__plugin_swe_serena__read_memory("index/INDEX_FEATURES")
 ```
 
 **If INDEX_FEATURES doesn't exist or has no registered features:**
@@ -83,7 +83,7 @@ If any FEATURE_[KEY] doesn't exist → `WF_ONBOARD`
 ### 3. Read CLAUDE_OBLIGATIONS
 
 ```
-mcp__plugin_swe_serena__read_memory("CLAUDE_OBLIGATIONS")
+mcp__plugin_swe_serena__read_memory("claude/CLAUDE_OBLIGATIONS")
 ```
 
 ### 4. ⚠️ MANDATORY: WM File
