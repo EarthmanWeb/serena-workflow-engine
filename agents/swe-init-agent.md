@@ -459,6 +459,41 @@ rbenv exec gem install ruby-lsp
 
 **Root cause in Serena source:** `_setup_runtime_dependencies()` in `solidlsp/language_servers/ruby_lsp.py` correctly detects rbenv but the global `ruby-lsp` binary (found via `shutil.which`) resolves to the rbenv shim pointing to a Ruby version where the gem isn't installed.
 
+### Ruby LSP Fails With Native Extension Build Errors
+
+**Cause:** `ruby-lsp` creates a "composed bundle" that includes ALL project gems from `Gemfile`. If any gem requires native extensions with missing system libraries (e.g. `mysql2` needs `libmysqlclient`), the bundle install fails and the Ruby LS never starts.
+
+**Symptoms in Serena logs:**
+```
+ERROR - Gem::Ext::BuildError: ERROR: Failed to build gem native extension.
+ERROR - An error occurred while installing mysql2 (0.5.7), and Bundler cannot continue.
+```
+
+**Fix options (in order of preference):**
+
+1. **Serena handles this automatically** (fix/ruby-lsp-rbenv branch) — pre-creates `.ruby-lsp/bundle_is_composed` marker so ruby-lsp skips the composed bundle install entirely. Symbol extraction works without it.
+
+2. **Manual marker creation:**
+```bash
+mkdir -p .ruby-lsp && touch .ruby-lsp/bundle_is_composed
+# Then restart Serena MCP server
+```
+
+3. **Install missing system libraries:**
+```bash
+# For mysql2:
+brew install mysql-client
+# Then restart Serena MCP server
+```
+
+4. **Add ruby-lsp to project Gemfile** (ruby-lsp skips composed bundle when it finds itself in Gemfile):
+```ruby
+group :development do
+  gem 'ruby-lsp'
+  gem 'debug'
+end
+```
+
 ### Verification Fails
 
 Identify which check failed, return to that task, fix, and re-verify.

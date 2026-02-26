@@ -26,9 +26,8 @@ Create `.claude/plugins/serena-workflow-engine/.mcp.json`:
         "ide-assistant",
         "--project",
         "./",
-        "--additional-folders",
-        ".serena/swe/arch,.serena/swe/dev,.serena/swe/feature",
-        "--enable-web-dashboard=false"
+        "--enable-web-dashboard=false",
+        "--memory-folders=./.serena/swe"
       ],
       "env": {}
     }
