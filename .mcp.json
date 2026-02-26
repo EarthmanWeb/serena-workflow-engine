@@ -13,8 +13,6 @@
         "ide-assistant",
         "--project",
         "./",
-        "--additional-folders",
-        ".serena/swe/arch,.serena/swe/claude,.serena/swe/dev,.serena/swe/dom,.serena/swe/feature,.serena/swe/index,.serena/swe/map,.serena/swe/ref,.serena/swe/rules,.serena/swe/sys,.serena/swe/wf",
         "--enable-web-dashboard=false",
         "--memory-path=./.serena/swe"
       ],
