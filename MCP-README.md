@@ -19,7 +19,7 @@ Create `.claude/plugins/serena-workflow-engine/.mcp.json`:
       "args": [
         "--reinstall",
         "--from",
-        "git+https://github.com/EarthmanWeb/serena@feature-multiplefoldersupport",
+        "git+https://github.com/EarthmanWeb/serena@swe",
         "serena",
         "start-mcp-server",
         "--context",

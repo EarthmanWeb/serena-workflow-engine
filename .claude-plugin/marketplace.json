@@ -1,6 +1,6 @@
 {
   "name": "EarthmanWeb",
-  "version": "1.0.63",
+  "version": "1.0.64",
   "description": "Earthman Media custom Claude plugins",
   "owner": {
     "name": "EarthmanWeb",
@@ -10,7 +10,7 @@
   "plugins": [
     {
       "name": "swe",
-      "version": "1.0.63",
+      "version": "1.0.64",
       "description": "21-state workflow engine with Serena memory persistence, RLVR learning, and auto plan mode switching",
       "source": "./",
       "homepage": "https://github.com/EarthmanWeb/serena-workflow-engine",
