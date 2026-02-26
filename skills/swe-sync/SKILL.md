@@ -40,6 +40,10 @@ Follow WF_INIT instructions before executing this skill.
 
 Synchronize Serena memories between plugin and local project using ruv-swarm coordination.
 
+## Resolve Plugin Root
+
+Before syncing, resolve `SWE_PLUGIN_ROOT` — check in order: `.claude/plugins/serena-workflow-engine`, `~/.claude/plugins/marketplaces/EarthmanWeb`, latest in `~/.claude/plugins/cache/EarthmanWeb/swe/`. Use the first path containing `.claude-plugin/plugin.json`.
+
 ## Usage
 
 ```
@@ -83,7 +87,7 @@ mcp__ruv-swarm__task_orchestrate({
 
 ### Step 4: Execute File Comparison
 
-**Plugin Path:** `.claude/plugins/serena-workflow-engine/memories/`
+**Plugin Path:** `$SWE_PLUGIN_ROOT/memories/`
 **Local Path:** `.serena/swe/`
 
 **Categories:**
@@ -174,7 +178,7 @@ Files MUST be copied to their matching subdirectory:
 mkdir -p .serena/swe/{category}
 
 # For PLUGIN_NEWER and MISSING_LOCAL files — always overwrite:
-cp -f .claude/plugins/serena-workflow-engine/memories/{category}/{file} .serena/swe/{category}/{file}
+cp -f $SWE_PLUGIN_ROOT/memories/{category}/{file} .serena/swe/{category}/{file}
 
 # For LOCAL_NEWER files — SKIP and report:
 echo "⚠️ SKIPPED: {category}/{file} — local version is newer. Review manually if plugin changes are needed."
@@ -183,7 +187,7 @@ echo "⚠️ SKIPPED: {category}/{file} — local version is newer. Review manua
 **Direction: local-to-plugin**
 
 ```bash
-cp -f .serena/swe/{category}/{file} .claude/plugins/serena-workflow-engine/memories/{category}/{file}
+cp -f .serena/swe/{category}/{file} $SWE_PLUGIN_ROOT/memories/{category}/{file}
 ```
 
 **Direction: bidirectional**

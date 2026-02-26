@@ -145,7 +145,7 @@ Changes detected for [KEY]:
 
 When updating the **SWE** feature itself, memories follow a dual-location architecture:
 
-1. **Edit FIRST** in the plugin folder: `.claude/plugins/serena-workflow-engine/memories/`
+1. **Edit FIRST** in the plugin folder: `$SWE_PLUGIN_ROOT/memories/`
 2. **Then sync** to local project using `/swe-sync`
 
 This ensures changes are preserved in the portable plugin and propagated correctly.

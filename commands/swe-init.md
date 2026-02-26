@@ -21,7 +21,12 @@ Task({
   description: "SWE plugin initialization",
   prompt: `You are the SWE Init Agent.
 
-Read .claude/plugins/serena-workflow-engine/agents/swe-init-agent.md and execute ALL tasks (1-10), then run all 8 verifications.
+First resolve SWE_PLUGIN_ROOT by checking these paths in order (use the first that contains .claude-plugin/plugin.json):
+1. .claude/plugins/serena-workflow-engine (local dev)
+2. ~/.claude/plugins/marketplaces/EarthmanWeb (marketplace install)
+3. Latest version dir in ~/.claude/plugins/cache/EarthmanWeb/swe/ (cache)
+
+Then read $SWE_PLUGIN_ROOT/agents/swe-init-agent.md and execute ALL tasks (1-12), then run all 9 verifications.
 
 Only create swe-setup-complete.json after ALL verifications pass.
 Output the completion summary at the end.`

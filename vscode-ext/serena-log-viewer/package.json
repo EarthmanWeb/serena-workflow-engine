@@ -1,0 +1,25 @@
+{
+  "name": "serena-log-viewer",
+  "displayName": "SWE: Serena Log Viewer",
+  "description": "Tails Serena MCP server logs in the VSCode Output panel",
+  "version": "0.1.0",
+  "publisher": "EarthmanWeb",
+  "engines": {
+    "vscode": "^1.94.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "serena-log-viewer.show",
+        "title": "SWE: Show Serena Logs"
+      }
+    ]
+  }
+}

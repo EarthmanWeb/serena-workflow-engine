@@ -115,7 +115,7 @@ mcp__plugin_swe_serena__get_symbols_overview({
 
 ```javascript
 mcp__plugin_swe_serena__get_symbols_overview({
-  relative_path: ".claude/plugins/serena-workflow-engine/memories/[subdir]/[MEMORY_NAME].md"
+  relative_path: "$SWE_PLUGIN_ROOT/memories/[subdir]/[MEMORY_NAME].md"
 })
 ```
 

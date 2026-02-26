@@ -327,7 +327,7 @@ contributing:
 
 | Location           | Path                                      | Purpose                      |
 | ------------------ | ----------------------------------------- | ---------------------------- |
-| **Plugin Folder**  | `.claude/plugins/serena-workflow-engine/` | Generic/portable code        |
+| **Plugin Folder**  | `$SWE_PLUGIN_ROOT/` | Generic/portable code        |
 | **Local Memories** | `.serena/swe/`                            | Project-specific adaptations |
 
 ### Change Classification

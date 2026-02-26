@@ -37,9 +37,9 @@ Task({
 
 ## TASKS
 
-Execute ALL tasks (1-11) in order, then verify.
+Execute ALL tasks (1-12) in order, then verify.
 
-### Task 1: Detect Environment
+### Task 1: Detect Environment and Resolve Plugin Root
 
 Report:
 
@@ -47,6 +47,41 @@ Report:
 - Git repo status
 - Existing .serena/ directory
 - Existing .claude/ directory
+
+**Resolve SWE_PLUGIN_ROOT** — the plugin source may be in different locations depending on how it was installed. Check these paths in order and use the first one found:
+
+```bash
+# Resolve SWE plugin root (check in priority order)
+SWE_PLUGIN_ROOT=""
+CANDIDATES=(
+  ".claude/plugins/serena-workflow-engine"                    # Local dev (git submodule)
+  "$HOME/.claude/plugins/marketplaces/EarthmanWeb"            # Marketplace install
+)
+
+# Also check versioned cache dirs (use latest version)
+CACHE_BASE="$HOME/.claude/plugins/cache/EarthmanWeb/swe"
+if [ -d "$CACHE_BASE" ]; then
+  LATEST_CACHE=$(ls -1d "$CACHE_BASE"/*/ 2>/dev/null | sort -V | tail -1)
+  [ -n "$LATEST_CACHE" ] && CANDIDATES+=("${LATEST_CACHE%/}")
+fi
+
+for candidate in "${CANDIDATES[@]}"; do
+  if [ -f "$candidate/.claude-plugin/plugin.json" ]; then
+    SWE_PLUGIN_ROOT="$candidate"
+    break
+  fi
+done
+
+if [ -z "$SWE_PLUGIN_ROOT" ]; then
+  echo "ERROR: Could not find SWE plugin installation"
+  exit 1
+fi
+
+echo "SWE Plugin Root: $SWE_PLUGIN_ROOT"
+echo "Version: $(jq -r '.version' "$SWE_PLUGIN_ROOT/.claude-plugin/plugin.json")"
+```
+
+**IMPORTANT:** Use `$SWE_PLUGIN_ROOT` in ALL subsequent tasks instead of hardcoded paths. Store it for the session.
 
 ### Task 2: Verify MCP Servers
 
@@ -174,7 +209,7 @@ else
   echo "Then restart Claude Code and run /swe-init again."
   echo ""
   echo "See the README for full installation instructions:"
-  echo "  .claude/plugins/serena-workflow-engine/README.md"
+  echo "  $SWE_PLUGIN_ROOT/README.md"
   exit 1
 fi
 ```
@@ -250,9 +285,9 @@ else
 fi
 
 # Verify hooks.json exists in plugin
-if [ -f ".claude/plugins/serena-workflow-engine/hooks/hooks.json" ]; then
+if [ -f "$SWE_PLUGIN_ROOT/hooks/hooks.json" ]; then
   echo "Plugin hooks.json found - hooks will load automatically"
-  jq '.hooks | keys' .claude/plugins/serena-workflow-engine/hooks/hooks.json
+  jq '.hooks | keys' $SWE_PLUGIN_ROOT/hooks/hooks.json
 else
   echo "ERROR: Plugin hooks.json missing!"
   exit 1
@@ -289,7 +324,7 @@ done
 cd - >/dev/null
 
 # Recursively copy ALL memories preserving directory structure
-cp -r .claude/plugins/serena-workflow-engine/memories/* .serena/swe/
+cp -r $SWE_PLUGIN_ROOT/memories/* .serena/swe/
 
 echo "Installed instruction files with directory structure"
 echo "Subdirectories:"
@@ -313,7 +348,7 @@ Check for and create if missing:
 
 ```bash
 # Copy _INDEX if missing
-[ ! -f ".serena/swe/_INDEX.md" ] && cp .claude/plugins/serena-workflow-engine/memories/_INDEX.md .serena/swe/
+[ ! -f ".serena/swe/_INDEX.md" ] && cp $SWE_PLUGIN_ROOT/memories/_INDEX.md .serena/swe/
 
 # List existing FEATURE_* files to populate Active Features
 echo "Available features to add to _INDEX:"
@@ -347,9 +382,32 @@ CLAUDE.local.md
 .serena/archive-specs/
 ```
 
+### Task 12: Install Serena Log Viewer VSCode Extension
+
+**Install the VSCode extension that surfaces Serena logs in the Output panel.**
+
+```bash
+EXT_SOURCE="$SWE_PLUGIN_ROOT/vscode-ext/serena-log-viewer"
+EXT_TARGET="$HOME/.vscode/extensions/serena-log-viewer"
+
+if [ -L "$EXT_TARGET" ]; then
+  echo "✅ Serena Log Viewer already installed (symlink exists)"
+elif [ -d "$EXT_TARGET" ]; then
+  echo "✅ Serena Log Viewer already installed (directory exists)"
+elif [ -d "$EXT_SOURCE" ]; then
+  ln -s "$EXT_SOURCE" "$EXT_TARGET"
+  echo "✅ Installed Serena Log Viewer VSCode extension"
+  echo "   Reload VSCode to activate (Cmd+Shift+P > Reload Window)"
+else
+  echo "⚠️ VSCode extension source not found at $EXT_SOURCE - skipping"
+fi
+```
+
+This creates a symlink from `~/.vscode/extensions/serena-log-viewer` to the extension source in the plugin directory. The extension tails `~/.serena/logs/<date>/mcp_*.txt` and displays them in the VSCode Output panel under "SWE: Serena Logs".
+
 ## VERIFICATION
 
-After all tasks, verify these 8 conditions:
+After all tasks, verify these 9 conditions:
 
 1. **MCP Servers**: All three respond
 2. **settings.json**: NO hooks, statusLine, or claudeFlow
@@ -369,7 +427,7 @@ After all tasks, verify these 8 conditions:
    ```
 5. **Plugin Hooks Exist**: hooks.json in plugin folder
    ```bash
-   jq '.hooks | keys' .claude/plugins/serena-workflow-engine/hooks/hooks.json
+   jq '.hooks | keys' $SWE_PLUGIN_ROOT/hooks/hooks.json
    # Expected: ["PostToolUse", "PreToolUse", "SessionStart", "Stop", "UserPromptSubmit"]
    ```
 6. **Instruction Files**: >= 26 files with subdirectory structure
@@ -381,6 +439,10 @@ After all tasks, verify these 8 conditions:
    ```
 7. **Core Memories**: _INDEX.md and INDEX_FEATURES.md exist
 8. **Serena Onboarding**: Complete
+9. **Log Viewer Extension**: Symlink exists at `~/.vscode/extensions/serena-log-viewer`
+   ```bash
+   [ -L "$HOME/.vscode/extensions/serena-log-viewer" ] || [ -d "$HOME/.vscode/extensions/serena-log-viewer" ] && echo "✅ Log Viewer installed" || echo "⚠️ Log Viewer not installed"
+   ```
 
 ## COMPLETION
 
@@ -388,7 +450,7 @@ Only after ALL verifications pass:
 
 ```bash
 # Read version from plugin.json
-PLUGIN_VERSION=$(jq -r '.version' .claude/plugins/serena-workflow-engine/.claude-plugin/plugin.json)
+PLUGIN_VERSION=$(jq -r '.version' $SWE_PLUGIN_ROOT/.claude-plugin/plugin.json)
 
 cat > .claude/swe-setup-complete.json << EOF
 {
@@ -414,6 +476,7 @@ EOF
 - Instruction Files: Copied to .serena/swe/
 - Core Memories: Created
 - Gitignore: Configured
+- Log Viewer: VSCode extension installed
 
 **Next steps:**
 1. Run /swe-feature-onboard [KEY] to register your first feature
@@ -509,5 +572,5 @@ Identify which check failed, return to that task, fix, and re-verify.
 jq '.enabledPlugins' .claude/settings.local.json
 
 # Verify hooks.json exists
-cat .claude/plugins/serena-workflow-engine/hooks/hooks.json | jq '.hooks | keys'
+cat $SWE_PLUGIN_ROOT/hooks/hooks.json | jq '.hooks | keys'
 ```

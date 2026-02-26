@@ -34,7 +34,7 @@ Uses ruv-swarm for parallel file comparison:
 
 ### What it does:
 
-- Copies files from `.claude/plugins/serena-workflow-engine/memories/` TO `.serena/swe/`
+- Copies files from `$SWE_PLUGIN_ROOT/memories/` TO `.serena/swe/`
 - **Always overwrites** local files when plugin version is newer (no prompting)
 - **Reports but skips** local files that are newer than the plugin version
 - Preserves ALL local-only files (memories created by user, WM_* files, stats/, etc.)
@@ -50,9 +50,9 @@ Uses ruv-swarm for parallel file comparison:
 
 ```bash
 # Copy plugin memories to local, preserve everything else
-cp -n .claude/plugins/serena-workflow-engine/memories/**/*.md .serena/swe/
+cp -n $SWE_PLUGIN_ROOT/memories/**/*.md .serena/swe/
 # Or for specific files:
-cp .claude/plugins/serena-workflow-engine/memories/wf/WF_CLASSIFY.md .serena/swe/wf/
+cp $SWE_PLUGIN_ROOT/memories/wf/WF_CLASSIFY.md .serena/swe/wf/
 ```
 
 **⛔ FORBIDDEN COMMANDS - NEVER USE:**
