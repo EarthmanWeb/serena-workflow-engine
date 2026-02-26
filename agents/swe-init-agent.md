@@ -94,7 +94,7 @@ LSP_COMMANDS=(
 )
 
 LSP_INSTALL=(
-  ruby      "gem install ruby-lsp"
+  ruby      "gem install ruby-lsp"  # overridden below if rbenv detected
   markdown  "brew install marksman"
   php       "npm install -g intelephense"
   typescript "npm install -g typescript-language-server typescript"
@@ -102,6 +102,14 @@ LSP_INSTALL=(
   python    "pipx install python-lsp-server"
   yaml      "npm install -g yaml-language-server"
 )
+
+# rbenv awareness: ruby-lsp MUST be installed under the rbenv-managed Ruby,
+# not the system/Homebrew Ruby. Serena detects .ruby-version + rbenv and uses
+# `rbenv exec` to launch ruby-lsp, so the gem must exist in that Ruby version.
+if whence rbenv > /dev/null 2>&1 && [ -f ".ruby-version" ]; then
+  LSP_INSTALL[ruby]="rbenv exec gem install ruby-lsp"
+  LSP_COMMANDS[ruby]="ruby-lsp"  # check via rbenv shim
+fi
 
 MISSING=()
 INSTALLED=()
@@ -428,6 +436,28 @@ claude mcp logs [server-name]
 rm -rf ~/.serena/language_servers/static/BashLanguageServer
 # Then restart Claude Code
 ```
+
+### Ruby LSP Returns Empty Symbols `{}`
+
+**Cause:** `ruby-lsp` is installed under the system/Homebrew Ruby but NOT under the rbenv-managed Ruby. Serena detects `.ruby-version` + rbenv and uses `rbenv exec` to launch `ruby-lsp`. If the gem doesn't exist in that Ruby version, the Ruby LS silently fails to start and all `.rb` files fall back to a non-Ruby LS that returns `{}`.
+
+**Diagnosis:**
+```bash
+# Check which Ruby rbenv uses
+rbenv version
+# Check if ruby-lsp is installed there
+rbenv exec gem list ruby-lsp
+# Compare with system gem
+/opt/homebrew/bin/gem list ruby-lsp
+```
+
+**Fix:**
+```bash
+rbenv exec gem install ruby-lsp
+# Then restart Serena MCP server
+```
+
+**Root cause in Serena source:** `_setup_runtime_dependencies()` in `solidlsp/language_servers/ruby_lsp.py` correctly detects rbenv but the global `ruby-lsp` binary (found via `shutil.which`) resolves to the rbenv shim pointing to a Ruby version where the gem isn't installed.
 
 ### Verification Fails
 
