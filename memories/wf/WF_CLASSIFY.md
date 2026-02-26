@@ -113,7 +113,7 @@ These tasks need **feature context** (endpoints, config keys, data formats) but 
 **For tasks involving code changes**, read dev standards:
 
 ```
-mcp__plugin_swe_serena__read_memory("ref/REF_DEV_STANDARDS")
+mcp__plugin_swe_serena__read_memory("feature/FEATURE_DEV_STANDARDS")
 ```
 
 **⚠️ MANDATORY RESEARCH BEFORE ROUTING:**

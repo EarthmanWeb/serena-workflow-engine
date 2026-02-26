@@ -22,7 +22,7 @@
 
 **⛔ SKIPPING = WORKFLOW VIOLATION**
 
-**Note:** REF_AGENTS is a template file — skip it unless customized.
+**Note:** FEATURE_AGENTS is a template file — skip it unless customized.
 
 ---
 

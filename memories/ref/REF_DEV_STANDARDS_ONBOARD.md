@@ -60,7 +60,7 @@ mcp__ruv-swarm__task_orchestrate(task: "[specific research task]", strategy: "pa
 
 ### Create Index Entry Point
 
-Create `REF_DEV_STANDARDS` as short index (~50 lines):
+Create `FEATURE_DEV_STANDARDS` as short index (~50 lines):
 
 - Quick reference table linking to subsections
 - Universal standards (indentation, line endings, encoding)
@@ -125,7 +125,7 @@ Add to `_INDEX`:
 ```markdown
 ## Development Standards
 
-**Entry Point**: `REF_DEV_STANDARDS`
+**Entry Point**: `FEATURE_DEV_STANDARDS`
 
 | Standard   | Memory           |
 | ---------- | ---------------- |
@@ -139,7 +139,7 @@ Add to `_INDEX`:
 - [ ] Swarm initialized with 8-10 specialized agents
 - [ ] Config files analyzed (PHP, JS, SCSS, templates, tests)
 - [ ] Code samples examined for patterns
-- [ ] `REF_DEV_STANDARDS` created as index entry point
+- [ ] `FEATURE_DEV_STANDARDS` created as index entry point
 - [ ] Individual `DEV_*` memories created (~100-120 lines each)
 - [ ] `_INDEX` updated with Development Standards section
 - [ ] WM updated with completion status
@@ -147,7 +147,7 @@ Add to `_INDEX`:
 ## Output Structure
 
 ```
-REF_DEV_STANDARDS (entry point, ~50 lines)
+FEATURE_DEV_STANDARDS (entry point, ~50 lines)
 ├── DEV_PHP (~100 lines)
 ├── DEV_JAVASCRIPT (~100 lines)
 ├── DEV_SCSS (~100 lines)

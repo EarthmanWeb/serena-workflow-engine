@@ -2,6 +2,19 @@
 
 21-state workflow engine for Claude Code with Serena memory persistence, swarm coordination, and RLVR learning.
 
+## Prerequisites
+
+- **Node.js 18+** (LTS recommended) and **npm 9+**
+- **Claude Code** installed globally
+
+```bash
+# Install claude-flow globally (required for swarm coordination and RLVR learning)
+npm install -g claude-flow@alpha
+
+# Verify installation
+claude-flow --version
+```
+
 ## Install
 
 ### 1. Install MCP servers
@@ -13,30 +26,24 @@ claude mcp add playwright -s local -- npx -y @playwright/mcp@latest
 claude mcp add ruv-swarm -s local -- npx -y ruv-swarm mcp start
 ```
 
-### 2. Install marksman (required for markdown symbol extraction)
-
-```bash
-brew install marksman
-```
-
-### 3. Install the plugin
+### 2. Install the plugin
 
 ```bash
 claude plugin marketplace add https://github.com/EarthmanWeb/serena-workflow-engine.git
 claude plugin install swe@EarthmanWeb --scope local
 ```
 
-### 4. Enable auto-update
+### 3. Enable auto-update
 
-In Claude Code: `/plugin` → **Marketplaces** tab → **EarthmanWeb** → **Enable auto-update**
+In Claude Code CLI: `claude /plugin` → **Marketplaces** tab → **EarthmanWeb** → **Enable auto-update**
 
-### 5. Restart Claude Code and initialize
+### 4. Restart Claude Code and initialize
 
 ```
 /swe-init
 ```
 
-### 6. Onboard your first feature
+### 5. Restart Claude Code and Onboard your first feature
 
 ```
 /swe-feature-onboard FEATURE_[KEY]

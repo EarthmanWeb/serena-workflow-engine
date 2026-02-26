@@ -16,7 +16,7 @@ fi
 
 # Append plugin bundled memories
 if [ -n "$PLUGIN_ROOT" ]; then
-  PATHS="$PATHS,$PLUGIN_ROOT/memories"
+  PATHS="$PATHS,$PLUGIN_ROOT/memories:ro "
 fi
 
 exec uvx --refresh \

@@ -62,7 +62,7 @@ Each FEATURE_[KEY] memory lists related memories. Read those that are relevant:
 ```
 # Example - read whatever is listed in your FEATURE_[KEY]:
 mcp__plugin_swe_serena__read_memory("dom/DOM_[DOMAIN]")
-mcp__plugin_swe_serena__read_memory("ref/REF_DEV_STANDARDS")
+mcp__plugin_swe_serena__read_memory("feature/FEATURE_DEV_STANDARDS")
 ```
 
 ### 4. Validate Requirements Against Domain Memories

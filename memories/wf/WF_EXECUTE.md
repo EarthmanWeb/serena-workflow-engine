@@ -84,7 +84,7 @@ mcp__plugin_swe_serena__read_memory("sys/SYS_[SYSTEM]")     # For system compone
 
 # Codebase-shared:
 mcp__plugin_swe_serena__read_memory("ref/REF_[PATTERN]")    # For patterns/standards
-mcp__plugin_swe_serena__read_memory("ref/REF_DEV_STANDARDS") # For coding standards
+mcp__plugin_swe_serena__read_memory("feature/FEATURE_DEV_STANDARDS") # For coding standards
 ```
 
 **DO NOT write code until you have read the relevant memories.**
@@ -108,7 +108,7 @@ For each layer, follow patterns from relevant SYS_* and REF_* memories.
 
 - Read REF_TESTING for testing patterns
 - Implement tests for functional code
-- Run tests and verify (commands from FEATURE_[KEY] or REF_DEV_STANDARDS)
+- Run tests and verify (commands from FEATURE_[KEY] or FEATURE_DEV_STANDARDS)
 
 ---
 

@@ -7,7 +7,6 @@ capabilities:
   - lsp_verification
   - settings_migration
   - hook_installation
-  - memory_installation
 ---
 
 # SWE Init Agent
@@ -22,8 +21,7 @@ Autonomous agent for initializing the swe plugin. Completes all setup tasks and 
 4. **Claude-Flow Verification** - Verify plugin is installed
 5. **Settings Migration** - Move claudeFlow config to settings.local.json
 6. **Plugin Verification** - Verify SWE plugin is enabled
-7. **Memory Installation** - Copy instruction files to .serena/swe/
-8. **Verification** - Confirm all tasks completed correctly
+7. **Verification** - Confirm all tasks completed correctly
 
 ## Agent Spawn
 
@@ -37,7 +35,7 @@ Task({
 
 ## TASKS
 
-Execute ALL tasks (1-12) in order, then verify.
+Execute ALL tasks (1-11) in order, then verify.
 
 ### Task 1: Detect Environment and Resolve Plugin Root
 
@@ -294,73 +292,36 @@ else
 fi
 ```
 
-### Task 9: Install Instruction Files to Memories
+### Task 9: Install Template Memories
 
-**IMPORTANT: This plugin uses a forked version of Serena that supports subdirectory organization.**
-
-Memory files are organized in subdirectories and MUST be copied preserving this structure:
-
-- `wf/` - Workflow state instructions (WF_*.md)
-- `claude/` - Claude behavior docs (CLAUDE.md, CLAUDE_OBLIGATIONS.md)
-- `ref/` - Reference documentation (REF_*.md)
-- `dom/` - Domain documentation (DOM_*.md)
-- `feature/` - Feature configurations (FEATURE_*.md)
-- `arch/` - Architecture documentation (ARCH_*.md)
-- `index/` - Index files (INDEX_*.md)
+**Copy template files from the plugin to the project's Serena memories.** These are starter files that get customized per-project.
 
 ```bash
-# Create directory structure (preserving subdirectory organization)
-mkdir -p .serena/swe/{wf,claude,ref,dom,feature,arch,index,archived}
+TEMPLATES_DIR="$SWE_PLUGIN_ROOT/memories/templates"
+TARGET_DIR=".serena/swe"
 
-# Archive existing files in subdirectories
-cd .serena/swe
-for dir in wf claude ref dom feature arch; do
-  if [ -d "$dir" ]; then
-    for f in "$dir"/*.md; do
-      [ -f "$f" ] && mv "$f" archived/"$(basename "$f").$(date +%Y%m%d_%H%M%S).bak" 2>/dev/null
-    done
-  fi
-done
-cd - >/dev/null
+# Create target subdirectories
+mkdir -p "$TARGET_DIR"/feature
 
-# Recursively copy ALL memories preserving directory structure
-cp -r $SWE_PLUGIN_ROOT/memories/* .serena/swe/
+# Copy templates to their appropriate subdirectories (skip if already exists)
+[ ! -f "$TARGET_DIR/_INDEX.md" ] && cp "$TEMPLATES_DIR/_INDEX.md" "$TARGET_DIR/_INDEX.md"
+[ ! -f "$TARGET_DIR/feature/FEATURE_TESTS.md" ] && cp "$TEMPLATES_DIR/FEATURE_TESTS.md" "$TARGET_DIR/feature/FEATURE_TESTS.md"
+[ ! -f "$TARGET_DIR/feature/FEATURE_DEV_STANDARDS.md" ] && cp "$TEMPLATES_DIR/FEATURE_DEV_STANDARDS.md" "$TARGET_DIR/feature/FEATURE_DEV_STANDARDS.md"
+[ ! -f "$TARGET_DIR/feature/FEATURE_AGENTS.md" ] && cp "$TEMPLATES_DIR/FEATURE_AGENTS.md" "$TARGET_DIR/feature/FEATURE_AGENTS.md"
 
-echo "Installed instruction files with directory structure"
-echo "Subdirectories:"
-ls -d .serena/swe/*/ 2>/dev/null
-echo "Total files:"
-find .serena/swe -name "*.md" -type f | wc -l
+echo "Template files installed (skipped any that already exist)"
 ```
 
-### Task 10: Create and Customize Core Memories
+**After copying, populate templates using available skills:**
 
-Check for and create if missing:
+1. **`_INDEX.md`**: List actual FEATURE_* files in `## Active Features`, remove `<!-- TEMPLATE: ... -->` comment block, clear placeholder text from `## Current Session`
+2. **`FEATURE_TESTS.md`**: If the project has test suites, run `/swe-feature-onboard tests` to populate with project-specific test config
+3. **`FEATURE_DEV_STANDARDS.md`**: If dev standards have been onboarded, run `/swe-feature-onboard` for relevant features to populate standards from detected config files
+4. **`FEATURE_AGENTS.md`**: If custom agents are defined, populate with project-specific agent definitions
 
-- `.serena/swe/_INDEX.md` (from memories/_INDEX.md)
-- `.serena/swe/INDEX_FEATURES.md`
+Skip population for templates that don't apply to the project yet — they'll be populated when the relevant feature is onboarded later.
 
-**IMPORTANT: Customize _INDEX.md after copying:**
-
-1. List actual FEATURE_* files in `## Active Features` section
-2. Remove the `<!-- TEMPLATE: ... -->` comment block
-3. Clear placeholder text from `## Current Session`
-
-```bash
-# Copy _INDEX if missing
-[ ! -f ".serena/swe/_INDEX.md" ] && cp $SWE_PLUGIN_ROOT/memories/_INDEX.md .serena/swe/
-
-# List existing FEATURE_* files to populate Active Features
-echo "Available features to add to _INDEX:"
-ls .serena/swe/FEATURE_*.md 2>/dev/null | xargs -I{} basename {} .md
-```
-
-Then edit `.serena/swe/_INDEX.md`:
-
-- Replace `[FEATURE_X](FEATURE_X) - Description` with actual features
-- Remove template comment block
-
-### Task 11: Configure Gitignore
+### Task 10: Configure Gitignore
 
 Add these entries to .gitignore if not present:
 
@@ -382,7 +343,7 @@ CLAUDE.local.md
 .serena/archive-specs/
 ```
 
-### Task 12: Install Serena Log Viewer VSCode Extension
+### Task 11: Install Serena Log Viewer VSCode Extension
 
 **Install the VSCode extension that surfaces Serena logs in the Output panel.**
 
@@ -416,7 +377,7 @@ This creates a symlink from `~/.vscode/extensions/serena-log-viewer` to the exte
 
 ## VERIFICATION
 
-After all tasks, verify these 9 conditions:
+After all tasks, verify these 8 conditions:
 
 1. **MCP Servers**: All three respond
 2. **settings.json**: NO hooks, statusLine, or claudeFlow
@@ -439,16 +400,12 @@ After all tasks, verify these 9 conditions:
    jq '.hooks | keys' $SWE_PLUGIN_ROOT/hooks/hooks.json
    # Expected: ["PostToolUse", "PreToolUse", "SessionStart", "Stop", "UserPromptSubmit"]
    ```
-6. **Instruction Files**: >= 26 files with subdirectory structure
+6. **Template Memories Installed**: Template files exist in `.serena/swe/`
    ```bash
-   # Verify subdirectories exist
-   ls -d .serena/swe/{wf,claude,ref,dom,feature,arch}/ 2>/dev/null && echo "✅ Subdirectories exist"
-   # Count total instruction files
-   find .serena/swe -name "*.md" -type f | wc -l
+   ls .serena/swe/_INDEX.md .serena/swe/feature/FEATURE_TESTS.md .serena/swe/feature/FEATURE_DEV_STANDARDS.md .serena/swe/feature/FEATURE_AGENTS.md
    ```
-7. **Core Memories**: _INDEX.md and INDEX_FEATURES.md exist
-8. **Serena Onboarding**: Complete
-9. **Log Viewer Extension**: Symlink exists at `~/.vscode/extensions/serena-log-viewer`
+7. **Serena Onboarding**: Complete
+8. **Log Viewer Extension**: Symlink exists at `~/.vscode/extensions/serena-log-viewer`
    ```bash
    [ -L "$HOME/.vscode/extensions/serena-log-viewer" ] || [ -d "$HOME/.vscode/extensions/serena-log-viewer" ] && echo "✅ Log Viewer installed" || echo "⚠️ Log Viewer not installed"
    ```
@@ -482,8 +439,7 @@ EOF
 - Claude-Flow Plugin: Verified installed
 - Settings Migration: claudeFlow config moved to settings.local.json
 - SWE Plugin: Enabled (hooks load from plugin folder)
-- Instruction Files: Copied to .serena/swe/
-- Core Memories: Created
+- Template Memories: Installed to .serena/swe/
 - Gitignore: Configured
 - Log Viewer: VSCode extension installed
 

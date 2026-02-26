@@ -1,3 +1,3 @@
-# REF_DEV_STANDARDS - Development Standards Index Template
+# FEATURE_AGENTS - Custom Agents Index Template
 
 This is a template file. Customize for your project during onboarding.

@@ -119,7 +119,7 @@ WF_START → WF_CLASSIFY → WF_LOAD_FEATURE → WF_ARCH_REVIEW → WF_EXECUTE
 | ---------------------------- | ------- | ---------------------- |
 | `swe_stop_workflow_check.py` | Stop    | Verify WF_DONE reached |
 
-### Skills (11 total)
+### Skills (10 total)
 
 | Skill                      | Purpose                                             |
 | -------------------------- | --------------------------------------------------- |
@@ -127,7 +127,6 @@ WF_START → WF_CLASSIFY → WF_LOAD_FEATURE → WF_ARCH_REVIEW → WF_EXECUTE
 | `swe-feature-update`       | Update feature memory files                         |
 | `swe-scaffold-project`     | Initialize new project                              |
 | `swe-symbol-index`         | Generate symbol index table for feature linked docs |
-| `swe-sync`                 | Sync plugin to local memories                       |
 | `swe-wm-update`            | Update Working Memory sections                      |
 | `swe-swarm-orchestrate`    | Multi-agent swarm coordination                      |
 | `swe-swarm-analyze`        | DAA-powered codebase analysis                       |
@@ -136,7 +135,7 @@ WF_START → WF_CLASSIFY → WF_LOAD_FEATURE → WF_ARCH_REVIEW → WF_EXECUTE
 | `swe-workflow-research`    | Code exploration/research                           |
 | `swe-workflow-arch-review` | Architecture compliance review                      |
 
-### Commands (9 total)
+### Commands (7 total)
 
 | Command         | Purpose                    |
 | --------------- | -------------------------- |
@@ -146,9 +145,7 @@ WF_START → WF_CLASSIFY → WF_LOAD_FEATURE → WF_ARCH_REVIEW → WF_EXECUTE
 | `/swe-goto`     | Force transition to state  |
 | `/swe-memory`   | Manage session WM          |
 | `/swe-scaffold` | Scaffold new project       |
-| `/swe-sync`     | Sync plugin memories       |
 | `/swe-cleanup`  | Archive completed memories |
-| `/swe-migrate`  | Migrate legacy files       |
 
 ### Agents (2 total)
 
@@ -164,7 +161,7 @@ Memories are organized in subdirectories:
 | Directory           | Contents                                                     |
 | ------------------- | ------------------------------------------------------------ |
 | `memories/wf/`      | 21 workflow state instructions (WF_*.md)                     |
-| `memories/ref/`     | Reference docs (REF_DEV_STANDARDS, REF_SWARM_PATTERNS, etc.) |
+| `memories/ref/`     | Reference docs (FEATURE_DEV_STANDARDS, REF_SWARM_PATTERNS, etc.) |
 | `memories/claude/`  | Claude behavior docs (CLAUDE.md, CLAUDE_OBLIGATIONS.md)      |
 | `memories/arch/`    | Architecture documentation (ARCH_SWE.md)                     |
 | `memories/dom/`     | Domain documentation (DOM_SWE_HOOKS.md)                      |
@@ -292,11 +289,11 @@ Contains project-specific adaptations:
 
 | Change Type               | Plugin Folder | Local Memories | Example             |
 | ------------------------- | ------------- | -------------- | ------------------- |
-| Generic workflow logic    | ✅ YES        | ✅ SYNC        | New WF_* state      |
+| Generic workflow logic    | ✅ YES        | ❌ No          | New WF_* state      |
 | Generic hook behavior     | ✅ YES        | ❌ No          | Hook pattern change |
 | Project-specific patterns | ❌ No         | ✅ YES         | Custom DOM_* doc    |
 | New skill/command         | ✅ YES        | ❌ No          | New /swe-* command  |
-| Reference documentation   | ✅ YES        | ✅ SYNC        | REF_* updates       |
+| Reference documentation   | ✅ YES        | ❌ No          | REF_* updates       |
 | Hook script changes       | ✅ YES        | ❌ No          | Python hook edits   |
 
 ### Hook Loading

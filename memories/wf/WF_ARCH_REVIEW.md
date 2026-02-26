@@ -50,7 +50,7 @@ mcp__plugin_swe_serena__read_memory("feature/FEATURE_[KEY]")    # Get feature co
 ```
 mcp__plugin_swe_serena__read_memory("sys/SYS_[SYSTEM]")     # System documentation (feature-specific)
 mcp__plugin_swe_serena__read_memory("ref/REF_[TOPIC]")      # Reference patterns (codebase-shared)
-mcp__plugin_swe_serena__read_memory("ref/REF_DEV_STANDARDS") # Coding standards (codebase-shared)
+mcp__plugin_swe_serena__read_memory("feature/FEATURE_DEV_STANDARDS") # Coding standards (codebase-shared)
 mcp__plugin_swe_serena__read_memory("dom/DOM_[DOMAIN]")     # Domain-specific context (feature-specific)
 ```
 

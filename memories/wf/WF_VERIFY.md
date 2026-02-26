@@ -22,7 +22,7 @@ Check for violations:
 
 ```
 mcp__plugin_swe_serena__read_memory("arch/ARCH_INDEX")
-mcp__plugin_swe_serena__read_memory("ref/REF_DEV_STANDARDS")
+mcp__plugin_swe_serena__read_memory("feature/FEATURE_DEV_STANDARDS")
 ```
 
 Verify:
