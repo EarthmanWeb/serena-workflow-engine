@@ -14,7 +14,7 @@
         "--project",
         "./",
         "--enable-web-dashboard=false",
-        "--memory-path=./.serena/swe,./docs,~/.claude/plugins/cache/EarthmanWeb/swe/1.0.72/memories"
+        "--memory-path=${SWE_MEMORY_PATH:-./.serena/memories},${CLAUDE_PLUGIN_ROOT}/memories"
       ],
       "env": {}
     }
