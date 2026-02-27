@@ -14,13 +14,6 @@ fi
 # Run the bump script
 "$BUMP_SCRIPT"
 
-# Sync version into .mcp.json memory-path
-NEW_VERSION=$(python3 -c "import json; print(json.load(open('$PLUGIN_ROOT/.claude-plugin/plugin.json'))['version'])")
-MCP_JSON="$PLUGIN_ROOT/.mcp.json"
-if [[ -f "$MCP_JSON" ]]; then
-    sed -i '' "s|cache/EarthmanWeb/swe/[0-9][0-9.]*[0-9]/memories|cache/EarthmanWeb/swe/$NEW_VERSION/memories|g" "$MCP_JSON"
-fi
-
 # Stage the bumped files
-git add "$PLUGIN_ROOT/.claude-plugin/plugin.json" "$PLUGIN_ROOT/.claude-plugin/marketplace.json" "$MCP_JSON"
+git add "$PLUGIN_ROOT/.claude-plugin/plugin.json" "$PLUGIN_ROOT/.claude-plugin/marketplace.json"
 [[ -f "$PLUGIN_ROOT/package.json" ]] && git add "$PLUGIN_ROOT/package.json"
