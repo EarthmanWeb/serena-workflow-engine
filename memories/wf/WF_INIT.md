@@ -14,6 +14,7 @@ Common rationalizations that are **NEVER VALID**:
 - ❌ "I can batch this with other calls" - **NEVER combine workflow steps with implementation actions.**
 - ❌ "CLAUDE_OBLIGATIONS doesn't apply here" - **It ALWAYS applies. Read it EVERY time.**
 - ❌ "WM already exists" - **Verify and UPDATE it. Don't assume.**
+- ❌ "This task has nothing to do with the codebase" - **ALL tasks run through the workflow. No exceptions for GitHub issues, external tools, or "unrelated" work.**
 
 **If you find yourself making a tool call that searches code, edits files, or does ANYTHING implementation-related before completing initialization: STOP. You are violating the workflow.**
 
