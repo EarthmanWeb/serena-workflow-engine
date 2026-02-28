@@ -19,6 +19,7 @@ try:
     from swe_hooks.core.session import extract_session_id
     from swe_hooks.core.config import get_project_root
     from swe_hooks.core.stream import get_sentinel_path, get_stream_path, append_event
+    from swe_hooks.core.input import read_stdin_safe
     _STREAM_AVAILABLE = True
 except ImportError:
     _STREAM_AVAILABLE = False
@@ -177,7 +178,7 @@ def check_working_memory_exists(session_id):
 
 def main():
     try:
-        input_data = json.load(sys.stdin)
+        input_data = read_stdin_safe(timeout_seconds=2.0) if _STREAM_AVAILABLE else json.load(sys.stdin)
         tool_name = input_data.get('tool_name', '')
         transcript_path = input_data.get('transcript_path', '')
         tool_input = input_data.get('tool_input', {})
