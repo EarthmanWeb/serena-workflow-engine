@@ -80,7 +80,7 @@ Each workflow state includes a reporting line with a distinct icon:
 | WF_CLASSIFY           | **On step WF_CLASSIFY**        |
 | WF_UPDATE_MEMORY      | **On step WF_UPDATE_MEMORY**   |
 | WF_CLARIFY            | **On step WF_CLARIFY**         |
-| WF_LOAD_FEATURE       | **On step WF_LOAD_FEATURE**    |
+| ~~WF_LOAD_FEATURE~~   | _(merged into WF_CLASSIFY)_    |
 | ~~WF_ASK_PERMISSION~~ | _(merged into WF_ARCH_REVIEW)_ |
 | WF_EXECUTE            | **On step WF_EXECUTE**         |
 | WF_CHECKPOINT         | **On step WF_CHECKPOINT**      |
@@ -270,7 +270,7 @@ Key verification points that can't be skipped:
 
 ### 5. Requirement Detection
 
-`WF_CLASSIFY` scans every user message for requirement language inline and notes requirements for validation at `WF_LOAD_FEATURE` against domain memories.
+`WF_CLASSIFY` scans every user message for requirement language inline and validates requirements against domain memories in Step 5.
 
 ---
 

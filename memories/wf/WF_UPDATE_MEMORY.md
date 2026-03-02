@@ -53,7 +53,7 @@ mcp__plugin_swe_serena__edit_memory("MEMORY_NAME", "old", "new", "literal")
 
 | Condition             | MUST Read Next                   |
 | --------------------- | -------------------------------- |
-| Domain memory updated | `WF_LOAD_FEATURE`                |
+| Domain memory updated | `WF_CLASSIFY`                    |
 | WM updated            | Return to previous workflow step |
 
 1. Read the appropriate WF_* memory NOW

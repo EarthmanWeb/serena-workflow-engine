@@ -98,7 +98,6 @@ STATE_ICONS = {
     "WF_START": "🚀",
     "WF_ONBOARD": "📚",
     "WF_CLASSIFY": "🏷️",
-    "WF_LOAD_FEATURE": "📂",
     "WF_RESEARCH": "🔍",
     "WF_CLARIFY": "❓",
     "WF_ARCH_REVIEW": "🔬",

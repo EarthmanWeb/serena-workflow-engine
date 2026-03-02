@@ -36,7 +36,7 @@ The SPEC contains the pre-approved architecture, file paths, data flow, and impl
 
 ### 1. Get Feature Architecture
 
-If not already loaded at WF_LOAD_FEATURE (check WM):
+If not already loaded at WF_CLASSIFY (check WM):
 
 ```
 mcp__plugin_swe_serena__read_memory("index/INDEX_FEATURES")   # Get active feature

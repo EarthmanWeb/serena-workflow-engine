@@ -1,4 +1,4 @@
-# WF_CLASSIFY - Classify, Detect Requirements & Load Features
+# WF_CLASSIFY - Classify, Detect Requirements, Load Features & Route
 
 > **On step WF_CLASSIFY**
 
@@ -15,15 +15,15 @@ If you are thinking of skipping to WF_EXECUTE because:
 - ❌ "The task is simple" - **Complexity doesn't matter. ALL tasks go through WF_CLASSIFY.**
 - ❌ "I already know what to do" - **You still need to load features and verify.**
 - ❌ "WM already has the feature" - **Having the key != having loaded the memory.**
-- ❌ "I'll load features later" - **NO. Features are loaded HERE, at the END of this step.**
+- ❌ "I'll load features later" - **NO. Features are loaded HERE, in this step.**
 
 **The ONLY valid paths to WF_EXECUTE are:**
 
-1. WF_CLASSIFY → WF_LOAD_FEATURE → WF_ARCH_REVIEW → WF_EXECUTE (code changes)
-2. WF_CLASSIFY → WF_LOAD_FEATURE → WF_ARCH_REVIEW → WF_SWARM_ORCHESTRATE → WF_EXECUTE (swarm)
-3. WF_CLASSIFY → WF_LOAD_FEATURE → WF_EXECUTE (operational tasks only)
+1. WF_CLASSIFY → WF_ARCH_REVIEW → WF_EXECUTE (code changes)
+2. WF_CLASSIFY → WF_ARCH_REVIEW → WF_SWARM_ORCHESTRATE → WF_EXECUTE (swarm)
+3. WF_CLASSIFY → WF_EXECUTE (operational tasks only)
 
-**There is NO direct path from WF_CLASSIFY to WF_EXECUTE.**
+**There is NO direct path from WF_CLASSIFY to WF_EXECUTE for code changes.**
 
 ---
 
@@ -44,7 +44,7 @@ Scan user message for behavioral/UX requirements:
 - Corrections to current behavior
 - UX preferences or constraints
 
-**If requirements detected:** Note them in WM for validation at WF_LOAD_FEATURE (where they'll be checked against DOM_* memories).
+**If requirements detected:** Note them in WM for validation at Step 5 (where they'll be checked against DOM_* memories).
 
 **If no requirements:** Pure implementation task — continue.
 
@@ -95,8 +95,8 @@ Fuzzy-match for phrases indicating the user wants uninterrupted execution:
 - Run existing test suites
 - Verify deployment or environment state
 
-These tasks need **feature context** (endpoints, config keys, data formats) but do **not modify source code**. They skip arch review at WF_LOAD_FEATURE.
-→ **WF_LOAD_FEATURE** (mark task as `operational` in WM)
+These tasks need **feature context** (endpoints, config keys, data formats) but do **not modify source code**. They skip arch review.
+→ Mark task as `operational` in WM, route to **WF_EXECUTE** after feature loading (Step 4)
 
 #### Simple Tasks (Code Changes, 1-2 files)
 
@@ -104,7 +104,7 @@ These tasks need **feature context** (endpoints, config keys, data formats) but 
 - Small code change
 - Documentation update
 - Single function modification
-  → **WF_LOAD_FEATURE**
+  → **WF_ARCH_REVIEW** (after feature loading in Step 4)
 
 #### Medium Tasks (Code Changes, 2-5 files)
 
@@ -131,7 +131,7 @@ mcp__plugin_swe_serena__read_memory("_INDEX")  # Full navigation hub
 - New feature spanning 2-5 files
 - Refactoring existing code structure
 - Multi-layer design changes
-  → **WF_LOAD_FEATURE** (swarm assessment happens at WF_ARCH_REVIEW)
+  → **WF_ARCH_REVIEW** (swarm assessment happens there)
 
 #### Large Tasks (Potential Swarm)
 
@@ -149,7 +149,7 @@ When ANY of these apply, note `swarm_candidate: true` in WM:
 mcp__plugin_swe_serena__read_memory("feature/FEATURE_SWARM")
 ```
 
-→ **WF_LOAD_FEATURE** (swarm routing confirmed at WF_ARCH_REVIEW after feature context is loaded)
+→ **WF_ARCH_REVIEW** (swarm routing confirmed there after feature context is loaded)
 
 ---
 
@@ -186,11 +186,13 @@ mcp__plugin_swe_serena__read_memory("feature/FEATURE_[KEY]")
 
 From each FEATURE_[KEY], load relevant:
 
-| Memory Type                     | Purpose                 |
-| ------------------------------- | ----------------------- |
-| `DOM_[KEY]`                     | Domain-specific context |
-| `ARCH_[KEY]` or shared `ARCH_*` | Architecture patterns   |
-| `INDEX_[KEY]_*`                 | File/symbol indexes     |
+| Memory Type                     | When to Read                               |
+| ------------------------------- | ------------------------------------------ |
+| `DOM_[KEY]`                     | Always - contains domain-specific patterns |
+| `SYS_[SYSTEM]`                  | For system/infrastructure work             |
+| `REF_[TOPIC]`                   | For coding standards and patterns          |
+| `ARCH_[KEY]` or shared `ARCH_*` | For multi-layer architecture work          |
+| `INDEX_[KEY]_*`                 | For locating specific files/classes        |
 
 ### 4e. Update WM with Features
 
@@ -203,6 +205,33 @@ From each FEATURE_[KEY], load relevant:
 
 ---
 
+## Step 5: Validate Requirements Against Domain Memories
+
+**If Step 2 detected requirements** (noted in WM), compare them to loaded domain memories:
+
+1. **Check for existing domain memory:**
+   Look for `DOM_*` memories that relate to the detected requirements.
+
+2. **Compare requirement to domain knowledge:**
+   - **NEW requirement**: Note it — will be added to domain memory after implementation
+   - **CONFLICTING requirement**: Route to `WF_CLARIFY` — ask user before overriding existing domain rules
+   - **EXISTING requirement**: Acknowledge — the domain already documents this behavior
+
+3. **If no requirements were detected at Step 2**: Skip this — pure implementation task.
+
+---
+
+## Step 6: Note Key Information for Implementation
+
+From the feature memories, record in your understanding:
+
+- Key file paths and directories
+- Important class/function names for Serena lookups
+- Testing commands
+- Architecture patterns to follow
+
+---
+
 ## Feature Loading Verification Checklist
 
 **Before proceeding to ANY next step, confirm ALL boxes:**
@@ -210,9 +239,9 @@ From each FEATURE_[KEY], load relevant:
 - [ ] Read INDEX_FEATURES
 - [ ] Identified ALL features for this task
 - [ ] Called `read_memory("feature/FEATURE_[KEY]")` for EACH feature
-- [ ] Loaded relevant DOM__, ARCH__, INDEX_* memories
+- [ ] Loaded relevant DOM_*, SYS_*, REF_*, ARCH_*, INDEX_* memories
 - [ ] Updated WM with feature information
-- [ ] Requirements noted (or "none — pure implementation")
+- [ ] Requirements validated against domain memories (or "none — pure implementation")
 
 **If ANY box is unchecked: STOP and complete it NOW.**
 
@@ -230,14 +259,14 @@ When routing to a workflow-aware skill (e.g., `/research`):
 - **Calling Step**: WF_CLASSIFY
 - **Feature Key**: [from INDEX_FEATURES or detected]
 - **Session ID**: [from WM filename]
-- **Return Step**: WF_LOAD_FEATURE
+- **Return Step**: WF_CLASSIFY
 - **Invocation Mode**: workflow
 ```
 
 ### 2. Inform User
 
 ```
-> Routing to /research skill for exploration. Will return to WF_LOAD_FEATURE on completion.
+> Routing to /research skill for exploration. Will return to WF_CLASSIFY on completion.
 ```
 
 ### 3. Handle Skill Return
@@ -262,20 +291,22 @@ When routing to a workflow-aware skill (e.g., `/research`):
 2. Did you call `read_memory("feature/FEATURE_[KEY]")` for EACH feature? (YES/NO)
 3. Did you update WM with features? (YES/NO)
 4. Did you detect requirements (or note "none")? (YES/NO)
+5. Did you validate requirements against domain memories? (YES/NO)
 
 **If ANY answer is NO: STOP and do it NOW.**
 
 ### Routing Table
 
-| Condition             | MUST Read Next    |
-| --------------------- | ----------------- |
-| Request unclear       | `WF_CLARIFY`      |
-| Test debugging needed | `WF_DEBUG_TDD`    |
-| Research only         | `WF_RESEARCH`     |
-| **All other tasks**   | `WF_LOAD_FEATURE` |
+| Condition                | MUST Read Next   |
+| ------------------------ | ---------------- |
+| Request unclear          | `WF_CLARIFY`     |
+| Test debugging needed    | `WF_DEBUG_TDD`   |
+| Research only            | `WF_RESEARCH`    |
+| Conflicting requirement  | `WF_CLARIFY`     |
+| **Operational tasks**    | `WF_EXECUTE`     |
+| **All code change tasks**| `WF_ARCH_REVIEW` |
 
-**ALL implementation tasks (simple, medium, large, operational) go to WF_LOAD_FEATURE.**
-Swarm assessment happens later at WF_ARCH_REVIEW where feature context is available.
+Swarm assessment happens at WF_ARCH_REVIEW where feature context is available.
 
 1. Determine which condition applies
 2. Read that WF_* memory NOW
@@ -283,7 +314,7 @@ Swarm assessment happens later at WF_ARCH_REVIEW where feature context is availa
 
 **SKIPPING THIS TRANSITION = WORKFLOW VIOLATION**
 **SKIPPING FEATURE LOADING = WORKFLOW VIOLATION**
-**GOING DIRECTLY TO WF_EXECUTE = WORKFLOW VIOLATION**
+**GOING DIRECTLY TO WF_EXECUTE FOR CODE CHANGES = WORKFLOW VIOLATION**
 
 ## ⚠️ MANDATORY: WM UPDATE
 

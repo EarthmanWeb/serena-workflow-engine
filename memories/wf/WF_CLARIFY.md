@@ -116,7 +116,7 @@ AskUserQuestion({
 | Return To         | MUST Read Next    |
 | ----------------- | ----------------- |
 | From CLASSIFY     | `WF_CLASSIFY`     |
-| From LOAD_FEATURE | `WF_LOAD_FEATURE` |
+| From CLASSIFY     | `WF_CLASSIFY`     |
 | From ARCH_REVIEW  | `WF_ARCH_REVIEW`  |
 
 1. Note where you came from

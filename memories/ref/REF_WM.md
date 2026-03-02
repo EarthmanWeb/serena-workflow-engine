@@ -64,7 +64,7 @@ Session: <SESSION_ID>
 - **Calling Step**: WF_CLASSIFY
 - **Feature Key(s)**: BLOCKS
 - **Session ID**: 3fe6b3c5
-- **Return Step**: WF_LOAD_FEATURE
+- **Return Step**: WF_CLASSIFY
 - **Invocation Mode**: workflow
 - **Current State**: WF_EXECUTE
 - **Task Iteration**: 1
@@ -137,7 +137,7 @@ Session: <SESSION_ID>
 - **Status**: success_with_findings
 - **Findings Summary**: [brief]
 - **Artifacts**: [list]
-- **Next Step Hint**: WF_LOAD_FEATURE
+- **Next Step Hint**: WF_CLASSIFY
 ```
 
 **Status codes:** `success`, `success_with_findings`, `needs_clarification`, `blocked`, `escalate_complexity`

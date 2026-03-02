@@ -32,8 +32,8 @@
 
 ```
 SessionStart → WF_INITIAL_SETUP (first time) OR WF_START
-WF_START → WF_CLASSIFY → WF_LOAD_FEATURE → WF_ARCH_REVIEW → WF_EXECUTE
-                                          → WF_SWARM_ORCHESTRATE → WF_EXECUTE
+WF_START → WF_CLASSIFY → WF_ARCH_REVIEW → WF_EXECUTE
+                                        → WF_SWARM_ORCHESTRATE → WF_EXECUTE
          → WF_EXECUTE ↔ WF_CHECKPOINT → WF_VERIFY → WF_DONE → WF_CLEANUP
 ```
 
@@ -63,7 +63,7 @@ WF_START → WF_CLASSIFY → WF_LOAD_FEATURE → WF_ARCH_REVIEW → WF_EXECUTE
 | Analysis   | WF_RESEARCH                                              |
 | Planning   | WF_ARCH_REVIEW, WF_SWARM_ORCHESTRATE                     |
 | Gates      | WF_CLARIFY                                               |
-| Execution  | WF_LOAD_FEATURE, WF_EXECUTE, WF_CHECKPOINT, WF_DEBUG_TDD |
+| Execution  | WF_EXECUTE, WF_CHECKPOINT, WF_DEBUG_TDD |
 | Completion | WF_VERIFY, WF_DONE                                       |
 
 ### Core Modules (swe_hooks/core/)

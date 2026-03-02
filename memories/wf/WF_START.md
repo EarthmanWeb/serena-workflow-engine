@@ -25,9 +25,9 @@ If you are thinking of going to WF_EXECUTE from here:
 
 **Valid paths to WF_EXECUTE (ALL go through classification and feature loading first):**
 
-1. **Code changes:** WF_START → WF_CLASSIFY → WF_LOAD_FEATURE → WF_ARCH_REVIEW → WF_EXECUTE
-2. **Operational tasks:** WF_START → WF_CLASSIFY → WF_LOAD_FEATURE → WF_EXECUTE
-3. **Large/swarm:** WF_START → WF_CLASSIFY → WF_LOAD_FEATURE → WF_ARCH_REVIEW → WF_SWARM_ORCHESTRATE → WF_EXECUTE
+1. **Code changes:** WF_START → WF_CLASSIFY → WF_ARCH_REVIEW → WF_EXECUTE
+2. **Operational tasks:** WF_START → WF_CLASSIFY → WF_EXECUTE
+3. **Large/swarm:** WF_START → WF_CLASSIFY → WF_ARCH_REVIEW → WF_SWARM_ORCHESTRATE → WF_EXECUTE
 
 **If your next step is WF_EXECUTE, you have violated the workflow.**
 
@@ -178,7 +178,6 @@ See routing table below.
 | Invalid Path               | Why It's Invalid                                     |
 | -------------------------- | ---------------------------------------------------- |
 | WF_START → WF_EXECUTE      | **Features not loaded. WF_CLASSIFY must run first.** |
-| WF_START → WF_LOAD_FEATURE | **Classification must happen first.**                |
 | WF_START → WF_CHECKPOINT   | **No work has been done yet.**                       |
 | WF_START → WF_VERIFY       | **Nothing to verify yet.**                           |
 

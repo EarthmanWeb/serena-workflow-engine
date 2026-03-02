@@ -29,10 +29,10 @@
 
 | Condition                             | MUST Read Next    |
 | ------------------------------------- | ----------------- |
-| Research complete, user wants changes | `WF_LOAD_FEATURE` |
+| Research complete, user wants changes | `WF_CLASSIFY`     |
 | Research complete, no changes needed  | `WF_DONE`         |
 
-If the user wants to proceed with implementation based on research findings, route to `WF_LOAD_FEATURE` to load feature context before any code changes.
+If the user wants to proceed with implementation based on research findings, route to `WF_CLASSIFY` to classify the task, load feature context, and route to implementation.
 
 If research answered the user's question with no further action needed, route to `WF_DONE`.
 

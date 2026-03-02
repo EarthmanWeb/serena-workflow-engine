@@ -5,7 +5,7 @@ description: Review architecture compliance before execution
 workflow:
   aware: true
   callable_from:
-    - WF_LOAD_FEATURE
+    - WF_CLASSIFY
     - WF_CONTINUE
   default_return: WF_EXECUTE
   supports_standalone: false

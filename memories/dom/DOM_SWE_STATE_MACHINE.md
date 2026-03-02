@@ -27,7 +27,6 @@ Documents the 21-state workflow FSM and transition rules.
 
 ### Execution States
 
-- **WF_LOAD_FEATURE** - Load feature memories, validate requirements against domain
 - **WF_EXECUTE** - Make changes (allows Edit/Write)
 - **WF_CHECKPOINT** - Save progress (every 3 edits)
 - **WF_DEBUG_TDD** - Test-driven debugging
@@ -43,7 +42,7 @@ Documents the 21-state workflow FSM and transition rules.
 
 | Complexity | Files | Layers | Route To        |
 | ---------- | ----- | ------ | --------------- |
-| All        | Any   | Any    | WF_LOAD_FEATURE |
+| All        | Any   | Any    | WF_ARCH_REVIEW (code) / WF_EXECUTE (operational) |
 
 Swarm assessment happens at WF_ARCH_REVIEW after feature context is loaded.
 

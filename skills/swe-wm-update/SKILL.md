@@ -7,7 +7,6 @@ workflow:
   callable_from:
     - WF_START
     - WF_CLASSIFY
-    - WF_LOAD_FEATURE
     - WF_RESEARCH
     - WF_CONTINUE
     - WF_ARCH_REVIEW
@@ -59,18 +58,12 @@ Note these **daemon-managed fields** exactly as they appear (DO NOT MODIFY):
 
 - [ ] Features identified from INDEX_FEATURES
 - [ ] FEATURE_[KEY] loaded for each feature
+- [ ] Supporting memories loaded (DOM_*, SYS_*, REF_*, ARCH_*, INDEX_*)
+- [ ] Requirements validated against domain memories (or "none detected")
 - [ ] Task type classified (simple / medium / large / operational)
 - [ ] `### Affected Features` populated with Primary / Secondary
-- [ ] `### Progress` updated with classification steps completed
-
-### WF_LOAD_FEATURE
-
-- [ ] INDEX_FEATURES read
-- [ ] FEATURE_[KEY] loaded for each feature
-- [ ] Supporting memories loaded (DOM__, SYS__, REF_*)
-- [ ] Requirements validated against domain memories (or "none detected")
 - [ ] `**Files:**` lists key file paths from feature memories
-- [ ] `### Progress` updated with feature loading outcomes
+- [ ] `### Progress` updated with classification and feature loading steps completed
 
 ### WF_RESEARCH
 

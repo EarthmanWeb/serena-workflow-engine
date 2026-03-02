@@ -37,9 +37,9 @@ WM provides session continuity across conversation turns and enables WF_CONTINUE
         ┌───────────────────┼───────────────────┐
         ▼                   ▼                   ▼
 ┌───────────────┐  ┌───────────────┐  ┌───────────────┐
-│ RESEARCH PATH │  │  ALL CODE TASKS  │
-│  WF_RESEARCH  │  │  WF_LOAD_FEATURE │
-└───────────────┘  └──────────────────┘
+│ RESEARCH PATH │  │  ALL CODE TASKS    │
+│  WF_RESEARCH  │  │  (via WF_CLASSIFY) │
+└───────────────┘  └────────────────────┘
         │                   │
         └───────────────────┘
                             ▼
@@ -145,7 +145,7 @@ When modifying the workflow system:
 | --------------- | -------------------------------------- |
 | WF_START        | CLAUDE_OBLIGATIONS, INDEX_FEATURES, WM |
 | WF_CLASSIFY     | _INDEX, FEATURE_*, REF_SWARM_PATTERNS  |
-| WF_LOAD_FEATURE | _INDEX, DOM_ _, SYS__, INDEX_*         |
+| WF_CLASSIFY     | (also) _INDEX, DOM_*, SYS_*, INDEX_*   |
 | WF_ARCH_REVIEW  | ARCH_INDEX, ARCH__, REF__              |
 | WF_VERIFY       | CLAUDE_OBLIGATIONS, ARCH_INDEX         |
 | Skills          | REF_SKILL_PROTOCOLS, WM                |

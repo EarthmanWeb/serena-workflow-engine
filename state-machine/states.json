@@ -52,12 +52,13 @@
       "id": "WF_CLASSIFY",
       "category": "entry",
       "icon": "🔍",
-      "description": "Classify task complexity, detect requirements, load features, route to implementation",
+      "description": "Classify task, detect requirements, load features, validate & route",
       "planMode": "conditional",
       "allowEdit": false,
       "allowWrite": false,
       "transitions": {
-        "implementation": "WF_LOAD_FEATURE",
+        "code_changes": "WF_ARCH_REVIEW",
+        "operational": "WF_EXECUTE",
         "research_needed": "WF_RESEARCH",
         "debug_needed": "WF_DEBUG_TDD",
         "needs_clarification": "WF_CLARIFY"
@@ -89,7 +90,7 @@
       "allowEdit": false,
       "allowWrite": false,
       "transitions": {
-        "needs_implementation": "WF_LOAD_FEATURE",
+        "needs_implementation": "WF_CLASSIFY",
         "complete": "WF_DONE"
       }
     },
@@ -133,21 +134,6 @@
       "allowEdit": false,
       "allowWrite": false,
       "transitions": { "clarified": "(return_to_caller)" }
-    },
-
-    "WF_LOAD_FEATURE": {
-      "id": "WF_LOAD_FEATURE",
-      "category": "execution",
-      "icon": "📦",
-      "description": "Load feature context, validate requirements against domain memories",
-      "planMode": "never",
-      "allowEdit": false,
-      "allowWrite": false,
-      "transitions": {
-        "code_changes": "WF_ARCH_REVIEW",
-        "operational": "WF_EXECUTE",
-        "needs_clarification": "WF_CLARIFY"
-      }
     },
 
     "WF_EXECUTE": {
@@ -223,13 +209,13 @@
     "SessionStart": ["WF_INITIAL_SETUP", "WF_START"],
     "WF_INITIAL_SETUP": ["WF_START", "WF_CLARIFY"],
     "WF_START": ["WF_CLASSIFY", "WF_CONTINUE", "WF_RESEARCH", "WF_ONBOARD"],
-    "WF_CLASSIFY": ["WF_LOAD_FEATURE", "WF_RESEARCH", "WF_DEBUG_TDD", "WF_CLARIFY"],
+    "WF_CLASSIFY": ["WF_ARCH_REVIEW", "WF_EXECUTE", "WF_RESEARCH", "WF_DEBUG_TDD", "WF_CLARIFY"],
     "WF_CONTINUE": ["WF_ARCH_REVIEW", "WF_EXECUTE", "WF_CLARIFY", "WF_CLASSIFY"],
-    "WF_RESEARCH": ["WF_LOAD_FEATURE", "WF_DONE"],
+    "WF_RESEARCH": ["WF_CLASSIFY", "WF_DONE"],
     "WF_ARCH_REVIEW": ["WF_EXECUTE", "WF_SWARM_ORCHESTRATE", "WF_ARCH_REVIEW", "WF_CLARIFY"],
     "WF_SWARM_ORCHESTRATE": ["WF_EXECUTE", "WF_ARCH_REVIEW"],
     "WF_CLARIFY": ["(return_to_caller)"],
-    "WF_LOAD_FEATURE": ["WF_ARCH_REVIEW", "WF_EXECUTE", "WF_CLARIFY"],
+
     "WF_EXECUTE": ["WF_CHECKPOINT", "WF_VERIFY"],
     "WF_CHECKPOINT": ["WF_EXECUTE", "WF_VERIFY"],
     "WF_DEBUG_TDD": ["WF_EXECUTE", "WF_CLARIFY"],
