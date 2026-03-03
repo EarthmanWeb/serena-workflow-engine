@@ -19,7 +19,7 @@ if [ -n "$PLUGIN_ROOT" ]; then
   PATHS="$PATHS,$PLUGIN_ROOT/memories:ro "
 fi
 
-exec uvx --refresh \
+exec uvx \
   --from "git+https://github.com/EarthmanWeb/serena@swe" \
   serena start-mcp-server \
   --context claude-code \
