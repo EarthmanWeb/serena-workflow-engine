@@ -22,7 +22,7 @@ fi
 exec uvx --refresh \
   --from "git+https://github.com/EarthmanWeb/serena@swe" \
   serena start-mcp-server \
-  --context ide-assistant \
+  --context claude-code \
   --project ./ \
   --enable-web-dashboard=false \
   --memory-path="$PATHS"
