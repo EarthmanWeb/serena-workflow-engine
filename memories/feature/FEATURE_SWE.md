@@ -17,6 +17,7 @@
 | ------------- | ------------------------------ | --------------------------------------- | --------------------- |
 | State Machine | 21-state workflow engine       | `state-machine/`                        | FSM with transitions  |
 | Core Modules  | Shared Python utilities        | `hooks/swe_hooks/core/`                 | Modular imports       |
+| MCP Server    | WM update tools (swe-wm)       | `hooks/swe_hooks/mcp/`                  | Stdio JSON-RPC 2.0   |
 | Hooks         | Event handlers for Claude Code | `hooks/{session,prompt,pre,post,stop}/` | Python scripts        |
 | Skills        | User-invocable workflows       | `skills/`                               | YAML frontmatter + MD |
 | Commands      | CLI shortcuts                  | `commands/`                             | Markdown              |
@@ -77,6 +78,25 @@ WF_START → WF_CLASSIFY → WF_ARCH_REVIEW → WF_EXECUTE
 | `output.py`           | Hook output formatting                     |
 | `wm_validator.py`     | Working Memory validation                  |
 | `wm_writer_daemon.py` | Async WM writing                           |
+
+### MCP Server: swe-wm (`hooks/swe_hooks/mcp/`)
+
+Lightweight stdio MCP server exposing Working Memory update tools. Stdlib only.
+Registered in `plugin.json` as `swe-wm`, started via `scripts/start-wm-mcp.sh`.
+
+| Tool                    | Purpose                                              |
+| ----------------------- | ---------------------------------------------------- |
+| `swe_wm_read`           | Read WM state + full content for a session           |
+| `swe_wm_update_section` | Update agent-owned section (protects daemon fields)  |
+| `swe_wm_update_status`  | Update `**[STATUS]**:` tag in Current Task           |
+
+**Protected sections** (rejected by tools): `Workflow Context`, `Transitions`
+
+**Agent-owned sections**: `Current Task`, `Progress`, `Files`, `Notes`,
+`Requirements`, `Implementation Notes`, `Previous Task`, `Task Context`,
+`Affected Features`, `Context`, `Feature(s)`
+
+**Usage**: `mcp__swe-wm__swe_wm_update_section(session_id="...", section="Progress", content="...")`
 
 ### Hooks (13 Python scripts organized by event type)
 

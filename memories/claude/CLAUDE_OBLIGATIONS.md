@@ -39,8 +39,8 @@ DO NOT BE CONVERSATIONAL when performing tasks. Concise, functional language ONL
 - [ ] **Follow WF_INIT → CLAUDE_OBLIGATIONS → WF_START sequence** - No shortcuts (see WF_INIT)
 - [ ] **"Let It Fail":** Remove and do not add defensive code, Allow Clear failures
 - [ ] Check _INDEX or INDEX_FEATURES when navigating features
-- [ ] Use Serena tools before Read/Edit
-- [ ] Update WM after significant steps
+- [ ] **Use Serena symbolic tools for ALL code edits** — `replace_symbol_body`, `insert_before_symbol`, `insert_after_symbol` for modifications; `find_symbol`, `get_symbols_overview`, `search_for_pattern` for discovery. Only fall back to `Read`/`Edit` for non-code files or when symbols cannot be resolved
+- [ ] **Update WM using `swe-wm` MCP tools** — `swe_wm_update_section` for targeted section updates, `swe_wm_update_status` for status changes, `swe_wm_read` to read. NEVER use `write_memory`/`edit_memory` on WM files (risks clobbering daemon-managed fields)
 - [ ] Ask for clarification when uncertain
 - [ ] Follow existing patterns (check docs and existing code first)
 - [ ] Document new patterns or deviations in Serena memories

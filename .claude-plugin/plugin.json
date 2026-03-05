@@ -1,6 +1,6 @@
 {
   "name": "swe",
-  "version": "1.0.77",
+  "version": "1.0.78",
   "description": "21-state workflow engine with Serena memory persistence, RLVR learning, and auto plan mode switching",
   "author": {
     "name": "EarthmanWeb",
@@ -20,6 +20,14 @@
     "serena": {
       "type": "stdio",
       "command": "${CLAUDE_PLUGIN_ROOT}/scripts/start-serena.sh",
+      "args": [],
+      "env": {
+        "PLUGIN_ROOT": "${CLAUDE_PLUGIN_ROOT}"
+      }
+    },
+    "swe-wm": {
+      "type": "stdio",
+      "command": "${CLAUDE_PLUGIN_ROOT}/scripts/start-wm-mcp.sh",
       "args": [],
       "env": {
         "PLUGIN_ROOT": "${CLAUDE_PLUGIN_ROOT}"
