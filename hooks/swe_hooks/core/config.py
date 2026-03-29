@@ -13,20 +13,24 @@ from datetime import datetime
 
 
 def get_project_root() -> str:
-    """Get project root from CLAUDE_PROJECT_DIR env var (set by Claude Code).
+    """Get project root — the git repository root.
 
-    This is the official, documented way to get the project root.
-    Immune to cd commands changing the working directory.
+    Resolution order:
+    1. CLAUDE_PROJECT_DIR env var, but only if it contains .git/.
+       In multi-root workspaces Claude Code may set this to a subdirectory
+       (e.g. .claude/), not the repo root.
+    2. Walk up from cwd looking for .git/ (always exists before any plugin
+       runs, unlike .serena/ which the plugin itself creates).
     """
-    # Primary: CLAUDE_PROJECT_DIR - set by Claude Code, never changes
+    # Primary: CLAUDE_PROJECT_DIR — but validate it is actually the repo root
     project_dir = os.environ.get('CLAUDE_PROJECT_DIR', '')
-    if project_dir:
+    if project_dir and os.path.isdir(os.path.join(project_dir, '.git')):
         return project_dir
 
-    # Fallback: walk up from cwd (less reliable after cd)
+    # Fallback: walk up from cwd looking for .git/
     current = os.getcwd()
     while current != os.path.dirname(current):
-        if os.path.isdir(os.path.join(current, '.serena')):
+        if os.path.isdir(os.path.join(current, '.git')):
             return current
         current = os.path.dirname(current)
     return os.getcwd()
