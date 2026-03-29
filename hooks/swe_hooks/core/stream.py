@@ -13,7 +13,11 @@ from typing import Optional
 
 def get_stream_dir() -> str:
     """Get stream directory, creating if needed."""
-    project_dir = os.environ.get('CLAUDE_PROJECT_DIR', os.getcwd())
+    try:
+        from swe_hooks.core.config import get_project_root
+        project_dir = get_project_root()
+    except ImportError:
+        project_dir = os.environ.get('CLAUDE_PROJECT_DIR', os.getcwd())
     stream_dir = os.path.join(project_dir, '.serena', 'streams')
     os.makedirs(stream_dir, exist_ok=True)
     return stream_dir

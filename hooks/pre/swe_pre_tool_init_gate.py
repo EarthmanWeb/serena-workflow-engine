@@ -66,13 +66,17 @@ SKIP_STREAM_TOOLS = frozenset([
 
 
 def _get_project_root():
-    """Fallback project root if core module unavailable."""
+    """Fallback project root if core module unavailable.
+
+    Uses .git/ not .serena/ — the plugin creates .serena/ itself, so it
+    can't be used as a root marker on first run or in subdirectory cwd.
+    """
     project_dir = os.environ.get('CLAUDE_PROJECT_DIR', '')
-    if project_dir:
+    if project_dir and os.path.isdir(os.path.join(project_dir, '.git')):
         return project_dir
     current = os.getcwd()
     while current != os.path.dirname(current):
-        if os.path.isdir(os.path.join(current, '.serena')):
+        if os.path.isdir(os.path.join(current, '.git')):
             return current
         current = os.path.dirname(current)
     return os.getcwd()

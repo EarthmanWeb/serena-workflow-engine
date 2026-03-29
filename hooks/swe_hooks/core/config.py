@@ -12,8 +12,11 @@ from typing import Dict, Any, Optional, List, Tuple
 from datetime import datetime
 
 
+_PROJECT_ROOT = None
+
+
 def get_project_root() -> str:
-    """Get project root — the git repository root.
+    """Get project root — the git repository root. Cached after first call.
 
     Resolution order:
     1. CLAUDE_PROJECT_DIR env var, but only if it contains .git/.
@@ -22,18 +25,26 @@ def get_project_root() -> str:
     2. Walk up from cwd looking for .git/ (always exists before any plugin
        runs, unlike .serena/ which the plugin itself creates).
     """
+    global _PROJECT_ROOT
+    if _PROJECT_ROOT is not None:
+        return _PROJECT_ROOT
+
     # Primary: CLAUDE_PROJECT_DIR — but validate it is actually the repo root
     project_dir = os.environ.get('CLAUDE_PROJECT_DIR', '')
     if project_dir and os.path.isdir(os.path.join(project_dir, '.git')):
-        return project_dir
+        _PROJECT_ROOT = project_dir
+        return _PROJECT_ROOT
 
     # Fallback: walk up from cwd looking for .git/
     current = os.getcwd()
     while current != os.path.dirname(current):
         if os.path.isdir(os.path.join(current, '.git')):
-            return current
+            _PROJECT_ROOT = current
+            return _PROJECT_ROOT
         current = os.path.dirname(current)
-    return os.getcwd()
+
+    _PROJECT_ROOT = os.getcwd()
+    return _PROJECT_ROOT
 
 
 def get_paths(cwd: str = None) -> Dict[str, str]:

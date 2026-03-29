@@ -17,19 +17,14 @@ from typing import Optional, Tuple
 def get_project_root() -> str:
     """Get the project root directory reliably, immune to cd commands.
 
-    Uses CLAUDE_PROJECT_DIR environment variable set by Claude Code.
-    This is the official, documented way to get the project root.
-
-    Returns:
-        Absolute path to the project root directory
+    Delegates to config.get_project_root() for single source of truth.
+    Falls back to find_project_root() if config import fails.
     """
-    # Primary: CLAUDE_PROJECT_DIR - set by Claude Code, never changes
-    project_dir = os.environ.get('CLAUDE_PROJECT_DIR', '')
-    if project_dir:
-        return project_dir
-
-    # Fallback: walk up from cwd to find .serena (less reliable after cd)
-    return find_project_root(os.getcwd())
+    try:
+        from swe_hooks.core.config import get_project_root as _config_root
+        return _config_root()
+    except ImportError:
+        return find_project_root(os.getcwd())
 
 
 def extract_session_id(transcript_path: str) -> Optional[str]:
@@ -53,24 +48,17 @@ def extract_session_id(transcript_path: str) -> Optional[str]:
 
 
 def find_project_root(start_dir: str) -> str:
-    """Find the MAIN project root by walking up directory tree.
+    """Find the project root by walking up looking for .git/.
 
-    Skips any .serena folders inside .claude/plugins/ (nested plugin repos).
-    Returns the highest .serena folder in the tree (main project).
+    Uses .git/ (not .serena/) because .serena/ is created by the plugin
+    itself — causes chicken-and-egg when cwd is a subdirectory.
     """
     current = os.path.abspath(start_dir)
-    main_project_root = None
-
-    while current != os.path.dirname(current):  # Stop at filesystem root
-        serena_dir = os.path.join(current, '.serena')
-        if os.path.isdir(serena_dir):
-            # Only accept if NOT inside a plugin directory
-            if '/.claude/plugins/' not in current and '\\.claude\\plugins\\' not in current:
-                # Keep updating - we want the HIGHEST in the tree (main project)
-                main_project_root = current
+    while current != os.path.dirname(current):
+        if os.path.isdir(os.path.join(current, '.git')):
+            return current
         current = os.path.dirname(current)
-
-    return main_project_root if main_project_root else start_dir
+    return start_dir
 
 
 def get_serena_memories_dir(cwd: str = None) -> str:
