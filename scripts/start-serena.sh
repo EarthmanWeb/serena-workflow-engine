@@ -19,10 +19,24 @@ if [ -n "$PLUGIN_ROOT" ]; then
   PATHS="$PATHS,$PLUGIN_ROOT/memories:ro "
 fi
 
-exec uvx \
-  --from "git+https://github.com/EarthmanWeb/serena@swe" \
-  serena start-mcp-server \
-  --context claude-code \
-  --project ./ \
-  --enable-web-dashboard=false \
-  --memory-path="$PATHS"
+PATCH_SCRIPT="$PLUGIN_ROOT/scripts/serena_memory_patch.py"
+
+if [ -f "$PATCH_SCRIPT" ]; then
+  # Use patched wrapper for automatic memory prefix resolution
+  exec uv run \
+    --with "git+https://github.com/EarthmanWeb/serena@swe" \
+    python "$PATCH_SCRIPT" \
+    --context claude-code \
+    --project ./ \
+    --enable-web-dashboard=false \
+    --memory-path="$PATHS"
+else
+  # Fallback to direct Serena startup
+  exec uvx \
+    --from "git+https://github.com/EarthmanWeb/serena@swe" \
+    serena start-mcp-server \
+    --context claude-code \
+    --project ./ \
+    --enable-web-dashboard=false \
+    --memory-path="$PATHS"
+fi

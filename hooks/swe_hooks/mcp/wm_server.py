@@ -137,7 +137,7 @@ TOOL_REGISTRY: Dict[str, Any] = {}  # populated after function definitions
 # ──────────────────────────────────────────────────────────────────
 
 def _resolve_session_id(explicit: str = None) -> Optional[str]:
-    """Resolve session_id: explicit param > SWE_SESSION_ID > CLAUDE_SESSION_ID."""
+    """Resolve session_id: explicit param > env vars > most recent WM file."""
     if explicit:
         return explicit
     sid = os.environ.get("SWE_SESSION_ID")
@@ -146,6 +146,19 @@ def _resolve_session_id(explicit: str = None) -> Optional[str]:
     sid = os.environ.get("CLAUDE_SESSION_ID")
     if sid:
         return sid[:8]
+    # Fallback: find most recent WM file and extract session ID from filename
+    try:
+        import glob as _glob
+        cwd = get_project_root()
+        swe_dir = os.path.join(cwd, '.serena', 'swe')
+        wm_files = _glob.glob(os.path.join(swe_dir, 'WM_*.md'))
+        if wm_files:
+            most_recent = max(wm_files, key=os.path.getmtime)
+            match = re.search(r'WM_([a-f0-9]{8})', os.path.basename(most_recent))
+            if match:
+                return match.group(1)
+    except Exception:
+        pass
     return None
 
 # ──────────────────────────────────────────────────────────────────
