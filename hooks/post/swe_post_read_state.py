@@ -43,26 +43,58 @@ def create_feature_sentinel(session_id: str, gate_name: str) -> bool:
         return False
 
 
+def _get_continuation(current_state: str) -> str:
+    """Get a one-line continuation directive for the current workflow state.
+
+    Prevents mid-step stalls by reminding the agent what to do next.
+    Only fires for states where stalls have been observed.
+    """
+    directives = {
+        "WF_START": "Load INDEX_FEATURES → identify features → update WM → route to WF_CLASSIFY",
+        "WF_CLASSIFY": "Load ALL FEATURE_[KEY] + supporting DOM_*/SYS_*/SPEC_* memories → update WM → route to next step",
+        "WF_ARCH_REVIEW": "Complete architecture review → present plan → route to WF_EXECUTE",
+        "WF_EXECUTE": "Continue implementation → checkpoint at 3+ edits → WF_VERIFY when done",
+        "WF_RESEARCH": "Continue investigation → record findings → route when complete",
+    }
+    d = directives.get(current_state)
+    return f"⏩ CONTINUE ({current_state}): {d}" if d else ""
+
+
 def main():
     try:
         input_data = read_stdin_safe(timeout_seconds=2.0)
         cwd = get_input_field(input_data, 'cwd', default=os.getcwd())
+        tool_name = get_input_field(input_data, 'tool_name', default='')
         memory_name = get_input_field(input_data, 'tool_input', 'memory_name', default='')
         # Bare name without directory prefix (e.g. "wf/WF_START" -> "WF_START")
         bare_name = memory_name.rsplit('/', 1)[-1] if memory_name else ''
 
+        # Extract session ID early (needed for continuation directives)
+        transcript_path = get_input_field(input_data, 'transcript_path', default='')
+        session_id = extract_session_id(transcript_path)
+
+        # Handle list_memories calls (no memory_name) — inject continuation
+        if 'list_memories' in tool_name:
+            state_mgr = StateManager(cwd, session_id=session_id)
+            current = state_mgr.get_current_state()
+            directive = _get_continuation(current)
+            if directive:
+                output = HookOutput(event_name="PostToolUse")
+                output.add_message("📋 Memories listed")
+                output.add_message("")
+                output.add_message(directive)
+                output.output_and_exit()
+            output_empty()
+            return
+
         # Handle FEATURE_TESTS read - create sentinel for test gate
         if bare_name == 'FEATURE_TESTS':
-            transcript_path = get_input_field(input_data, 'transcript_path', default='')
-            session_id = extract_session_id(transcript_path)
             create_feature_sentinel(session_id, 'test')
             output_status(f"📖 Read: {memory_name}")
             return
 
         # Handle FEATURE_SWARM read - create sentinel for swarm gate + emit directive
         if bare_name == 'FEATURE_SWARM':
-            transcript_path = get_input_field(input_data, 'transcript_path', default='')
-            session_id = extract_session_id(transcript_path)
             create_feature_sentinel(session_id, 'swarm')
 
             output = HookOutput(event_name="PostToolUse")
@@ -71,14 +103,21 @@ def main():
             output.add_message("🐝 SWARM DETECTED - You MUST use ruv-swarm or hive-mind swarm orchestration. Go to WF_SWARM_ORCHESTRATE after completing WF_CLASSIFY feature loading.")
             output.output_and_exit()
 
-        # Only process WF_* memories for state transitions
+        # Non-WF_* memories: log read + inject continuation directive
         if not bare_name or not bare_name.startswith('WF_'):
+            state_mgr = StateManager(cwd, session_id=session_id)
+            current = state_mgr.get_current_state()
+            directive = _get_continuation(current)
+
+            if directive:
+                output = HookOutput(event_name="PostToolUse")
+                output.add_message(f"📖 Read: {memory_name or 'unknown'}")
+                output.add_message("")
+                output.add_message(directive)
+                output.output_and_exit()
+
             output_status(f"📖 Read: {memory_name or 'unknown'}")
             return
-
-        # Extract session ID for session isolation
-        transcript_path = get_input_field(input_data, 'transcript_path', default='')
-        session_id = extract_session_id(transcript_path)
 
         # Create state manager with session isolation
         state_mgr = StateManager(cwd, session_id=session_id)
