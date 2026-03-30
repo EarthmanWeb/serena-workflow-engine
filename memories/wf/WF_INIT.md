@@ -24,7 +24,11 @@ Common rationalizations that are **NEVER VALID**:
 
 **BEFORE responding to ANY user message, if you do not remember reading these, you MUST:**
 
-1. READ and COMPLY WITH [CLAUDE_OBLIGATIONS](CLAUDE_OBLIGATIONS.md)
+1. READ and COMPLY WITH CLAUDE_OBLIGATIONS:
+
+```
+mcp__plugin_swe_serena__read_memory("claude/CLAUDE_OBLIGATIONS")
+```
 
 **THEN IN ALL CASES, you MUST:***
 2. READ and COMPLY WITH [WF_START](WF_START.md) fully
