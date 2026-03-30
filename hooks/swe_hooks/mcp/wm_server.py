@@ -309,6 +309,11 @@ TOOL_REGISTRY = {
 # JSON-RPC transport
 # ──────────────────────────────────────────────────────────────────
 
+def _log(msg: str):
+    """Log to stderr (visible in VSCode MCP output panel)."""
+    print(f"[{SERVER_NAME}] {msg}", file=sys.stderr, flush=True)
+
+
 def _send(obj: dict):
     """Write a JSON-RPC message to stdout (newline-delimited)."""
     sys.stdout.write(json.dumps(obj) + "\n")
@@ -370,8 +375,7 @@ HANDLERS = {
 
 def main():
     """Persistent stdio MCP server loop (newline-delimited JSON-RPC 2.0)."""
-    # Log startup to stderr (stdout is reserved for protocol)
-    print(f"[{SERVER_NAME}] MCP server started (pid={os.getpid()})", file=sys.stderr)
+    _log(f"MCP server started (pid={os.getpid()})")
 
     for line in sys.stdin:
         line = line.strip()
@@ -388,6 +392,14 @@ def main():
         method = request.get("method", "")
         params = request.get("params", {})
 
+        # Log incoming request
+        if method == "tools/call":
+            tool_name = params.get("name", "?")
+            tool_args = params.get("arguments", {})
+            _log(f"[In] tools/call {tool_name}: {json.dumps(tool_args)}")
+        elif method:
+            _log(f"[In] {method}")
+
         # Notifications (no id) — acknowledge silently
         if msg_id is None:
             continue
@@ -395,8 +407,13 @@ def main():
         handler = HANDLERS.get(method)
         if handler:
             result = handler(params)
+            # Log outgoing response
+            if method == "tools/call":
+                is_err = result.get("isError", False)
+                _log(f"[Out] {tool_name}: {'ERROR' if is_err else 'OK'}")
             _send_result(msg_id, result)
         else:
+            _log(f"[Out] Method not found: {method}")
             _send_error(msg_id, -32601, f"Method not found: {method}")
 
 
