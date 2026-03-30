@@ -188,11 +188,11 @@ From each FEATURE_[KEY], load relevant:
 
 | Memory Type                     | When to Read                               |
 | ------------------------------- | ------------------------------------------ |
-| `DOM_[KEY]`                     | Always - contains domain-specific patterns |
-| `SYS_[SYSTEM]`                  | For system/infrastructure work             |
-| `REF_[TOPIC]`                   | For coding standards and patterns          |
-| `ARCH_[KEY]` or shared `ARCH_*` | For multi-layer architecture work          |
-| `INDEX_[KEY]_*`                 | For locating specific files/classes        |
+| `dom/DOM_[KEY]_*`               | Always - contains domain-specific patterns |
+| `sys/SYS_[SYSTEM]`              | For system/infrastructure work             |
+| `ref/REF_[TOPIC]`               | For coding standards and patterns          |
+| `arch/ARCH_[KEY]` or `arch/ARCH_*` | For multi-layer architecture work       |
+| `index/INDEX_[KEY]_*`           | For locating specific files/classes        |
 
 ### 4e. Update WM with Features
 

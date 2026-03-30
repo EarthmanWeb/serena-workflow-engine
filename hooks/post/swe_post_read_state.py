@@ -66,8 +66,12 @@ def main():
         cwd = get_input_field(input_data, 'cwd', default=os.getcwd())
         tool_name = get_input_field(input_data, 'tool_name', default='')
         memory_name = get_input_field(input_data, 'tool_input', 'memory_name', default='')
+        tool_result = get_input_field(input_data, 'tool_result', default='')
         # Bare name without directory prefix (e.g. "wf/WF_START" -> "WF_START")
         bare_name = memory_name.rsplit('/', 1)[-1] if memory_name else ''
+
+        # Build input echo prefix for all output paths
+        _in_label = f"[IN: memory_name=\"{memory_name}\"]" if memory_name else ""
 
         # Extract session ID early (needed for continuation directives)
         transcript_path = get_input_field(input_data, 'transcript_path', default='')
@@ -84,13 +88,13 @@ def main():
                 output.add_message("")
                 output.add_message(directive)
                 output.output_and_exit()
-            output_empty()
+            output_status(f"📋 Memories listed {_in_label}")
             return
 
         # Handle FEATURE_TESTS read - create sentinel for test gate
         if bare_name == 'FEATURE_TESTS':
             create_feature_sentinel(session_id, 'test')
-            output_status(f"📖 Read: {memory_name}")
+            output_status(f"📖 Read: {memory_name} {_in_label}")
             return
 
         # Handle FEATURE_SWARM read - create sentinel for swarm gate + emit directive
@@ -98,7 +102,7 @@ def main():
             create_feature_sentinel(session_id, 'swarm')
 
             output = HookOutput(event_name="PostToolUse")
-            output.add_message(f"📖 Read: {memory_name}")
+            output.add_message(f"📖 Read: {memory_name} {_in_label}")
             output.add_message("")
             output.add_message("🐝 SWARM DETECTED - You MUST use ruv-swarm or hive-mind swarm orchestration. Go to WF_SWARM_ORCHESTRATE after completing WF_CLASSIFY feature loading.")
             output.output_and_exit()
@@ -111,12 +115,12 @@ def main():
 
             if directive:
                 output = HookOutput(event_name="PostToolUse")
-                output.add_message(f"📖 Read: {memory_name or 'unknown'}")
+                output.add_message(f"📖 Read: {memory_name or 'unknown'} {_in_label}")
                 output.add_message("")
                 output.add_message(directive)
                 output.output_and_exit()
 
-            output_status(f"📖 Read: {memory_name or 'unknown'}")
+            output_status(f"📖 Read: {memory_name or 'unknown'} {_in_label}")
             return
 
         # Create state manager with session isolation

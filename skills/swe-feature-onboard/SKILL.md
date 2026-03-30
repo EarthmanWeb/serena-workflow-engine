@@ -302,9 +302,9 @@ If user selects "No, needs changes", gather corrections manually.
 
 | Memory        | Content           |
 | ------------- | ----------------- |
-| DOM_[KEY]_*   | Domain behaviors  |
-| SYS_[KEY]_*   | System references |
-| INDEX_[KEY]_* | Indexes           |
+| dom/DOM_[KEY]_*   | Domain behaviors  |
+| sys/SYS_[KEY]_*   | System references |
+| index/INDEX_[KEY]_* | Indexes           |
 
 ## Testing
 
@@ -324,13 +324,13 @@ mcp__plugin_swe_serena__write_memory("FEATURE_[KEY]", "<content>")
 If domains detected:
 
 ```javascript
-mcp__plugin_swe_serena__write_memory("DOM_[KEY]_[DOMAIN]", "<content>")
+mcp__plugin_swe_serena__write_memory("dom/DOM_[KEY]_[DOMAIN]", "<content>")
 ```
 
 If systems detected:
 
 ```javascript
-mcp__plugin_swe_serena__write_memory("SYS_[KEY]_[SYSTEM]", "<content>")
+mcp__plugin_swe_serena__write_memory("sys/SYS_[KEY]_[SYSTEM]", "<content>")
 ```
 
 ---
