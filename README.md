@@ -111,6 +111,3 @@ bash .claude/plugins/serena-workflow-engine/scripts/install-hooks.sh
 
 See `memories/REF_SWE_DEVELOPMENT.md` for full development standards.
 
-## License
-
-MIT
