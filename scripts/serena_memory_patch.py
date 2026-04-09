@@ -18,8 +18,6 @@ import sys
 
 from serena.project import MemoriesManager
 
-print("[SWE-PATCH] serena_memory_patch.py loaded — prefix resolution active", file=sys.stderr)
-
 _original_find_memory = MemoriesManager._find_memory
 _original_get_memory_file_path = MemoriesManager.get_memory_file_path
 _original_load_memory = MemoriesManager.load_memory
