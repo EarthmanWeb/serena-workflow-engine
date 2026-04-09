@@ -20,6 +20,10 @@ from serena.project import MemoriesManager
 
 _original_find_memory = MemoriesManager._find_memory
 _original_get_memory_file_path = MemoriesManager.get_memory_file_path
+_original_load_memory = MemoriesManager.load_memory
+_original_save_memory = MemoriesManager.save_memory
+_original_delete_memory = MemoriesManager.delete_memory
+_original_rename_memory = MemoriesManager.rename_memory
 
 
 def _derive_prefix(name):
@@ -99,8 +103,61 @@ def _patched_get_memory_file_path(self, name):
     return _original_get_memory_file_path(self, normalized)
 
 
+def _patched_load_memory(self, name):
+    """Normalize name before reading."""
+    # Try as-is first
+    try:
+        return _original_load_memory(self, name)
+    except Exception:
+        pass
+    # Try normalized
+    normalized = _normalize_name(name)
+    if normalized != name.replace(".md", ""):
+        try:
+            return _original_load_memory(self, normalized)
+        except Exception:
+            pass
+    # Try bare name
+    clean = name.replace(".md", "")
+    base = clean.split("/")[-1] if "/" in clean else None
+    if base and base != clean:
+        try:
+            return _original_load_memory(self, base)
+        except Exception:
+            pass
+    # Final: let original raise its error with the normalized name
+    return _original_load_memory(self, normalized if normalized != name.replace(".md", "") else name)
+
+
+def _patched_save_memory(self, name, content):
+    """Normalize name before writing."""
+    normalized = _normalize_name(name)
+    return _original_save_memory(self, normalized, content)
+
+
+def _patched_delete_memory(self, name):
+    """Normalize name before deleting."""
+    try:
+        return _original_delete_memory(self, name)
+    except Exception:
+        pass
+    normalized = _normalize_name(name)
+    return _original_delete_memory(self, normalized)
+
+
+def _patched_rename_memory(self, old_name, new_name):
+    """Normalize names before renaming."""
+    normalized_old = _normalize_name(old_name)
+    normalized_new = _normalize_name(new_name)
+    return _original_rename_memory(self, normalized_old, normalized_new)
+
+
 MemoriesManager._find_memory = _patched_find_memory
 MemoriesManager.get_memory_file_path = _patched_get_memory_file_path
+MemoriesManager.load_memory = _patched_load_memory
+MemoriesManager.save_memory = _patched_save_memory
+MemoriesManager.delete_memory = _patched_delete_memory
+MemoriesManager.rename_memory = _patched_rename_memory
 
 # Delegate to Serena CLI with start-mcp-server prepended
 sys.argv = ["serena", "start-mcp-server"] + sys.argv[1:]
