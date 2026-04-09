@@ -56,24 +56,33 @@ def _normalize_name(name):
 
 def _patched_find_memory(self, name):
     # Try the name as-is first (handles already-correct paths)
-    result = _original_find_memory(self, name)
-    if result is not None:
-        return result
+    try:
+        result = _original_find_memory(self, name)
+        if result is not None:
+            return result
+    except Exception:
+        pass
 
     # Auto-resolve: normalize to correct prefix and retry
     normalized = _normalize_name(name)
     if normalized != name.replace(".md", ""):
-        result = _original_find_memory(self, normalized)
-        if result is not None:
-            return result
+        try:
+            result = _original_find_memory(self, normalized)
+            if result is not None:
+                return result
+        except Exception:
+            pass
 
     # Also try the bare name without any prefix (for root-level files)
     clean = name.replace(".md", "")
     base = clean.split("/")[-1] if "/" in clean else None
     if base and base != clean:
-        result = _original_find_memory(self, base)
-        if result is not None:
-            return result
+        try:
+            result = _original_find_memory(self, base)
+            if result is not None:
+                return result
+        except Exception:
+            pass
 
     return None
 
