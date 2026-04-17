@@ -7,7 +7,7 @@
 - **Language:** Python/Bash/JSON/Markdown
 - **Framework:** Claude Code Plugins
 - **Root Path:** `.claude/plugins/serena-workflow-engine`
-- **Last Updated:** 2026-01-25
+- **Last Updated:** 2026-04-16
 
 ## Architecture
 
@@ -251,8 +251,7 @@ read. All feature gates use **session-scoped sentinel files** for O(1) checks.
 
 ## Dependencies
 
-- **Internal:** Serena MCP (memory), Claude-Flow MCP (swarm/learning), RUV-Swarm
-  MCP (DAA)
+- **Internal:** Serena MCP (memory), swe-wm MCP (Working Memory updates)
 - **External:** jq (JSON parsing), bash, python3
 
 ## Runtime Files
@@ -288,7 +287,16 @@ If user says "skip swe" / "no swe" / "disable swe":
 1. User says "yes" → `swe-bootstrap.py` runs inline (via UserPromptSubmit hook)
 2. Bootstrap creates: `.serena/`, `.serena/swe/`, `project.yml`, `memory-paths.conf`, template memories, `swe-setup-complete.json` with `bootstrapped: true`
 3. Init gate is **unblocked** (gate checks `complete` field; bootstrapped-but-not-complete passes through)
-4. User runs `/swe-scaffold-project` which creates core memories and sets `complete: true`
+4. User runs `/swe-init` which launches the init agent (9 tasks):
+   - Detect environment + resolve plugin root
+   - Run bootstrap (if not already done)
+   - Verify MCP servers (Serena, swe-wm)
+   - Serena onboarding
+   - Verify and install language servers
+   - Verify SWE plugin is enabled
+   - Review CLAUDE.md for conflicts
+   - Install Serena Log Viewer VSCode extension
+   - Finalize setup (`complete: true`)
 5. Full workflow is now active
 
 ### State Flow

@@ -5,23 +5,24 @@ capabilities:
   - environment_detection
   - mcp_verification
   - lsp_verification
-  - settings_migration
-  - hook_installation
+  - plugin_verification
 ---
 
 # SWE Init Agent
 
-Autonomous agent for initializing the swe plugin. Completes all setup tasks and verifies success.
+Autonomous agent for initializing the SWE plugin. Completes all setup tasks and verifies success.
 
 ## Capabilities
 
-1. **Environment Detection** - Check project state, git, existing directories
-2. **MCP Verification** - Test serena, claude-flow, ruv-swarm respond
-3. **Serena Onboarding** - Run one-time Serena setup
-4. **Claude-Flow Verification** - Verify plugin is installed
-5. **Settings Migration** - Move claudeFlow config to settings.local.json
+1. **Environment Detection** - Check project state, git, resolve plugin root
+2. **Prerequisite Check** - Run bootstrap if project not yet bootstrapped
+3. **MCP Verification** - Test Serena and swe-wm MCP servers respond
+4. **Serena Onboarding** - Run one-time Serena setup
+5. **LSP Verification** - Verify and install language servers
 6. **Plugin Verification** - Verify SWE plugin is enabled
-7. **Verification** - Confirm all tasks completed correctly
+7. **CLAUDE.md Review** - Remove conflicting workflow commands
+8. **VSCode Extension** - Install Serena Log Viewer
+9. **Finalization** - Mark setup complete
 
 ## Agent Spawn
 
@@ -35,7 +36,7 @@ Task({
 
 ## TASKS
 
-Execute ALL tasks (1-11) in order, then verify.
+Execute ALL tasks (1-9) in order, then run verifications.
 
 ### Task 1: Detect Environment and Resolve Plugin Root
 
@@ -43,8 +44,8 @@ Report:
 
 - Project root (cwd)
 - Git repo status
-- Existing .serena/ directory
-- Existing .claude/ directory
+- Existing `.serena/` directory
+- Existing `.claude/` directory
 
 **Resolve SWE_PLUGIN_ROOT** — the plugin source may be in different locations depending on how it was installed. Check these paths in order and use the first one found:
 
@@ -81,17 +82,54 @@ echo "Version: $(jq -r '.version' "$SWE_PLUGIN_ROOT/.claude-plugin/plugin.json")
 
 **IMPORTANT:** Use `$SWE_PLUGIN_ROOT` in ALL subsequent tasks instead of hardcoded paths. Store it for the session.
 
-### Task 2: Verify MCP Servers
+### Task 2: Check Prerequisites and Bootstrap
 
-Test these MCP tools respond:
+**Requires `$SWE_PLUGIN_ROOT` from Task 1.** Check if the project has been bootstrapped. If not, run the bootstrap script.
 
-- `mcp__plugin_swe_serena__list_memories`
-- `mcp__claude-flow__system_status`
-- `mcp__plugin_swe_ruv-swarm__swarm_status`
+```bash
+SETUP_FILE=".claude/swe-setup-complete.json"
 
-If any fail, report which ones and stop.
+if [ -f "$SETUP_FILE" ]; then
+  BOOTSTRAPPED=$(jq -r '.bootstrapped // false' "$SETUP_FILE")
+  COMPLETE=$(jq -r '.complete // false' "$SETUP_FILE")
+  if [ "$COMPLETE" = "true" ]; then
+    echo "✅ Already fully initialized"
+  elif [ "$BOOTSTRAPPED" = "true" ]; then
+    echo "✅ Already bootstrapped - continuing with full init"
+  else
+    echo "⚠️ Setup file exists but not bootstrapped - running bootstrap"
+  fi
+else
+  echo "⚠️ No setup file - running bootstrap"
+fi
+```
 
-### Task 3: Serena Onboarding
+**If not bootstrapped or not complete**, run:
+
+```bash
+python3 "$SWE_PLUGIN_ROOT/scripts/swe-bootstrap.py"
+```
+
+Bootstrap handles:
+- Directory creation (`.serena/`, `.serena/swe/`, `.claude/`, `.claude/swe-state/`)
+- Language detection → `project.yml`
+- `memory-paths.conf` creation/update
+- Template memory copying (`_INDEX.md`, `FEATURE_TESTS.md`, `FEATURE_DEV_STANDARDS.md`, `FEATURE_AGENTS.md`)
+- `.gitignore` updates
+- `swe-setup-complete.json` creation with `bootstrapped: true`
+
+**If bootstrap fails**, report the error and stop.
+
+### Task 3: Verify MCP Servers
+
+Test that the SWE plugin's MCP servers respond:
+
+- `mcp__plugin_swe_serena__list_memories` (Serena memory server)
+- `mcp__plugin_swe_swe-wm__swe_wm_read` (Working Memory MCP server)
+
+If any fail, report which ones and stop — these are required for the plugin to function.
+
+### Task 4: Serena Onboarding
 
 ```javascript
 const status = await mcp__plugin_swe_serena__check_onboarding_performed();
@@ -100,7 +138,7 @@ if (!status.performed) {
 }
 ```
 
-### Task 4: Verify and Install Language Servers
+### Task 5: Verify and Install Language Servers
 
 **Check which LSP servers are available for languages configured in project.yml.**
 
@@ -188,91 +226,17 @@ Install missing LSP servers automatically. If any fail to install, log the failu
 
 **Note:** Uses `zsh` (not bash) for macOS compatibility. macOS ships bash 3.x which lacks associative arrays.
 
-### Task 5: Verify Claude-Flow Plugin Installation
+### Task 6: Verify SWE Plugin is Enabled
 
-**Check if the claude-flow plugin is installed. If not, guide user to install it.**
-
-```bash
-# Check if claude-flow plugin is installed
-if claude plugin list 2>/dev/null | grep -q "claude-flow@claude-flow-plugin"; then
-  echo "✅ Claude-Flow plugin is installed"
-else
-  echo "⚠️ Claude-Flow plugin NOT installed"
-  echo ""
-  echo "The SWE plugin works best with Claude-Flow. Please install it:"
-  echo ""
-  echo "  claude plugin marketplace add https://github.com/EarthmanWeb/claude-flow-plugin.git#plugin"
-  echo "  claude plugin install claude-flow@claude-flow-plugin --scope local"
-  echo ""
-  echo "Then restart Claude Code and run /swe-init again."
-  echo ""
-  echo "See the README for full installation instructions:"
-  echo "  $SWE_PLUGIN_ROOT/README.md"
-  exit 1
-fi
-```
-
-### Task 6: Review CLAUDE.md for Conflicting Workflow Commands
-
-**Check CLAUDE.md for any workflow/session start instructions that conflict with SWE.**
-
-Read CLAUDE.md and look for:
-
-- References to `WF_START`, `WF_INIT`, or workflow initialization
-- Instructions to read workflow memories on startup
-- Session start procedures that duplicate SWE hooks
-
-If found, remove them - SWE hooks handle workflow initialization automatically.
-
-```bash
-# Check for workflow conflicts in CLAUDE.md
-if [ -f "CLAUDE.md" ]; then
-  # Look for conflicting patterns
-  if grep -qE "(WF_START|WF_INIT|read_memory.*WF_|workflow.*start|session.*start.*hook)" CLAUDE.md; then
-    echo "Found potential workflow conflicts in CLAUDE.md - review and remove duplicates"
-    grep -nE "(WF_START|WF_INIT|read_memory.*WF_|workflow.*start|session.*start.*hook)" CLAUDE.md
-  else
-    echo "No conflicting workflow commands in CLAUDE.md"
-  fi
-fi
-```
-
-If conflicts found, edit CLAUDE.md to remove the conflicting sections. SWE's SessionStart hook handles all workflow initialization.
-
-### Task 7: Migrate Claude-Flow Settings to settings.local.json
-
-**CRITICAL: Move claude-flow config from settings.json to settings.local.json**
-
-```bash
-SETTINGS=".claude/settings.json"
-SETTINGS_LOCAL=".claude/settings.local.json"
-
-# Create settings.local.json if missing
-[ ! -f "$SETTINGS_LOCAL" ] && echo '{}' > "$SETTINGS_LOCAL"
-
-# Extract and migrate statusLine and claudeFlow from settings.json to settings.local.json
-jq -s '
-  (.[0].statusLine // null) as $statusLine |
-  (.[0].claudeFlow // null) as $claudeFlow |
-  .[1] |
-  (if $statusLine then .statusLine = $statusLine else . end) |
-  (if $claudeFlow then .claudeFlow = $claudeFlow else . end)
-' "$SETTINGS" "$SETTINGS_LOCAL" > "${SETTINGS_LOCAL}.tmp" && mv "${SETTINGS_LOCAL}.tmp" "$SETTINGS_LOCAL"
-
-# Remove statusLine and claudeFlow from settings.json
-jq 'del(.statusLine, .claudeFlow)' "$SETTINGS" > "${SETTINGS}.tmp" && mv "${SETTINGS}.tmp" "$SETTINGS"
-
-echo "Migrated claudeFlow settings to settings.local.json"
-```
-
-### Task 8: Verify SWE Plugin is Enabled
-
-**SWE hooks load directly from the plugin folder - no copying needed.**
+**SWE hooks load directly from the plugin folder — no copying needed.**
 
 The plugin's `hooks/hooks.json` uses `${CLAUDE_PLUGIN_ROOT}` which is automatically resolved by Claude Code's plugin system.
 
 ```bash
 SETTINGS_LOCAL=".claude/settings.local.json"
+
+# Create settings.local.json if missing
+[ ! -f "$SETTINGS_LOCAL" ] && echo '{}' > "$SETTINGS_LOCAL"
 
 # Ensure plugin is enabled in settings.local.json
 if ! jq -e '.enabledPlugins["swe@EarthmanWeb"] == true' "$SETTINGS_LOCAL" > /dev/null 2>&1; then
@@ -292,58 +256,34 @@ else
 fi
 ```
 
-### Task 9: Install Template Memories
+### Task 7: Review CLAUDE.md for Conflicting Workflow Commands
 
-**Copy template files from the plugin to the project's Serena memories.** These are starter files that get customized per-project.
+**Check CLAUDE.md for any workflow/session start instructions that conflict with SWE.**
+
+Read CLAUDE.md and look for:
+
+- References to `WF_START`, `WF_INIT`, or workflow initialization
+- Instructions to read workflow memories on startup
+- Session start procedures that duplicate SWE hooks
+
+If found, remove them — SWE hooks handle workflow initialization automatically.
 
 ```bash
-TEMPLATES_DIR="$SWE_PLUGIN_ROOT/memories/templates"
-TARGET_DIR=".serena/swe"
-
-# Create target subdirectories
-mkdir -p "$TARGET_DIR"/feature
-
-# Copy templates to their appropriate subdirectories (skip if already exists)
-[ ! -f "$TARGET_DIR/_INDEX.md" ] && cp "$TEMPLATES_DIR/_INDEX.md" "$TARGET_DIR/_INDEX.md"
-[ ! -f "$TARGET_DIR/feature/FEATURE_TESTS.md" ] && cp "$TEMPLATES_DIR/FEATURE_TESTS.md" "$TARGET_DIR/feature/FEATURE_TESTS.md"
-[ ! -f "$TARGET_DIR/feature/FEATURE_DEV_STANDARDS.md" ] && cp "$TEMPLATES_DIR/FEATURE_DEV_STANDARDS.md" "$TARGET_DIR/feature/FEATURE_DEV_STANDARDS.md"
-[ ! -f "$TARGET_DIR/feature/FEATURE_AGENTS.md" ] && cp "$TEMPLATES_DIR/FEATURE_AGENTS.md" "$TARGET_DIR/feature/FEATURE_AGENTS.md"
-
-echo "Template files installed (skipped any that already exist)"
+# Check for workflow conflicts in CLAUDE.md
+if [ -f "CLAUDE.md" ]; then
+  # Look for conflicting patterns
+  if grep -qE "(WF_START|WF_INIT|read_memory.*WF_|workflow.*start|session.*start.*hook)" CLAUDE.md; then
+    echo "Found potential workflow conflicts in CLAUDE.md - review and remove duplicates"
+    grep -nE "(WF_START|WF_INIT|read_memory.*WF_|workflow.*start|session.*start.*hook)" CLAUDE.md
+  else
+    echo "No conflicting workflow commands in CLAUDE.md"
+  fi
+fi
 ```
 
-**After copying, populate templates using available skills:**
+If conflicts found, edit CLAUDE.md to remove the conflicting sections. SWE's SessionStart hook handles all workflow initialization.
 
-1. **`_INDEX.md`**: List actual FEATURE_* files in `## Active Features`, remove `<!-- TEMPLATE: ... -->` comment block, clear placeholder text from `## Current Session`
-2. **`FEATURE_TESTS.md`**: If the project has test suites, run `/swe-feature-onboard tests` to populate with project-specific test config
-3. **`FEATURE_DEV_STANDARDS.md`**: If dev standards have been onboarded, run `/swe-feature-onboard` for relevant features to populate standards from detected config files
-4. **`FEATURE_AGENTS.md`**: If custom agents are defined, populate with project-specific agent definitions
-
-Skip population for templates that don't apply to the project yet — they'll be populated when the relevant feature is onboarded later.
-
-### Task 10: Configure Gitignore
-
-Add these entries to .gitignore if not present:
-
-```
-# Claude Code Plugin - Local files
-CLAUDE.local.md
-.claude/settings.local.json
-.claude/workflow-state.json
-.claude/setup-state.json
-.claude/swe-setup-complete.json
-
-# Runtime directories
-**/.claude-flow
-**/.swarm
-
-# Session memories
-.serena/swe/WM_*.md
-.serena/archive-memories/
-.serena/archive-specs/
-```
-
-### Task 11: Install Serena Log Viewer VSCode Extension
+### Task 8: Install Serena Log Viewer VSCode Extension
 
 **Install the VSCode extension that surfaces Serena logs in the Output panel.**
 
@@ -375,72 +315,61 @@ fi
 
 This creates a symlink from `~/.vscode/extensions/serena-log-viewer` to the extension source in the plugin directory. The extension tails `~/.serena/logs/<date>/mcp_*.txt` and displays them in the VSCode Output panel under "SWE: Serena Logs".
 
+### Task 9: Finalize Setup
+
+Mark setup as complete. Only run after all previous tasks pass.
+
+```bash
+PLUGIN_VERSION=$(jq -r '.version' "$SWE_PLUGIN_ROOT/.claude-plugin/plugin.json")
+
+cat > .claude/swe-setup-complete.json << EOF
+{
+  "complete": true,
+  "timestamp": "$(date -Iseconds)",
+  "version": "${PLUGIN_VERSION}",
+  "verified": true
+}
+EOF
+
+echo "✅ Setup complete (version $PLUGIN_VERSION)"
+```
+
 ## VERIFICATION
 
-After all tasks, verify these 8 conditions:
+After all tasks, verify these 6 conditions:
 
-1. **MCP Servers**: All three respond
-2. **settings.json**: NO hooks, statusLine, or claudeFlow
-   ```bash
-   jq 'has("hooks"), has("statusLine"), has("claudeFlow")' .claude/settings.json
-   # Expected: false false false
-   ```
-3. **settings.local.json**: HAS statusLine and claudeFlow (hooks load from plugin)
-   ```bash
-   jq 'has("statusLine"), has("claudeFlow")' .claude/settings.local.json
-   # Expected: true true
-   ```
-4. **SWE Plugin Enabled**: Plugin is active
+1. **MCP Servers**: Serena and swe-wm respond
+2. **SWE Plugin Enabled**: Plugin is active
    ```bash
    jq '.enabledPlugins["swe@EarthmanWeb"]' .claude/settings.local.json
    # Expected: true
    ```
-5. **Plugin Hooks Exist**: hooks.json in plugin folder
+3. **Plugin Hooks Exist**: hooks.json in plugin folder
    ```bash
    jq '.hooks | keys' $SWE_PLUGIN_ROOT/hooks/hooks.json
    # Expected: ["PostToolUse", "PreToolUse", "SessionStart", "Stop", "UserPromptSubmit"]
    ```
-6. **Template Memories Installed**: Template files exist in `.serena/swe/`
+4. **Template Memories Installed**: Template files exist in `.serena/swe/`
    ```bash
    ls .serena/swe/_INDEX.md .serena/swe/feature/FEATURE_TESTS.md .serena/swe/feature/FEATURE_DEV_STANDARDS.md .serena/swe/feature/FEATURE_AGENTS.md
    ```
-7. **Serena Onboarding**: Complete
-8. **Log Viewer Extension**: Symlink exists at `~/.vscode/extensions/serena-log-viewer`
+5. **Serena Onboarding**: Complete
+6. **Log Viewer Extension**: Symlink exists at `~/.vscode/extensions/serena-log-viewer`
    ```bash
    [ -L "$HOME/.vscode/extensions/serena-log-viewer" ] || [ -d "$HOME/.vscode/extensions/serena-log-viewer" ] && echo "✅ Log Viewer installed" || echo "⚠️ Log Viewer not installed"
    ```
 
 ## COMPLETION
 
-Only after ALL verifications pass:
-
-```bash
-# Read version from plugin.json
-PLUGIN_VERSION=$(jq -r '.version' $SWE_PLUGIN_ROOT/.claude-plugin/plugin.json)
-
-cat > .claude/swe-setup-complete.json << EOF
-{
-  "complete": true,
-  "timestamp": "$(date -Iseconds)",
-  "mcps": ["serena", "claude-flow", "ruv-swarm"],
-  "version": "${PLUGIN_VERSION}",
-  "verified": true
-}
-EOF
-```
-
-## Output Summary
+Output summary after all verifications pass:
 
 ```
 **SETUP COMPLETE**
 
-- MCP Servers: serena, claude-flow, ruv-swarm
+- MCP Servers: serena, swe-wm
 - Serena Onboarding: Complete
-- Claude-Flow Plugin: Verified installed
-- Settings Migration: claudeFlow config moved to settings.local.json
 - SWE Plugin: Enabled (hooks load from plugin folder)
 - Template Memories: Installed to .serena/swe/
-- Gitignore: Configured
 - Log Viewer: VSCode extension installed
 
 **Next steps:**
@@ -485,41 +414,18 @@ rbenv exec gem install ruby-lsp
 # Then restart Serena MCP server
 ```
 
-**Root cause in Serena source:** `_setup_runtime_dependencies()` in `solidlsp/language_servers/ruby_lsp.py` correctly detects rbenv but the global `ruby-lsp` binary (found via `shutil.which`) resolves to the rbenv shim pointing to a Ruby version where the gem isn't installed.
-
 ### Ruby LSP Fails With Native Extension Build Errors
 
 **Cause:** `ruby-lsp` creates a "composed bundle" that includes ALL project gems from `Gemfile`. If any gem requires native extensions with missing system libraries (e.g. `mysql2` needs `libmysqlclient`), the bundle install fails and the Ruby LS never starts.
 
-**Symptoms in Serena logs:**
-```
-ERROR - Gem::Ext::BuildError: ERROR: Failed to build gem native extension.
-ERROR - An error occurred while installing mysql2 (0.5.7), and Bundler cannot continue.
-```
-
 **Fix options (in order of preference):**
 
-1. **Serena handles this automatically** (fix/ruby-lsp-rbenv branch) — pre-creates `.ruby-lsp/bundle_is_composed` marker so ruby-lsp skips the composed bundle install entirely. Symbol extraction works without it.
+1. **Serena handles this automatically** — pre-creates `.ruby-lsp/bundle_is_composed` marker so ruby-lsp skips the composed bundle install entirely.
 
 2. **Manual marker creation:**
 ```bash
 mkdir -p .ruby-lsp && touch .ruby-lsp/bundle_is_composed
 # Then restart Serena MCP server
-```
-
-3. **Install missing system libraries:**
-```bash
-# For mysql2:
-brew install mysql-client
-# Then restart Serena MCP server
-```
-
-4. **Add ruby-lsp to project Gemfile** (ruby-lsp skips composed bundle when it finds itself in Gemfile):
-```ruby
-group :development do
-  gem 'ruby-lsp'
-  gem 'debug'
-end
 ```
 
 ### Verification Fails

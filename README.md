@@ -4,46 +4,41 @@
 
 ## Prerequisites
 
-- **Node.js 18+** (LTS recommended) and **npm 9+**
 - **Claude Code** installed globally
-
-```bash
-# Install claude-flow globally (required for swarm coordination and RLVR learning)
-npm install -g claude-flow@alpha
-
-# Verify installation
-claude-flow --version
-```
+- **Python 3** (for hook scripts and bootstrap)
+- **jq** (for JSON processing in setup scripts)
 
 ## Install
 
-### 1. Install MCP servers
-
-```bash
-claude mcp add claude-flow -s local -- npx claude-flow@v3alpha mcp start
-claude mcp add sequential-thinking -s local -- npx -y @modelcontextprotocol/server-sequential-thinking
-claude mcp add playwright -s local -- npx -y @playwright/mcp@latest
-claude mcp add ruv-swarm -s local -- npx -y ruv-swarm mcp start
-```
-
-### 2. Install the plugin
+### 1. Install the plugin
 
 ```bash
 claude plugin marketplace add https://github.com/EarthmanWeb/serena-workflow-engine.git
 claude plugin install swe@EarthmanWeb --scope local
 ```
 
-### 3. Enable auto-update
+### 2. Enable auto-update
 
 In Claude Code CLI: `claude /plugin` → **Marketplaces** tab → **EarthmanWeb** → **Enable auto-update**
 
-### 4. Restart Claude Code and initialize
+### 3. Restart Claude Code and initialize
 
 ```
 /swe-init
 ```
 
-### 5. Restart Claude Code and Onboard your first feature
+The init agent will:
+1. Detect your environment and resolve the plugin root
+2. Run bootstrap (creates directories, detects languages, installs templates)
+3. Verify MCP servers (Serena, swe-wm)
+4. Run Serena onboarding
+5. Verify and install language servers
+6. Enable the SWE plugin
+7. Review CLAUDE.md for conflicts
+8. Install the Serena Log Viewer VSCode extension
+9. Finalize setup
+
+### 4. Restart Claude Code and onboard your first feature
 
 ```
 /swe-feature-onboard FEATURE_[KEY]

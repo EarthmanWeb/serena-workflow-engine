@@ -5,13 +5,13 @@ description: Initialize swe plugin via autonomous agent
 
 # /swe-init
 
-First-time setup command for the swe plugin. Launches an autonomous agent to complete all initialization tasks and verify success.
+First-time setup command for the SWE plugin. Launches an autonomous agent to complete all initialization tasks and verify success.
 
 ## When to Run
 
 - First time using plugin in a project
 - After cloning a repo with the plugin
-- When `session-start.sh` reports "INITIAL SETUP REQUIRED"
+- When SessionStart hook reports "Project Not Initialized"
 
 ## Execution
 
@@ -26,7 +26,7 @@ First resolve SWE_PLUGIN_ROOT by checking these paths in order (use the first th
 2. ~/.claude/plugins/marketplaces/EarthmanWeb (marketplace install)
 3. Latest version dir in ~/.claude/plugins/cache/EarthmanWeb/swe/ (cache)
 
-Then read $SWE_PLUGIN_ROOT/agents/swe-init-agent.md and execute ALL tasks (1-12), then run all 9 verifications.
+Then read $SWE_PLUGIN_ROOT/agents/swe-init-agent.md and execute ALL tasks (1-9), then run all 6 verifications.
 
 Only create swe-setup-complete.json after ALL verifications pass.
 Output the completion summary at the end.`
