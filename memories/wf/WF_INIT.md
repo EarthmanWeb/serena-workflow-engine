@@ -60,11 +60,41 @@ This applies to:
 - `find_referencing_symbols` — trace dependencies between symbols
 - `search_for_pattern` — targeted search when symbol name is unknown
 
+### Multi-Level Extraction with `depth`
+
+Both `get_symbols_overview` and `find_symbol` accept a `depth` parameter (default 0):
+
+| depth | Returns |
+|-------|---------|
+| `0` | Top-level symbols only (classes, standalone functions, constants) |
+| `1` | Top-level + immediate children (e.g. class methods, function-local variables) |
+| `2+` | Deeper nesting levels |
+
+**Recommended workflow:**
+1. `get_symbols_overview(path, depth=1)` — see file structure with children
+2. `find_symbol("ClassName", depth=1, include_body=False)` — list all methods without reading bodies
+3. `find_symbol("ClassName/methodName", include_body=True)` — read only what you need
+
+### Language Server Coverage
+
+Not all file types return rich symbols. Known behavior:
+
+| File Type | Symbol Quality | Notes |
+|-----------|---------------|-------|
+| **PHP** | Excellent | Functions, classes, variables, DOM elements in templates |
+| **Python** | Excellent | Classes, functions, variables |
+| **TypeScript/JavaScript** | Good | Named exports, classes, functions. jQuery wrappers may return empty |
+| **Markdown** | Limited | Headings only (H2/H3 as symbols) |
+| **SCSS/CSS** | Poor | Language server rarely exposes selectors or variables |
+| **JSON/YAML/Config** | None | No symbolic structure — use `Read` or `search_for_pattern` |
+
+**When symbol extraction returns empty**, fall back to `search_for_pattern` with regex (e.g. `^\\.classname`, `^\\$variable`).
+
 **NEVER read an entire file when you can extract the specific symbols you need.**
 The only exceptions are:
 
 - Config files (`.json`, `.env`) that have no symbolic structure
-- Files where the language server is unavailable or not responding
+- Files where the language server returns empty/poor results (SCSS, CSS)
 - When you explicitly need the full file context (e.g. reviewing a template's complete layout)
 
 **Rationale:** Symbol extraction is token-efficient, precise, and leverages the language servers that Serena maintains for this project. Reading full files wastes context window and risks missing the relevant code in noise.

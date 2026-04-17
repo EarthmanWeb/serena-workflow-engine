@@ -89,13 +89,22 @@ Deduplicate the combined list. These are all the memory files to index.
 
 ## Stage 3: Extract Symbols From Each Linked Doc
 
-**For each linked memory file**, use Serena's symbolic tools:
+**For each linked memory file**, use Serena's symbolic tools with `depth=1` to capture nested headings:
 
 ```javascript
 mcp__plugin_swe_serena__get_symbols_overview({
-  relative_path: ".serena/swe/[memory_subdir]/[MEMORY_NAME].md"
+  relative_path: ".serena/swe/[memory_subdir]/[MEMORY_NAME].md",
+  depth: 1
 })
 ```
+
+### Depth Parameter Reference
+
+| depth | Returns |
+|-------|---------|
+| `0` (default) | Top-level symbols only |
+| `1` | Top-level + immediate children (recommended for indexes) |
+| `2+` | Deeper nesting — rarely needed for memory docs |
 
 **Memory subdirectory mapping:**
 
@@ -250,6 +259,20 @@ Consider running /swe-feature-update [KEY] first.
 - Memory may not exist in .serena/swe/ or plugin memories/
 - Try `search_for_pattern` as fallback to find heading patterns: `^##`
 - Log skipped memories in the summary report
+
+### Symbol extraction returns empty for code files
+
+Not all language servers expose symbols equally. Known limitations:
+
+| File Type | Symbol Quality | Fallback |
+|-----------|---------------|----------|
+| **PHP** | Excellent | — |
+| **Python/TS/JS** | Good | Named exports work; jQuery wrappers may be empty |
+| **SCSS/CSS** | Poor | Use `search_for_pattern` with `^\\.classname` or `^\\$variable` |
+| **Markdown** | Limited | Headings only (H2/H3) |
+| **JSON/Config** | None | Use `Read` or `search_for_pattern` |
+
+When indexing **code files** (not memory docs), use `depth=1` on `get_symbols_overview` and `find_symbol` to capture class methods and nested symbols. Fall back to `search_for_pattern` for SCSS/CSS assets.
 
 ### No symbols found
 

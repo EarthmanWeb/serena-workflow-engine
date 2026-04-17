@@ -348,8 +348,10 @@ Invoke the `/swe-symbol-index` skill:
 This will:
 
 1. Read all linked memories listed in FEATURE_[KEY]'s Related Memories section
-2. Extract heading symbols from each via `get_symbols_overview`
+2. Extract heading symbols from each via `get_symbols_overview` with `depth=1`
 3. Build a summary table and insert it as `## Related Docs` after Feature Overview
+
+**Depth guidance:** Use `depth=1` for memory markdown files to capture H2+H3 headings. For code file indexes, `depth=1` on PHP/Python/TS returns classes + methods; SCSS/CSS language servers return empty — fall back to `search_for_pattern`.
 
 **Skip if no Related Memories were created** (e.g., quick mode with no DOM__/SYS__).
 
