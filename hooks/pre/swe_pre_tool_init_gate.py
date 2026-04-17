@@ -187,6 +187,34 @@ def main():
         transcript_path = input_data.get('transcript_path', '')
         tool_input = input_data.get('tool_input', {})
 
+        # Resolve project root for bypass/setup checks
+        try:
+            project_root = get_project_root() if _STREAM_AVAILABLE else _get_project_root()
+        except Exception:
+            project_root = _get_project_root()
+
+        # Bypass check — plugin disabled for this project
+        bypass_file = os.path.join(project_root, '.claude', 'swe-bypass.json')
+        if os.path.exists(bypass_file):
+            print(json.dumps({}))
+            sys.exit(0)
+
+        # If setup not complete, don't enforce init gate
+        # This allows /swe-init and bootstrap to run freely
+        setup_file = os.path.join(project_root, '.claude', 'swe-setup-complete.json')
+        if not os.path.exists(setup_file):
+            print(json.dumps({}))  # No setup at all — don't block
+            sys.exit(0)
+        try:
+            with open(setup_file) as f:
+                setup_data = json.load(f)
+            if not setup_data.get('complete'):
+                print(json.dumps({}))  # Bootstrapped but not complete — don't block
+                sys.exit(0)
+        except (json.JSONDecodeError, IOError):
+            print(json.dumps({}))  # Corrupt — don't block
+            sys.exit(0)
+
         # Extract session ID
         try:
             session_id = extract_session_id(transcript_path) if _STREAM_AVAILABLE else _extract_session_id(transcript_path)

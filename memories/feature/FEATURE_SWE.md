@@ -239,11 +239,15 @@ read. All feature gates use **session-scoped sentinel files** for O(1) checks.
 
 ## Scripts
 
-| Script             | Purpose               |
-| ------------------ | --------------------- |
-| `bump-version.sh`  | Version management    |
-| `install-hooks.sh` | Install git hooks     |
-| `pre-commit`       | Pre-commit validation |
+| Script                | Purpose                                    |
+| --------------------- | ------------------------------------------ |
+| `bump-version.sh`     | Version management                         |
+| `install-hooks.sh`    | Install git hooks                          |
+| `pre-commit`          | Pre-commit validation                      |
+| `swe-bootstrap.py`    | Self-contained new project bootstrap       |
+| `start-serena.sh`     | Start Serena LSP server                    |
+| `start-wm-mcp.sh`     | Start WM MCP server                        |
+| `serena_memory_patch.py` | Serena memory path patching             |
 
 ## Dependencies
 
@@ -257,7 +261,61 @@ read. All feature gates use **session-scoped sentinel files** for O(1) checks.
 | --------------------------------- | ---------------------------------- |
 | `.claude/workflow-state.json`     | Current state, trajectory, rewards |
 | `.claude/swe-setup-complete.json` | Setup completion flag              |
+| `.claude/swe-bypass.json`         | SWE permanently disabled flag      |
 | `.claude/learning.json`           | RLVR configuration                 |
+
+## Bootstrap & Init Flow (New Projects)
+
+When the SWE plugin is installed at user level and a new project is opened, the plugin
+uses a three-tier approach to avoid blocking the user:
+
+### Tier 1: Prompt to Set Up (new project detected)
+
+SessionStart detects no `swe-setup-complete.json` and **prompts** (not blocks):
+- Option 1: Say "yes" or run `/swe-init` to set up
+- Option 2: Say "skip swe" to permanently disable
+
+### Tier 2: Permanent Bypass (user declines)
+
+If user says "skip swe" / "no swe" / "disable swe":
+- Creates `.claude/swe-bypass.json` with `{"bypass": true, "reason": "user_declined"}`
+- All three hooks (SessionStart, UserPromptSubmit, PreToolUse init gate) check for this file first and exit silently
+- Plugin becomes invisible in that project
+- Remove `.claude/swe-bypass.json` to re-enable
+
+### Tier 3: Full Init (user accepts)
+
+1. User says "yes" → `swe-bootstrap.py` runs inline (via UserPromptSubmit hook)
+2. Bootstrap creates: `.serena/`, `.serena/swe/`, `project.yml`, `memory-paths.conf`, template memories, `swe-setup-complete.json` with `bootstrapped: true`
+3. Init gate is **unblocked** (gate checks `complete` field; bootstrapped-but-not-complete passes through)
+4. User runs `/swe-scaffold-project` which creates core memories and sets `complete: true`
+5. Full workflow is now active
+
+### State Flow
+
+```
+New Project → No setup file
+  → SessionStart prompts (not blocks)
+  ├── "yes" → Bootstrap runs → bootstrapped: true → Scaffold → complete: true → Full workflow
+  └── "skip swe" → swe-bypass.json → All hooks silent → Plugin invisible
+```
+
+### swe-bootstrap.py Guards
+
+| Guard | Behavior |
+|-------|----------|
+| `.claude/swe-bypass.json` exists | Exit: "SWE bypassed" |
+| `swe-setup-complete.json` has `complete: true` | Exit: "Already initialized" |
+| `swe-setup-complete.json` has `bootstrapped: true` | Exit: "Already bootstrapped" |
+
+### .gitignore Additions (via bootstrap)
+
+```
+.claude/swe-bypass.json
+.claude/swe-setup-complete.json
+.claude/swe-state/
+.serena/swe/WM_*.md
+```
 
 ## Test Commands
 

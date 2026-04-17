@@ -44,11 +44,38 @@ Automatically suggested when:
 
 ## Process
 
+### Stage 0: Git Repository Check
+
+**BEFORE any other detection, check for a git repository.**
+
+```bash
+if ! git rev-parse --git-dir > /dev/null 2>&1; then
+  echo "No git repository found in this project directory."
+fi
+```
+
+**If no git repo exists:**
+1. Ask the user: "No git repository detected. Initialize one? (recommended for SWE workflow)"
+2. If yes:
+   ```bash
+   git init
+   echo "# Project" > README.md  # only if no README exists
+   git add -A
+   git commit -m "Initial commit"
+   ```
+3. If no: Warn that some features may not work (project root detection, .gitignore integration) but proceed.
+
+**Why git is needed:**
+- Serena uses `.git/` to detect project root (`_get_project_root()` in init gate)
+- SWE hooks use `CLAUDE_PROJECT_DIR` with `.git/` fallback for root resolution
+- `.gitignore` integration for ignoring `WM_*.md`, `.claude/swe-state/`, etc.
+- Without git, `get_project_root()` falls back to `os.getcwd()` which may be wrong in subdirectories
+
 ### Stage 1: Project Detection
 
 ```bash
-# Detect project root
-git rev-parse --show-toplevel || pwd
+# Git repo guaranteed by Stage 0 (or user warned)
+PROJECT_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
 
 # Detect package manager
 [ -f "package.json" ] && echo "npm"
@@ -174,6 +201,25 @@ AI-powered codebase analysis available.
 [B] Quick scan (basic structure)
 [C] Skip
 ```
+
+### Stage 6: Finalize Setup Status
+
+If `swe-setup-complete.json` has `bootstrapped: true` but not `complete: true`, update it:
+
+```bash
+PLUGIN_VERSION=$(jq -r '.version' "$SWE_PLUGIN_ROOT/.claude-plugin/plugin.json" 2>/dev/null || echo "unknown")
+cat > .claude/swe-setup-complete.json << EOF
+{
+  "complete": true,
+  "timestamp": "$(date -Iseconds)",
+  "version": "${PLUGIN_VERSION}",
+  "scaffolded": true,
+  "verified": false
+}
+EOF
+```
+
+This unblocks the full init gate for subsequent sessions. Running `/swe-init` later will add `verified: true` after full verification.
 
 ## Minimal Workflow Mode
 

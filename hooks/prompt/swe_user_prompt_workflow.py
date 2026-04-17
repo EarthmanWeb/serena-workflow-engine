@@ -13,6 +13,7 @@ import os
 import sys
 import json
 import re
+from datetime import datetime
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import swe_hooks.bootstrap  # noqa: E402
 
@@ -107,17 +108,80 @@ def main():
         
         prompt = input_data.get('prompt', '')
         cwd = input_data.get('cwd', os.getcwd())
-        
+
         if not prompt or not prompt.strip():
             sys.exit(0)
-        
-        # Check setup
-        setup = load_setup_complete(cwd)
-        if not setup or not setup.get('complete'):
+
+        # Bypass check — plugin disabled for this project
+        bypass_file = os.path.join(cwd, '.claude', 'swe-bypass.json')
+        if os.path.exists(bypass_file):
+            sys.exit(0)  # Silent exit
+
+        # Handle bypass request from user
+        prompt_lower = prompt.lower().strip()
+        if any(p in prompt_lower for p in ['skip swe', 'no swe', 'disable swe', 'bypass swe']):
+            os.makedirs(os.path.join(cwd, '.claude'), exist_ok=True)
+            with open(bypass_file, 'w') as f:
+                json.dump({
+                    "bypass": True,
+                    "reason": "user_declined",
+                    "created": datetime.now().isoformat(),
+                    "project": cwd
+                }, f, indent=2)
             output = {
                 "hookSpecificOutput": {
                     "hookEventName": "UserPromptSubmit",
-                    "additionalContext": "⚠️ SWE not initialized. Run /swe-init first."
+                    "additionalContext": "SWE permanently disabled for this project. Remove .claude/swe-bypass.json to re-enable."
+                }
+            }
+            print(json.dumps(output))
+            sys.exit(0)
+
+        # Check setup
+        setup = load_setup_complete(cwd)
+        if not setup or not setup.get('complete'):
+            # Handle setup acceptance — user says "yes" to bootstrap prompt
+            if not setup or (not setup.get('complete') and not setup.get('bootstrapped')):
+                if re.search(r'^(yes|yeah|yep|ok|sure|set.?up|initialize|init)\b', prompt_lower):
+                    # Run bootstrap inline
+                    plugin_root = os.environ.get('CLAUDE_PLUGIN_ROOT', '')
+                    bootstrap_script = os.path.join(plugin_root, 'scripts', 'swe-bootstrap.py') if plugin_root else ''
+                    if not bootstrap_script or not os.path.exists(bootstrap_script):
+                        # Fallback: resolve from this file's location
+                        bootstrap_script = os.path.join(
+                            os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+                            'scripts', 'swe-bootstrap.py'
+                        )
+                    if os.path.exists(bootstrap_script):
+                        import subprocess
+                        result = subprocess.run(
+                            [sys.executable, bootstrap_script],
+                            cwd=cwd, capture_output=True, text=True, timeout=30
+                        )
+                        if result.returncode == 0:
+                            context = f"SWE Bootstrap Complete\n\n{result.stdout}\n\nMANDATORY NEXT ACTION:\n-> Run Skill(\"swe-scaffold-project\") to complete project setup."
+                        else:
+                            context = f"Bootstrap failed: {result.stderr}"
+                    else:
+                        context = "Bootstrap script not found at plugin root."
+                    output = {
+                        "hookSpecificOutput": {
+                            "hookEventName": "UserPromptSubmit",
+                            "additionalContext": context
+                        }
+                    }
+                    print(json.dumps(output))
+                    sys.exit(0)
+
+            # Not yet set up — show gentle prompt (not block)
+            if setup and setup.get('bootstrapped'):
+                context = "SWE bootstrapped but not fully initialized. Run /swe-init or /swe-scaffold-project to complete."
+            else:
+                context = "SWE plugin detected but not initialized. Say \"yes\" to set up, or \"skip swe\" to disable."
+            output = {
+                "hookSpecificOutput": {
+                    "hookEventName": "UserPromptSubmit",
+                    "additionalContext": context
                 }
             }
             print(json.dumps(output))

@@ -51,34 +51,36 @@ def main():
         else:
             session_id = datetime.now().strftime('%Y%m%d_%H%M%S')
 
+        # Check bypass FIRST
+        bypass_file = os.path.join(cwd, '.claude', 'swe-bypass.json')
+        if os.path.exists(bypass_file):
+            print(json.dumps({}))  # Silent — plugin disabled
+            sys.exit(0)
+
         # Check setup
         setup = load_setup_complete(cwd)
         if not setup or not setup.get('complete'):
-            # First-time project setup NOT complete - this is different from session init
+            if setup and setup.get('bootstrapped'):
+                # Bootstrapped but needs full init
+                context = "⚠️ SWE bootstrapped but not fully initialized. Run /swe-init or /swe-scaffold-project to complete."
+            else:
+                # Not set up — PROMPT (not block)
+                context = """🔧 SWE Plugin Detected — Project Not Initialized
+
+This project doesn't have SWE workflow configured.
+
+**Option 1:** Set up SWE for this project:
+   → Say "yes" or run /swe-init
+
+**Option 2:** Permanently disable SWE for this project:
+   → Say "skip swe" or "no swe"
+
+The workflow will not block you while you decide."""
+            # Return as additionalContext (NOT a hard block)
             output = {
                 "hookSpecificOutput": {
                     "hookEventName": "SessionStart",
-                    "additionalContext": """🛑🛑🛑 CRITICAL: PROJECT SETUP NOT COMPLETE 🛑🛑🛑
-
-═══════════════════════════════════════════════════════════════════════════════
-                    ⚠️  FIRST-TIME SETUP REQUIRED  ⚠️
-═══════════════════════════════════════════════════════════════════════════════
-
-This is a ONE-TIME setup for the project (not per-session).
-
-MANDATORY: Run /swe-init to complete first-time project setup.
-
-This installs:
-- MCP server configurations
-- Workflow instruction files
-- Core memory templates
-- Git ignore entries
-
-After /swe-init completes, restart Claude Code and return to this project.
-
-═══════════════════════════════════════════════════════════════════════════════
-              DO NOT ATTEMPT ANY OTHER ACTIONS UNTIL SETUP COMPLETE
-═══════════════════════════════════════════════════════════════════════════════"""
+                    "additionalContext": context
                 }
             }
             print(json.dumps(output))
