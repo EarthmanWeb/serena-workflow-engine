@@ -147,6 +147,10 @@ def update_gitignore(project_root):
         '.claude/swe-bypass.json',
         '.claude/swe-setup-complete.json',
         '.claude/swe-state/',
+        '',
+        '# Override global .serena/* ignore — un-ignore swe memories',
+        '!.serena/swe/',
+        '!.serena/swe/**/*.md',
         '.serena/swe/WM_*.md',
     ]
 
@@ -155,13 +159,13 @@ def update_gitignore(project_root):
         with open(gitignore_path) as f:
             existing_content = f.read()
 
-    new_entries = [e for e in entries if e not in existing_content]
-    if not new_entries:
+    # Check if already configured (use the negation pattern as marker)
+    if '!.serena/swe/' in existing_content:
         return False
 
     with open(gitignore_path, 'a') as f:
         f.write('\n# SWE workflow engine\n')
-        for entry in new_entries:
+        for entry in entries:
             f.write(f'{entry}\n')
     return True
 
