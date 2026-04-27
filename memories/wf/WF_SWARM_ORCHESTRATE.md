@@ -12,19 +12,18 @@
 - Independent subtasks can run in parallel
 - Multi-domain coordination or consensus needed
 
-**Read `REF_SWARM_PATTERNS` for detailed MCP tool reference.**
-
 ---
 
 ## ⚠️ Explicit Tool Selection Rule
 
-**When user requests a specific swarm system, USE THOSE EXACT MCP TOOLS — never substitute Task/Explore agents.**
+**When user requests a swarm system, USE THESE EXACT MCP TOOLS — NEVER substitute Task/Explore agents.**
 
-| User Says | Use Tools |
-|-----------|-----------|
-| "ruv-swarm" | `mcp__ruv-swarm__*` |
-| "claude-flow swarm" | `mcp__claude-flow__*` |
-| "hive-mind" | `mcp__claude-flow__hive-mind_*` |
+| User Says | Use Tools | Read |
+|-----------|-----------|------|
+| "claude-flow swarm" | `mcp__claude-flow__*` | `WF_SWARM_CLAUDE_FLOW` |
+| "ruv-swarm" | `mcp__ruv-swarm__*` | `WF_SWARM_RUV` |
+| "DAA" / "DAA swarm" | `mcp__ruv-swarm__daa_*` | `WF_SWARM_RUV` (Pattern B2) |
+| "hive-mind" | `mcp__claude-flow__hive-mind_*` | `WF_SWARM_HIVE_MIND` |
 
 ---
 
@@ -43,75 +42,57 @@
 
 ## Step 1: Select System & Topology
 
-| System | When | Prefix |
-|--------|------|--------|
-| **Claude-Flow** | General orchestration, parallel tasks | `mcp__claude-flow__*` |
-| **RUV-Swarm** | Learning/adaptation, DAA patterns | `mcp__ruv-swarm__*` |
-| **Hive-Mind** | Consensus, collective intelligence | `mcp__claude-flow__hive-mind_*` |
+| System | When | Prefix | Methodology |
+|--------|------|--------|-------------|
+| **Claude-Flow** | General orchestration, parallel tasks | `mcp__claude-flow__*` | `WF_SWARM_CLAUDE_FLOW` |
+| **RUV-Swarm Task** | Simple parallel task orchestration | `mcp__ruv-swarm__*` | `WF_SWARM_RUV` (B1) |
+| **RUV-Swarm DAA** | Learning/adaptation, autonomous agents | `mcp__ruv-swarm__daa_*` | `WF_SWARM_RUV` (B2) |
+| **RUV-Swarm Hybrid** | Task orchestration + DAA learning | `mcp__ruv-swarm__*` | `WF_SWARM_RUV` (B3) |
+| **Hive-Mind** | Consensus, collective intelligence | `mcp__claude-flow__hive-mind_*` | `WF_SWARM_HIVE_MIND` |
 
 | Topology | Best For |
 |----------|----------|
+| **star** | Quick parallel tasks (RECOMMENDED default) |
 | **mesh** | Collaborative analysis, exploration |
 | **hierarchical** | Complex projects, orchestrated changes |
-| **star** | Quick parallel tasks |
 | **ring** | Sequential processing pipelines |
 
 Agent types: `researcher`, `analyst`, `coder`, `tester`, `coordinator`, `optimizer`, `reviewer`
 
+### Decision Guide: Which System and Why?
+
+| System | Choose When | Rationale | Avoid When |
+|--------|------------|-----------|------------|
+| **Claude-Flow (A)** | General-purpose parallel tasks, multi-file changes, coordinated refactoring | Most flexible system. Star topology has minimal overhead. Task registration gives full visibility. Memory store enables cross-agent state sharing. Best balance of power and simplicity. | You need learning/adaptation (use DAA) or consensus (use Hive-Mind) |
+| **RUV-Swarm Task (B1)** | Simple parallel task execution, quick fan-out/fan-in | Simpler than Claude-Flow with fewer tools (25 vs 241). `task_orchestrate` handles agent assignment automatically. Lower context budget cost. | You need learning, adaptation, or cross-domain knowledge transfer (use B2). You need fine-grained task dependencies (use Claude-Flow). |
+| **RUV-Swarm DAA (B2)** | Research/audit tasks, code reviews, architecture analysis, tasks requiring learning from findings | DAA agents have cognitive patterns (critical, systems, adaptive) that shape analysis approach. Meta-learning transfers knowledge across domains. Knowledge sharing cross-pollinates findings between agents. Agent adaptation improves performance over iterations. | Simple parallel execution where learning adds no value (use B1). Tasks where consensus matters more than analysis (use Hive-Mind). |
+| **RUV-Swarm Hybrid (B3)** | Multi-phase projects where Phase 1 findings inform Phase 2 execution | Combines B1's task speed with B2's learning. Swarm agents do immediate work; DAA agents learn from results and inform next iteration. | Single-phase tasks. Simple tasks that don't benefit from two agent pools. |
+| **Hive-Mind (C)** | Architecture decisions requiring agreement, collective code review, design consensus | Consensus mechanism ensures all agents agree before proceeding. Shared memory provides single source of truth. Broadcast ensures all agents get same instructions. Best for quality-critical decisions. | Speed-critical tasks (consensus adds latency). Tasks where one agent's opinion suffices. Pure execution tasks with no decision-making. |
+
+### Quick Decision Tree
+
+```
+Is the task a decision that needs agreement? → Hive-Mind (C)
+Does the task benefit from learning/adaptation? → DAA (B2) or Hybrid (B3)
+Is it a multi-phase project? → Hybrid (B3)
+Do you need fine-grained task dependencies? → Claude-Flow (A)
+Is it simple parallel work? → RUV-Swarm Task (B1)
+Not sure? → Claude-Flow (A) with star topology (safe default)
+```
+
 ---
 
-## Step 2: Initialize & Execute
+## Step 2: Read Pattern-Specific Methodology
 
-### Pattern A: Claude-Flow V3 (Recommended)
-
-```
-1. swarm_init({ topology: 'hierarchical-mesh', maxAgents: 15 })
-2. agent_spawn (all agents in ONE message, parallel)
-3. task_create({ assignToAgent: 'agent-id', priority: 8 }) for each task
-4. task_dependencies() for sequential ordering
-5. Task tool (run_in_background: true) for actual file work
-6. task_status / swarm_status to monitor
-7. task_results / TaskOutput to collect
-8. memory_store for coordination state
-```
-
-**Key V3 tools:** `swarm/init`, `agent/spawn|list|status`, `task/create|assign|status|results|dependencies`, `workflow/create|execute`
-
-### Pattern B1: RUV-Swarm Task Orchestration
-
-⚠️ `task_orchestrate` ONLY works with `agent_spawn` agents, NOT `daa_agent_create`.
+**MANDATORY: Read the methodology file for your selected system BEFORE executing.**
 
 ```
-1. swarm_init({ topology: 'mesh', strategy: 'balanced' })
-2. agent_spawn (all agents)
-3. task_orchestrate({ strategy: 'parallel', priority: 'high' })
-4. task_status / task_results to collect
+mcp__plugin_swe_serena__read_memory("wf/WF_SWARM_CLAUDE_FLOW")   // Pattern A
+mcp__plugin_swe_serena__read_memory("wf/WF_SWARM_RUV")           // Patterns B1, B2, B3
+mcp__plugin_swe_serena__read_memory("wf/WF_SWARM_HIVE_MIND")     // Pattern C
 ```
 
-### Pattern B2: RUV-Swarm DAA (Autonomous Learning)
-
-⚠️ DAA agents are SEPARATE from swarm agents. Use `daa_workflow_execute`, NOT `task_orchestrate`.
-
-```
-1. daa_init({ enableLearning: true, enableCoordination: true })
-2. daa_agent_create (these are NOT swarm agents)
-3. daa_workflow_create + daa_workflow_execute({ parallelExecution: true })
-4. daa_knowledge_share between agents
-5. daa_learning_status to check progress
-```
-
-### Pattern B3: Hybrid (Swarm + DAA)
-
-Combine B1 for task orchestration + B2 for learning. Two separate agent pools.
-
-### Pattern C: Hive-Mind
-
-```
-1. hive-mind_init({ topology: 'mesh' })
-2. hive-mind_spawn({ count: 3, role: 'worker' })
-3. hive-mind_consensus({ action: 'propose' })
-4. hive-mind_memory / hive-mind_broadcast as needed
-```
+**Follow the phased methodology in the selected file exactly.**
 
 ---
 
@@ -121,18 +102,30 @@ Combine B1 for task orchestration + B2 for learning. Two separate agent pools.
 
 ---
 
-## Critical Execution Rules
+## Critical Execution Rules (All Systems)
 
-**DO:** Init swarm first → Spawn all agents in one message → Register tasks with `task_create` + `assignToAgent` before Task tool → Store state to memory → Monitor non-blocking, collect blocking
+**DO:**
+- Init swarm FIRST → spawn all agents in ONE message → register tasks BEFORE launching Agent tools
+- Use Agent tool (background) for ALL file reads/writes — separate context windows
+- Batch MCP calls into as few messages as possible
+- Load memories BEFORE swarm init, not during
+- Store coordination state to MCP memory
 
-**DON'T:** Spawn swarm then revert to single-agent → Block on first agent before spawning others → Skip task registration in coordination layer → Mix swarm systems without clear handoff
+**DON'T:**
+- Spawn swarm then revert to single-agent work
+- Block on first agent before spawning others
+- Skip task registration in coordination layer
+- Mix swarm systems without clear handoff
+- Read files directly in coordinator context — agents do that
+- Use verbose/detailed flags on MCP calls
+- Call `memory_stats` (scans 100K entries)
 
 ### Task Registration (CRITICAL)
 
-MCP agents MUST have tasks registered via `task_create({ assignToAgent })` BEFORE launching Task tool work. Without this, the coordination layer has no visibility into agent work.
+MCP agents MUST have tasks registered BEFORE launching Task tool work. Without this, the coordination layer has no visibility into agent work.
 
 ```
-1. agent_spawn → 2. task_create({ assignToAgent }) → 3. Task tool (background) → 4. task_status to monitor
+1. agent_spawn/daa_agent_create → 2. task_create/daa_workflow_create → 3. Agent tool (background) → 4. Collect results
 ```
 
 ---
