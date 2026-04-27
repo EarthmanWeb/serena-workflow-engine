@@ -109,21 +109,37 @@ mcp__ruv-swarm__task_orchestrate({ task: "...", strategy: "parallel", priority: 
 
 ---
 
-## 🧠 RUV-SWARM DAA (Autonomous Learning)
+## 🧠 RUV-SWARM DAA (Iterative Coordination & Tracking)
 
 **Prefix:** `mcp__ruv-swarm__`
+
+**⚠️ DAA is a metadata/tracking layer, NOT an execution engine.** `daa_workflow_execute` returns empty arrays. `daa_meta_learning` returns `Math.random()` values. All metrics are simulated. Only use DAA for **multi-iteration workflows** where cross-iteration state tracking adds value. For single-pass parallel work, use Claude-Flow or RUV-Swarm Task (B1).
+
+### How DAA Actually Works
+
+1. `daa_agent_create` → Creates JSON record (cognitive pattern label, capabilities). No process spawned.
+2. `daa_workflow_create` → Registers workflow steps as metadata. No execution logic.
+3. **Agent tool** → Does ALL actual work in separate context. Cognitive pattern MUST be injected into prompt.
+4. `daa_knowledge_share` → Stores Agent findings in JSON registry for next iteration.
+5. Repeat: Read stored knowledge → shape next Agent prompt → launch next round.
 
 ### Minimal Pattern
 
 ```javascript
 ToolSearch({ query: "+ruv-swarm daa" })
 mcp__ruv-swarm__daa_init({ enableLearning: true, enableCoordination: true })
-mcp__ruv-swarm__daa_agent_create({ id: "daa-1", cognitivePattern: "adaptive", enableMemory: true })
+mcp__ruv-swarm__daa_agent_create({ id: "daa-1", cognitivePattern: "critical", enableMemory: true })
 mcp__ruv-swarm__daa_workflow_create({ id: "wf-1", name: "Analysis", strategy: "adaptive" })
-mcp__ruv-swarm__daa_workflow_execute({ workflowId: "wf-1" })
+// ⚠️ Skip daa_workflow_execute (returns empty arrays) — launch Agent tools directly
+// Inject cognitive pattern into Agent prompt to influence actual behavior
+Agent({ prompt: "You are daa-1 (cognitive: critical). Analyze critically, find flaws..." })
+// After Agent completes, store ACTUAL findings for next iteration:
+mcp__ruv-swarm__daa_knowledge_share({ sourceAgentId: "daa-1", ..., knowledgeContent: { findings: "REAL results" } })
 ```
 
 **Cognitive patterns:** `adaptive`, `critical`, `convergent`, `divergent`, `lateral`, `systems`
+
+**Skip these tools** (return simulated/random data): `daa_meta_learning`, `daa_learning_status`, `daa_performance_metrics`
 
 ---
 
@@ -183,7 +199,7 @@ mcp__claude-flow__hive-mind_consensus({ action: "propose", type: "decision", str
 | Quick parallel tasks    | Claude-Flow   | star         |
 | Parallel file analysis  | RUV-Swarm     | mesh         |
 | Coordinated refactoring | Claude-Flow   | hierarchical |
-| Learning from patterns  | RUV-Swarm DAA | adaptive     |
+| Multi-iteration tracking | RUV-Swarm DAA | adaptive     |
 | Consensus decisions     | Hive-Mind     | mesh         |
 
 ---

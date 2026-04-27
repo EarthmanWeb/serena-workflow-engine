@@ -100,7 +100,7 @@ Trigger on: `swarm`, `parallel agents`, `multi-agent`, `hive-mind`, `ruv-swarm`,
 | System      | Use Case                           | Tools | Details In         |
 | ----------- | ---------------------------------- | ----- | ------------------ |
 | Claude-Flow | General orchestration              | ~257  | CLAUDE_FLOW        |
-| RUV-Swarm   | Task orchestration, DAA learning   | 25    | REF_SWARM_PATTERNS |
+| RUV-Swarm   | Task orchestration, DAA iterative tracking | 25    | REF_SWARM_PATTERNS |
 | Hive-Mind   | Consensus, collective intelligence | 9     | CLAUDE_FLOW        |
 
 ---

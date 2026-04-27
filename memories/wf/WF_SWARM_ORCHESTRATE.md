@@ -46,8 +46,8 @@
 |--------|------|--------|-------------|
 | **Claude-Flow** | General orchestration, parallel tasks | `mcp__claude-flow__*` | `WF_SWARM_CLAUDE_FLOW` |
 | **RUV-Swarm Task** | Simple parallel task orchestration | `mcp__ruv-swarm__*` | `WF_SWARM_RUV` (B1) |
-| **RUV-Swarm DAA** | Learning/adaptation, autonomous agents | `mcp__ruv-swarm__daa_*` | `WF_SWARM_RUV` (B2) |
-| **RUV-Swarm Hybrid** | Task orchestration + DAA learning | `mcp__ruv-swarm__*` | `WF_SWARM_RUV` (B3) |
+| **RUV-Swarm DAA** | Multi-iteration tracking/coordination (metadata only — NOT autonomous) | `mcp__ruv-swarm__daa_*` | `WF_SWARM_RUV` (B2) |
+| **RUV-Swarm Hybrid** | Task orchestration + DAA iterative tracking | `mcp__ruv-swarm__*` | `WF_SWARM_RUV` (B3) |
 | **Hive-Mind** | Consensus, collective intelligence | `mcp__claude-flow__hive-mind_*` | `WF_SWARM_HIVE_MIND` |
 
 | Topology | Best For |
@@ -65,16 +65,16 @@ Agent types: `researcher`, `analyst`, `coder`, `tester`, `coordinator`, `optimiz
 |--------|------------|-----------|------------|
 | **Claude-Flow (A)** | General-purpose parallel tasks, multi-file changes, coordinated refactoring | Most flexible system. Star topology has minimal overhead. Task registration gives full visibility. Memory store enables cross-agent state sharing. Best balance of power and simplicity. | You need learning/adaptation (use DAA) or consensus (use Hive-Mind) |
 | **RUV-Swarm Task (B1)** | Simple parallel task execution, quick fan-out/fan-in | Simpler than Claude-Flow with fewer tools (25 vs 241). `task_orchestrate` handles agent assignment automatically. Lower context budget cost. | You need learning, adaptation, or cross-domain knowledge transfer (use B2). You need fine-grained task dependencies (use Claude-Flow). |
-| **RUV-Swarm DAA (B2)** | Research/audit tasks, code reviews, architecture analysis, tasks requiring learning from findings | DAA agents have cognitive patterns (critical, systems, adaptive) that shape analysis approach. Meta-learning transfers knowledge across domains. Knowledge sharing cross-pollinates findings between agents. Agent adaptation improves performance over iterations. | Simple parallel execution where learning adds no value (use B1). Tasks where consensus matters more than analysis (use Hive-Mind). |
-| **RUV-Swarm Hybrid (B3)** | Multi-phase projects where Phase 1 findings inform Phase 2 execution | Combines B1's task speed with B2's learning. Swarm agents do immediate work; DAA agents learn from results and inform next iteration. | Single-phase tasks. Simple tasks that don't benefit from two agent pools. |
+| **RUV-Swarm DAA (B2)** | Multi-iteration workflows where Round 1 findings shape Round 2 prompts. Iterative audits, progressive refinement, adaptive research. | DAA is a **metadata/tracking layer** — it stores agent records, cognitive pattern labels, and knowledge entries in a JSON registry. It does NOT execute work. Value comes from: (1) cognitive patterns shaping Agent tool prompts, (2) knowledge_share storing findings for next iteration, (3) structured state across rounds. | Single-pass parallel work (use B1 or Claude-Flow — DAA adds ~10 MCP calls of overhead with zero benefit). Any task where one round of agents suffices. |
+| **RUV-Swarm Hybrid (B3)** | Multi-phase projects where Phase 1 findings inform Phase 2 execution | Combines B1's task speed with B2's cross-iteration state tracking. Swarm agents do immediate work via Agent tools; DAA stores findings and tracks state for subsequent rounds. | Single-phase tasks. Simple tasks that don't benefit from two agent pools. |
 | **Hive-Mind (C)** | Architecture decisions requiring agreement, collective code review, design consensus | Consensus mechanism ensures all agents agree before proceeding. Shared memory provides single source of truth. Broadcast ensures all agents get same instructions. Best for quality-critical decisions. | Speed-critical tasks (consensus adds latency). Tasks where one agent's opinion suffices. Pure execution tasks with no decision-making. |
 
 ### Quick Decision Tree
 
 ```
 Is the task a decision that needs agreement? → Hive-Mind (C)
-Does the task benefit from learning/adaptation? → DAA (B2) or Hybrid (B3)
-Is it a multi-phase project? → Hybrid (B3)
+Is this a multi-iteration workflow where round N findings shape round N+1? → DAA (B2) or Hybrid (B3)
+Is it a multi-phase project with progressive refinement? → Hybrid (B3)
 Do you need fine-grained task dependencies? → Claude-Flow (A)
 Is it simple parallel work? → RUV-Swarm Task (B1)
 Not sure? → Claude-Flow (A) with star topology (safe default)

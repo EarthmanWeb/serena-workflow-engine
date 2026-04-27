@@ -90,163 +90,210 @@ mcp__ruv-swarm__task_results({ taskId: "task-id", format: "summary" })
 
 ---
 
-## Pattern B2: DAA (Autonomous Learning)
+## Pattern B2: DAA (Iterative Coordination & Tracking)
+
+### ⚠️ DAA REALITY — Read Before Using
+
+**DAA is a metadata/tracking layer, NOT an execution engine.**
+
+| DAA Tool | What It Actually Does |
+|----------|----------------------|
+| `daa_agent_create` | Creates a JSON record with id, cognitive pattern label, capabilities list. No process spawned. |
+| `daa_workflow_create` | Creates a JSON workflow record with steps. No execution logic. |
+| `daa_workflow_execute` | **Flips a status flag.** Returns empty arrays. Does NOT run agents or analysis. |
+| `daa_meta_learning` | Returns simulated values (`Math.random()`). Framework exists but is NOT wired to this tool. |
+| `daa_knowledge_share` | Stores a JSON blob. Source note: "No cross-agent memory transfer occurs." |
+| `daa_agent_adapt` | Changes cognitive pattern string based on score thresholds. Returns `Math.random() * 0.3`. |
+| `daa_learning_status` | Returns hardcoded/random metrics: `avgProficiency: 0.75 + Math.random() * 0.2`. |
+| `daa_performance_metrics` | Mix of real counts and random values (`successRate: 0.84 + Math.random() * 0.1`). |
+| `daa_cognitive_pattern` | Reads or changes a string enum label. Returns random effectiveness scores. |
+
+**All actual work (file reading, analysis, code generation) is done by the Agent tool in separate context windows. DAA tools NEVER read files, analyze code, or produce findings.**
+
+### When DAA Adds Value vs When It's Overhead
+
+| Scenario | Use DAA? | Why |
+|----------|----------|-----|
+| **Single-pass parallel analysis** (e.g., analyze 4 areas simultaneously) | ❌ NO — use Claude-Flow (A) or B1 | DAA adds ~10 MCP calls of pure overhead. Agent tools do all real work regardless. |
+| **Multi-iteration workflow** where Round 1 findings shape Round 2 prompts | ✅ YES | DAA provides structured storage for cross-iteration state. Cognitive patterns help differentiate agent roles. |
+| **Iterative refinement** with feedback loops | ✅ YES | DAA tracks which agents performed well, stores knowledge for reuse across rounds. |
+| **Research with learning** across repeated similar tasks | ✅ YES | Knowledge registry builds up findings that can be read and injected into future Agent prompts. |
 
 ### When To Use
 
 | Scenario | Cognitive Pattern |
 |----------|-------------------|
-| Audits, code reviews | `critical` |
-| Architecture analysis | `systems` |
-| General learning tasks | `adaptive` |
-| Decision-making | `convergent` |
-| Brainstorming | `divergent` |
-| Creative solutions | `lateral` |
+| Multi-round audits with refinement | `critical` |
+| Iterative architecture exploration | `systems` |
+| Adaptive research (findings shape next query) | `adaptive` |
+| Decision trees requiring multiple passes | `convergent` |
+| Brainstorming across iterations | `divergent` |
+| Creative multi-pass solutions | `lateral` |
 
 ### Phase 1: Load Tools + Initialize DAA + Create Agents
 
 ```javascript
-// 1. Load ALL needed DAA tools (3 ToolSearch calls covers everything)
+// 1. Load DAA tools (2 ToolSearch calls max)
 ToolSearch({ query: "+ruv-swarm daa agent task swarm" })
-ToolSearch({ query: "select:mcp__ruv-swarm__swarm_init,mcp__ruv-swarm__daa_init,mcp__ruv-swarm__daa_workflow_create,mcp__ruv-swarm__daa_workflow_execute,mcp__ruv-swarm__task_results" })
-ToolSearch({ query: "select:mcp__ruv-swarm__daa_knowledge_share,mcp__ruv-swarm__daa_learning_status,mcp__ruv-swarm__daa_performance_metrics,mcp__ruv-swarm__daa_cognitive_pattern,mcp__ruv-swarm__daa_meta_learning" })
+ToolSearch({ query: "select:mcp__ruv-swarm__daa_init,mcp__ruv-swarm__daa_agent_create,mcp__ruv-swarm__daa_workflow_create,mcp__ruv-swarm__daa_knowledge_share" })
 
-// 2. Init DAA (ONE call)
+// 2. Init DAA
 mcp__ruv-swarm__daa_init({ enableLearning: true, enableCoordination: true, persistenceMode: "memory" })
 
-// 3. Create DAA agents — batch ALL in ONE message
+// 3. Create DAA agents — cognitive pattern WILL BE USED to shape Agent prompts
 mcp__ruv-swarm__daa_agent_create({
   id: "agent-1",
-  cognitivePattern: "critical",
+  cognitivePattern: "critical",    // → Agent prompt will emphasize: "Analyze critically, find flaws"
   enableMemory: true,
   capabilities: ["spec-audit", "code-review"]
 })
 mcp__ruv-swarm__daa_agent_create({
   id: "agent-2",
-  cognitivePattern: "systems",
+  cognitivePattern: "systems",     // → Agent prompt will emphasize: "Think holistically, trace connections"
   enableMemory: true,
   capabilities: ["architecture-analysis"]
 })
-// ... more agents as needed
 ```
 
-### Phase 2: Create Workflow + Execute + Enable Meta-Learning
+### Phase 2: Create Workflow (Tracking Only)
 
 ```javascript
-// 4. Create workflow with steps mapped to agents
+// 4. Register workflow — this is BOOKKEEPING, not execution
 mcp__ruv-swarm__daa_workflow_create({
   id: "wf-id",
   name: "Workflow Name",
-  strategy: "parallel",  // or "sequential", "adaptive"
+  strategy: "parallel",
   steps: [
     { id: "step-1", name: "Step Name", description: "...", agentId: "agent-1", type: "analysis" },
     { id: "step-2", name: "Step Name", description: "...", agentId: "agent-2", type: "analysis" },
   ],
-  dependencies: {}  // add { "step-2": ["step-1"] } if step-2 depends on step-1
+  dependencies: {}
 })
 
-// 5. Execute workflow with all agent IDs
-mcp__ruv-swarm__daa_workflow_execute({
-  workflowId: "wf-id",
-  agentIds: ["agent-1", "agent-2"],
-  parallelExecution: true
+// ⚠️ DO NOT call daa_workflow_execute here — it returns empty arrays.
+// Skip it entirely OR call it ONLY as a status marker if you want the tracking record.
+```
+
+### Phase 3: Launch Agent Tools — THE ACTUAL WORK
+
+**This is where real work happens. The DAA cognitive pattern MUST shape the Agent prompt.**
+
+```javascript
+// 5. Map cognitive patterns to prompt instructions
+// COGNITIVE_PROMPT_MAP:
+//   critical:   "Analyze critically. Identify flaws, gaps, and risks. Question assumptions."
+//   systems:    "Think holistically. Trace connections between components. Consider side effects."
+//   adaptive:   "Adjust your approach based on what you find. Start broad, then focus on issues."
+//   convergent: "Focus on finding the single best answer. Narrow down options systematically."
+//   divergent:  "Generate multiple alternative approaches. Explore unusual angles."
+//   lateral:    "Look for indirect connections. Consider unconventional solutions."
+
+// 6. Launch background Agent tools — ONE per DAA agent
+// ⚠️ CRITICAL: Include the cognitive pattern instruction in the Agent prompt
+Agent({
+  description: "Task for agent-1",
+  run_in_background: true,
+  prompt: `You are agent-1 (cognitive pattern: critical).
+Analyze critically. Identify flaws, gaps, and risks. Question assumptions.
+
+Your task: [specific task description]
+Research ONLY — do NOT modify files.
+
+After completing analysis, structure your findings as:
+- KEY_FINDINGS: [list]
+- ISSUES_FOUND: [list]
+- RECOMMENDATIONS: [list]`
 })
 
-// 6. Enable meta-learning across agents for cross-domain knowledge transfer
-mcp__ruv-swarm__daa_meta_learning({
-  sourceDomain: "primary-domain",
-  targetDomain: "secondary-domain",
-  transferMode: "adaptive",  // or "direct", "gradual"
-  agentIds: ["agent-1", "agent-2"]
+Agent({
+  description: "Task for agent-2",
+  run_in_background: true,
+  prompt: `You are agent-2 (cognitive pattern: systems).
+Think holistically. Trace connections between components. Consider side effects.
+
+Your task: [specific task description]
+Research ONLY — do NOT modify files.
+
+After completing analysis, structure your findings as:
+- KEY_FINDINGS: [list]
+- CONNECTIONS_MAPPED: [list]
+- RECOMMENDATIONS: [list]`
 })
 ```
 
-### Phase 3: Launch Task Agents for Actual File Work
+### Phase 4: Collect Results + Store in DAA (for multi-iteration use)
 
 ```javascript
-// 7. Launch background Agent tools — one per DAA agent/step
-//    MCP layer coordinates; Task agents execute in SEPARATE context windows
-Agent({ description: "Task for agent-1", run_in_background: true, prompt: "..." })
-Agent({ description: "Task for agent-2", run_in_background: true, prompt: "..." })
-```
-
-### Phase 4: Collect Results + Share Knowledge + Adapt
-
-```javascript
-// 8. After Task agents complete, share knowledge between DAA agents
+// 7. After Agent tools complete, store ACTUAL findings in DAA for the NEXT iteration
 mcp__ruv-swarm__daa_knowledge_share({
   sourceAgentId: "agent-1",
   targetAgentIds: ["agent-2"],
   knowledgeDomain: "domain-name",
-  knowledgeContent: { findings: "summary of results" }
+  knowledgeContent: { findings: "ACTUAL findings from Agent tool results — not empty data" }
 })
 
-// 9. Adapt agents based on performance feedback
+// 8. Record performance feedback (only useful if you'll iterate)
 mcp__ruv-swarm__daa_agent_adapt({
   agentId: "agent-1",
-  feedback: "description of performance",
+  feedback: "Found 3 critical issues in auth flow",
   performanceScore: 0.9,
-  suggestions: ["improvement suggestion"]
+  suggestions: ["Expand scope to include session management"]
 })
-
-// 10. Check learning status across all agents
-mcp__ruv-swarm__daa_learning_status({})
-
-// 11. Get performance metrics
-mcp__ruv-swarm__daa_performance_metrics({ category: "all" })
-// Categories: "all", "system", "performance", "efficiency", "neural"
 ```
 
-### Phase 5 (Optional): Analyze Cognitive Patterns
+### Phase 5 (Multi-Iteration ONLY): Use Stored Knowledge for Next Round
 
 ```javascript
-// 12. Analyze agent cognitive patterns
-mcp__ruv-swarm__daa_cognitive_pattern({
-  action: "analyze",
-  agentId: "agent-1"
-})
+// 9. READ stored knowledge before crafting next-round Agent prompts
+mcp__ruv-swarm__daa_learning_status({ agentId: "agent-1", detailed: true })
 
-// 13. Change pattern if agent needs different approach
-mcp__ruv-swarm__daa_cognitive_pattern({
-  action: "change",
-  agentId: "agent-1",
-  pattern: "adaptive"  // switch from current to adaptive
+// 10. Launch Round 2 agents with knowledge from Round 1 injected into prompts
+Agent({
+  description: "Round 2 for agent-1",
+  run_in_background: true,
+  prompt: `You are agent-1 (cognitive pattern: critical), Round 2.
+Analyze critically. Identify flaws, gaps, and risks. Question assumptions.
+
+CONTEXT FROM ROUND 1:
+[Insert actual findings from Phase 4 knowledge_share here]
+
+Your task: Deep-dive into the issues found in Round 1...`
 })
 ```
 
 ### DAA-Specific Rules
 
-- **MCP = coordination, Agent tool = execution** — never read/write files in coordinator context
-- **Batch all `daa_agent_create` calls** in ONE message
-- **Always create workflow** via `daa_workflow_create` BEFORE `daa_workflow_execute` — don't skip it
-- **Always use `daa_knowledge_share`** after collecting results to cross-pollinate findings
-- **Always use `daa_agent_adapt`** to feed back results and improve agent performance
-- **Use `daa_meta_learning`** to transfer learning across domains when agents cover different areas
+- **MCP = tracking/metadata, Agent tool = execution** — DAA tools NEVER read/write files
+- **DO NOT call `daa_workflow_execute` expecting results** — it returns empty arrays
+- **DO inject cognitive patterns into Agent prompts** — this is how DAA influences real work
+- **DO store actual Agent findings via `daa_knowledge_share`** — not empty/fake data
+- **ONLY use DAA for multi-iteration workflows** — single-pass parallel work should use B1 or Claude-Flow
+- **Skip `daa_meta_learning`** — returns random numbers, provides no actual learning
+- **Skip `daa_performance_metrics` and `daa_learning_status`** unless tracking iteration state
 - **Never mix** `daa_agent_create` agents with `agent_spawn` agents — they are separate pools
-- **Never use** `task_orchestrate` with DAA agents — use `daa_workflow_execute` instead
 
 ---
 
 ## Pattern B3: Hybrid (Swarm + DAA)
 
-Combine B1 for task orchestration + B2 for learning. Two separate agent pools.
+Combine B1 for task orchestration + B2 for iterative tracking. Two separate agent pools.
 
 ### When To Use
 
-- Need both parallel task execution AND learning/adaptation
+- Need both parallel task execution AND cross-iteration state tracking
 - Complex multi-phase projects where early phases inform later ones
 
 ### Methodology
 
 1. **Phase 1:** Init both systems — `swarm_init` + `daa_init`
 2. **Phase 2:** Spawn swarm agents (`agent_spawn`) for immediate task work
-3. **Phase 3:** Create DAA agents (`daa_agent_create`) for learning/analysis
-4. **Phase 4:** Run swarm tasks via `task_orchestrate`
-5. **Phase 5:** Feed swarm results into DAA via `daa_knowledge_share`
-6. **Phase 6:** Run DAA workflows via `daa_workflow_execute` informed by swarm findings
-7. **Phase 7:** Use `daa_agent_adapt` to improve future iterations
+3. **Phase 3:** Create DAA agents (`daa_agent_create`) for iterative tracking
+4. **Phase 4:** Run swarm tasks via `task_orchestrate` + Agent tools (actual work)
+5. **Phase 5:** Feed swarm results into DAA via `daa_knowledge_share` (store ACTUAL findings)
+6. **Phase 6:** For next iteration, read stored DAA knowledge → shape new Agent prompts
+7. **Phase 7:** Use `daa_agent_adapt` to record performance feedback for tracking
 
-**Key rule:** Keep the two pools completely separate. Swarm agents run immediate tasks; DAA agents learn from results.
+**Key rule:** Keep the two pools completely separate. Swarm agents (via Agent tool) run immediate tasks; DAA agents track state and store findings for cross-iteration use. DAA does NOT execute work — it's bookkeeping.
 
 ---
 

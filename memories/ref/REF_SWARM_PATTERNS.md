@@ -162,13 +162,23 @@ mcp__ruv-swarm__task_orchestrate({ task: "...", strategy: "parallel", priority: 
 // Then use Task tool for actual file work
 ```
 
-**Minimal Pattern B (DAA Learning):**
+**⚠️ DAA REALITY: DAA is a metadata/tracking layer, NOT an execution engine.**
+
+`daa_workflow_execute` flips a status flag and returns empty arrays. `daa_meta_learning` returns `Math.random()` values. `daa_learning_status` returns hardcoded metrics. All actual work is done by the Agent tool. **Only use DAA for multi-iteration workflows** where you need structured cross-iteration state. For single-pass parallel work, use Claude-Flow (A) or B1 instead.
+
+**Minimal Pattern B (DAA Iterative Tracking):**
 
 ```javascript
 ToolSearch({ query: "+ruv-swarm daa" })
 mcp__ruv-swarm__daa_init({ enableLearning: true, enableCoordination: true })
 mcp__ruv-swarm__daa_agent_create({ id: "daa-1", cognitivePattern: "adaptive", enableMemory: true })
+// Register workflow for tracking (NOT execution)
 mcp__ruv-swarm__daa_workflow_create({ id: "wf-1", name: "Analysis", strategy: "adaptive" })
+// DO NOT expect daa_workflow_execute to produce results — launch Agent tools instead
+// Use cognitive pattern to SHAPE the Agent tool prompt (see WF_SWARM_RUV Pattern B2)
+Agent({ prompt: "You are daa-1 (cognitive: adaptive). Adjust approach based on findings..." })
+// After Agent completes, store findings for next iteration:
+mcp__ruv-swarm__daa_knowledge_share({ sourceAgentId: "daa-1", ..., knowledgeContent: { findings: "ACTUAL results" } })
 ```
 
 ### 3. Hive-Mind (Consensus/Collective Intelligence)
@@ -198,7 +208,7 @@ Without explicit `ToolSearch` + `hive-mind_memory` instructions in agent prompts
 | Quick parallel tasks   | Claude-Flow   | star         |
 | Multi-file analysis    | Claude-Flow   | mesh         |
 | Code refactoring       | Claude-Flow   | hierarchical |
-| Research with learning | RUV-Swarm DAA | adaptive     |
+| Multi-iteration tracking | RUV-Swarm DAA | adaptive     |
 | Simple parallel tasks  | RUV-Swarm     | mesh         |
 | Consensus decisions    | Hive-Mind     | mesh         |
 
