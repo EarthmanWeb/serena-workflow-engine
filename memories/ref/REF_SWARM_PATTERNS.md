@@ -174,6 +174,7 @@ mcp__ruv-swarm__daa_workflow_create({ id: "wf-1", name: "Analysis", strategy: "a
 ### 3. Hive-Mind (Consensus/Collective Intelligence)
 
 **MCP Prefix:** `mcp__claude-flow__hive-mind_`
+**State file:** `.claude-flow/hive-mind/state.json` (file-backed, shared across all processes)
 
 **Essential Tools:**
 
@@ -184,6 +185,9 @@ mcp__ruv-swarm__daa_workflow_create({ id: "wf-1", name: "Analysis", strategy: "a
 | `hive-mind_consensus` | `mcp__claude-flow__hive-mind_consensus` |
 | `hive-mind_memory`    | `mcp__claude-flow__hive-mind_memory`    |
 | `hive-mind_status`    | `mcp__claude-flow__hive-mind_status`    |
+
+**⛔ CRITICAL: Agent subagents MUST be explicitly instructed to use hive-mind tools.**
+Without explicit `ToolSearch` + `hive-mind_memory` instructions in agent prompts, agents run as plain parallel workers — not hive-mind participants. See `WF_SWARM_HIVE_MIND` Phase 4 for the required agent prompt template.
 
 ---
 
@@ -225,6 +229,28 @@ mcp__ruv-swarm__daa_workflow_create({ id: "wf-1", name: "Analysis", strategy: "a
 4. Read memory docs during swarm execution (load them BEFORE)
 5. Block on first agent before spawning others
 6. Read files directly in coordinator — agents do that
+7. **Use `SendMessage`** — it does NOT exist. The Agent tool output suggests it, but the tool is not available. Agents are fire-and-forget.
+
+---
+
+## ⛔ Agent Communication Constraints (Verified 2026-04-27)
+
+**`SendMessage` does NOT exist.** The Agent tool's completion output says "Use SendMessage with to: 'agentId' to continue this agent" — this is misleading. The tool is not available.
+
+**What this means:**
+
+| Need | Solution | Limitation |
+|------|----------|------------|
+| Send instructions to agent | Include ALL instructions in the initial Agent prompt | Cannot update mid-execution |
+| Share data between agents | Use `hive-mind_memory set/get` | Agent must be coded to poll shared memory |
+| Refine scope after launch | Update hive-mind memory key BEFORE agent reads it | Race condition — agent may have already read the old value |
+| Continue a completed agent | Launch a NEW Agent with the completed agent's output | No context preservation — must re-provide context |
+
+**Rules:**
+- All agent instructions must be **complete and self-contained** in the initial prompt
+- For scope refinements, update hive-mind shared memory keys and hope the agent hasn't read them yet
+- For cross-referencing, agents should read hive-mind memory at the END of their analysis (Step 5), not just at the start
+- Treat agents as **fire-and-forget workers** — plan accordingly
 
 ---
 
@@ -250,3 +276,5 @@ mcp__ruv-swarm__daa_workflow_create({ id: "wf-1", name: "Analysis", strategy: "a
 | Pretty-printed JSON responses          | 2x response size                       | Can't control this — keep calls minimal |
 | ruv-swarm WAL file grows unbounded     | DB file accumulation                   | Clear npx cache periodically            |
 | GitHub Issue #126: naming confusion    | 100% tool call failure if wrong prefix | Use prefixes from THIS doc              |
+| **SendMessage does not exist**         | Cannot communicate with running agents | All instructions in initial prompt; use hive-mind shared memory for data exchange |
+| Agent tool claims SendMessage works    | Misleading output on agent completion  | Ignore the suggestion — tool is not available |

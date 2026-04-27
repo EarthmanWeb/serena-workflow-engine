@@ -84,6 +84,67 @@ mcp__claude-flow__hive-mind_memory({
 
 ## Phase 4: Launch Task Agents for File Work
 
+**⛔ CRITICAL: Agent prompts MUST include hive-mind tool instructions.**
+
+The hive-mind is file-backed (`.claude-flow/hive-mind/state.json`). Any process calling hive-mind MCP tools reads/writes the SAME shared state. Agent subagents have access to all MCP tools but **will not use them unless explicitly instructed in their prompt**.
+
+**Every agent prompt MUST include these steps:**
+
+1. `ToolSearch({ query: "select:mcp__claude-flow__hive-mind_memory", max_results: 1 })` — load the tool
+2. `mcp__claude-flow__hive-mind_memory({ action: "get", key: "..." })` — read shared context
+3. Do analysis work (file reads, codebase research)
+4. `mcp__claude-flow__hive-mind_memory({ action: "set", key: "findings-{agent-id}", value: {...} })` — write findings to shared memory
+5. (Optional) `mcp__claude-flow__hive-mind_memory({ action: "get", key: "findings-{other-agent}" })` — cross-reference other agents' findings
+
+**Agent prompt template:**
+
+```
+You are {role} in a hive-mind swarm.
+
+## STEP 1: Load hive-mind tools
+Call: ToolSearch({ query: "select:mcp__claude-flow__hive-mind_memory", max_results: 1 })
+
+## STEP 2: Read shared context from hive-mind
+Call: mcp__claude-flow__hive-mind_memory({ action: "get", key: "{context-key}" })
+Also check for scope updates:
+Call: mcp__claude-flow__hive-mind_memory({ action: "get", key: "scope-update-{domain}" })
+
+## STEP 3: Do your analysis
+{domain-specific instructions}
+
+## STEP 3b: MID-TASK SCOPE CHECK (poll for updates)
+Before writing findings, check for scope refinements from the coordinator:
+Call: mcp__claude-flow__hive-mind_memory({ action: "list" })
+Look for any keys starting with "scope-update-" that appeared AFTER your initial read.
+Read and apply any new scope constraints to your remaining work.
+
+## STEP 4: Store findings in hive-mind shared memory
+Call: mcp__claude-flow__hive-mind_memory({ action: "set", key: "findings-{agent-id}", value: { ... } })
+
+## STEP 5: Cross-reference (if other agents have finished)
+Call: mcp__claude-flow__hive-mind_memory({ action: "list" })
+Then get any findings-* keys from other agents to cross-reference.
+```
+
+**Scope update polling pattern:**
+
+Since `SendMessage` does not exist, the coordinator cannot push updates to running agents. Instead, use a pull-based pattern:
+
+1. **Coordinator** writes scope refinements to a known key pattern: `scope-update-{topic}`
+2. **Agents** poll for scope updates at defined checkpoints:
+   - After initial context read (Step 2)
+   - Before each major analysis section (Step 3b)
+   - Before writing final findings (Step 4)
+3. **Key convention:** `scope-update-*` keys are always refinements — agents merge them with initial instructions, they don't replace them
+4. **For long-running agents**, add a poll step between each audit item analysis:
+   ```
+   ## Between each item analysis:
+   Call: mcp__claude-flow__hive-mind_memory({ action: "get", key: "scope-update-{domain}" })
+   If value exists and differs from last read, apply the refinement to remaining work.
+   ```
+
+**Launch agents in parallel:**
+
 ```javascript
 // 7. Launch background Agent tools for actual work
 Agent({ description: "Worker 1 analysis", run_in_background: true, prompt: "..." })
@@ -91,38 +152,61 @@ Agent({ description: "Worker 2 analysis", run_in_background: true, prompt: "..."
 Agent({ description: "Worker 3 analysis", run_in_background: true, prompt: "..." })
 ```
 
+**Verified behavior (tested 2026-04-27):**
+- Coordinator stores context → Agent reads it via `hive-mind_memory get` ✓
+- Agent stores findings → Coordinator reads them via `hive-mind_memory get` ✓
+- Agent loads MCP tools via `ToolSearch` inside Agent subagent ✓
+- All backed by same file: `.claude-flow/hive-mind/state.json` ✓
+
 ---
 
 ## Phase 5: Consensus + Collect Results
 
+After all agents complete and store findings in shared memory:
+
 ```javascript
-// 8. Propose a decision for consensus
+// 8. Coordinator reads all agent findings from shared memory
+mcp__claude-flow__hive-mind_memory({ action: "list" })
+// Then get each findings-* key
+
+// 9. Propose a decision for consensus
 mcp__claude-flow__hive-mind_consensus({
   action: "propose",
   type: "decision",
+  strategy: "quorum",           // "bft", "raft", or "quorum"
+  quorumPreset: "majority",     // "unanimous", "majority", "supermajority"
   value: {
     question: "Should we refactor the submission pipeline?",
     options: ["yes-full-refactor", "partial-refactor", "no-change"]
   }
 })
 
-// 9. Vote on proposal (each worker votes)
+// 10. Vote on proposal (coordinator votes on behalf of agents based on findings)
 mcp__claude-flow__hive-mind_consensus({
   action: "vote",
-  proposalId: "proposal-id",
-  vote: "yes-full-refactor"
+  proposalId: "proposal-id",   // from step 9 response
+  voterId: "worker-1",
+  vote: true                   // true=for, false=against
 })
 
-// 10. Check consensus status
-mcp__claude-flow__hive-mind_status({})
+// 11. Check consensus status
+mcp__claude-flow__hive-mind_consensus({
+  action: "status",
+  proposalId: "proposal-id"
+})
 
-// 11. Store results in shared memory
+// 12. Store final results in shared memory
 mcp__claude-flow__hive-mind_memory({
   action: "set",
   key: "consensus-result",
   value: { decision: "...", rationale: "..." }
 })
 ```
+
+**Consensus strategies (from source `hive-mind-tools.js`):**
+- **bft** — Byzantine Fault Tolerant: requires 2/3 + 1 votes, detects conflicting voters
+- **raft** — Simple majority, one vote per node per term, timeout support
+- **quorum** — Configurable: `unanimous` (all), `majority` (50%+1), `supermajority` (2/3+1)
 
 ---
 
@@ -163,3 +247,27 @@ mcp__claude-flow__hive-mind_shutdown({})
 - **Cleanup:** `leave` workers → `shutdown` hive when done
 - **Mesh topology** is the only practical choice for consensus
 - **MCP = coordination, Agent tool = execution** — same rule as all systems
+- **⛔ Agent prompts MUST include ToolSearch + hive-mind tool usage** — agents will NOT use hive-mind tools unless explicitly told to in their prompt. This is the #1 mistake. Without it, you just have parallel agents, not a hive-mind.
+- **⛔ SendMessage does NOT exist** — the Agent tool output suggests "Use SendMessage to continue this agent" but the tool is not available. Agents are fire-and-forget. All instructions must be in the initial prompt. For mid-flight data sharing, agents should read hive-mind memory at BOTH start AND end of their analysis.
+- **Scope refinements after launch** — update hive-mind memory keys before the agent reads them. Race condition applies — if the agent already read the key, it won't see updates. Design agents to read shared memory at multiple points (start + before writing findings).
+
+## How It Works (from source code)
+
+All hive-mind state is stored in `.claude-flow/hive-mind/state.json`:
+
+```
+{
+  initialized: bool,
+  topology: "mesh",
+  workers: ["agent-id-1", "agent-id-2", ...],
+  consensus: { pending: [...], history: [...] },
+  sharedMemory: { "key": value, "broadcasts": [...] },
+  queen: { agentId, electedAt, term }
+}
+```
+
+- `hive-mind_memory` reads/writes `state.sharedMemory[key]`
+- `hive-mind_broadcast` appends to `state.sharedMemory.broadcasts` array (keeps last 100)
+- `hive-mind_spawn` creates agents in both `.claude-flow/agents.json` AND adds to `state.workers`
+- `hive-mind_consensus` manages proposals in `state.consensus.pending`, moves to `history` on resolution
+- All operations are file I/O — any process calling MCP tools shares the same state file

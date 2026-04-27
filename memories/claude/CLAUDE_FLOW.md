@@ -130,17 +130,36 @@ mcp__ruv-swarm__daa_workflow_execute({ workflowId: "wf-1" })
 ## 🐝 HIVE-MIND (Collective Intelligence)
 
 **Prefix:** `mcp__claude-flow__hive-mind_`
+**State file:** `.claude-flow/hive-mind/state.json` (file-backed, shared by all processes)
 
-### Minimal Pattern
+### Minimal Pattern (Coordinator)
 
 ```javascript
+// Coordinator: init + spawn + store context
 ToolSearch({ query: "+claude-flow hive-mind" })
 mcp__claude-flow__hive-mind_init({ topology: "mesh", queenId: "queen-1" })
 mcp__claude-flow__hive-mind_spawn({ count: 3, role: "worker", agentType: "analyst" })
-mcp__claude-flow__hive-mind_memory({ action: "set", key: "config", value: {...} })
-mcp__claude-flow__hive-mind_consensus({ action: "propose", type: "decision", value: {...} })
-mcp__claude-flow__hive-mind_status({})
+mcp__claude-flow__hive-mind_memory({ action: "set", key: "task-context", value: {...} })
+
+// Launch agents — each MUST use hive-mind tools (see below)
+Agent({ run_in_background: true, prompt: "...includes hive-mind tool instructions..." })
+
+// After agents complete: read findings + run consensus
+mcp__claude-flow__hive-mind_memory({ action: "get", key: "findings-agent-1" })
+mcp__claude-flow__hive-mind_consensus({ action: "propose", type: "decision", strategy: "quorum", value: {...} })
 ```
+
+### ⛔ CRITICAL: Agent Prompt Requirements
+
+**Agent subagents will NOT use hive-mind tools unless explicitly told to.** Every agent prompt MUST include:
+
+1. `ToolSearch({ query: "select:mcp__claude-flow__hive-mind_memory", max_results: 1 })` — load the tool
+2. `hive-mind_memory get` — read shared context stored by coordinator
+3. Do analysis work
+4. `hive-mind_memory set` — write findings back to shared memory
+5. (Optional) `hive-mind_memory get` — read other agents' findings for cross-referencing
+
+**Without this, you just have parallel agents — not a hive-mind.** See `WF_SWARM_HIVE_MIND` for the full agent prompt template.
 
 ---
 
