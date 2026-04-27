@@ -3,7 +3,7 @@
 **System:** RUV-Swarm
 **MCP Prefix:** `mcp__ruv-swarm__`
 **Version:** 1.0.20
-**Tools:** 25 total (15 core + 10 DAA)
+**Tools:** 25 total (9 core + 10 DAA + 6 utility)
 **Memory:** better-sqlite3 (native SQLite), 256MB mmap, WAL mode
 
 ---
@@ -257,12 +257,14 @@ Combine B1 for task orchestration + B2 for learning. Two separate agent pools.
 | Tool | Full Name | Purpose |
 |------|-----------|---------|
 | `swarm_init` | `mcp__ruv-swarm__swarm_init` | Initialize swarm |
+| `swarm_status` | `mcp__ruv-swarm__swarm_status` | Check swarm state |
+| `swarm_monitor` | `mcp__ruv-swarm__swarm_monitor` | Monitor swarm activity |
 | `agent_spawn` | `mcp__ruv-swarm__agent_spawn` | Create swarm agent |
+| `agent_list` | `mcp__ruv-swarm__agent_list` | List agents |
+| `agent_metrics` | `mcp__ruv-swarm__agent_metrics` | Performance metrics |
 | `task_orchestrate` | `mcp__ruv-swarm__task_orchestrate` | Execute across agents |
 | `task_status` | `mcp__ruv-swarm__task_status` | Check progress |
 | `task_results` | `mcp__ruv-swarm__task_results` | Get results |
-| `agent_list` | `mcp__ruv-swarm__agent_list` | List agents |
-| `agent_metrics` | `mcp__ruv-swarm__agent_metrics` | Performance metrics |
 
 ### DAA (B2) Tools
 
@@ -278,6 +280,17 @@ Combine B1 for task orchestration + B2 for learning. Two separate agent pools.
 | `daa_performance_metrics` | `mcp__ruv-swarm__daa_performance_metrics` | Performance data |
 | `daa_cognitive_pattern` | `mcp__ruv-swarm__daa_cognitive_pattern` | Analyze/change patterns |
 | `daa_meta_learning` | `mcp__ruv-swarm__daa_meta_learning` | Cross-domain transfer |
+
+### Utility Tools
+
+| Tool | Full Name | Purpose |
+|------|-----------|---------|
+| `benchmark_run` | `mcp__ruv-swarm__benchmark_run` | Run performance benchmarks |
+| `features_detect` | `mcp__ruv-swarm__features_detect` | Detect available features |
+| `memory_usage` | `mcp__ruv-swarm__memory_usage` | Monitor memory consumption |
+| `neural_patterns` | `mcp__ruv-swarm__neural_patterns` | Analyze neural patterns |
+| `neural_status` | `mcp__ruv-swarm__neural_status` | Check neural engine state |
+| `neural_train` | `mcp__ruv-swarm__neural_train` | Train neural models |
 
 ---
 

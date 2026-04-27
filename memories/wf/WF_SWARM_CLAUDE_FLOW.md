@@ -2,8 +2,8 @@
 
 **System:** Claude-Flow V3 (Recommended for general orchestration)
 **MCP Prefix:** `mcp__claude-flow__`
-**Version:** 3.1.0-alpha.44 (third-party alpha by ruvnet)
-**Tools:** ~241 (deferred-loaded via ToolSearch — only load 3-5 max)
+**Version:** 3.5.81 (third-party by ruvnet)
+**Tools:** ~257 across 29 categories (deferred-loaded via ToolSearch — only load 3-5 max)
 
 ---
 
@@ -126,7 +126,7 @@ Only load what you need (max 3-5 per session):
 
 ## Claude-Flow Specific Rules
 
-- **Max 3-5 tools loaded** per session via ToolSearch — never load all 241
+- **Max 3-5 tools loaded** per session via ToolSearch — never load all 257
 - **NEVER use `verbose: true`** or `detailed: true` flags on status/metrics calls
 - **NEVER call `memory_stats`** — it scans up to 100K entries internally
 - **Limit `memory_list` to `limit: 5`** (defaults to 50)
@@ -150,11 +150,11 @@ Only load what you need (max 3-5 per session):
 
 ---
 
-## Known Issues (2026-02-24)
+## Known Issues (2026-04-27)
 
 | Issue | Mitigation |
 |-------|------------|
-| claude-flow is alpha software | Use simple patterns only |
-| 241 tools cause context bloat | Deferred loading + load 3-5 max |
+| claude-flow is third-party software | Use simple patterns only |
+| 257 tools cause context bloat | Deferred loading + load 3-5 max |
 | Pretty-printed JSON doubles response size | `MAX_MCP_OUTPUT_TOKENS=5000` |
 | "Prompt is too long" kills session permanently | Prevention only — see budget section |

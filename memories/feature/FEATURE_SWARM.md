@@ -26,7 +26,7 @@
 
 ---
 
-## ⚠️ VERIFIED MCP TOOL PREFIXES (2026-02-23)
+## ⚠️ VERIFIED MCP TOOL PREFIXES (2026-04-27)
 
 | System          | Actual MCP Prefix              |
 | --------------- | ------------------------------ |
@@ -99,7 +99,7 @@ Trigger on: `swarm`, `parallel agents`, `multi-agent`, `hive-mind`, `ruv-swarm`,
 
 | System      | Use Case                           | Tools | Details In         |
 | ----------- | ---------------------------------- | ----- | ------------------ |
-| Claude-Flow | General orchestration              | ~241  | CLAUDE_FLOW        |
+| Claude-Flow | General orchestration              | ~257  | CLAUDE_FLOW        |
 | RUV-Swarm   | Task orchestration, DAA learning   | 25    | REF_SWARM_PATTERNS |
 | Hive-Mind   | Consensus, collective intelligence | 9     | CLAUDE_FLOW        |
 

@@ -1,6 +1,6 @@
 # CLAUDE_FLOW - MCP Swarm Coordination Reference
 
-## ⚠️ VERIFIED MCP TOOL PREFIXES (2026-02-23)
+## ⚠️ VERIFIED MCP TOOL PREFIXES (2026-04-27)
 
 | System          | Actual MCP Prefix              |
 | --------------- | ------------------------------ |
@@ -52,8 +52,8 @@ export ENABLE_TOOL_SEARCH=auto:5     # Defer tools at 5% context threshold (defa
 ## 🚀 Claude-Flow (Primary System)
 
 **Prefix:** `mcp__claude-flow__`
-**Version:** 3.1.0-alpha.44 (third-party alpha by ruvnet)
-**Tools:** ~241 (deferred-loaded, only load what you need)
+**Version:** 3.5.81 (third-party by ruvnet)
+**Tools:** ~257 across 29 categories (deferred-loaded, only load what you need)
 
 ### Minimal Orchestration Pattern
 
@@ -91,7 +91,7 @@ TaskOutput({ task_id: "...", block: true })
 
 **Prefix:** `mcp__ruv-swarm__`
 **Version:** 1.0.20
-**Tools:** 25 total (15 core + 10 DAA)
+**Tools:** 25 total (9 core + 10 DAA + 6 utility)
 
 ### Minimal Pattern
 
@@ -212,12 +212,12 @@ The #1 failure mode for swarm sessions. This is a **hard context limit** — onc
 
 ---
 
-## Known Issues (2026-02-24)
+## Known Issues (2026-04-27)
 
 | Issue                                           | Mitigation                                        |
 | ----------------------------------------------- | ------------------------------------------------- |
-| claude-flow is alpha software                   | Use simple patterns only                          |
-| 241 tools cause context bloat                   | Deferred loading + load 3-5 max                   |
+| claude-flow is third-party software             | Use simple patterns only                          |
+| 257 tools cause context bloat                   | Deferred loading + load 3-5 max                   |
 | Pretty-printed JSON doubles response size       | `MAX_MCP_OUTPUT_TOKENS=5000` + keep calls minimal |
 | memory_stats scans all entries                  | NEVER call it                                     |
 | Wrong prefixes in old docs caused 100% failures | Use prefixes from THIS doc                        |

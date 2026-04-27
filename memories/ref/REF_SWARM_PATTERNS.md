@@ -4,7 +4,7 @@ Multi-agent swarm patterns for parallel processing and complex task coordination
 
 ---
 
-## ⚠️ VERIFIED MCP TOOL PREFIXES (2026-02-23)
+## ⚠️ VERIFIED MCP TOOL PREFIXES (2026-04-27)
 
 **The ACTUAL MCP tool names visible in ToolSearch deferred list:**
 
@@ -91,8 +91,8 @@ npx claude-flow init
 ### 1. Claude-Flow (Primary - Recommended for orchestration)
 
 **MCP Prefix:** `mcp__claude-flow__`
-**Version:** 3.1.0-alpha.44 (third-party, alpha)
-**Tools:** ~241 across 26 categories (deferred-loaded via ToolSearch)
+**Version:** 3.5.81 (third-party by ruvnet)
+**Tools:** ~257 across 29 categories (deferred-loaded via ToolSearch)
 **Memory:** sql.js (WASM SQLite) + HNSW vector index
 
 **Essential Tools (load ONLY what you need):**
@@ -131,7 +131,7 @@ TaskOutput({ task_id: "...", block: true })
 
 **MCP Prefix:** `mcp__ruv-swarm__`
 **Version:** 1.0.20
-**Tools:** 25 (15 core + 10 DAA)
+**Tools:** 25 (9 core + 10 DAA + 6 utility)
 **Memory:** better-sqlite3 (native SQLite), 256MB mmap, WAL mode
 
 **⚠️ TWO SEPARATE agent systems — DO NOT MIX:**
@@ -245,8 +245,8 @@ mcp__ruv-swarm__daa_workflow_create({ id: "wf-1", name: "Analysis", strategy: "a
 
 | Issue                                  | Impact                                 | Mitigation                              |
 | -------------------------------------- | -------------------------------------- | --------------------------------------- |
-| claude-flow is alpha (v3.1.0-alpha.44) | Stability concerns                     | Use simple patterns only                |
-| 241 tools cause context bloat          | ToolSearch deferred loading helps      | Only load 3-5 tools max                 |
+| claude-flow is third-party (v3.5.81)   | Stability concerns                     | Use simple patterns only                |
+| 257 tools cause context bloat          | ToolSearch deferred loading helps      | Only load 3-5 tools max                 |
 | Pretty-printed JSON responses          | 2x response size                       | Can't control this — keep calls minimal |
 | ruv-swarm WAL file grows unbounded     | DB file accumulation                   | Clear npx cache periodically            |
 | GitHub Issue #126: naming confusion    | 100% tool call failure if wrong prefix | Use prefixes from THIS doc              |
