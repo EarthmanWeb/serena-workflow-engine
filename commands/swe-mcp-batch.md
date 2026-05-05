@@ -1,98 +1,100 @@
 # MCP Batch Recorder
 
-Record a multi-step browser interaction into a reusable MCP scenario, stored in both the Browser DevTools MCP scenario system (`.browser-devtools-mcp/scenarios.json`) and Serena memory.
+Converts recent Browser DevTools MCP steps from the current conversation into a reusable scenario stored in `.browser-devtools-mcp/scenarios.json` and Serena memory.
 
 ## Arguments
-- $ARGUMENTS: Description of the batch to create (e.g., "login to wp-admin", "navigate to CRM contacts page")
+- $ARGUMENTS: Name/description for the batch (e.g., "login to wp-admin", "navigate to CRM contacts")
 
 ## Instructions
 
-Creating a new MCP batch scenario. Follow these steps exactly:
-
-### 1. Parse the Request
+### 1. Parse Arguments
 
 Extract from `$ARGUMENTS`:
 - **Batch name**: Derive an `MCP_{action}` name (e.g., `MCP_login`, `MCP_navigate_crm`)
-- **Steps**: What browser actions are needed (navigate, fill, click, wait, verify)
-- **Starting state**: Does this batch depend on another batch? (e.g., needs login first)
+- **Description**: One-line summary of what the batch does
 
-### 2. Check for Existing Scenarios
+### 2. Review Conversation Thread
+
+Scan backwards through the current conversation for Browser DevTools MCP tool calls. Identify the sequence of steps that match what `$ARGUMENTS` describes:
+
+- `navigation_go-to` calls — URLs navigated to
+- `a11y_take-aria-snapshot` calls — ref discovery points
+- `interaction_fill` calls — field values entered
+- `interaction_click` calls — buttons/links clicked (note `waitForNavigation`)
+- `interaction_select`, `interaction_hover` — other interactions
+- `scenario-run` calls — prerequisite batches that were composed
+
+For each interaction step, note:
+- The **element name** from the ARIA snapshot (e.g., `"Username or Email Address"`, `"Log In"`)
+- The **role** (button, textbox, link, etc.)
+- The **value** used (for fill/select)
+- Whether `waitForNavigation` was needed
+
+### 3. Check for Existing Scenarios
 
 ```
 mcp__browser-devtools__scenario-list()
 ```
 
-- If the requested batch already exists, inform the user and ask if they want to update it
-- If the batch depends on login, note that `MCP_login` can be composed via `callTool('scenario-run', { name: 'MCP_login' })`
-
-### 3. Interactive Discovery
-
-Execute the steps interactively using individual MCP tool calls to discover the correct selectors:
-
-1. **Navigate** to the target page using `navigation_go-to`
-2. **Snapshot** using `a11y_take-aria-snapshot` with `interactiveOnly: true` to get refs
-3. **Record ref mappings** — note which `name` property maps to each form field/button (do NOT hardcode ref IDs like `e1`, `e2` — they are ephemeral)
-4. **Interact** — fill fields, click buttons using the discovered refs
-5. **Verify** — take a final snapshot to confirm the expected end state
+If a scenario with this name already exists, ask the user whether to update or abort.
 
 ### 4. Build the Scenario Script
 
-Write the scenario using dynamic ref discovery (NOT hardcoded refs). Pattern:
+Convert the identified steps into an `execute` script using **dynamic ref discovery** (never hardcoded refs). Pattern:
 
 ```javascript
 // Navigate
 await callTool('navigation_go-to', { url: '...', includeSnapshot: true, snapshotOptions: { interactiveOnly: true } });
 
-// Discover refs by name
+// Discover refs by name (from ARIA snapshot)
 const snapshot = await callTool('a11y_take-aria-snapshot', { interactiveOnly: true }, true);
 const refs = snapshot.refs || {};
 let targetRef;
 for (const [ref, info] of Object.entries(refs)) {
-  if (info.name === 'Expected Name') targetRef = ref;
+  if (info.name === 'Element Name From Thread') targetRef = ref;
 }
-if (!targetRef) throw new Error('Could not find target element');
+if (!targetRef) throw new Error('Could not find element: Element Name From Thread');
 
-// Interact
+// Interact (replay the steps from the thread)
 await callTool('interaction_fill', { selector: targetRef, value: '...' });
-await callTool('interaction_click', { selector: targetRef, waitForNavigation: true });
+await callTool('interaction_click', { selector: loginRef, waitForNavigation: true });
 
-// Verify
+// Verify end state
 const result = await callTool('a11y_take-aria-snapshot', { maxDepth: 1 }, true);
-if (!result.output.includes('Expected Page')) throw new Error('Verification failed');
+if (!result.output.includes('Expected Page Title')) {
+  throw new Error('Batch failed. Expected: ... Got: ' + result.output.substring(0, 200));
+}
 
 return { status: 'success', page: 'Expected Page' };
 ```
 
-### 5. Composing Batches
-
-If the batch requires a prior batch (like login), compose them:
+If the thread showed a prerequisite batch (e.g., `MCP_login` was run first), compose it:
 
 ```javascript
-// Run prerequisite batch
 await callTool('scenario-run', { name: 'MCP_login' });
-// Then continue with this batch's steps...
+// Then the steps from the thread...
 ```
 
-### 6. Save the Scenario
+### 5. Save the Scenario
 
 ```
 mcp__browser-devtools__scenario-add({
   name: "MCP_{action}",
-  description: "Clear one-line description",
+  description: "One-line description",
   script: "... the script from step 4 ...",
   scope: "project"
 })
 ```
 
-### 7. Test the Scenario
+### 6. Test the Scenario
 
 ```
 mcp__browser-devtools__scenario-run({ name: "MCP_{action}" })
 ```
 
-Verify it completes successfully.
+Verify it completes successfully. If it fails, debug and fix the script.
 
-### 8. Store in Serena Memory
+### 7. Store in Serena Memory
 
 ```
 mcp__plugin_swe_serena__write_memory({
@@ -101,20 +103,21 @@ mcp__plugin_swe_serena__write_memory({
 })
 ```
 
-Include in the memory:
-- Overview table (type, storage, invoke command, target URL)
-- How it works (numbered steps)
-- Usage example
+Include:
+- Overview table (type, storage, invoke command, target URL, result)
+- Numbered steps describing what the batch does
+- Usage example (standalone + composed)
 - Ref discovery strategy
-- Any prerequisites (e.g., "Requires MCP_login first")
+- Prerequisites if any
 
-### 9. Update MEMORY.md
+### 8. Update MEMORY.md
 
 Add entry under MCP Batch Scenarios section.
 
 ## Key Rules
 
-- **NEVER hardcode element refs** (e1, e2) — always discover by `name` property from ARIA snapshot
+- **Retroactive** — review conversation thread to extract steps already taken, do not re-execute them from scratch
+- **NEVER hardcode element refs** (e1, e2) — discover by `name` property from ARIA snapshot
 - **Use `MCP_` prefix** for all batch scenario names
 - **Project scope** for all scenarios (not global)
 - **Compose, don't duplicate** — if a batch needs login, call `MCP_login`, don't re-implement it

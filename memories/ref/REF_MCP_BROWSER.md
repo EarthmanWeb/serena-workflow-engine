@@ -18,18 +18,19 @@ Each scenario is documented in Serena memory as `mcp/MCP_{name}`.
 
 ### Creating New Batches
 
-Use the `/swe-mcp-batch` skill to interactively record new multi-step browser interactions:
+After performing browser steps in a conversation (navigate, fill, click, etc.), use `/swe-mcp-batch` to convert those steps into a reusable scenario:
 
 ```
-/swe-mcp-batch navigate to CRM contacts page
+/swe-mcp-batch login to wp-admin
 ```
 
-The skill will:
-1. Walk through the steps interactively in the browser
-2. Discover element refs dynamically via ARIA snapshots (never hardcoded)
-3. Build a composable scenario script
+The command will:
+1. Review recent Browser DevTools MCP calls in the conversation thread
+2. Extract the navigation, interaction, and verification steps
+3. Build a scenario script with dynamic ref discovery (never hardcoded refs)
 4. Save to `.browser-devtools-mcp/scenarios.json` via `scenario-add`
-5. Document in Serena memory as `mcp/MCP_{action}`
+5. Test the scenario via `scenario-run`
+6. Document in Serena memory as `mcp/MCP_{action}`
 
 ### Using Batches
 
