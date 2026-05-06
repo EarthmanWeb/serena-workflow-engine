@@ -1,7 +1,7 @@
 # WF_SWARM_HIVE_MIND - Hive-Mind Collective Intelligence Methodology
 
-**System:** Hive-Mind (part of Claude-Flow)
-**MCP Prefix:** `mcp__claude-flow__hive-mind_`
+**System:** Hive-Mind (Ruflo subsystem)
+**MCP Prefix:** `mcp__ruflo__hive-mind_`
 **Purpose:** Consensus-based decisions, collective intelligence, shared memory
 
 ---
@@ -10,9 +10,9 @@
 
 | System | Actual Prefix |
 |--------|---------------|
-| **Hive-Mind** | `mcp__claude-flow__hive-mind_` |
+| **Hive-Mind** | `mcp__ruflo__hive-mind_` |
 
-**Note:** Hive-Mind tools are part of Claude-Flow but use the `hive-mind_` sub-prefix.
+**Note:** Hive-Mind tools are part of Ruflo and use the `hive-mind_` sub-prefix.
 
 ---
 
@@ -25,7 +25,7 @@
 | Architecture decision-making | mesh |
 | Shared knowledge accumulation | mesh |
 
-**Hive-Mind is best for tasks requiring agreement or collective intelligence, not raw parallel execution.** For parallel tasks, use Claude-Flow (Pattern A) or RUV-Swarm (Pattern B1).
+**Hive-Mind is best for tasks requiring agreement or collective intelligence, not raw parallel execution.** For parallel tasks, use Ruflo swarm (Pattern A) or Ruflo coordination (Pattern B1).
 
 ---
 
@@ -33,10 +33,10 @@
 
 ```javascript
 // 1. Load hive-mind tools
-ToolSearch({ query: "+claude-flow hive-mind" })
+ToolSearch({ query: "+ruflo hive-mind" })
 
 // 2. Init hive with topology and queen
-mcp__claude-flow__hive-mind_init({
+mcp__ruflo__hive-mind_init({
   topology: "mesh",
   queenId: "queen-1"
 })
@@ -48,7 +48,7 @@ mcp__claude-flow__hive-mind_init({
 
 ```javascript
 // 3. Spawn worker agents
-mcp__claude-flow__hive-mind_spawn({
+mcp__ruflo__hive-mind_spawn({
   count: 3,
   role: "worker",        // "worker" or "queen"
   agentType: "analyst"   // researcher, analyst, coder, etc.
@@ -61,20 +61,20 @@ mcp__claude-flow__hive-mind_spawn({
 
 ```javascript
 // 4. Store shared configuration/context in hive memory
-mcp__claude-flow__hive-mind_memory({
+mcp__ruflo__hive-mind_memory({
   action: "set",
   key: "task-config",
   value: { description: "...", scope: "..." }
 })
 
 // 5. Broadcast instructions to all workers
-mcp__claude-flow__hive-mind_broadcast({
+mcp__ruflo__hive-mind_broadcast({
   message: "Analyze the form submission pipeline for gaps",
   priority: "high"
 })
 
 // 6. Retrieve shared memory
-mcp__claude-flow__hive-mind_memory({
+mcp__ruflo__hive-mind_memory({
   action: "get",
   key: "task-config"
 })
@@ -86,15 +86,15 @@ mcp__claude-flow__hive-mind_memory({
 
 **⛔ CRITICAL: Agent prompts MUST include hive-mind tool instructions.**
 
-The hive-mind is file-backed (`.claude-flow/hive-mind/state.json`). Any process calling hive-mind MCP tools reads/writes the SAME shared state. Agent subagents have access to all MCP tools but **will not use them unless explicitly instructed in their prompt**.
+The hive-mind is file-backed. Any process calling hive-mind MCP tools reads/writes the SAME shared state. Agent subagents have access to all MCP tools but **will not use them unless explicitly instructed in their prompt**.
 
 **Every agent prompt MUST include these steps:**
 
-1. `ToolSearch({ query: "select:mcp__claude-flow__hive-mind_memory", max_results: 1 })` — load the tool
-2. `mcp__claude-flow__hive-mind_memory({ action: "get", key: "..." })` — read shared context
+1. `ToolSearch({ query: "select:mcp__ruflo__hive-mind_memory", max_results: 1 })` — load the tool
+2. `mcp__ruflo__hive-mind_memory({ action: "get", key: "..." })` — read shared context
 3. Do analysis work (file reads, codebase research)
-4. `mcp__claude-flow__hive-mind_memory({ action: "set", key: "findings-{agent-id}", value: {...} })` — write findings to shared memory
-5. (Optional) `mcp__claude-flow__hive-mind_memory({ action: "get", key: "findings-{other-agent}" })` — cross-reference other agents' findings
+4. `mcp__ruflo__hive-mind_memory({ action: "set", key: "findings-{agent-id}", value: {...} })` — write findings to shared memory
+5. (Optional) `mcp__ruflo__hive-mind_memory({ action: "get", key: "findings-{other-agent}" })` — cross-reference other agents' findings
 
 **Agent prompt template:**
 
@@ -102,27 +102,27 @@ The hive-mind is file-backed (`.claude-flow/hive-mind/state.json`). Any process 
 You are {role} in a hive-mind swarm.
 
 ## STEP 1: Load hive-mind tools
-Call: ToolSearch({ query: "select:mcp__claude-flow__hive-mind_memory", max_results: 1 })
+Call: ToolSearch({ query: "select:mcp__ruflo__hive-mind_memory", max_results: 1 })
 
 ## STEP 2: Read shared context from hive-mind
-Call: mcp__claude-flow__hive-mind_memory({ action: "get", key: "{context-key}" })
+Call: mcp__ruflo__hive-mind_memory({ action: "get", key: "{context-key}" })
 Also check for scope updates:
-Call: mcp__claude-flow__hive-mind_memory({ action: "get", key: "scope-update-{domain}" })
+Call: mcp__ruflo__hive-mind_memory({ action: "get", key: "scope-update-{domain}" })
 
 ## STEP 3: Do your analysis
 {domain-specific instructions}
 
 ## STEP 3b: MID-TASK SCOPE CHECK (poll for updates)
 Before writing findings, check for scope refinements from the coordinator:
-Call: mcp__claude-flow__hive-mind_memory({ action: "list" })
+Call: mcp__ruflo__hive-mind_memory({ action: "list" })
 Look for any keys starting with "scope-update-" that appeared AFTER your initial read.
 Read and apply any new scope constraints to your remaining work.
 
 ## STEP 4: Store findings in hive-mind shared memory
-Call: mcp__claude-flow__hive-mind_memory({ action: "set", key: "findings-{agent-id}", value: { ... } })
+Call: mcp__ruflo__hive-mind_memory({ action: "set", key: "findings-{agent-id}", value: { ... } })
 
 ## STEP 5: Cross-reference (if other agents have finished)
-Call: mcp__claude-flow__hive-mind_memory({ action: "list" })
+Call: mcp__ruflo__hive-mind_memory({ action: "list" })
 Then get any findings-* keys from other agents to cross-reference.
 ```
 
@@ -136,12 +136,6 @@ Since `SendMessage` does not exist, the coordinator cannot push updates to runni
    - Before each major analysis section (Step 3b)
    - Before writing final findings (Step 4)
 3. **Key convention:** `scope-update-*` keys are always refinements — agents merge them with initial instructions, they don't replace them
-4. **For long-running agents**, add a poll step between each audit item analysis:
-   ```
-   ## Between each item analysis:
-   Call: mcp__claude-flow__hive-mind_memory({ action: "get", key: "scope-update-{domain}" })
-   If value exists and differs from last read, apply the refinement to remaining work.
-   ```
 
 **Launch agents in parallel:**
 
@@ -156,7 +150,6 @@ Agent({ description: "Worker 3 analysis", run_in_background: true, prompt: "..."
 - Coordinator stores context → Agent reads it via `hive-mind_memory get` ✓
 - Agent stores findings → Coordinator reads them via `hive-mind_memory get` ✓
 - Agent loads MCP tools via `ToolSearch` inside Agent subagent ✓
-- All backed by same file: `.claude-flow/hive-mind/state.json` ✓
 
 ---
 
@@ -166,11 +159,11 @@ After all agents complete and store findings in shared memory:
 
 ```javascript
 // 8. Coordinator reads all agent findings from shared memory
-mcp__claude-flow__hive-mind_memory({ action: "list" })
+mcp__ruflo__hive-mind_memory({ action: "list" })
 // Then get each findings-* key
 
 // 9. Propose a decision for consensus
-mcp__claude-flow__hive-mind_consensus({
+mcp__ruflo__hive-mind_consensus({
   action: "propose",
   type: "decision",
   strategy: "quorum",           // "bft", "raft", or "quorum"
@@ -182,7 +175,7 @@ mcp__claude-flow__hive-mind_consensus({
 })
 
 // 10. Vote on proposal (coordinator votes on behalf of agents based on findings)
-mcp__claude-flow__hive-mind_consensus({
+mcp__ruflo__hive-mind_consensus({
   action: "vote",
   proposalId: "proposal-id",   // from step 9 response
   voterId: "worker-1",
@@ -190,20 +183,20 @@ mcp__claude-flow__hive-mind_consensus({
 })
 
 // 11. Check consensus status
-mcp__claude-flow__hive-mind_consensus({
+mcp__ruflo__hive-mind_consensus({
   action: "status",
   proposalId: "proposal-id"
 })
 
 // 12. Store final results in shared memory
-mcp__claude-flow__hive-mind_memory({
+mcp__ruflo__hive-mind_memory({
   action: "set",
   key: "consensus-result",
   value: { decision: "...", rationale: "..." }
 })
 ```
 
-**Consensus strategies (from source `hive-mind-tools.js`):**
+**Consensus strategies:**
 - **bft** — Byzantine Fault Tolerant: requires 2/3 + 1 votes, detects conflicting voters
 - **raft** — Simple majority, one vote per node per term, timeout support
 - **quorum** — Configurable: `unanimous` (all), `majority` (50%+1), `supermajority` (2/3+1)
@@ -214,10 +207,10 @@ mcp__claude-flow__hive-mind_memory({
 
 ```javascript
 // 12. Workers leave hive when done
-mcp__claude-flow__hive-mind_leave({ agentId: "worker-1" })
+mcp__ruflo__hive-mind_leave({ agentId: "worker-1" })
 
 // 13. Shutdown hive when all work complete
-mcp__claude-flow__hive-mind_shutdown({})
+mcp__ruflo__hive-mind_shutdown({})
 ```
 
 ---
@@ -226,15 +219,15 @@ mcp__claude-flow__hive-mind_shutdown({})
 
 | Tool | Full Name | Purpose |
 |------|-----------|---------|
-| `hive-mind_init` | `mcp__claude-flow__hive-mind_init` | Initialize hive |
-| `hive-mind_spawn` | `mcp__claude-flow__hive-mind_spawn` | Spawn workers |
-| `hive-mind_join` | `mcp__claude-flow__hive-mind_join` | Agent joins hive |
-| `hive-mind_leave` | `mcp__claude-flow__hive-mind_leave` | Agent leaves hive |
-| `hive-mind_broadcast` | `mcp__claude-flow__hive-mind_broadcast` | Send to all agents |
-| `hive-mind_memory` | `mcp__claude-flow__hive-mind_memory` | Shared key-value store |
-| `hive-mind_consensus` | `mcp__claude-flow__hive-mind_consensus` | Propose/vote/decide |
-| `hive-mind_status` | `mcp__claude-flow__hive-mind_status` | Check hive state |
-| `hive-mind_shutdown` | `mcp__claude-flow__hive-mind_shutdown` | Terminate hive |
+| `hive-mind_init` | `mcp__ruflo__hive-mind_init` | Initialize hive |
+| `hive-mind_spawn` | `mcp__ruflo__hive-mind_spawn` | Spawn workers |
+| `hive-mind_join` | `mcp__ruflo__hive-mind_join` | Agent joins hive |
+| `hive-mind_leave` | `mcp__ruflo__hive-mind_leave` | Agent leaves hive |
+| `hive-mind_broadcast` | `mcp__ruflo__hive-mind_broadcast` | Send to all agents |
+| `hive-mind_memory` | `mcp__ruflo__hive-mind_memory` | Shared key-value store |
+| `hive-mind_consensus` | `mcp__ruflo__hive-mind_consensus` | Propose/vote/decide |
+| `hive-mind_status` | `mcp__ruflo__hive-mind_status` | Check hive state |
+| `hive-mind_shutdown` | `mcp__ruflo__hive-mind_shutdown` | Terminate hive |
 
 ---
 
@@ -250,24 +243,3 @@ mcp__claude-flow__hive-mind_shutdown({})
 - **⛔ Agent prompts MUST include ToolSearch + hive-mind tool usage** — agents will NOT use hive-mind tools unless explicitly told to in their prompt. This is the #1 mistake. Without it, you just have parallel agents, not a hive-mind.
 - **⛔ SendMessage does NOT exist** — the Agent tool output suggests "Use SendMessage to continue this agent" but the tool is not available. Agents are fire-and-forget. All instructions must be in the initial prompt. For mid-flight data sharing, agents should read hive-mind memory at BOTH start AND end of their analysis.
 - **Scope refinements after launch** — update hive-mind memory keys before the agent reads them. Race condition applies — if the agent already read the key, it won't see updates. Design agents to read shared memory at multiple points (start + before writing findings).
-
-## How It Works (from source code)
-
-All hive-mind state is stored in `.claude-flow/hive-mind/state.json`:
-
-```
-{
-  initialized: bool,
-  topology: "mesh",
-  workers: ["agent-id-1", "agent-id-2", ...],
-  consensus: { pending: [...], history: [...] },
-  sharedMemory: { "key": value, "broadcasts": [...] },
-  queen: { agentId, electedAt, term }
-}
-```
-
-- `hive-mind_memory` reads/writes `state.sharedMemory[key]`
-- `hive-mind_broadcast` appends to `state.sharedMemory.broadcasts` array (keeps last 100)
-- `hive-mind_spawn` creates agents in both `.claude-flow/agents.json` AND adds to `state.workers`
-- `hive-mind_consensus` manages proposals in `state.consensus.pending`, moves to `history` on resolution
-- All operations are file I/O — any process calling MCP tools shares the same state file

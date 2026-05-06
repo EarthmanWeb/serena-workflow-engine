@@ -88,7 +88,7 @@ WF_SWARM_ORCHESTRATE coordinates multi-agent work:
 - Each agent can follow workflow or receive direct instructions
 - Results aggregated back to main workflow
 
-See: `REF_SWARM_PATTERNS`, `CLAUDE_FLOW`
+See: `REF_SWARM_PATTERNS`, `RUFLO`
 
 ### Memory Integration
 

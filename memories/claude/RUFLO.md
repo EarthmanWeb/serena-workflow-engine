@@ -1,12 +1,22 @@
-# CLAUDE_FLOW - MCP Swarm Coordination Reference
+# RUFLO - MCP Swarm Coordination Reference
 
-## ⚠️ VERIFIED MCP TOOL PREFIXES (2026-04-27)
+## ⚠️ VERIFIED MCP TOOL PREFIX (2026-05-06)
 
-| System          | Actual MCP Prefix              |
-| --------------- | ------------------------------ |
-| **Claude-Flow** | `mcp__claude-flow__`           |
-| **RUV-Swarm**   | `mcp__ruv-swarm__`             |
-| **Hive-Mind**   | `mcp__claude-flow__hive-mind_` |
+| System | Actual MCP Prefix |
+| ------ | ----------------- |
+| **Ruflo** (unified) | `mcp__ruflo__` |
+| **Hive-Mind** (subsystem) | `mcp__ruflo__hive-mind_` |
+| **DAA** (subsystem) | `mcp__ruflo__daa_*` |
+| **Coordination** (subsystem) | `mcp__ruflo__coordination_*` |
+
+**NOTE:** Ruflo unifies what was previously separate Claude-Flow and RUV-Swarm MCP servers into a single system. All tools use the `mcp__ruflo__` prefix.
+
+**⛔ OLD WRONG PREFIXES (never use):**
+
+- ~~`mcp__claude-flow__`~~ — OLD (replaced by `mcp__ruflo__`)
+- ~~`mcp__ruv-swarm__`~~ — OLD (replaced by `mcp__ruflo__`)
+- ~~`mcp__plugin_claude-flow_claude-flow__`~~ — WRONG
+- ~~`mcp__plugin_claude-flow_ruv-swarm__`~~ — WRONG
 
 **IMPORTANT:** Use `ToolSearch` to load MCP tools before calling them. Only load what you need (3-5 tools max per session).
 
@@ -49,22 +59,20 @@ export ENABLE_TOOL_SEARCH=auto:5     # Defer tools at 5% context threshold (defa
 
 ---
 
-## 🚀 Claude-Flow (Primary System)
+## 🚀 Ruflo Swarm Orchestration
 
-**Prefix:** `mcp__claude-flow__`
-**Version:** 3.5.81 (third-party by ruvnet)
-**Tools:** ~257 across 29 categories (deferred-loaded, only load what you need)
+**Prefix:** `mcp__ruflo__`
 
 ### Minimal Orchestration Pattern
 
 ```javascript
 // 1. Load tools (ONE call)
-ToolSearch({ query: "+claude-flow swarm agent task" })
+ToolSearch({ query: "+ruflo swarm agent task" })
 
 // 2. Init + spawn + task in ONE message
-mcp__claude-flow__swarm_init({ topology: "star", maxAgents: 5 })
-mcp__claude-flow__agent_spawn({ agentType: "coder", agentId: "agent-1" })
-mcp__claude-flow__task_create({ type: "implement", description: "...", assignToAgent: "agent-1", priority: 8 })
+mcp__ruflo__swarm_init({ topology: "star", maxAgents: 5 })
+mcp__ruflo__agent_spawn({ agentType: "coder", agentId: "agent-1" })
+mcp__ruflo__task_create({ type: "implement", description: "...", assignToAgent: "agent-1", priority: 8 })
 
 // 3. Launch work via Task tool (separate context window)
 Task({ subagent_type: "general-purpose", run_in_background: true, prompt: "..." })
@@ -87,20 +95,18 @@ TaskOutput({ task_id: "...", block: true })
 
 ---
 
-## 🚀 RUV-SWARM Task Orchestration
+## 🚀 Ruflo Task Orchestration (Coordination Tools)
 
-**Prefix:** `mcp__ruv-swarm__`
-**Version:** 1.0.20
-**Tools:** 25 total (9 core + 10 DAA + 6 utility)
+**Prefix:** `mcp__ruflo__coordination_*`
 
 ### Minimal Pattern
 
 ```javascript
-ToolSearch({ query: "+ruv-swarm agent task" })
-mcp__ruv-swarm__swarm_init({ topology: "mesh", strategy: "balanced", maxAgents: 5 })
-mcp__ruv-swarm__agent_spawn({ type: "researcher", name: "r1" })
-mcp__ruv-swarm__agent_spawn({ type: "coder", name: "c1" })
-mcp__ruv-swarm__task_orchestrate({ task: "...", strategy: "parallel", priority: "high" })
+ToolSearch({ query: "+ruflo agent coordination" })
+mcp__ruflo__swarm_init({ topology: "mesh", strategy: "balanced", maxAgents: 5 })
+mcp__ruflo__agent_spawn({ type: "researcher", name: "r1" })
+mcp__ruflo__agent_spawn({ type: "coder", name: "c1" })
+mcp__ruflo__coordination_orchestrate({ task: "...", strategy: "parallel", priority: "high" })
 ```
 
 **Agent types:** `researcher`, `analyst`, `coder`, `optimizer`, `coordinator`
@@ -109,11 +115,11 @@ mcp__ruv-swarm__task_orchestrate({ task: "...", strategy: "parallel", priority: 
 
 ---
 
-## 🧠 RUV-SWARM DAA (Iterative Coordination & Tracking)
+## 🧠 Ruflo DAA (Iterative Coordination & Tracking)
 
-**Prefix:** `mcp__ruv-swarm__`
+**Prefix:** `mcp__ruflo__daa_*`
 
-**⚠️ DAA is a metadata/tracking layer, NOT an execution engine.** `daa_workflow_execute` returns empty arrays. `daa_meta_learning` returns `Math.random()` values. All metrics are simulated. Only use DAA for **multi-iteration workflows** where cross-iteration state tracking adds value. For single-pass parallel work, use Claude-Flow or RUV-Swarm Task (B1).
+**⚠️ DAA is a metadata/tracking layer, NOT an execution engine.** `daa_workflow_execute` returns empty arrays. All metrics are simulated. Only use DAA for **multi-iteration workflows** where cross-iteration state tracking adds value. For single-pass parallel work, use Ruflo swarm orchestration.
 
 ### How DAA Actually Works
 
@@ -126,50 +132,48 @@ mcp__ruv-swarm__task_orchestrate({ task: "...", strategy: "parallel", priority: 
 ### Minimal Pattern
 
 ```javascript
-ToolSearch({ query: "+ruv-swarm daa" })
-mcp__ruv-swarm__daa_init({ enableLearning: true, enableCoordination: true })
-mcp__ruv-swarm__daa_agent_create({ id: "daa-1", cognitivePattern: "critical", enableMemory: true })
-mcp__ruv-swarm__daa_workflow_create({ id: "wf-1", name: "Analysis", strategy: "adaptive" })
+ToolSearch({ query: "+ruflo daa" })
+mcp__ruflo__daa_agent_create({ id: "daa-1", cognitivePattern: "critical", enableMemory: true })
+mcp__ruflo__daa_workflow_create({ id: "wf-1", name: "Analysis", strategy: "adaptive" })
 // ⚠️ Skip daa_workflow_execute (returns empty arrays) — launch Agent tools directly
 // Inject cognitive pattern into Agent prompt to influence actual behavior
 Agent({ prompt: "You are daa-1 (cognitive: critical). Analyze critically, find flaws..." })
 // After Agent completes, store ACTUAL findings for next iteration:
-mcp__ruv-swarm__daa_knowledge_share({ sourceAgentId: "daa-1", ..., knowledgeContent: { findings: "REAL results" } })
+mcp__ruflo__daa_knowledge_share({ sourceAgentId: "daa-1", ..., knowledgeContent: { findings: "REAL results" } })
 ```
 
 **Cognitive patterns:** `adaptive`, `critical`, `convergent`, `divergent`, `lateral`, `systems`
 
-**Skip these tools** (return simulated/random data): `daa_meta_learning`, `daa_learning_status`, `daa_performance_metrics`
+**Skip these tools** (return simulated/random data): `daa_learning_status`, `daa_performance_metrics`
 
 ---
 
 ## 🐝 HIVE-MIND (Collective Intelligence)
 
-**Prefix:** `mcp__claude-flow__hive-mind_`
-**State file:** `.claude-flow/hive-mind/state.json` (file-backed, shared by all processes)
+**Prefix:** `mcp__ruflo__hive-mind_`
 
 ### Minimal Pattern (Coordinator)
 
 ```javascript
 // Coordinator: init + spawn + store context
-ToolSearch({ query: "+claude-flow hive-mind" })
-mcp__claude-flow__hive-mind_init({ topology: "mesh", queenId: "queen-1" })
-mcp__claude-flow__hive-mind_spawn({ count: 3, role: "worker", agentType: "analyst" })
-mcp__claude-flow__hive-mind_memory({ action: "set", key: "task-context", value: {...} })
+ToolSearch({ query: "+ruflo hive-mind" })
+mcp__ruflo__hive-mind_init({ topology: "mesh", queenId: "queen-1" })
+mcp__ruflo__hive-mind_spawn({ count: 3, role: "worker", agentType: "analyst" })
+mcp__ruflo__hive-mind_memory({ action: "set", key: "task-context", value: {...} })
 
 // Launch agents — each MUST use hive-mind tools (see below)
 Agent({ run_in_background: true, prompt: "...includes hive-mind tool instructions..." })
 
 // After agents complete: read findings + run consensus
-mcp__claude-flow__hive-mind_memory({ action: "get", key: "findings-agent-1" })
-mcp__claude-flow__hive-mind_consensus({ action: "propose", type: "decision", strategy: "quorum", value: {...} })
+mcp__ruflo__hive-mind_memory({ action: "get", key: "findings-agent-1" })
+mcp__ruflo__hive-mind_consensus({ action: "propose", type: "decision", strategy: "quorum", value: {...} })
 ```
 
 ### ⛔ CRITICAL: Agent Prompt Requirements
 
 **Agent subagents will NOT use hive-mind tools unless explicitly told to.** Every agent prompt MUST include:
 
-1. `ToolSearch({ query: "select:mcp__claude-flow__hive-mind_memory", max_results: 1 })` — load the tool
+1. `ToolSearch({ query: "select:mcp__ruflo__hive-mind_memory", max_results: 1 })` — load the tool
 2. `hive-mind_memory get` — read shared context stored by coordinator
 3. Do analysis work
 4. `hive-mind_memory set` — write findings back to shared memory
@@ -185,39 +189,39 @@ mcp__claude-flow__hive-mind_consensus({ action: "propose", type: "decision", str
 2. **Init before spawn** — Always initialize swarm/hive first
 3. **ToolSearch first** — Load MCP tools before calling (ONE batch call)
 4. **MCP = coordination, Task = execution** — Never do file work in coordinator
-5. **Never run CLI init** — Use MCP tools, not `npx claude-flow init`
+5. **Never run CLI init** — Use MCP tools only
 6. **Star topology by default** — Least coordination overhead
 7. **3-5 tools max** — Don't load tools you won't use
 8. **No verbose flags** — Keep responses small
 
 ---
 
-## 📊 When to Use Each System
+## 📊 When to Use Each Subsystem
 
-| Scenario                | System        | Topology     |
-| ----------------------- | ------------- | ------------ |
-| Quick parallel tasks    | Claude-Flow   | star         |
-| Parallel file analysis  | RUV-Swarm     | mesh         |
-| Coordinated refactoring | Claude-Flow   | hierarchical |
-| Multi-iteration tracking | RUV-Swarm DAA | adaptive     |
-| Consensus decisions     | Hive-Mind     | mesh         |
+| Scenario                 | Subsystem              | Topology     |
+| ------------------------ | ---------------------- | ------------ |
+| Quick parallel tasks     | Ruflo swarm            | star         |
+| Parallel file analysis   | Ruflo coordination     | mesh         |
+| Coordinated refactoring  | Ruflo swarm            | hierarchical |
+| Multi-iteration tracking | Ruflo DAA              | adaptive     |
+| Consensus decisions      | Ruflo Hive-Mind        | mesh         |
 
 ---
 
 ## 🔧 Loading Tools
 
 ```javascript
-// Load claude-flow tools (batch)
-ToolSearch({ query: "+claude-flow swarm agent task" })
+// Load ruflo swarm tools (batch)
+ToolSearch({ query: "+ruflo swarm agent task" })
 
-// Load ruv-swarm tools (batch)
-ToolSearch({ query: "+ruv-swarm agent task" })
+// Load ruflo DAA tools (batch)
+ToolSearch({ query: "+ruflo daa" })
 
 // Load hive-mind tools
-ToolSearch({ query: "+claude-flow hive-mind" })
+ToolSearch({ query: "+ruflo hive-mind" })
 
 // Select one specific tool
-ToolSearch({ query: "select:mcp__claude-flow__swarm_init" })
+ToolSearch({ query: "select:mcp__ruflo__swarm_init" })
 ```
 
 ---
@@ -247,16 +251,13 @@ The #1 failure mode for swarm sessions. This is a **hard context limit** — onc
 
 ---
 
-## Known Issues (2026-04-27)
+## Known Issues (2026-05-06)
 
 | Issue                                           | Mitigation                                        |
 | ----------------------------------------------- | ------------------------------------------------- |
-| claude-flow is third-party software             | Use simple patterns only                          |
-| 257 tools cause context bloat                   | Deferred loading + load 3-5 max                   |
 | Pretty-printed JSON doubles response size       | `MAX_MCP_OUTPUT_TOKENS=5000` + keep calls minimal |
 | memory_stats scans all entries                  | NEVER call it                                     |
 | Wrong prefixes in old docs caused 100% failures | Use prefixes from THIS doc                        |
-| ruv-swarm WAL file grows unbounded              | Clear npx cache periodically                      |
 | "Prompt is too long" kills session permanently  | Prevention only — see section above               |
 
 Remember: **MCP coordinates, Task tool executes!**

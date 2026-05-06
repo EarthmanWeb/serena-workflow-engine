@@ -138,13 +138,11 @@ Task({
 });
 
 // Monitor swarm status (non-blocking)
-mcp__claude-flow__swarm_status({});
+mcp__ruflo__swarm_status({});
 
 // Store progress to memory
-mcp__claude-flow__memory_usage({
-  action: 'store',
-  namespace: 'swarm',
-  key: 'progress',
+mcp__ruflo__memory_store({
+  key: 'swarm:progress',
   value: '...',
 });
 

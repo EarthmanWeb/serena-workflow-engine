@@ -9,7 +9,7 @@ This workflow uses a multi-agent swarm to research existing codebase patterns an
 ## Phase 1: Initialize Research Swarm
 
 ```
-mcp__ruv-swarm__swarm_init(topology: "mesh", maxAgents: 10, strategy: "balanced")
+mcp__ruflo__swarm_init(topology: "mesh", maxAgents: 10, strategy: "balanced")
 ```
 
 Spawn specialized research agents:
@@ -53,7 +53,7 @@ For each language/area, analyze representative files:
 Use swarm orchestration:
 
 ```
-mcp__ruv-swarm__task_orchestrate(task: "[specific research task]", strategy: "parallel")
+mcp__ruflo__coordination_orchestrate(task: "[specific research task]", strategy: "parallel")
 ```
 
 ## Phase 4: Compile Findings

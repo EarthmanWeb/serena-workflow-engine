@@ -89,7 +89,7 @@ If user instruction contradicts memory:
 
 - Use swarms to parallel process tasks when appropriate
 - Spawn multiple agents for independent subtasks
-- Leverage `mcp__claude-flow__` or `mcp__ruv-swarm__` tools for coordination
+- Leverage `mcp__ruflo__` tools for coordination
 
 ## Quality Standards
 

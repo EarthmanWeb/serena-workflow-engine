@@ -34,7 +34,7 @@ Archive completed work - terminal state.
 mv .serena/swe/wm/WM_*.md .serena/archive-memories/
 
 # Clean up any temp files
-rm -f .claude-flow/workflow-state.json
+rm -f .ruflo/workflow-state.json
 ```
 
 ## Transitions

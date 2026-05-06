@@ -83,7 +83,7 @@ hooks/
 | `swe_post_edit_checkpoint.py`         | PostToolUse (Edit/Write/Serena) | Edit counting, checkpoint triggers |
 | `swe_post_serena_replace_fallback.py` | PostToolUse (Serena replace)    | Symbol replace error handling      |
 | `swe_post_task_learn.py`              | PostToolUse (read_memory)       | RLVR trajectory tracking           |
-| `swe_post_ruv_swarm_init.py`          | PostToolUse (ruv_swarm)         | RUV-Swarm initialization           |
+| `swe_post_ruv_swarm_init.py`          | PostToolUse (ruflo)             | Ruflo swarm initialization         |
 
 ### Stop Hooks (`stop/`)
 

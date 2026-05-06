@@ -141,7 +141,7 @@ When ANY of these apply, note `swarm_candidate: true` in WM:
 - **Parallel Work**: Independent subtasks that can run concurrently
 - **Research-Heavy**: Requires analyzing multiple areas simultaneously
 - **Complexity**: Multi-domain coordination needed
-- **Keywords**: "swarm", "parallel agents", "multi-agent", "hive-mind", "ruv-swarm", "DAA"
+- **Keywords**: "swarm", "parallel agents", "multi-agent", "hive-mind", "ruflo", "DAA"
 
 **⚠️ MANDATORY: Load FEATURE_SWARM:**
 

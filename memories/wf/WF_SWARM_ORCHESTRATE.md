@@ -16,14 +16,14 @@
 
 ## ⚠️ Explicit Tool Selection Rule
 
-**When user requests a swarm system, USE THESE EXACT MCP TOOLS — NEVER substitute Task/Explore agents.**
+**When user requests a swarm subsystem, USE THESE EXACT MCP TOOLS — NEVER substitute Task/Explore agents.**
 
 | User Says | Use Tools | Read |
 |-----------|-----------|------|
-| "claude-flow swarm" | `mcp__claude-flow__*` | `WF_SWARM_CLAUDE_FLOW` |
-| "ruv-swarm" | `mcp__ruv-swarm__*` | `WF_SWARM_RUV` |
-| "DAA" / "DAA swarm" | `mcp__ruv-swarm__daa_*` | `WF_SWARM_RUV` (Pattern B2) |
-| "hive-mind" | `mcp__claude-flow__hive-mind_*` | `WF_SWARM_HIVE_MIND` |
+| "ruflo swarm" / "swarm" | `mcp__ruflo__swarm_*` + `mcp__ruflo__agent_*` | `WF_SWARM_RUFLO` |
+| "coordinate" / "orchestrate" | `mcp__ruflo__coordination_*` | `WF_SWARM_RUV` (Pattern B1) |
+| "DAA" / "DAA swarm" | `mcp__ruflo__daa_*` | `WF_SWARM_RUV` (Pattern B2) |
+| "hive-mind" | `mcp__ruflo__hive-mind_*` | `WF_SWARM_HIVE_MIND` |
 
 ---
 
@@ -40,15 +40,15 @@
 
 ---
 
-## Step 1: Select System & Topology
+## Step 1: Select Subsystem & Topology
 
-| System | When | Prefix | Methodology |
-|--------|------|--------|-------------|
-| **Claude-Flow** | General orchestration, parallel tasks | `mcp__claude-flow__*` | `WF_SWARM_CLAUDE_FLOW` |
-| **RUV-Swarm Task** | Simple parallel task orchestration | `mcp__ruv-swarm__*` | `WF_SWARM_RUV` (B1) |
-| **RUV-Swarm DAA** | Multi-iteration tracking/coordination (metadata only — NOT autonomous) | `mcp__ruv-swarm__daa_*` | `WF_SWARM_RUV` (B2) |
-| **RUV-Swarm Hybrid** | Task orchestration + DAA iterative tracking | `mcp__ruv-swarm__*` | `WF_SWARM_RUV` (B3) |
-| **Hive-Mind** | Consensus, collective intelligence | `mcp__claude-flow__hive-mind_*` | `WF_SWARM_HIVE_MIND` |
+| Subsystem | When | Prefix | Methodology |
+|-----------|------|--------|-------------|
+| **Ruflo Swarm** | General orchestration, parallel tasks | `mcp__ruflo__swarm_*` + `mcp__ruflo__agent_*` | `WF_SWARM_RUFLO` |
+| **Ruflo Coordination** | Simple parallel task orchestration | `mcp__ruflo__coordination_*` | `WF_SWARM_RUV` (B1) |
+| **Ruflo DAA** | Multi-iteration tracking/coordination (metadata only — NOT autonomous) | `mcp__ruflo__daa_*` | `WF_SWARM_RUV` (B2) |
+| **Ruflo Hybrid** | Task orchestration + DAA iterative tracking | `mcp__ruflo__*` | `WF_SWARM_RUV` (B3) |
+| **Ruflo Hive-Mind** | Consensus, collective intelligence | `mcp__ruflo__hive-mind_*` | `WF_SWARM_HIVE_MIND` |
 
 | Topology | Best For |
 |----------|----------|
@@ -59,15 +59,15 @@
 
 Agent types: `researcher`, `analyst`, `coder`, `tester`, `coordinator`, `optimizer`, `reviewer`
 
-### Decision Guide: Which System and Why?
+### Decision Guide: Which Subsystem and Why?
 
-| System | Choose When | Rationale | Avoid When |
-|--------|------------|-----------|------------|
-| **Claude-Flow (A)** | General-purpose parallel tasks, multi-file changes, coordinated refactoring | Most flexible system. Star topology has minimal overhead. Task registration gives full visibility. Memory store enables cross-agent state sharing. Best balance of power and simplicity. | You need learning/adaptation (use DAA) or consensus (use Hive-Mind) |
-| **RUV-Swarm Task (B1)** | Simple parallel task execution, quick fan-out/fan-in | Simpler than Claude-Flow with fewer tools (25 vs 241). `task_orchestrate` handles agent assignment automatically. Lower context budget cost. | You need learning, adaptation, or cross-domain knowledge transfer (use B2). You need fine-grained task dependencies (use Claude-Flow). |
-| **RUV-Swarm DAA (B2)** | Multi-iteration workflows where Round 1 findings shape Round 2 prompts. Iterative audits, progressive refinement, adaptive research. | DAA is a **metadata/tracking layer** — it stores agent records, cognitive pattern labels, and knowledge entries in a JSON registry. It does NOT execute work. Value comes from: (1) cognitive patterns shaping Agent tool prompts, (2) knowledge_share storing findings for next iteration, (3) structured state across rounds. | Single-pass parallel work (use B1 or Claude-Flow — DAA adds ~10 MCP calls of overhead with zero benefit). Any task where one round of agents suffices. |
-| **RUV-Swarm Hybrid (B3)** | Multi-phase projects where Phase 1 findings inform Phase 2 execution | Combines B1's task speed with B2's cross-iteration state tracking. Swarm agents do immediate work via Agent tools; DAA stores findings and tracks state for subsequent rounds. | Single-phase tasks. Simple tasks that don't benefit from two agent pools. |
-| **Hive-Mind (C)** | Architecture decisions requiring agreement, collective code review, design consensus | Consensus mechanism ensures all agents agree before proceeding. Shared memory provides single source of truth. Broadcast ensures all agents get same instructions. Best for quality-critical decisions. | Speed-critical tasks (consensus adds latency). Tasks where one agent's opinion suffices. Pure execution tasks with no decision-making. |
+| Subsystem | Choose When | Rationale | Avoid When |
+|-----------|------------|-----------|------------|
+| **Ruflo Swarm (A)** | General-purpose parallel tasks, multi-file changes, coordinated refactoring | Most flexible. Star topology has minimal overhead. Task registration gives full visibility. Memory store enables cross-agent state sharing. | You need learning/adaptation (use DAA) or consensus (use Hive-Mind) |
+| **Ruflo Coordination (B1)** | Simple parallel task execution, quick fan-out/fan-in | `coordination_orchestrate` handles agent assignment automatically. Lower context budget cost. | You need learning, adaptation, or cross-domain knowledge transfer (use B2). |
+| **Ruflo DAA (B2)** | Multi-iteration workflows where Round 1 findings shape Round 2 prompts. Iterative audits, progressive refinement. | DAA is a **metadata/tracking layer** — stores agent records, cognitive pattern labels, and knowledge entries. Value comes from: (1) cognitive patterns shaping Agent tool prompts, (2) knowledge_share storing findings for next iteration. | Single-pass parallel work (use B1 or Swarm — DAA adds ~10 MCP calls of overhead with zero benefit). |
+| **Ruflo Hybrid (B3)** | Multi-phase projects where Phase 1 findings inform Phase 2 execution | Combines B1's task speed with B2's cross-iteration state tracking. | Single-phase tasks. Simple tasks that don't benefit from two agent pools. |
+| **Ruflo Hive-Mind (C)** | Architecture decisions requiring agreement, collective code review, design consensus | Consensus mechanism ensures all agents agree before proceeding. Shared memory provides single source of truth. | Speed-critical tasks (consensus adds latency). Pure execution tasks with no decision-making. |
 
 ### Quick Decision Tree
 
@@ -75,19 +75,19 @@ Agent types: `researcher`, `analyst`, `coder`, `tester`, `coordinator`, `optimiz
 Is the task a decision that needs agreement? → Hive-Mind (C)
 Is this a multi-iteration workflow where round N findings shape round N+1? → DAA (B2) or Hybrid (B3)
 Is it a multi-phase project with progressive refinement? → Hybrid (B3)
-Do you need fine-grained task dependencies? → Claude-Flow (A)
-Is it simple parallel work? → RUV-Swarm Task (B1)
-Not sure? → Claude-Flow (A) with star topology (safe default)
+Do you need fine-grained task dependencies? → Ruflo Swarm (A)
+Is it simple parallel work? → Ruflo Coordination (B1)
+Not sure? → Ruflo Swarm (A) with star topology (safe default)
 ```
 
 ---
 
 ## Step 2: Read Pattern-Specific Methodology
 
-**MANDATORY: Read the methodology file for your selected system BEFORE executing.**
+**MANDATORY: Read the methodology file for your selected subsystem BEFORE executing.**
 
 ```
-mcp__plugin_swe_serena__read_memory("wf/WF_SWARM_CLAUDE_FLOW")   // Pattern A
+mcp__plugin_swe_serena__read_memory("wf/WF_SWARM_RUFLO")   // Pattern A
 mcp__plugin_swe_serena__read_memory("wf/WF_SWARM_RUV")           // Patterns B1, B2, B3
 mcp__plugin_swe_serena__read_memory("wf/WF_SWARM_HIVE_MIND")     // Pattern C
 ```
@@ -98,11 +98,11 @@ mcp__plugin_swe_serena__read_memory("wf/WF_SWARM_HIVE_MIND")     // Pattern C
 
 ## ⛔ NEVER Run Init CLI Commands
 
-**Never** `npx claude-flow init` or `npx ruv-swarm init` — these modify repo files. Use MCP tools directly (in-memory coordination).
+**Never** run CLI init commands — these modify repo files. Use MCP tools directly (in-memory coordination).
 
 ---
 
-## Critical Execution Rules (All Systems)
+## Critical Execution Rules (All Subsystems)
 
 **DO:**
 - Init swarm FIRST → spawn all agents in ONE message → register tasks BEFORE launching Agent tools
@@ -115,7 +115,7 @@ mcp__plugin_swe_serena__read_memory("wf/WF_SWARM_HIVE_MIND")     // Pattern C
 - Spawn swarm then revert to single-agent work
 - Block on first agent before spawning others
 - Skip task registration in coordination layer
-- Mix swarm systems without clear handoff
+- Mix swarm subsystems without clear handoff
 - Read files directly in coordinator context — agents do that
 - Use verbose/detailed flags on MCP calls
 - Call `memory_stats` (scans 100K entries)
@@ -127,16 +127,6 @@ MCP agents MUST have tasks registered BEFORE launching Task tool work. Without t
 ```
 1. agent_spawn/daa_agent_create → 2. task_create/daa_workflow_create → 3. Agent tool (background) → 4. Collect results
 ```
-
----
-
-## Coordination Hooks
-
-| Phase | Command |
-|-------|---------|
-| Before | `npx claude-flow@alpha hooks pre-task --description "[task]"` |
-| During | `npx claude-flow@alpha hooks post-edit --file "[file]"` |
-| After | `npx claude-flow@alpha hooks post-task --task-id "[task]"` |
 
 ---
 

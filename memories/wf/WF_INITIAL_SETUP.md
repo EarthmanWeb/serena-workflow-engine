@@ -18,7 +18,7 @@ First-time plugin setup - install MCPs, configure environment.
 ## Required Actions
 
 1. `detect_missing_mcps` - Check for required MCP servers
-2. `install_mcp_servers` - Install missing servers (serena, claude-flow)
+2. `install_mcp_servers` - Install missing servers (serena, ruflo)
 3. `prompt_restart` - Request Claude Code restart if MCPs installed
 4. `verify_installation` - Confirm MCPs are accessible
 5. `run_serena_onboard` - Execute Serena project onboarding

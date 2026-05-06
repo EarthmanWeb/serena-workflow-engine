@@ -41,7 +41,7 @@ If you are thinking of going to WF_EXECUTE from here:
 
 - ✅ You MAY bypass this workflow entirely
 - ✅ Adhere ONLY to the specific instructions provided by the initiating agent
-- ✅ Read CLAUDE_FLOW, CLAUDE_OBLIGATIONS, _INDEX, and only read other memories if they assist with your specific task
+- ✅ Read RUFLO, CLAUDE_OBLIGATIONS, _INDEX, and only read other memories if they assist with your specific task
 - ❌ Do NOT create WM files (the coordinator handles this)
 
 **IF you are NOT a swarm agent, ALWAYS continue below.**

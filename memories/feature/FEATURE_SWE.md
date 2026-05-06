@@ -120,7 +120,7 @@ Registered in `plugin.json` as `swe-wm`, started via `scripts/start-wm-mcp.sh`.
 | `swe_pre_tool_init_gate.py`     | PreToolUse                     | Block ALL tools until WF_INIT read |
 | `swe_pre_edit_validate.py`      | PreToolUse (Edit/Write/Serena) | Validate edit permissions          |
 | `swe_pre_bash_test_gate.py`     | PreToolUse (Bash)              | Feature gate: FEATURE_TESTS        |
-| `swe_pre_swarm_feature_gate.py` | PreToolUse (ruv-swarm)         | Feature gate: FEATURE_SWARM        |
+| `swe_pre_swarm_feature_gate.py` | PreToolUse (ruflo swarm)       | Feature gate: FEATURE_SWARM        |
 
 #### Post-Tool Hooks (`hooks/post/`)
 
@@ -130,7 +130,7 @@ Registered in `plugin.json` as `swe-wm`, started via `scripts/start-wm-mcp.sh`.
 | `swe_post_edit_checkpoint.py`         | PostToolUse (Edit/Write/Serena) | Track edits, trigger checkpoints |
 | `swe_post_serena_replace_fallback.py` | PostToolUse (Serena replace)    | Symbol replace fallback handling |
 | `swe_post_task_learn.py`              | PostToolUse (read_memory)       | RLVR learning                    |
-| `swe_post_ruv_swarm_init.py`          | PostToolUse (ruv_swarm)         | RUV-Swarm initialization         |
+| `swe_post_ruv_swarm_init.py`          | PostToolUse (ruflo)             | Ruflo swarm initialization       |
 | `swe_post_todo_wm_sync.py`            | PostToolUse (TodoWrite)         | WM sync reminder on todo changes |
 
 #### Stop Hooks (`hooks/stop/`)
@@ -207,7 +207,7 @@ read. All feature gates use **session-scoped sentinel files** for O(1) checks.
 | Gate Name | Pre-Hook                        | Blocks                 | Sentinel                   | Feature Memory |
 | --------- | ------------------------------- | ---------------------- | -------------------------- | -------------- |
 | `test`    | `swe_pre_bash_test_gate.py`     | `npx playwright test`  | `.test_feature_{session}`  | FEATURE_TESTS  |
-| `swarm`   | `swe_pre_swarm_feature_gate.py` | `ruv-swarm swarm_init` | `.swarm_feature_{session}` | FEATURE_SWARM  |
+| `swarm`   | `swe_pre_swarm_feature_gate.py` | `ruflo swarm_init`     | `.swarm_feature_{session}` | FEATURE_SWARM  |
 
 ### Adding a New Gate
 
