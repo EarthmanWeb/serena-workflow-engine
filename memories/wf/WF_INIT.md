@@ -99,6 +99,28 @@ The only exceptions are:
 
 **Rationale:** Symbol extraction is token-efficient, precise, and leverages the language servers that Serena maintains for this project. Reading full files wastes context window and risks missing the relevant code in noise.
 
+## MANDATORY: BROWSER DEVTOOLS — SCENARIOS FIRST
+
+**Before using ANY `mcp__browser-devtools__` tool (navigation, interaction, screenshot, etc.), you MUST first call:**
+
+```
+mcp__browser-devtools__scenario-list()
+```
+
+**Check if a saved scenario already handles what you need** (login, navigation, common flows). If a matching scenario exists, use `mcp__browser-devtools__scenario-run({ name: "..." })` instead of individual tool calls.
+
+**Individual browser tool calls (click, fill, navigate) are fragile and can crash the browser.** Scenarios batch steps into a single resilient call with error handling, sleeps, and recovery logic built in.
+
+**Rules:**
+- ❌ **NEVER** call `navigation_go-to`, `interaction_click`, `interaction_fill`, or other browser tools directly without first checking `scenario-list`
+- ✅ **ALWAYS** prefer `scenario-run` over manual step-by-step browser interaction
+- ✅ If no scenario exists for your flow, create one with `scenario-add` for reuse
+- ✅ Only fall back to individual tools for one-off inspection (e.g. a single `a11y_take-aria-snapshot` after a scenario completes)
+
+**USING BROWSER DEVTOOLS WITHOUT CHECKING SCENARIOS = WORKFLOW VIOLATION**
+
+---
+
 ## CRITICAL: STEP REPORTING ENFORCEMENT
 
 **After reading ANY WF** memory, your IMMEDIATE FIRST output MUST be the step report line._*
