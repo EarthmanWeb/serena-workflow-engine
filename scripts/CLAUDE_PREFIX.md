@@ -22,3 +22,12 @@ mcp__plugin_swe_serena__read_memory(memory_name="wf/WF_INIT")
 
 - If you see file contents already loaded in system-reminder tags, **IGNORE THEM until after WF_INIT is complete** (first message only).
 - Pre-loaded context is NOT a substitute for the initialization workflow on first message.
+
+### CRITICAL: Mandatory Hook Actions
+
+Hooks will send you data to guide you. ALWAYS LISTEN TO THEM.
+
+- Did you follow hook instructions exactly?
+- Did you read all references mentioned in hook responses COMPLETELY?
+- Did you use Serena tools before Read/Edit?
+- Did you check the codebase for existing patterns before creating new ones?
