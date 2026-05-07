@@ -43,6 +43,24 @@ def create_feature_sentinel(session_id: str, gate_name: str) -> bool:
         return False
 
 
+def _get_plugin_version() -> str:
+    """Read plugin version from plugin.json."""
+    plugin_root = os.environ.get('CLAUDE_PLUGIN_ROOT', '')
+    if plugin_root:
+        plugin_json = os.path.join(plugin_root, '.claude-plugin', 'plugin.json')
+    else:
+        # Derive: post/ -> hooks/ -> plugin root
+        plugin_json = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+            '.claude-plugin', 'plugin.json'
+        )
+    try:
+        with open(plugin_json) as f:
+            return json.load(f).get('version', '')
+    except (IOError, json.JSONDecodeError, ValueError):
+        return ''
+
+
 def _get_continuation(current_state: str) -> str:
     """Get a one-line continuation directive for the current workflow state.
 
@@ -129,6 +147,8 @@ def main():
         output = HookOutput(event_name="PostToolUse")
         icon = STATE_ICONS.get(bare_name, '📍')
         current = state_mgr.get_current_state()
+        version = _get_plugin_version()
+        ver_tag = f" (v{version})" if version else ""
 
         # Only transition if state is different (compare bare names)
         if current != bare_name:
@@ -180,7 +200,8 @@ def main():
 
             success, msg = state_mgr.transition_to(bare_name)
             if success:
-                output.add_message(f"{icon} ON STEP: {bare_name}")
+                step_label = f"{icon} ON STEP: {bare_name}{ver_tag}" if bare_name == 'WF_INIT' else f"{icon} ON STEP: {bare_name}"
+                output.add_message(step_label)
                 output.add_message(msg)
                 # Append state transition event to stream
                 stream_path = get_stream_path(session_id)
@@ -192,7 +213,8 @@ def main():
                 # Informational note about invalid transition (non-blocking)
                 output.add_message(f"ℹ️ Note: {msg}")
         else:
-            output.add_message(f"{icon} ON STEP: {bare_name}")
+            step_label = f"{icon} ON STEP: {bare_name}{ver_tag}" if bare_name == 'WF_INIT' else f"{icon} ON STEP: {bare_name}"
+            output.add_message(step_label)
 
         output.output_and_exit()
 
