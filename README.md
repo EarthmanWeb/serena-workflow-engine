@@ -30,13 +30,16 @@ In Claude Code CLI: `claude /plugin` → **Marketplaces** tab → **EarthmanWeb*
 The init agent will:
 1. Detect your environment and resolve the plugin root
 2. Run bootstrap (creates directories, detects languages, installs templates)
-3. Verify MCP servers (Serena, swe-wm)
-4. Run Serena onboarding
-5. Verify and install language servers
-6. Enable the SWE plugin
-7. Review CLAUDE.md for conflicts
-8. Install the Serena Log Viewer VSCode extension
-9. Finalize setup
+3. Prompt for additional Serena memory paths (e.g. `./docs:ro`)
+4. Inject `CLAUDE_PREFIX.md` into your project's `CLAUDE.md`
+5. Create `.serena/.gitignore` for runtime file exclusions
+6. Verify MCP servers (Serena, swe-wm)
+7. Run Serena onboarding
+8. Verify and install language servers
+9. Enable the SWE plugin
+10. Review CLAUDE.md for conflicts
+11. Install the Serena Log Viewer VSCode extension
+12. Finalize setup
 
 ### 4. Restart Claude Code and onboard your first feature
 
@@ -44,16 +47,40 @@ The init agent will:
 /swe-feature-onboard FEATURE_[KEY]
 ```
 
+## Directory Structure
+
+```
+.serena/
+├── .gitignore              # Runtime file exclusions (auto-created)
+├── memory-paths.conf       # Serena memory path config
+├── project.yml             # Detected languages
+├── swe/                    # Feature memories, refs, specs
+│   ├── feature/
+│   ├── ref/
+│   └── ...
+├── memories/               # Working Memory files (per-session)
+│   └── WM_<session>.md
+├── swe-state/              # Decoupled workflow state (authoritative)
+│   └── <session>.state
+├── streams/                # Append-only event logs
+│   ├── <session>.jsonl
+│   └── .init_<session>     # Init gate sentinel
+├── swe-setup-complete.json # Setup completion flag
+└── swe-bypass.json         # SWE disabled flag (if user declines)
+```
+
 ## Custom Memory Paths
 
-Create `.serena/memory-paths.conf` in your project root (one path per line):
+During bootstrap, you'll be prompted to add extra folders for Serena to access.
+You can also edit `.serena/memory-paths.conf` manually (one path per line):
 
 ```
 ./.serena/swe
-./docs
+./.serena/memories
+./docs:ro
 ```
 
-Plugin bundled memories are always appended automatically. See [MCP-README.md](MCP-README.md) for details.
+Append `:ro` for read-only access. Plugin bundled memories are always appended automatically. See [MCP-README.md](MCP-README.md) for details.
 
 ## Commands
 
@@ -62,6 +89,7 @@ Plugin bundled memories are always appended automatically. See [MCP-README.md](M
 | `/swe-init` | First-time setup |
 | `/swe-status` | Show current state |
 | `/swe-feature-onboard [KEY]` | Register existing feature |
+| `/swe-feature-update [KEY]` | Update feature memories |
 | `/swe-scaffold` | Scaffold new project |
 | `/swe-reset` | Reset workflow |
 | `/swe-goto [STATE]` | Force transition (debug) |
@@ -102,7 +130,8 @@ bash .claude/plugins/serena-workflow-engine/scripts/install-hooks.sh
 | Location | Path | Purpose |
 |---|---|---|
 | Plugin folder | `.claude/plugins/serena-workflow-engine/` | Generic/portable code |
-| Local memories | `.serena/swe/` | Project-specific adaptations |
+| Local memories | `.serena/swe/` | Project-specific feature memories |
+| Working memory | `.serena/memories/` | Session-scoped WM files |
+| State files | `.serena/swe-state/` | Authoritative workflow state |
 
 See `memories/REF_SWE_DEVELOPMENT.md` for full development standards.
-

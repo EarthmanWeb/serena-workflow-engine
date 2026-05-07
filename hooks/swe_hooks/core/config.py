@@ -58,23 +58,23 @@ def get_paths(cwd: str = None) -> Dict[str, str]:
         "cwd": cwd,
         "project_root": project_root,
         "claude_dir": os.path.join(project_root, ".claude"),
-        "setup_file": os.path.join(project_root, ".claude", "swe-setup-complete.json"),
+        "setup_file": os.path.join(project_root, ".serena", "swe-setup-complete.json"),
         "learning_file": os.path.join(project_root, ".claude", "learning.json"),
         "plugin_dir": os.path.join(project_root, ".claude", "plugins", "swe"),
         "instructions_dir": os.path.join(project_root, ".claude", "plugins", "swe", "memories", "instructions"),
         "references_dir": os.path.join(project_root, ".claude", "plugins", "swe", "memories", "references"),
-        "serena_memories": os.path.join(project_root, ".serena", "swe"),
+        "serena_memories": os.path.join(project_root, ".serena", "memories"),
     }
 
 
 # =============================================================================
 # Decoupled State File Management
-# State files live in .claude/swe-state/ and are the authoritative source
+# State files live in .serena/swe-state/ and are the authoritative source
 # of workflow state, immune to Serena's MCP file caching.
 # =============================================================================
 
 def get_state_dir() -> str:
-    return os.path.join(get_project_root(), '.claude', 'swe-state')
+    return os.path.join(get_project_root(), '.serena', 'swe-state')
 
 
 def get_state_file_path(session_id: str) -> str:

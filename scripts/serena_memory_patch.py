@@ -26,6 +26,9 @@ _original_delete_memory = MemoriesManager.delete_memory
 _original_rename_memory = MemoriesManager.rename_memory
 
 
+# Prefixes whose files live flat in .serena/memories/ (not in swe/ subfolders)
+_MEMORIES_DIR_PREFIXES = frozenset(["wm", "lite"])
+
 def _derive_prefix(name):
     """Derive the directory prefix from a memory name convention.
 
@@ -44,9 +47,11 @@ def _normalize_name(name):
     """Normalize a memory name to use the correct directory prefix.
 
     Handles:
-      DOM_X              -> dom/DOM_X        (missing prefix)
+      DOM_X              -> dom/DOM_X        (missing prefix, swe subdir)
       feature/DOM_X      -> dom/DOM_X        (wrong prefix)
       dom/DOM_X          -> dom/DOM_X        (already correct)
+      WM_abc123          -> WM_abc123        (flat in memories/, no subdir)
+      LITE_MODE_abc123   -> LITE_MODE_abc123 (flat in memories/, no subdir)
     """
     clean = name.replace(".md", "")
     # Get the base filename without any directory
@@ -54,6 +59,9 @@ def _normalize_name(name):
     prefix = _derive_prefix(base)
     if prefix is None:
         return clean  # Can't derive prefix (e.g. _INDEX)
+    # WM and LITE files live flat in .serena/memories/ — no subdirectory
+    if prefix in _MEMORIES_DIR_PREFIXES:
+        return base
     correct = f"{prefix}/{base}"
     return correct
 

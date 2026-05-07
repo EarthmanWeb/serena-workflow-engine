@@ -113,14 +113,14 @@ def main():
             sys.exit(0)
 
         # Bypass check — plugin disabled for this project
-        bypass_file = os.path.join(cwd, '.claude', 'swe-bypass.json')
+        bypass_file = os.path.join(cwd, '.serena', 'swe-bypass.json')
         if os.path.exists(bypass_file):
             sys.exit(0)  # Silent exit
 
         # Handle bypass request from user
         prompt_lower = prompt.lower().strip()
         if any(p in prompt_lower for p in ['skip swe', 'no swe', 'disable swe', 'bypass swe']):
-            os.makedirs(os.path.join(cwd, '.claude'), exist_ok=True)
+            os.makedirs(os.path.join(cwd, '.serena'), exist_ok=True)
             with open(bypass_file, 'w') as f:
                 json.dump({
                     "bypass": True,
@@ -131,7 +131,7 @@ def main():
             output = {
                 "hookSpecificOutput": {
                     "hookEventName": "UserPromptSubmit",
-                    "additionalContext": "SWE permanently disabled for this project. Remove .claude/swe-bypass.json to re-enable."
+                    "additionalContext": "SWE permanently disabled for this project. Remove .serena/swe-bypass.json to re-enable."
                 }
             }
             print(json.dumps(output))

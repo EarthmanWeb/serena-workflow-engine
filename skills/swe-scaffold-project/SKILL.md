@@ -68,7 +68,7 @@ fi
 **Why git is needed:**
 - Serena uses `.git/` to detect project root (`_get_project_root()` in init gate)
 - SWE hooks use `CLAUDE_PROJECT_DIR` with `.git/` fallback for root resolution
-- `.gitignore` integration for ignoring `WM_*.md`, `.claude/swe-state/`, etc.
+- `.gitignore` integration for ignoring `WM_*.md`, `.serena/swe-state/`, etc.
 - Without git, `get_project_root()` falls back to `os.getcwd()` which may be wrong in subdirectories
 
 ### Stage 1: Project Detection
@@ -208,7 +208,7 @@ If `swe-setup-complete.json` has `bootstrapped: true` but not `complete: true`, 
 
 ```bash
 PLUGIN_VERSION=$(jq -r '.version' "$SWE_PLUGIN_ROOT/.claude-plugin/plugin.json" 2>/dev/null || echo "unknown")
-cat > .claude/swe-setup-complete.json << EOF
+cat > .serena/swe-setup-complete.json << EOF
 {
   "complete": true,
   "timestamp": "$(date -Iseconds)",

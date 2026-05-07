@@ -97,7 +97,7 @@ def is_working_memory_write(tool_name, tool_input):
     if tool_name != 'Write':
         return False
     file_path = tool_input.get('file_path', '')
-    return '.serena/swe/WM_' in file_path and file_path.endswith('.md')
+    return '.serena/memories/WM_' in file_path and file_path.endswith('.md')
 
 
 def check_lite_mode(session_id):
@@ -108,7 +108,7 @@ def check_lite_mode(session_id):
         project_root = get_project_root() if _STREAM_AVAILABLE else _get_project_root()
     except Exception:
         project_root = _get_project_root()
-    memories_dir = os.path.join(project_root, '.serena', 'swe')
+    memories_dir = os.path.join(project_root, '.serena', 'memories')
     return os.path.exists(os.path.join(memories_dir, f'LITE_MODE_{session_id}.md'))
 
 
@@ -121,9 +121,9 @@ def check_working_memory_exists(session_id):
         project_root = get_project_root() if _STREAM_AVAILABLE else _get_project_root()
     except Exception:
         project_root = _get_project_root()
-    memories_dir = os.path.join(project_root, '.serena', 'swe')
+    memories_dir = os.path.join(project_root, '.serena', 'memories')
     if not os.path.exists(memories_dir):
-        return False, "No .serena/swe directory found"
+        return False, "No .serena/memories directory found"
 
     if session_id:
         pattern = os.path.join(memories_dir, f'WM_{session_id}.md')
@@ -194,14 +194,14 @@ def main():
             project_root = _get_project_root()
 
         # Bypass check — plugin disabled for this project
-        bypass_file = os.path.join(project_root, '.claude', 'swe-bypass.json')
+        bypass_file = os.path.join(project_root, '.serena', 'swe-bypass.json')
         if os.path.exists(bypass_file):
             print(json.dumps({}))
             sys.exit(0)
 
         # If setup not complete, don't enforce init gate
         # This allows /swe-init and bootstrap to run freely
-        setup_file = os.path.join(project_root, '.claude', 'swe-setup-complete.json')
+        setup_file = os.path.join(project_root, '.serena', 'swe-setup-complete.json')
         if not os.path.exists(setup_file):
             print(json.dumps({}))  # No setup at all — don't block
             sys.exit(0)

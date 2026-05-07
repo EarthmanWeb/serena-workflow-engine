@@ -87,7 +87,7 @@ echo "Version: $(jq -r '.version' "$SWE_PLUGIN_ROOT/.claude-plugin/plugin.json")
 **Requires `$SWE_PLUGIN_ROOT` from Task 1.** Check if the project has been bootstrapped. If not, run the bootstrap script.
 
 ```bash
-SETUP_FILE=".claude/swe-setup-complete.json"
+SETUP_FILE=".serena/swe-setup-complete.json"
 
 if [ -f "$SETUP_FILE" ]; then
   BOOTSTRAPPED=$(jq -r '.bootstrapped // false' "$SETUP_FILE")
@@ -111,7 +111,7 @@ python3 "$SWE_PLUGIN_ROOT/scripts/swe-bootstrap.py"
 ```
 
 Bootstrap handles:
-- Directory creation (`.serena/`, `.serena/swe/`, `.claude/`, `.claude/swe-state/`)
+- Directory creation (`.serena/`, `.serena/swe/`, `.serena/swe-state/`)
 - Language detection → `project.yml`
 - `memory-paths.conf` creation/update
 - Template memory copying (`_INDEX.md`, `FEATURE_TESTS.md`, `FEATURE_DEV_STANDARDS.md`, `FEATURE_AGENTS.md`)
@@ -322,7 +322,7 @@ Mark setup as complete. Only run after all previous tasks pass.
 ```bash
 PLUGIN_VERSION=$(jq -r '.version' "$SWE_PLUGIN_ROOT/.claude-plugin/plugin.json")
 
-cat > .claude/swe-setup-complete.json << EOF
+cat > .serena/swe-setup-complete.json << EOF
 {
   "complete": true,
   "timestamp": "$(date -Iseconds)",

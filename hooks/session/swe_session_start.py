@@ -52,7 +52,7 @@ def main():
             session_id = datetime.now().strftime('%Y%m%d_%H%M%S')
 
         # Check bypass FIRST
-        bypass_file = os.path.join(cwd, '.claude', 'swe-bypass.json')
+        bypass_file = os.path.join(cwd, '.serena', 'swe-bypass.json')
         if os.path.exists(bypass_file):
             print(json.dumps({}))  # Silent — plugin disabled
             sys.exit(0)

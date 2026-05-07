@@ -6,9 +6,9 @@ Creates minimal directory structure and config files needed
 before /swe-init or /swe-scaffold-project can run.
 
 Guards:
-- Exit if .claude/swe-bypass.json exists (SWE bypassed)
-- Exit if swe-setup-complete.json has complete: true (already initialized)
-- Exit if swe-setup-complete.json has bootstrapped: true (already bootstrapped)
+- Exit if .serena/swe-bypass.json exists (SWE bypassed)
+- Exit if .serena/swe-setup-complete.json has complete: true (already initialized)
+- Exit if .serena/swe-setup-complete.json has bootstrapped: true (already bootstrapped)
 """
 
 import os
@@ -92,24 +92,34 @@ languages:
     return True
 
 
-def ensure_memory_paths_conf(project_root):
-    """Create or update .serena/memory-paths.conf with SWE memory path."""
+def ensure_memory_paths_conf(project_root, extra_paths=None):
+    """Create or update .serena/memory-paths.conf with SWE memory paths.
+
+    Args:
+        project_root: Project root directory
+        extra_paths: Optional list of additional paths (e.g. ['./docs:ro'])
+    """
     conf_path = os.path.join(project_root, '.serena', 'memory-paths.conf')
-    swe_line = './.serena/swe'
+    required_lines = ['./.serena/swe', './.serena/memories']
 
     if os.path.exists(conf_path):
         with open(conf_path) as f:
             content = f.read()
-        if swe_line in content:
-            return False  # Already configured
+        missing = [line for line in required_lines if line not in content]
+        if extra_paths:
+            missing.extend(p for p in extra_paths if p not in content)
+        if not missing:
+            return False  # All paths already present
         with open(conf_path, 'a') as f:
-            f.write(f'\n{swe_line}\n')
+            for line in missing:
+                f.write(f'{line}\n')
         return True
 
-    content = f"""# Serena memory paths configuration
-# Each line is a path (relative to project root) containing memory files
-{swe_line}
-"""
+    all_lines = required_lines + (extra_paths or [])
+    content = "# Serena memory paths configuration\n"
+    content += "# Each line is a path (relative to project root) containing memory files\n"
+    for line in all_lines:
+        content += f"{line}\n"
     with open(conf_path, 'w') as f:
         f.write(content)
     return True
@@ -140,18 +150,105 @@ def copy_template_memories(project_root):
     return copied
 
 
+def prompt_extra_memory_paths():
+    """Prompt user for additional directories Serena should access.
+
+    Returns list of paths like ['./docs:ro', './src/config'].
+    """
+    extra = []
+    print("\n--- Additional Serena Memory Paths ---")
+    print("Serena can read folders in your project (e.g. ./docs, ./src/config).")
+    print("Append :ro for read-only access. Leave blank to skip.\n")
+    while True:
+        path = input("  Add folder (or press Enter to finish): ").strip()
+        if not path:
+            break
+        # Normalize: ensure starts with ./
+        if not path.startswith('./') and not path.startswith('/'):
+            path = './' + path
+        ro = input(f"  Read-only? (y/N): ").strip().lower()
+        if ro in ('y', 'yes'):
+            if not path.endswith(':ro'):
+                path += ':ro'
+        extra.append(path)
+        print(f"    Added: {path}")
+    return extra
+
+
+def inject_claude_prefix(project_root):
+    """Prepend CLAUDE_PREFIX.md to the project's CLAUDE.md if not already present."""
+    prefix_path = os.path.join(PLUGIN_ROOT, 'scripts', 'CLAUDE_PREFIX.md')
+    claude_md_path = os.path.join(project_root, 'CLAUDE.md')
+
+    if not os.path.exists(prefix_path):
+        return False
+
+    with open(prefix_path, 'r') as f:
+        prefix_content = f.read().rstrip('\n')
+
+    # Marker to detect if already injected
+    marker = 'MANDATORY ENTRY POINT'
+
+    if os.path.exists(claude_md_path):
+        with open(claude_md_path, 'r') as f:
+            existing = f.read()
+        if marker in existing:
+            return False  # Already has the prefix
+        # Prepend
+        with open(claude_md_path, 'w') as f:
+            f.write(prefix_content + '\n\n' + existing)
+    else:
+        with open(claude_md_path, 'w') as f:
+            f.write(prefix_content + '\n')
+
+    return True
+
+
+def ensure_serena_gitignore(project_root):
+    """Create .serena/.gitignore for runtime file exclusions."""
+    gitignore_path = os.path.join(project_root, '.serena', '.gitignore')
+    if os.path.exists(gitignore_path):
+        return False
+
+    content = """/cache
+
+# Stream data (ephemeral, session-specific)
+streams/
+
+# Working memory files (session-specific, ephemeral)
+memories/WM_*.md
+memories/LITE_MODE_*.md
+
+# SWE runtime state
+swe-state/
+swe-bypass.json
+swe-setup-complete.json
+
+# Keep everything else (feature memories, specs, etc.)
+!swe/
+!swe/**/*.md
+!memories/
+!/memory-paths.conf
+"""
+    with open(gitignore_path, 'w') as f:
+        f.write(content)
+    return True
+
+
 def update_gitignore(project_root):
     """Add SWE-specific entries to .gitignore if not already present."""
     gitignore_path = os.path.join(project_root, '.gitignore')
     entries = [
-        '.claude/swe-bypass.json',
-        '.claude/swe-setup-complete.json',
-        '.claude/swe-state/',
+        '.serena/swe-bypass.json',
+        '.serena/swe-setup-complete.json',
+        '.serena/swe-state/',
         '',
         '# Override global .serena/* ignore — un-ignore swe memories',
         '!.serena/swe/',
         '!.serena/swe/**/*.md',
-        '.serena/swe/WM_*.md',
+        '!.serena/memories/',
+        '!.serena/memories/**/*.md',
+        '.serena/memories/WM_*.md',
     ]
 
     existing_content = ''
@@ -174,13 +271,13 @@ def main():
     project_root = os.getcwd()
 
     # Guard: Check bypass
-    bypass_file = os.path.join(project_root, '.claude', 'swe-bypass.json')
+    bypass_file = os.path.join(project_root, '.serena', 'swe-bypass.json')
     if os.path.exists(bypass_file):
-        print("SWE bypassed for this project. Remove .claude/swe-bypass.json to re-enable.")
+        print("SWE bypassed for this project. Remove .serena/swe-bypass.json to re-enable.")
         sys.exit(0)
 
     # Guard: Check if already fully initialized
-    setup_file = os.path.join(project_root, '.claude', 'swe-setup-complete.json')
+    setup_file = os.path.join(project_root, '.serena', 'swe-setup-complete.json')
     if os.path.exists(setup_file):
         try:
             with open(setup_file) as f:
@@ -199,8 +296,8 @@ def main():
         os.path.join(project_root, '.serena'),
         os.path.join(project_root, '.serena', 'swe'),
         os.path.join(project_root, '.serena', 'swe', 'feature'),
-        os.path.join(project_root, '.claude'),
-        os.path.join(project_root, '.claude', 'swe-state'),
+        os.path.join(project_root, '.serena', 'memories'),
+        os.path.join(project_root, '.serena', 'swe-state'),
     ]
     for d in dirs:
         os.makedirs(d, exist_ok=True)
@@ -211,8 +308,11 @@ def main():
     # Create project.yml
     yml_created = create_project_yml(project_root, languages)
 
+    # Prompt for additional memory paths
+    extra_paths = prompt_extra_memory_paths()
+
     # Create/update memory-paths.conf
-    conf_updated = ensure_memory_paths_conf(project_root)
+    conf_updated = ensure_memory_paths_conf(project_root, extra_paths=extra_paths)
 
     # Copy template memories
     copied_templates = copy_template_memories(project_root)
@@ -237,8 +337,14 @@ def main():
             with open(readme_path, 'w') as f:
                 f.write('# Project\n')
 
-    # Update .gitignore
+    # Create .serena/.gitignore
+    serena_gitignore_created = ensure_serena_gitignore(project_root)
+
+    # Update project .gitignore
     gitignore_updated = update_gitignore(project_root)
+
+    # Inject CLAUDE_PREFIX.md into CLAUDE.md
+    claude_prefix_injected = inject_claude_prefix(project_root)
 
     # Report
     print("SWE Bootstrap Complete")
@@ -246,9 +352,13 @@ def main():
     print(f"  Languages detected: {', '.join(languages)}")
     print(f"  project.yml: {'created' if yml_created else 'already exists'}")
     print(f"  memory-paths.conf: {'updated' if conf_updated else 'already configured'}")
+    if extra_paths:
+        print(f"  Extra paths added: {', '.join(extra_paths)}")
     if copied_templates:
         print(f"  Templates copied: {', '.join(copied_templates)}")
+    print(f"  .serena/.gitignore: {'created' if serena_gitignore_created else 'already exists'}")
     print(f"  .gitignore: {'updated' if gitignore_updated else 'already configured'}")
+    print(f"  CLAUDE.md: {'prefix injected' if claude_prefix_injected else 'already configured'}")
     print(f"  Setup status: bootstrapped (needs /swe-scaffold-project to complete)")
 
 

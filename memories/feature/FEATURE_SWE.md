@@ -7,7 +7,7 @@
 - **Language:** Python/Bash/JSON/Markdown
 - **Framework:** Claude Code Plugins
 - **Root Path:** `.claude/plugins/serena-workflow-engine`
-- **Last Updated:** 2026-04-16
+- **Last Updated:** 2026-05-06
 
 ## Architecture
 
@@ -72,12 +72,12 @@ WF_START → WF_CLASSIFY → WF_ARCH_REVIEW → WF_EXECUTE
 | Module                | Purpose                                    |
 | --------------------- | ------------------------------------------ |
 | `state_manager.py`    | Workflow state transitions and persistence |
-| `config.py`           | Configuration loading and constants        |
+| `config.py`           | Configuration, paths, WM state read/write  |
 | `session.py`          | Session ID and Working Memory management   |
 | `input.py`            | Hook input parsing utilities               |
 | `output.py`           | Hook output formatting                     |
+| `stream.py`           | Append-only JSONL event log for sessions   |
 | `wm_validator.py`     | Working Memory validation                  |
-| `wm_writer_daemon.py` | Async WM writing                           |
 
 ### MCP Server: swe-wm (`hooks/swe_hooks/mcp/`)
 
@@ -128,10 +128,8 @@ Registered in `plugin.json` as `swe-wm`, started via `scripts/start-wm-mcp.sh`.
 | ------------------------------------- | ------------------------------- | -------------------------------- |
 | `swe_post_read_state.py`              | PostToolUse (read_memory)       | State transitions, plan mode     |
 | `swe_post_edit_checkpoint.py`         | PostToolUse (Edit/Write/Serena) | Track edits, trigger checkpoints |
-| `swe_post_serena_replace_fallback.py` | PostToolUse (Serena replace)    | Symbol replace fallback handling |
-| `swe_post_task_learn.py`              | PostToolUse (read_memory)       | RLVR learning                    |
-| `swe_post_ruv_swarm_init.py`          | PostToolUse (ruflo)             | Ruflo swarm initialization       |
 | `swe_post_todo_wm_sync.py`            | PostToolUse (TodoWrite)         | WM sync reminder on todo changes |
+| `swe_post_write_continue.py`          | PostToolUse (Write)             | Post-write continuation          |
 
 #### Stop Hooks (`hooks/stop/`)
 
@@ -256,12 +254,14 @@ read. All feature gates use **session-scoped sentinel files** for O(1) checks.
 
 ## Runtime Files
 
-| File                              | Purpose                            |
-| --------------------------------- | ---------------------------------- |
-| `.claude/workflow-state.json`     | Current state, trajectory, rewards |
-| `.claude/swe-setup-complete.json` | Setup completion flag              |
-| `.claude/swe-bypass.json`         | SWE permanently disabled flag      |
-| `.claude/learning.json`           | RLVR configuration                 |
+| File                               | Purpose                            |
+| ---------------------------------- | ---------------------------------- |
+| `.serena/swe-setup-complete.json`  | Setup completion flag              |
+| `.serena/swe-bypass.json`          | SWE permanently disabled flag      |
+| `.serena/swe-state/<session>.state`| Decoupled workflow state (authoritative) |
+| `.serena/streams/<session>.jsonl`  | Append-only event log              |
+| `.serena/streams/.init_<session>`  | Init gate sentinel cache           |
+| `.serena/memories/WM_<session>.md` | Working Memory (per-session)       |
 
 ## Bootstrap & Init Flow (New Projects)
 
@@ -277,15 +277,15 @@ SessionStart detects no `swe-setup-complete.json` and **prompts** (not blocks):
 ### Tier 2: Permanent Bypass (user declines)
 
 If user says "skip swe" / "no swe" / "disable swe":
-- Creates `.claude/swe-bypass.json` with `{"bypass": true, "reason": "user_declined"}`
+- Creates `.serena/swe-bypass.json` with `{"bypass": true, "reason": "user_declined"}`
 - All three hooks (SessionStart, UserPromptSubmit, PreToolUse init gate) check for this file first and exit silently
 - Plugin becomes invisible in that project
-- Remove `.claude/swe-bypass.json` to re-enable
+- Remove `.serena/swe-bypass.json` to re-enable
 
 ### Tier 3: Full Init (user accepts)
 
 1. User says "yes" → `swe-bootstrap.py` runs inline (via UserPromptSubmit hook)
-2. Bootstrap creates: `.serena/`, `.serena/swe/`, `project.yml`, `memory-paths.conf`, template memories, `swe-setup-complete.json` with `bootstrapped: true`
+2. Bootstrap creates: `.serena/`, `.serena/swe/`, `.serena/memories/`, `.serena/.gitignore`, `project.yml`, `memory-paths.conf`, `CLAUDE_PREFIX.md` injection, template memories, `swe-setup-complete.json` with `bootstrapped: true`
 3. Init gate is **unblocked** (gate checks `complete` field; bootstrapped-but-not-complete passes through)
 4. User runs `/swe-init` which launches the init agent (9 tasks):
    - Detect environment + resolve plugin root
@@ -312,17 +312,32 @@ New Project → No setup file
 
 | Guard | Behavior |
 |-------|----------|
-| `.claude/swe-bypass.json` exists | Exit: "SWE bypassed" |
-| `swe-setup-complete.json` has `complete: true` | Exit: "Already initialized" |
-| `swe-setup-complete.json` has `bootstrapped: true` | Exit: "Already bootstrapped" |
+| `.serena/swe-bypass.json` exists | Exit: "SWE bypassed" |
+| `.serena/swe-setup-complete.json` has `complete: true` | Exit: "Already initialized" |
+| `.serena/swe-setup-complete.json` has `bootstrapped: true` | Exit: "Already bootstrapped" |
 
 ### .gitignore Additions (via bootstrap)
 
+**`.serena/.gitignore`** (auto-created inside `.serena/`):
 ```
-.claude/swe-bypass.json
-.claude/swe-setup-complete.json
-.claude/swe-state/
-.serena/swe/WM_*.md
+streams/
+memories/WM_*.md
+memories/LITE_MODE_*.md
+swe-state/
+swe-bypass.json
+swe-setup-complete.json
+```
+
+**Project root `.gitignore`** (appended):
+```
+.serena/swe-bypass.json
+.serena/swe-setup-complete.json
+.serena/swe-state/
+!.serena/swe/
+!.serena/swe/**/*.md
+!.serena/memories/
+!.serena/memories/**/*.md
+.serena/memories/WM_*.md
 ```
 
 ## Test Commands
@@ -361,15 +376,16 @@ Contains files that should work across ANY project using the plugin:
 
 ### Location 2: Local Serena Memories (Project-Specific)
 
-**Path:** `.serena/swe/`
-
-Contains project-specific adaptations:
+**Path:** `.serena/swe/` — feature memories, refs, specs
 
 - `wf/WF_*.md` - Copied from plugin, may have project customizations
 - `ref/REF_*.md` - Project-specific references
 - `dom/DOM_SWE_*.md` - Domain documentation
 - `feature/FEATURE_SWE.md` - This file
-- `WM_*.md` - Session state
+
+**Path:** `.serena/memories/` — session Working Memory
+
+- `WM_<session>.md` - Per-session working memory files
 
 ### Change Decision Matrix
 
