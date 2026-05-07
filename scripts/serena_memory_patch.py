@@ -23,7 +23,7 @@ _original_get_memory_file_path = MemoriesManager.get_memory_file_path
 _original_load_memory = MemoriesManager.load_memory
 _original_save_memory = MemoriesManager.save_memory
 _original_delete_memory = MemoriesManager.delete_memory
-_original_rename_memory = MemoriesManager.rename_memory
+_original_move_memory = MemoriesManager.move_memory
 
 
 # Prefixes whose files live flat in .serena/memories/ (not in swe/ subfolders)
@@ -137,27 +137,27 @@ def _patched_load_memory(self, name):
     return _original_load_memory(self, normalized if normalized != name.replace(".md", "") else name)
 
 
-def _patched_save_memory(self, name, content):
+def _patched_save_memory(self, name, content, is_tool_context=False):
     """Normalize name before writing."""
     normalized = _normalize_name(name)
-    return _original_save_memory(self, normalized, content)
+    return _original_save_memory(self, normalized, content, is_tool_context)
 
 
-def _patched_delete_memory(self, name):
+def _patched_delete_memory(self, name, is_tool_context=False):
     """Normalize name before deleting."""
     try:
-        return _original_delete_memory(self, name)
+        return _original_delete_memory(self, name, is_tool_context)
     except Exception:
         pass
     normalized = _normalize_name(name)
-    return _original_delete_memory(self, normalized)
+    return _original_delete_memory(self, normalized, is_tool_context)
 
 
-def _patched_rename_memory(self, old_name, new_name):
-    """Normalize names before renaming."""
+def _patched_move_memory(self, old_name, new_name, is_tool_context=False):
+    """Normalize names before moving/renaming."""
     normalized_old = _normalize_name(old_name)
     normalized_new = _normalize_name(new_name)
-    return _original_rename_memory(self, normalized_old, normalized_new)
+    return _original_move_memory(self, normalized_old, normalized_new, is_tool_context)
 
 
 MemoriesManager._find_memory = _patched_find_memory
@@ -165,7 +165,7 @@ MemoriesManager.get_memory_file_path = _patched_get_memory_file_path
 MemoriesManager.load_memory = _patched_load_memory
 MemoriesManager.save_memory = _patched_save_memory
 MemoriesManager.delete_memory = _patched_delete_memory
-MemoriesManager.rename_memory = _patched_rename_memory
+MemoriesManager.move_memory = _patched_move_memory
 
 # Delegate to Serena CLI with start-mcp-server prepended
 sys.argv = ["serena", "start-mcp-server"] + sys.argv[1:]
