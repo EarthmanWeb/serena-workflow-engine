@@ -150,7 +150,7 @@ def _resolve_session_id(explicit: str = None) -> Optional[str]:
     try:
         import glob as _glob
         cwd = get_project_root()
-        swe_dir = os.path.join(cwd, '.serena', 'swe')
+        swe_dir = os.path.join(cwd, '.serena', 'memories')
         wm_files = _glob.glob(os.path.join(swe_dir, 'WM_*.md'))
         if wm_files:
             most_recent = max(wm_files, key=os.path.getmtime)
