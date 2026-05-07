@@ -125,7 +125,13 @@ mcp__browser-devtools__scenario-list()
 
 **After reading ANY WF** memory, your IMMEDIATE FIRST output MUST be the step report line._*
 
-Example:
+**For WF_INIT only**, include the plugin version from the SessionStart banner (shown in system-reminder):
+
+```
+> **🎬 On step WF_INIT (v1.1.2)**
+```
+
+For all other steps:
 
 ```
 > **🚀 On step WF_START**
