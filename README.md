@@ -1,6 +1,6 @@
 # Serena Workflow Engine
 
-21-state workflow engine for Claude Code with Serena memory persistence, swarm coordination, and RLVR learning.
+14-state workflow engine for Claude Code with Serena memory persistence, hook-driven event architecture, and optional swarm orchestration.
 
 ## Prerequisites
 
