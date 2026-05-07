@@ -90,7 +90,24 @@ The workflow will not block you while you decide."""
         # This ensures the init_gate can block tools until WF_INIT is read
         # WM creation happens in WF_INIT workflow instructions
 
-        context = f"""🚀 SERENA WORKFLOW ENGINE - Session {session_id}
+        # Read plugin version from plugin.json
+        plugin_version = "unknown"
+        plugin_root = os.environ.get('CLAUDE_PLUGIN_ROOT', '')
+        if plugin_root:
+            plugin_json = os.path.join(plugin_root, '.claude-plugin', 'plugin.json')
+        else:
+            # Derive from this file's location: session/ -> hooks/ -> plugin root
+            plugin_json = os.path.join(
+                os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+                '.claude-plugin', 'plugin.json'
+            )
+        try:
+            with open(plugin_json) as f:
+                plugin_version = json.load(f).get('version', 'unknown')
+        except (IOError, json.JSONDecodeError):
+            pass
+
+        context = f"""🚀 SERENA WORKFLOW ENGINE v{plugin_version} - Session {session_id}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 ⏳ Working Memory: Not yet created (will be created after WF_INIT)
