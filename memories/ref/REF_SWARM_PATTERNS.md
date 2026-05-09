@@ -96,34 +96,68 @@ npx ruflo init
 
 **Essential Tools (load ONLY what you need):**
 
-| Tool           | Full Name                    | Purpose                              |
-| -------------- | ---------------------------- | ------------------------------------ |
-| `swarm_init`   | `mcp__ruflo__swarm_init`     | Initialize swarm with topology       |
-| `swarm_status` | `mcp__ruflo__swarm_status`   | Check swarm health (NO verbose flag) |
-| `agent_spawn`  | `mcp__ruflo__agent_spawn`    | Create coordination agent            |
-| `agent_list`   | `mcp__ruflo__agent_list`     | List active agents                   |
-| `task_create`  | `mcp__ruflo__task_create`    | Register task in coordination layer  |
-| `task_status`  | `mcp__ruflo__task_status`    | Check task progress                  |
-| `memory_store` | `mcp__ruflo__memory_store`   | Persist coordination state           |
+| Tool            | Full Name                     | Purpose                                          |
+| --------------- | ----------------------------- | ------------------------------------------------ |
+| `swarm_init`    | `mcp__ruflo__swarm_init`      | Initialize swarm with topology                   |
+| `swarm_status`  | `mcp__ruflo__swarm_status`    | Check swarm health (NO verbose flag)             |
+| `agent_spawn`   | `mcp__ruflo__agent_spawn`     | Create Ruflo-tracked executable agent            |
+| `agent_execute` | `mcp__ruflo__agent_execute`   | **Run prompt on spawned agent via Anthropic API** |
+| `agent_list`    | `mcp__ruflo__agent_list`      | List active agents                               |
+| `task_create`   | `mcp__ruflo__task_create`     | Register task in coordination layer              |
+| `task_status`   | `mcp__ruflo__task_status`     | Check task progress                              |
+| `memory_store`  | `mcp__ruflo__memory_store`    | Persist coordination state                       |
 
-**Minimal workflow (context-optimized):**
+### ⚠️ CRITICAL: Two Agent Creation Tools — Different Purposes
+
+| Tool | Creates | Executable? | Use When |
+|------|---------|-------------|----------|
+| `agent_spawn` | Ruflo-tracked agent with model, cost tracking, swarm coordination | ✅ YES — use with `agent_execute` | You want Ruflo to EXECUTE work |
+| `daa_agent_create` | Metadata record with cognitive pattern label | ❌ NO — just bookkeeping | You only need cross-iteration tracking (DAA) |
+
+**⛔ NEVER create `daa_agent_create` agents and then expect them to execute. They are metadata ONLY.**
+**✅ ALWAYS use `agent_spawn` → `agent_execute` for Ruflo-native execution.**
+
+### Two Execution Paths
+
+| Path | Tools | Has File Access? | Use When |
+|------|-------|-------------------|----------|
+| **Ruflo-native** | `agent_spawn` → `agent_execute` | ❌ No (API call only) | Reasoning, planning, spec writing, framework comparison — anything not needing project files |
+| **Hybrid** | `agent_spawn` (tracking) + Claude Code `Agent` tool (execution) | ✅ Yes (full tool access) | Codebase analysis, file reads, grep, symbol lookup — anything needing file system |
+
+**Minimal workflow — Ruflo-native (reasoning tasks):**
 
 ```javascript
-// Step 1: Load only needed tools (ONE ToolSearch call)
-ToolSearch({ query: "+ruflo swarm agent task" })
+// Step 1: Load tools
+ToolSearch({ query: "+ruflo swarm agent" })
+ToolSearch({ query: "select:mcp__ruflo__agent_execute" })
 
-// Step 2: Init swarm (small response)
+// Step 2: Init swarm
 mcp__ruflo__swarm_init({ topology: "star", maxAgents: 5 })
 
-// Step 3: Spawn agents + create tasks IN ONE MESSAGE
-mcp__ruflo__agent_spawn({ agentType: "coder", agentId: "agent-1" })
-mcp__ruflo__task_create({ type: "implement", description: "...", assignToAgent: "agent-1" })
+// Step 3: Spawn ALL agents in ONE message
+mcp__ruflo__agent_spawn({ agentType: "researcher", agentId: "r1", model: "sonnet", task: "Research task" })
+mcp__ruflo__agent_spawn({ agentType: "researcher", agentId: "r2", model: "sonnet", task: "Research task" })
 
-// Step 4: Launch ACTUAL work via Task tool (separate context)
-Task({ subagent_type: "general-purpose", run_in_background: true, prompt: "..." })
+// Step 4: Execute on ALL agents in ONE message (parallel)
+mcp__ruflo__agent_execute({ agentId: "r1", prompt: "Full task prompt...", maxTokens: 4096 })
+mcp__ruflo__agent_execute({ agentId: "r2", prompt: "Full task prompt...", maxTokens: 4096 })
 
-// Step 5: Collect results (blocking)
+// Step 5: Results come back directly — no TaskOutput needed
+```
+
+**Minimal workflow — Hybrid (codebase file access tasks):**
+
+```javascript
+// Steps 1-3: Same as above (swarm_init + agent_spawn for tracking)
+
+// Step 4: Launch Claude Code Agent tools for file work (separate context)
+Agent({ description: "...", run_in_background: true, prompt: "..." })
+
+// Step 5: Collect results
 TaskOutput({ task_id: "...", block: true })
+
+// Step 6: Store results to Ruflo for cross-agent tracking
+mcp__ruflo__memory_store({ key: "r1-results", value: { findings: "..." } })
 ```
 
 ### 2. Ruflo Coordination (Task Orchestration)
@@ -160,20 +194,41 @@ mcp__ruflo__coordination_orchestrate({ task: "...", strategy: "parallel", priori
 
 **⚠️ DAA REALITY: DAA is a metadata/tracking layer, NOT an execution engine.**
 
-`daa_workflow_execute` flips a status flag and returns empty arrays. All actual work is done by the Agent tool. **Only use DAA for multi-iteration workflows** where you need structured cross-iteration state. For single-pass parallel work, use Ruflo swarm orchestration.
+`daa_workflow_execute` flips a status flag and returns empty arrays. `daa_agent_create` creates metadata records ONLY — they cannot execute. **For actual execution, use `agent_spawn` + `agent_execute` (Ruflo-native) or `agent_spawn` + Claude Code `Agent` tool (hybrid for file access).**
 
-**Minimal Pattern (DAA Iterative Tracking):**
+**Only use DAA for multi-iteration workflows** where you need structured cross-iteration state. For single-pass parallel work, use Ruflo swarm orchestration.
+
+**Minimal Pattern (DAA + Ruflo-native execution):**
 
 ```javascript
-ToolSearch({ query: "+ruflo daa" })
+// Step 1: Load tools
+ToolSearch({ query: "+ruflo daa agent" })
+ToolSearch({ query: "select:mcp__ruflo__agent_execute,mcp__ruflo__daa_knowledge_share" })
+
+// Step 2: Create DAA metadata agents for tracking + cognitive patterns
 mcp__ruflo__daa_agent_create({ id: "daa-1", cognitivePattern: "adaptive", enableMemory: true })
-// Register workflow for tracking (NOT execution)
 mcp__ruflo__daa_workflow_create({ id: "wf-1", name: "Analysis", strategy: "adaptive" })
-// DO NOT expect daa_workflow_execute to produce results — launch Agent tools instead
-// Use cognitive pattern to SHAPE the Agent tool prompt
-Agent({ prompt: "You are daa-1 (cognitive: adaptive). Adjust approach based on findings..." })
-// After Agent completes, store findings for next iteration:
-mcp__ruflo__daa_knowledge_share({ sourceAgentId: "daa-1", ..., knowledgeContent: { findings: "ACTUAL results" } })
+
+// Step 3: ALSO spawn executable Ruflo agents (these actually run)
+mcp__ruflo__agent_spawn({ agentType: "researcher", agentId: "r1", model: "sonnet", task: "Analysis task" })
+
+// Step 4: Execute via Ruflo (cognitive pattern from DAA shapes the prompt)
+mcp__ruflo__agent_execute({ agentId: "r1", prompt: "You are r1 (cognitive: adaptive). Adjust approach based on findings...", maxTokens: 4096 })
+
+// Step 5: Store findings for next iteration
+mcp__ruflo__daa_knowledge_share({ sourceAgentId: "daa-1", targetAgentIds: ["daa-2"], knowledgeDomain: "analysis", knowledgeContent: { findings: "ACTUAL results from agent_execute" } })
+```
+
+**Minimal Pattern (DAA + Hybrid execution for file access):**
+
+```javascript
+// Steps 1-3: Same as above (daa_agent_create for tracking + agent_spawn for execution)
+
+// Step 4: Use Claude Code Agent tool for file work (has Glob/Grep/Read access)
+Agent({ description: "...", run_in_background: true, prompt: "You are r1 (cognitive: adaptive)..." })
+
+// Step 5: Collect results, then store to DAA
+mcp__ruflo__daa_knowledge_share({ sourceAgentId: "daa-1", targetAgentIds: ["daa-2"], knowledgeDomain: "analysis", knowledgeContent: { findings: "Results from Agent tool" } })
 ```
 
 ### 3. Hive-Mind (Consensus/Collective Intelligence)
@@ -220,10 +275,12 @@ Without explicit `ToolSearch` + `hive-mind_memory` instructions in agent prompts
 ### DO:
 
 1. Initialize swarm FIRST
-2. Spawn ALL agents + create ALL tasks in ONE message
-3. Use Task tool for actual file work (separate context)
-4. Keep coordinator lean — only orchestrate
-5. Batch all ToolSearch loads into ONE call
+2. Spawn ALL agents (`agent_spawn`) + create ALL tasks in ONE message
+3. Execute via `agent_execute` (Ruflo-native) OR Claude Code `Agent` tool (hybrid for file access)
+4. **Use `agent_execute` for reasoning/planning tasks** — results come back directly, no Task/Agent overhead
+5. **Use Claude Code `Agent` tool ONLY when file system access is needed** (Grep, Read, Glob, etc.)
+6. Keep coordinator lean — only orchestrate
+7. Batch all ToolSearch loads into ONE call
 
 ### DON'T:
 

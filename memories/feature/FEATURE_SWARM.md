@@ -18,7 +18,8 @@
 | ----- | ---------------------- | ------------------------------- |
 | **1** | `WF_SWARM_ORCHESTRATE` | ⛔ REQUIRED - Primary workflow  |
 | **2** | `REF_SWARM_PATTERNS`   | ⛔ REQUIRED - MCP tool patterns |
-| **3** | `RUFLO`                | ⛔ REQUIRED - Coordination ref  |
+| **3** | `REF_RUFLO_MCP_TOOLS`  | ⛔ REQUIRED - Tool schemas & execution flows |
+| **4** | `RUFLO`                | ⛔ REQUIRED - Coordination ref  |
 
 **⛔ SKIPPING = WORKFLOW VIOLATION**
 
