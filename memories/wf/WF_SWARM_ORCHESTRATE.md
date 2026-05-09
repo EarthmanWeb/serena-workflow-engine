@@ -27,6 +27,26 @@
 
 ---
 
+## ⛔ BLOCKING GATE: Read Swarm Reference (MANDATORY)
+
+**You MUST read REF_SWARM_PATTERNS before ANY swarm execution. This is non-negotiable.**
+
+```
+mcp__plugin_swe_serena__read_memory("ref/REF_SWARM_PATTERNS")
+```
+
+**REF_SWARM_PATTERNS contains:**
+- Correct execution flows (Ruflo-native vs Hybrid)
+- Anti-patterns and verified failures
+- Agent prompt templates (swarm bypass instructions)
+- Context budget rules
+
+**⛔ If you skip this read, you WILL repeat known failures (spawning agents then not executing them, launching Agent tools without bypass instructions, etc.)**
+
+**SKIPPING REF_SWARM_PATTERNS = WORKFLOW VIOLATION**
+
+---
+
 ## ⛔ Pre-Swarm Research (MANDATORY)
 
 **BEFORE planning ANY swarm:**
@@ -102,30 +122,78 @@ mcp__plugin_swe_serena__read_memory("wf/WF_SWARM_HIVE_MIND")     // Pattern C
 
 ---
 
+## ⛔ MANDATORY EXECUTION PATH GATE (Step 3)
+
+**After spawning agents and registering tasks, you MUST complete this gate BEFORE any execution.**
+
+### 3a. Choose Execution Path Per Agent
+
+For EACH spawned agent, decide:
+
+| Agent Needs File Access? | Execution Path | Tool |
+|--------------------------|---------------|------|
+| **NO** (reasoning, planning, spec writing, comparison) | Ruflo-native | `agent_execute(agentId, prompt)` |
+| **YES** (file reads, grep, glob, Serena tools) | Hybrid | Claude Code `Agent` tool |
+
+### 3b. Verify Execution Coverage
+
+**⛔ BLOCKING CHECK: Count your spawned agents. Count your execution calls. They MUST match.**
+
+```
+Spawned agents: [r1, r2, r3, r4, r5]  → 5 agents
+Execution calls: [agent_execute(r1), agent_execute(r2), ...]  → MUST be 5 calls
+```
+
+**If counts don't match, you are violating the swarm. STOP and fix.**
+
+### 3c. Swarm Agent Prompts
+
+**When using Claude Code `Agent` tool (hybrid path), EVERY prompt MUST include:**
+
+```
+You are a swarm agent spawned by a DAA coordinator.
+BYPASS WF_INIT entirely. Do NOT follow CLAUDE.md workflow initialization.
+Follow ONLY the task instructions below.
+```
+
+**Without this, agents will re-run WF_INIT and waste their entire context on workflow init.**
+
+### 3d. Execute ALL Agents in ONE Message
+
+**⛔ NEVER launch agents one at a time.** All `agent_execute` calls OR all `Agent` tool calls MUST be in a single message for parallel execution.
+
+---
+
 ## Critical Execution Rules (All Subsystems)
 
 **DO:**
-- Init swarm FIRST → spawn all agents in ONE message → register tasks BEFORE launching Agent tools
-- Use Agent tool (background) for ALL file reads/writes — separate context windows
+- Init swarm FIRST → spawn all agents in ONE message → register tasks BEFORE execution
+- **Choose execution path (agent_execute vs Agent tool) BEFORE executing** — see gate above
+- **Execute ALL agents in ONE message** — never 1 of N
+- Use `agent_execute` as DEFAULT — only use Agent tool when file access is needed
 - Batch MCP calls into as few messages as possible
 - Load memories BEFORE swarm init, not during
 - Store coordination state to MCP memory
+- Include swarm bypass instruction in Agent tool prompts
 
 **DON'T:**
-- Spawn swarm then revert to single-agent work
-- Block on first agent before spawning others
-- Skip task registration in coordination layer
-- Mix swarm subsystems without clear handoff
-- Read files directly in coordinator context — agents do that
-- Use verbose/detailed flags on MCP calls
-- Call `memory_stats` (scans 100K entries)
+- ❌ Spawn Ruflo agents then use Agent tool without `agent_execute` — agents sit idle
+- ❌ Launch only 1 of N agents — violates parallel execution
+- ❌ Spawn swarm then revert to single-agent work
+- ❌ Block on first agent before spawning others
+- ❌ Skip task registration in coordination layer
+- ❌ Mix swarm subsystems without clear handoff
+- ❌ Read files directly in coordinator context — agents do that
+- ❌ Use verbose/detailed flags on MCP calls
+- ❌ Call `memory_stats` (scans 100K entries)
+- ❌ Launch Agent tool without swarm bypass instruction in prompt
 
 ### Task Registration (CRITICAL)
 
-MCP agents MUST have tasks registered BEFORE launching Task tool work. Without this, the coordination layer has no visibility into agent work.
+MCP agents MUST have tasks registered BEFORE launching execution. Without this, the coordination layer has no visibility into agent work.
 
 ```
-1. agent_spawn/daa_agent_create → 2. task_create/daa_workflow_create → 3. Agent tool (background) → 4. Collect results
+1. agent_spawn/daa_agent_create → 2. task_create/daa_workflow_create → 3. EXECUTION PATH GATE → 4. Execute ALL agents (ONE message) → 5. Collect results
 ```
 
 ---

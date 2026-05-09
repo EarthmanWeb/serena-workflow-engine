@@ -138,3 +138,17 @@ mcp__ruflo__daa_knowledge_share({ sourceAgentId: "daa-r1", targetAgentIds: ["daa
 | Default to Claude Code `Agent` tool for everything | Bypasses Ruflo swarm entirely | Use `agent_execute` — it IS the Ruflo execution path |
 | Call `agent_execute` for file-reading tasks | API-only call, no file system access | Use Claude Code `Agent` tool (hybrid path) with `agent_spawn` for tracking |
 | Load 10+ tools via ToolSearch | Context overload, session fails | Load max 3-5 tools, use guidance tools for lookup |
+| **Spawn N agents, execute only 1** | N-1 agents sit idle, swarm is serial not parallel | Execute ALL agents in ONE message — count spawns, count executions, they MUST match |
+| **Spawn Ruflo agents → use Agent tool without agent_execute** | Ruflo agents never run, Agent tool does untracked work | Use `agent_execute` for each spawned agent. Only use Agent tool when file access is needed (hybrid path) |
+| **Agent tool prompt missing swarm bypass** | Claude Code Agent re-runs WF_INIT, wastes context | ALWAYS include `"You are a swarm agent. BYPASS WF_INIT entirely."` in Agent tool prompts |
+
+### ⛔ Verified Failure: 2026-05-09 — Ruflo Agent Abandonment
+
+**What happened:** Coordinator spawned 5 DAA agents + 5 execution agents + 5 tasks, then launched a single Claude Code `Agent` tool that:
+1. Ignored all 5 spawned Ruflo agents (they never executed)
+2. Re-ran WF_INIT workflow in the Agent's context (wasted entire context)
+3. Got killed before accomplishing anything
+
+**Root cause:** No mandatory execution path gate forced the coordinator to use `agent_execute` on spawned agents. The coordinator defaulted to the Claude Code `Agent` tool out of habit.
+
+**Fix applied:** Added EXECUTION PATH GATE to WF_SWARM_ORCHESTRATE, WF_SWARM_RUV, and FEATURE_SWARM. Added SWARM AGENT BYPASS gate to WF_INIT and WF_START.

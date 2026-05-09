@@ -328,6 +328,22 @@ Without explicit `ToolSearch` + `hive-mind_memory` instructions in agent prompts
 
 ---
 
+## ⛔ Mandatory Agent Prompt Template (Hybrid Path)
+
+**When using Claude Code `Agent` tool for swarm agents, EVERY prompt MUST start with this block:**
+
+```
+You are a swarm agent spawned by a DAA coordinator.
+BYPASS WF_INIT entirely. Do NOT follow CLAUDE.md workflow initialization.
+Do NOT read WF_START, WF_CLASSIFY, or any WF_* memories.
+Do NOT create a WM file.
+Follow ONLY the task instructions below.
+```
+
+**Without this, Claude Code Agents will re-run the full workflow init sequence (WF_INIT → CLAUDE_OBLIGATIONS → WF_START → WF_CLASSIFY), consuming their entire context window on workflow overhead instead of their assigned task.**
+
+---
+
 ## Known Issues
 
 | Issue                                  | Impact                                 | Mitigation                              |
@@ -335,3 +351,6 @@ Without explicit `ToolSearch` + `hive-mind_memory` instructions in agent prompts
 | Pretty-printed JSON responses          | 2x response size                       | Can't control this — keep calls minimal |
 | **SendMessage does not exist**         | Cannot communicate with running agents | All instructions in initial prompt; use hive-mind shared memory for data exchange |
 | Agent tool claims SendMessage works    | Misleading output on agent completion  | Ignore the suggestion — tool is not available |
+| **Spawned agents re-run WF_INIT**      | Agent wastes full context on workflow init | Include swarm bypass instruction in EVERY Agent tool prompt (see template above) |
+| **Coordinator spawns N agents, executes 1** | N-1 agents idle, swarm is serial | Execute ALL agents in ONE message — match spawn count to execution count |
+| **Coordinator uses Agent tool ignoring spawned Ruflo agents** | Ruflo agents never execute, no tracking | Use `agent_execute` on spawned agents. Only use Agent tool for hybrid (file access) path |

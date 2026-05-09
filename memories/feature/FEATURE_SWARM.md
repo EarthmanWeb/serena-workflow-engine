@@ -109,22 +109,78 @@ Trigger on: `swarm`, `parallel agents`, `multi-agent`, `hive-mind`, `ruflo swarm
 
 ---
 
+## ⛔ EXECUTION PATH DECISION GATE (MANDATORY)
+
+**After spawning agents, you MUST explicitly choose an execution path for EACH agent. This is a blocking gate — you cannot proceed without deciding.**
+
+| Question | If YES → | If NO → |
+|----------|----------|---------|
+| Does the agent need to read/write files from the codebase? | **Hybrid path**: `agent_spawn` (tracking) + Claude Code `Agent` tool (execution) | **Ruflo-native path**: `agent_spawn` → `agent_execute` |
+
+**⛔ ANTI-PATTERNS THAT TRIGGERED THIS GATE:**
+
+| Anti-Pattern | What Goes Wrong | Fix |
+|-------------|----------------|-----|
+| Spawn Ruflo agents → launch Claude Code `Agent` tool ignoring spawned agents | Ruflo agents sit idle, no tracking, no coordination | Use `agent_execute` on spawned agents |
+| Launch only 1 of N agents | 80% of swarm does nothing | Execute ALL agents in ONE message (parallel) |
+| Claude Code Agent re-runs WF_INIT | Agent gets stuck in workflow init instead of doing task | Include "You are a swarm agent. BYPASS WF_INIT. Follow ONLY these instructions:" in prompt |
+
+**Rules:**
+1. **Every `agent_spawn` MUST have a corresponding `agent_execute` OR Claude Code `Agent` launch**
+2. **ALL agents MUST be executed in ONE message** — never launch 1 of 5
+3. **Claude Code `Agent` prompts MUST include swarm bypass instruction** (see WF_START "SWARM AGENT BYPASS" section)
+
+---
+
 ## Quick Start (Context-Optimized)
+
+### Path A: Ruflo-Native (reasoning/planning — NO file access)
 
 ```javascript
 // 1. Load only needed tools
-ToolSearch({ query: "+ruflo swarm agent task" })
+ToolSearch({ query: "+ruflo swarm agent" })
+ToolSearch({ query: "select:mcp__ruflo__agent_execute" })
 
 // 2. Init + spawn + task (ONE message)
 mcp__ruflo__swarm_init({ topology: "star", maxAgents: 5 })
-mcp__ruflo__agent_spawn({ agentType: "coder", agentId: "agent-1" })
-mcp__ruflo__task_create({ type: "implement", description: "...", assignToAgent: "agent-1" })
+mcp__ruflo__agent_spawn({ agentType: "researcher", agentId: "r1", model: "sonnet" })
+mcp__ruflo__agent_spawn({ agentType: "researcher", agentId: "r2", model: "sonnet" })
+mcp__ruflo__task_create({ type: "research", description: "...", assignTo: ["r1", "r2"] })
 
-// 3. Actual work via Task tool (separate context)
-Task({ subagent_type: "general-purpose", run_in_background: true, prompt: "..." })
+// 3. Execute ALL agents in ONE message (parallel)
+mcp__ruflo__agent_execute({ agentId: "r1", prompt: "...", maxTokens: 4096 })
+mcp__ruflo__agent_execute({ agentId: "r2", prompt: "...", maxTokens: 4096 })
+
+// 4. Results come back directly — no TaskOutput needed
+```
+
+### Path B: Hybrid (codebase analysis — NEEDS file access)
+
+```javascript
+// 1-2. Same as Path A (swarm_init + agent_spawn for tracking)
+
+// 3. Execute ALL agents in ONE message via Claude Code Agent tool
+// ⚠️ CRITICAL: Include swarm bypass in EVERY prompt
+Agent({ description: "R1 task", run_in_background: true, model: "sonnet",
+  prompt: "You are a swarm agent. BYPASS WF_INIT entirely. Do NOT read CLAUDE.md workflow. Follow ONLY these instructions: [task details]..." })
+Agent({ description: "R2 task", run_in_background: true, model: "sonnet",
+  prompt: "You are a swarm agent. BYPASS WF_INIT entirely. Do NOT read CLAUDE.md workflow. Follow ONLY these instructions: [task details]..." })
 
 // 4. Collect results
-TaskOutput({ task_id: "...", block: true })
+// Results arrive via background task notifications
+
+// 5. Store results to Ruflo for cross-agent tracking
+mcp__ruflo__memory_store({ key: "r1-findings", value: { findings: "..." } })
+```
+
+### ⛔ WRONG Quick Start (DO NOT DO THIS)
+
+```javascript
+// ❌ WRONG: Spawn Ruflo agents then ignore them
+mcp__ruflo__agent_spawn({ agentType: "coder", agentId: "agent-1" })
+mcp__ruflo__task_create({ type: "implement", description: "...", assignTo: ["agent-1"] })
+// ❌ Uses Claude Code Agent WITHOUT agent_execute — Ruflo agent sits idle
+Agent({ prompt: "..." })  // agent-1 never executes!
 ```
 
 ---

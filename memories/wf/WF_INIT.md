@@ -2,6 +2,38 @@
 
 ---
 
+## ⚡ SWARM / RUFLO AGENT BYPASS — CHECK THIS FIRST
+
+**Before ANY initialization, check if you are a spawned agent:**
+
+### How to detect you are a spawned agent:
+
+Your initial prompt contains ANY of these indicators:
+- `"You are a swarm agent"`
+- `"BYPASS WF_INIT"`
+- `"You are the [role] agent"`
+- `"Do NOT follow CLAUDE.md workflow"`
+- Agent role assignment from a coordinator (e.g., "You are r1", "You are agent-features")
+- Explicit task-only instructions without a user conversation
+
+### If you ARE a spawned agent:
+
+- ✅ **SKIP this entire file (WF_INIT)**
+- ✅ **SKIP WF_START, WF_CLASSIFY, and all workflow steps**
+- ✅ **Do NOT create a WM file**
+- ✅ **Do NOT read CLAUDE_OBLIGATIONS**
+- ✅ **Execute ONLY the task in your initial prompt**
+- ✅ You MAY read Serena memories if they help your specific task
+- ✅ You MAY use any tool (Read, Grep, Glob, Serena, etc.) immediately
+
+**⛔ Spawned agents that run WF_INIT waste their entire context window on workflow initialization instead of doing their assigned task. This is the #1 cause of swarm failure.**
+
+### If you are NOT a spawned agent:
+
+Continue to the anti-rationalization block below. You are a primary session and MUST follow the full workflow.
+
+---
+
 ## 🚫 ANTI-RATIONALIZATION BLOCK - READ FIRST
 
 **YOU WILL BE TEMPTED TO SKIP STEPS. DO NOT.**

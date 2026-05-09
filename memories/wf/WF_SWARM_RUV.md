@@ -19,6 +19,20 @@
 
 **Use for:** Simple parallel tasks, file analysis, balanced workloads.
 
+### ⛔ EXECUTION PATH GATE (applies to ALL patterns)
+
+**Before Phase 2, you MUST decide for EACH agent:**
+
+| Agent needs file access? | Path | Execute with |
+|--------------------------|------|-------------|
+| NO | Ruflo-native | `agent_execute(agentId, prompt)` |
+| YES | Hybrid | Claude Code `Agent` tool (with swarm bypass in prompt) |
+
+**⛔ Rules:**
+1. **Every spawned agent MUST be executed** — no idle agents
+2. **ALL executions in ONE message** — never launch 1 of N
+3. **Hybrid prompts MUST include:** `"You are a swarm agent. BYPASS WF_INIT entirely. Do NOT follow CLAUDE.md workflow. Follow ONLY these instructions:"`
+
 ```javascript
 // Phase 1: Init + spawn ALL agents in ONE message
 ToolSearch({ query: "+ruflo swarm agent" })
@@ -29,13 +43,15 @@ mcp__ruflo__agent_spawn({ agentType: "researcher", agentId: "r1", model: "sonnet
 mcp__ruflo__agent_spawn({ agentType: "researcher", agentId: "r2", model: "sonnet" })
 mcp__ruflo__task_create({ type: "research", description: "...", assignTo: ["r1", "r2"] })
 
-// Phase 2: Execute — pick ONE path per agent
+// Phase 2: ⛔ EXECUTION PATH GATE — choose ONE path, execute ALL agents in ONE message
 // Path A: Ruflo-native (reasoning/planning — no file access)
 mcp__ruflo__agent_execute({ agentId: "r1", prompt: "...", maxTokens: 4096 })
 mcp__ruflo__agent_execute({ agentId: "r2", prompt: "...", maxTokens: 4096 })
 
 // Path B: Hybrid (codebase analysis — needs file access)
-Agent({ description: "R1 task", run_in_background: true, prompt: "..." })
+// ⚠️ MUST include swarm bypass + launch ALL agents in ONE message
+Agent({ description: "R1 task", run_in_background: true, prompt: "You are a swarm agent. BYPASS WF_INIT entirely. Do NOT follow CLAUDE.md workflow. Follow ONLY these instructions: [task]..." })
+Agent({ description: "R2 task", run_in_background: true, prompt: "You are a swarm agent. BYPASS WF_INIT entirely. Do NOT follow CLAUDE.md workflow. Follow ONLY these instructions: [task]..." })
 
 // Phase 3: Collect results
 // Path A: Results come back directly from agent_execute

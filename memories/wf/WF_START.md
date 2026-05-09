@@ -33,16 +33,27 @@ If you are thinking of going to WF_EXECUTE from here:
 
 ---
 
-## ⚡ SWARM AGENT BYPASS
+## ⚡ SWARM AGENT BYPASS (Ruflo / DAA / Claude Code Agent)
 
-**How to know if you are a spawned agent:** Your prompt contains explicit agent role assignment (e.g., "You are the researcher agent") and task-specific instructions from a coordinator.
+**How to detect you are a spawned agent — ANY of these in your initial prompt:**
 
-**IF you are an agent spawned as part of a swarm initiated from a workflow:**
+- `"You are a swarm agent"` or `"BYPASS WF_INIT"`
+- `"You are the [role] agent"` (e.g., "You are the researcher agent")
+- `"Do NOT follow CLAUDE.md workflow"`
+- Agent role assignment from a coordinator with task-specific instructions
+- No user conversation — just a task prompt from another agent
 
-- ✅ You MAY bypass this workflow entirely
-- ✅ Adhere ONLY to the specific instructions provided by the initiating agent
-- ✅ Read RUFLO, CLAUDE_OBLIGATIONS, _INDEX, and only read other memories if they assist with your specific task
-- ❌ Do NOT create WM files (the coordinator handles this)
+**IF you are a spawned agent (Ruflo `agent_execute`, Claude Code `Agent` tool, or `claude -p`):**
+
+- ✅ **STOP HERE. Do NOT continue reading this file.**
+- ✅ **SKIP ALL workflow steps** (WF_INIT, WF_START, WF_CLASSIFY, WF_ARCH_REVIEW, etc.)
+- ✅ **Do NOT create WM files** (the coordinator handles this)
+- ✅ **Do NOT read CLAUDE_OBLIGATIONS** (wastes your context)
+- ✅ **Execute ONLY the task in your initial prompt**
+- ✅ You MAY read Serena memories (`read_memory`) if they help your specific task
+- ✅ You MAY use any tool (Read, Grep, Glob, Serena, etc.) immediately
+
+**⛔ WARNING: If you are a spawned agent and you continue past this point, you will waste your entire context window on workflow initialization instead of your assigned task. This is the #1 cause of swarm agent failure.**
 
 **IF you are NOT a swarm agent, ALWAYS continue below.**
 
