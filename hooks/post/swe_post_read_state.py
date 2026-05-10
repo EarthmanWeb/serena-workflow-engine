@@ -198,6 +198,20 @@ def main():
                 stream_path = get_stream_path(session_id)
                 append_event(stream_path, 'session_start', s=session_id)
 
+                # Create init sentinel — unlocks the pre-init gate for this session
+                from swe_hooks.core.stream import get_sentinel_path
+                sentinel = get_sentinel_path(session_id)
+                try:
+                    sentinel_data = {
+                        "session_id": session_id,
+                        "wm_file": wm_filename.replace('.md', ''),
+                        "validated_at": int(time.time()),
+                    }
+                    with open(sentinel, 'w') as sf:
+                        json.dump(sentinel_data, sf, separators=(',', ':'))
+                except IOError:
+                    pass
+
             success, msg = state_mgr.transition_to(bare_name)
             if success:
                 step_label = f"{icon} ON STEP: {bare_name}{ver_tag}" if bare_name == 'WF_INIT' else f"{icon} ON STEP: {bare_name}"

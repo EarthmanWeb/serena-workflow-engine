@@ -112,31 +112,6 @@ def main():
         if not prompt or not prompt.strip():
             sys.exit(0)
 
-        # Bypass check — plugin disabled for this project
-        bypass_file = os.path.join(cwd, '.serena', 'swe-bypass.json')
-        if os.path.exists(bypass_file):
-            sys.exit(0)  # Silent exit
-
-        # Handle bypass request from user
-        prompt_lower = prompt.lower().strip()
-        if any(p in prompt_lower for p in ['skip swe', 'no swe', 'disable swe', 'bypass swe']):
-            os.makedirs(os.path.join(cwd, '.serena'), exist_ok=True)
-            with open(bypass_file, 'w') as f:
-                json.dump({
-                    "bypass": True,
-                    "reason": "user_declined",
-                    "created": datetime.now().isoformat(),
-                    "project": cwd
-                }, f, indent=2)
-            output = {
-                "hookSpecificOutput": {
-                    "hookEventName": "UserPromptSubmit",
-                    "additionalContext": "SWE permanently disabled for this project. Remove .serena/swe-bypass.json to re-enable."
-                }
-            }
-            print(json.dumps(output))
-            sys.exit(0)
-
         # Check setup
         setup = load_setup_complete(cwd)
         if not setup or not setup.get('complete'):

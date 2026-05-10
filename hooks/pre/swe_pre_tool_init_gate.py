@@ -185,17 +185,11 @@ def main():
         transcript_path = input_data.get('transcript_path', '')
         tool_input = input_data.get('tool_input', {})
 
-        # Resolve project root for bypass/setup checks
+        # Resolve project root for setup checks
         try:
             project_root = get_project_root() if _STREAM_AVAILABLE else _get_project_root()
         except Exception:
             project_root = _get_project_root()
-
-        # Bypass check — plugin disabled for this project
-        bypass_file = os.path.join(project_root, '.serena', 'swe-bypass.json')
-        if os.path.exists(bypass_file):
-            print(json.dumps({}))
-            sys.exit(0)
 
         # If setup not complete, don't enforce init gate
         # This allows /swe-init and bootstrap to run freely
