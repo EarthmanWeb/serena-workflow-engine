@@ -254,7 +254,7 @@ def main():
             # read_memory: only allow init-chain memories
             if tool_name in ('mcp__plugin_swe_serena__read_memory', 'mcp__serena__read_memory'):
                 memory_name = tool_input.get('memory_name', '')
-                if memory_name in INIT_ALLOWED_MEMORIES:
+                if memory_name in INIT_ALLOWED_MEMORIES or memory_name.startswith('wf/'):
                     print(json.dumps({}))
                     sys.exit(0)
                 else:
