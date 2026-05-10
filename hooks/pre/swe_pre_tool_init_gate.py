@@ -24,7 +24,7 @@ try:
 except ImportError:
     _STREAM_AVAILABLE = False
 
-# Tools ALWAYS ALLOWED before initialization (O(1) exact match)
+# Tools ALWAYS ALLOWED (both pre-init and post-init)
 ALLOWED_TOOLS = frozenset([
     'ToolSearch',
     'WebSearch',
@@ -45,6 +45,37 @@ ALLOWED_TOOLS = frozenset([
     'mcp__serena__list_projects',
     'mcp__plugin_swe_serena__add_project',
     'mcp__serena__add_project',
+    'mcp__plugin_swe_serena__get_symbols_overview',
+    'mcp__serena__get_symbols_overview',
+    'mcp__plugin_swe_serena__find_symbol',
+    'mcp__serena__find_symbol',
+    'mcp__plugin_swe_serena__find_referencing_symbols',
+    'mcp__serena__find_referencing_symbols',
+    'mcp__plugin_swe_serena__find_file',
+    'mcp__serena__find_file',
+    'mcp__plugin_swe_serena__search_for_pattern',
+    'mcp__serena__search_for_pattern',
+])
+
+# Memory names allowed BEFORE initialization (WF_INIT workflow chain only)
+# read_memory calls with any other memory_name will be BLOCKED pre-init
+INIT_ALLOWED_MEMORIES = frozenset([
+    'wf/WF_INIT',
+    'wf/WF_START',
+    'wf/WF_CLASSIFY',
+    'wf/WF_RESEARCH',
+    'wf/WF_RESEARCH_LITE',
+    'claude/CLAUDE_OBLIGATIONS',
+])
+
+# Tools that are ONLY allowed AFTER initialization (sentinel exists)
+# These are in ALLOWED_TOOLS but get blocked pre-init to prevent task work
+PRE_INIT_BLOCKED_TOOLS = frozenset([
+    'Read',
+    'Glob',
+    'Grep',
+    'mcp__plugin_swe_serena__list_memories',
+    'mcp__serena__list_memories',
     'mcp__plugin_swe_serena__get_symbols_overview',
     'mcp__serena__get_symbols_overview',
     'mcp__plugin_swe_serena__find_symbol',
@@ -221,25 +252,91 @@ def main():
         except Exception:
             session_id = _extract_session_id(transcript_path)
 
-        # FAST PATH 1: Allowed tools bypass (O(1) frozenset lookup)
-        if tool_name in ALLOWED_TOOLS:
-            print(json.dumps({}))
-            sys.exit(0)
-
-        # Allow Write to WORKING_MEMORY files
+        # Allow Write to WORKING_MEMORY files (always, pre- and post-init)
         if is_working_memory_write(tool_name, tool_input):
             print(json.dumps({}))
             sys.exit(0)
 
-        # FAST PATH 2: Sentinel file check (~0.5ms)
+        # FAST PATH: Sentinel file check (~0.5ms) — session already initialized
+        session_initialized = False
         if session_id and _STREAM_AVAILABLE:
             sentinel = get_sentinel_path(session_id)
             if os.path.exists(sentinel):
-                # Already validated - append tool event to stream and allow
+                session_initialized = True
+                # Post-init: ALL tools pass (sentinel = WM validated this session)
                 if tool_name not in SKIP_STREAM_TOOLS:
                     stream_path = get_stream_path(session_id)
                     append_event(stream_path, 'tool', name=tool_name, s=session_id)
                 print(json.dumps({}))
+                sys.exit(0)
+
+        # ═══ PRE-INIT GATE: Block task-work tools before initialization ═══
+        # If session is NOT initialized, only allow the init workflow chain
+        if not session_initialized:
+            # ToolSearch is always allowed (needed to fetch tool schemas)
+            if tool_name == 'ToolSearch':
+                print(json.dumps({}))
+                sys.exit(0)
+
+            # read_memory: only allow init-chain memories
+            if tool_name in ('mcp__plugin_swe_serena__read_memory', 'mcp__serena__read_memory'):
+                memory_name = tool_input.get('memory_name', '')
+                if memory_name in INIT_ALLOWED_MEMORIES:
+                    print(json.dumps({}))
+                    sys.exit(0)
+                else:
+                    output = {
+                        "hookSpecificOutput": {
+                            "hookEventName": "PreToolUse",
+                            "permissionDecision": "deny",
+                            "permissionDecisionReason": f"""🛑 BLOCKED: read_memory("{memory_name}") called before WF_INIT complete.
+
+Pre-init, only these memories are allowed: {', '.join(sorted(INIT_ALLOWED_MEMORIES))}
+
+Your FIRST read_memory call MUST be: read_memory("wf/WF_INIT")
+Then follow the init chain: WF_INIT → CLAUDE_OBLIGATIONS → WF_START → WF_CLASSIFY
+
+DO NOT read task-specific memories before initialization is complete."""
+                        }
+                    }
+                    print(json.dumps(output))
+                    sys.exit(0)
+
+            # write_memory / edit_memory: allow (needed for WM creation during init)
+            if tool_name in (
+                'mcp__plugin_swe_serena__write_memory', 'mcp__serena__write_memory',
+                'mcp__plugin_swe_serena__edit_memory', 'mcp__serena__edit_memory',
+            ):
+                print(json.dumps({}))
+                sys.exit(0)
+
+            # activate_project / list_projects / add_project: allow (needed for Serena setup)
+            if tool_name in (
+                'mcp__plugin_swe_serena__activate_project', 'mcp__serena__activate_project',
+                'mcp__plugin_swe_serena__list_projects', 'mcp__serena__list_projects',
+                'mcp__plugin_swe_serena__add_project', 'mcp__serena__add_project',
+            ):
+                print(json.dumps({}))
+                sys.exit(0)
+
+            # Everything else (Read, Grep, Glob, list_memories, find_symbol, etc.) → BLOCKED pre-init
+            if tool_name in PRE_INIT_BLOCKED_TOOLS or tool_name in ALLOWED_TOOLS:
+                output = {
+                    "hookSpecificOutput": {
+                        "hookEventName": "PreToolUse",
+                        "permissionDecision": "deny",
+                        "permissionDecisionReason": f"""🛑 BLOCKED: {tool_name} called before WF_INIT complete.
+
+This tool is allowed AFTER initialization, but NOT before.
+You are using an allowed tool to do task work before completing WF_INIT.
+
+MANDATORY ACTION — Call this tool NOW:
+   → mcp__plugin_swe_serena__read_memory(memory_name="wf/WF_INIT")
+
+Then follow the init chain. Do NOT use {tool_name} for task work until Working Memory exists."""
+                    }
+                }
+                print(json.dumps(output))
                 sys.exit(0)
 
         # Check lite mode
