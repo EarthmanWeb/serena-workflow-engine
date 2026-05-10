@@ -98,6 +98,24 @@ Trigger on: `swarm`, `parallel agents`, `multi-agent`, `hive-mind`, `ruflo swarm
 
 ---
 
+## ⚠️ MANDATORY FIRST QUESTION: Do You Actually Need Ruflo?
+
+**Ruflo is a coordination layer, not an execution engine (except for `agent_execute` which is API-only, no file access).** Before spinning up Ruflo, decide if it adds value:
+
+| Task Profile | Use Ruflo? | Why |
+|-------------|-----------|-----|
+| Reasoning-only parallel tasks (no file access) | **YES** — `agent_execute` IS the execution engine | Ruflo is the only way to run these |
+| Multi-iteration (Round 1 findings → Round 2) | **YES** — `daa_knowledge_share` stores cross-round state | Real value from DAA tracking |
+| Consensus decisions | **YES** — Hive-mind has no alternative | Only Ruflo provides this |
+| Single-pass parallel tasks needing file access | **NO** — just launch Claude Code `Agent` tools directly | Ruflo agents sit "idle" in hybrid mode. They track but don't execute. It's overhead. |
+| User explicitly requests Ruflo/DAA | **YES** — respect the request | But explain trade-offs |
+
+**If Ruflo isn't needed:** Skip straight to launching Claude Code `Agent` tools in parallel (all in ONE message, with swarm bypass prompts). No `swarm_init`, no `agent_spawn`, no ceremony.
+
+**⚠️ In hybrid mode (Ruflo + Claude Code Agent), Ruflo agents show `status: "idle"` in `agent_list`.** This is expected — they're tracking-only. The Claude Code Agent tools do the actual work. Communicate this to the user BEFORE launching to avoid confusion.
+
+---
+
 ## Available Subsystems (all under Ruflo)
 
 | Subsystem   | Use Case                                       | Details In         |

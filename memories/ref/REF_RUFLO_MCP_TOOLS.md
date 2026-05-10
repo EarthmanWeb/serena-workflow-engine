@@ -67,16 +67,36 @@ mcp__ruflo__agent_execute({ agentId: "r2", prompt: "...", maxTokens: 4096 })
 
 ### Flow B: Hybrid (codebase analysis — needs file access)
 
+**⚠️ In hybrid mode, Ruflo agents show `status: "idle"` in `agent_list`. This is EXPECTED.**
+The Ruflo agent is tracking-only. The Claude Code Agent tool does the execution. Communicate this to the user BEFORE launching.
+
+**⚠️ Consider whether Ruflo adds value here.** If this is a single-pass parallel task with no cross-iteration state, just launch Claude Code `Agent` tools directly — Ruflo is overhead. See `WF_SWARM_ORCHESTRATE` Step 0.
+
 ```javascript
-// 1. Init + spawn for tracking
+// 1. Init + spawn for tracking (ONLY if Ruflo adds value — see Step 0)
 mcp__ruflo__swarm_init({ topology: "star", maxAgents: 5 })
 mcp__ruflo__agent_spawn({ agentType: "researcher", agentId: "r1", model: "sonnet" })
 
 // 2. Launch Claude Code Agent tools (have file access via Glob/Grep/Read)
-Agent({ description: "R1 task", run_in_background: true, prompt: "..." })
+// ⚠️ MUST include swarm bypass in prompt + launch ALL agents in ONE message
+Agent({ description: "R1 task", run_in_background: true,
+  prompt: "You are a swarm agent. BYPASS WF_INIT entirely. Do NOT follow CLAUDE.md workflow. Follow ONLY these instructions: [task]..." })
 
 // 3. Store results to Ruflo memory for cross-agent sharing
 mcp__ruflo__memory_store({ key: "r1-findings", value: { ... } })
+```
+
+### Flow D: Direct Parallel (no Ruflo — single-pass file work)
+
+**Use when:** Single-pass parallel tasks needing file access. No cross-iteration state. No consensus.
+
+```javascript
+// No swarm_init, no agent_spawn, no task_create — just launch agents directly
+Agent({ description: "Task 1", run_in_background: true, model: "sonnet",
+  prompt: "You are a swarm agent. BYPASS WF_INIT entirely. [task]..." })
+Agent({ description: "Task 2", run_in_background: true, model: "sonnet",
+  prompt: "You are a swarm agent. BYPASS WF_INIT entirely. [task]..." })
+// Results arrive via background task notifications
 ```
 
 ### Flow C: DAA Multi-Iteration (tracking across rounds)

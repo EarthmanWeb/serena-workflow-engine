@@ -60,6 +60,45 @@ mcp__plugin_swe_serena__read_memory("ref/REF_SWARM_PATTERNS")
 
 ---
 
+## ⚠️ Step 0: Do You Actually Need Ruflo? (MANDATORY Decision)
+
+**Ruflo adds coordination overhead (~10-15 MCP calls). Before using it, answer this:**
+
+### When Ruflo Adds REAL Value
+
+| Scenario | Why Ruflo Matters |
+|----------|-------------------|
+| **Ruflo-native execution** (`agent_execute`) | Ruflo IS the execution engine — calls Anthropic API directly. No alternative. |
+| **Multi-iteration DAA** (Round 1 → Round 2) | `daa_knowledge_share` stores findings across rounds. Real cross-iteration state. |
+| **Cost tracking per agent** | `agent_spawn` tracks cost attribution per agent via Ruflo's cost namespace. |
+| **Cross-agent state sharing** | `memory_store`/`memory_retrieve` provides shared state between agents. |
+| **Consensus decisions** | Hive-mind consensus mechanism has no equivalent in plain Agent tools. |
+
+### When Ruflo Is Just Overhead
+
+| Scenario | Why Skip Ruflo |
+|----------|---------------|
+| **Single-pass parallel file work** | Claude Code `Agent` tools already run in parallel with background notifications. Ruflo agents will sit "idle" in hybrid mode — they're tracking-only, not executing. |
+| **All agents need file access** | `agent_execute` can't read files. You'll use Claude Code `Agent` tools anyway. Ruflo becomes bookkeeping with no execution value. |
+| **No cross-iteration state needed** | If Round 1 results don't shape Round 2, DAA adds ~10 MCP calls for zero benefit. |
+| **Simple fan-out/fan-in** | Just launch N Claude Code `Agent` tools in one message. No coordination layer needed. |
+
+### Decision
+
+| Answer | Action |
+|--------|--------|
+| Task needs `agent_execute` (no file access, reasoning only) | **Use Ruflo** — it's the execution engine |
+| Task is multi-iteration (DAA) | **Use Ruflo** — `knowledge_share` provides real value |
+| Task needs consensus | **Use Ruflo Hive-Mind** |
+| Task is single-pass parallel with file access | **Skip Ruflo** — launch Claude Code `Agent` tools directly |
+| User explicitly requested Ruflo/DAA/swarm | **Use Ruflo** — respect the request, but explain trade-offs |
+
+**If you choose to skip Ruflo:** Go directly to launching Claude Code `Agent` tools in parallel with swarm bypass prompts. No `swarm_init`, no `agent_spawn`, no `task_create`.
+
+**If you choose Ruflo:** Continue to Step 1 below.
+
+---
+
 ## Step 1: Select Subsystem & Topology
 
 | Subsystem | When | Prefix | Methodology |
