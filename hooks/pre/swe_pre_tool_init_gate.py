@@ -24,37 +24,24 @@ try:
 except ImportError:
     _STREAM_AVAILABLE = False
 
-# Tools ALWAYS ALLOWED (both pre-init and post-init)
-ALLOWED_TOOLS = frozenset([
-    'ToolSearch',
-    'WebSearch',
-    'Read',
-    'mcp__plugin_swe_serena__read_memory',
-    'mcp__serena__read_memory',
-    'mcp__plugin_swe_serena__write_memory',
-    'mcp__serena__write_memory',
-    'mcp__plugin_swe_serena__list_memories',
-    'mcp__serena__list_memories',
-    'mcp__plugin_swe_serena__edit_memory',
-    'mcp__serena__edit_memory',
-    'mcp__plugin_swe_serena__delete_memory',
-    'mcp__serena__delete_memory',
-    'mcp__plugin_swe_serena__activate_project',
-    'mcp__serena__activate_project',
-    'mcp__plugin_swe_serena__list_projects',
-    'mcp__serena__list_projects',
-    'mcp__plugin_swe_serena__add_project',
-    'mcp__serena__add_project',
-    'mcp__plugin_swe_serena__get_symbols_overview',
-    'mcp__serena__get_symbols_overview',
-    'mcp__plugin_swe_serena__find_symbol',
-    'mcp__serena__find_symbol',
-    'mcp__plugin_swe_serena__find_referencing_symbols',
-    'mcp__serena__find_referencing_symbols',
-    'mcp__plugin_swe_serena__find_file',
-    'mcp__serena__find_file',
-    'mcp__plugin_swe_serena__search_for_pattern',
-    'mcp__serena__search_for_pattern',
+# NOTE: Post-init, ALL tools are allowed (sentinel fast-path passes everything).
+# Pre-init, only specific tools are allowed — see the PRE-INIT GATE section in main().
+# This frozenset is NO LONGER used for gating. Kept for documentation only.
+_FORMERLY_ALLOWED_TOOLS = frozenset([
+    'ToolSearch', 'WebSearch', 'Read',
+    'mcp__plugin_swe_serena__read_memory', 'mcp__serena__read_memory',
+    'mcp__plugin_swe_serena__write_memory', 'mcp__serena__write_memory',
+    'mcp__plugin_swe_serena__list_memories', 'mcp__serena__list_memories',
+    'mcp__plugin_swe_serena__edit_memory', 'mcp__serena__edit_memory',
+    'mcp__plugin_swe_serena__delete_memory', 'mcp__serena__delete_memory',
+    'mcp__plugin_swe_serena__activate_project', 'mcp__serena__activate_project',
+    'mcp__plugin_swe_serena__list_projects', 'mcp__serena__list_projects',
+    'mcp__plugin_swe_serena__add_project', 'mcp__serena__add_project',
+    'mcp__plugin_swe_serena__get_symbols_overview', 'mcp__serena__get_symbols_overview',
+    'mcp__plugin_swe_serena__find_symbol', 'mcp__serena__find_symbol',
+    'mcp__plugin_swe_serena__find_referencing_symbols', 'mcp__serena__find_referencing_symbols',
+    'mcp__plugin_swe_serena__find_file', 'mcp__serena__find_file',
+    'mcp__plugin_swe_serena__search_for_pattern', 'mcp__serena__search_for_pattern',
 ])
 
 # Memory names allowed BEFORE initialization (WF_INIT workflow chain only)
@@ -66,26 +53,6 @@ INIT_ALLOWED_MEMORIES = frozenset([
     'wf/WF_RESEARCH',
     'wf/WF_RESEARCH_LITE',
     'claude/CLAUDE_OBLIGATIONS',
-])
-
-# Tools that are ONLY allowed AFTER initialization (sentinel exists)
-# These are in ALLOWED_TOOLS but get blocked pre-init to prevent task work
-PRE_INIT_BLOCKED_TOOLS = frozenset([
-    'Read',
-    'Glob',
-    'Grep',
-    'mcp__plugin_swe_serena__list_memories',
-    'mcp__serena__list_memories',
-    'mcp__plugin_swe_serena__get_symbols_overview',
-    'mcp__serena__get_symbols_overview',
-    'mcp__plugin_swe_serena__find_symbol',
-    'mcp__serena__find_symbol',
-    'mcp__plugin_swe_serena__find_referencing_symbols',
-    'mcp__serena__find_referencing_symbols',
-    'mcp__plugin_swe_serena__find_file',
-    'mcp__serena__find_file',
-    'mcp__plugin_swe_serena__search_for_pattern',
-    'mcp__serena__search_for_pattern',
 ])
 
 # Tools to skip in stream logging (too noisy, low value)
@@ -270,6 +237,12 @@ def main():
                 print(json.dumps({}))
                 sys.exit(0)
 
+        # Fallback: if stream unavailable, check WM directly for init status
+        if not session_initialized and not _STREAM_AVAILABLE:
+            is_valid, _ = check_working_memory_exists(session_id)
+            if is_valid:
+                session_initialized = True
+
         # ═══ PRE-INIT GATE: Block task-work tools before initialization ═══
         # If session is NOT initialized, only allow the init workflow chain
         if not session_initialized:
@@ -319,25 +292,26 @@ DO NOT read task-specific memories before initialization is complete."""
                 print(json.dumps({}))
                 sys.exit(0)
 
-            # Everything else (Read, Grep, Glob, list_memories, find_symbol, etc.) → BLOCKED pre-init
-            if tool_name in PRE_INIT_BLOCKED_TOOLS or tool_name in ALLOWED_TOOLS:
-                output = {
-                    "hookSpecificOutput": {
-                        "hookEventName": "PreToolUse",
-                        "permissionDecision": "deny",
-                        "permissionDecisionReason": f"""🛑 BLOCKED: {tool_name} called before WF_INIT complete.
+            # BLANKET DENY: Everything not explicitly allowed above is blocked pre-init
+            # This catches Bash, Grep, Glob, Edit, Write (non-WM), list_memories,
+            # find_symbol, get_symbols_overview, and ANY other tool
+            output = {
+                "hookSpecificOutput": {
+                    "hookEventName": "PreToolUse",
+                    "permissionDecision": "deny",
+                    "permissionDecisionReason": f"""🛑 BLOCKED: {tool_name} called before WF_INIT complete.
 
-This tool is allowed AFTER initialization, but NOT before.
-You are using an allowed tool to do task work before completing WF_INIT.
+This tool is NOT allowed before initialization.
+Only read_memory with init-chain memories (wf/WF_INIT, wf/WF_START, etc.) is permitted.
 
 MANDATORY ACTION — Call this tool NOW:
    → mcp__plugin_swe_serena__read_memory(memory_name="wf/WF_INIT")
 
-Then follow the init chain. Do NOT use {tool_name} for task work until Working Memory exists."""
-                    }
+Then follow the init chain. Do NOT use {tool_name} until Working Memory exists."""
                 }
-                print(json.dumps(output))
-                sys.exit(0)
+            }
+            print(json.dumps(output))
+            sys.exit(0)
 
         # Check lite mode
         if check_lite_mode(session_id):
@@ -347,12 +321,19 @@ Then follow the init chain. Do NOT use {tool_name} for task work until Working M
         # Full validation (only runs once per session until sentinel created)
         is_valid, diagnostic = check_working_memory_exists(session_id)
         if is_valid:
-            # Create sentinel for future fast-path
+            # Create sentinel with WM info for future fast-path
             if session_id and _STREAM_AVAILABLE:
                 sentinel = get_sentinel_path(session_id)
                 try:
                     os.makedirs(os.path.dirname(sentinel), exist_ok=True)
-                    open(sentinel, 'w').close()
+                    # Sentinel stores the validated WM filename — source of truth
+                    sentinel_data = {
+                        "session_id": session_id,
+                        "wm_file": f"WM_{session_id}",
+                        "validated_at": int(__import__('time').time()),
+                    }
+                    with open(sentinel, 'w') as f:
+                        json.dump(sentinel_data, f, separators=(',', ':'))
                 except IOError:
                     pass
 
