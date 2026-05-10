@@ -47,8 +47,9 @@ Common rationalizations that are **NEVER VALID**:
 - ❌ "CLAUDE_OBLIGATIONS doesn't apply here" - **It ALWAYS applies. Read it EVERY time.**
 - ❌ "WM already exists" - **Verify and UPDATE it. Don't assume.**
 - ❌ "This task has nothing to do with the codebase" - **ALL tasks run through the workflow. No exceptions for GitHub issues, external tools, or "unrelated" work.**
+- ❌ "The hook didn't block me, so it's fine" - **The hook allowlist (`ToolSearch`, `Read`, `Glob`, `Grep`, `list_memories`) exists so WF_INIT can run — not so you can use those tools to do task work before init. The hook cannot tell the difference. YOU must.**
 
-**If you find yourself making a tool call that searches code, edits files, or does ANYTHING implementation-related before completing initialization: STOP. You are violating the workflow.**
+**If you find yourself making a tool call that searches code, edits files, or does ANYTHING implementation-related before completing initialization: STOP. You are violating the workflow. This includes using allowed tools like `Read`, `Grep`, `Glob`, or `list_memories` for task work — the hook won't block you, but you are still in violation.**
 
 ---
 
