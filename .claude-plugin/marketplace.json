@@ -1,6 +1,6 @@
 {
   "name": "EarthmanWeb",
-  "version": "1.1.22",
+  "version": "1.1.23",
   "description": "Earthman Media custom Claude plugins",
   "owner": {
     "name": "EarthmanWeb",
@@ -10,7 +10,7 @@
   "plugins": [
     {
       "name": "swe",
-      "version": "1.1.22",
+      "version": "1.1.23",
       "description": "14-state workflow engine with Serena memory persistence, hook-driven event architecture, and optional swarm orchestration",
       "source": "./",
       "homepage": "https://github.com/EarthmanWeb/serena-workflow-engine",

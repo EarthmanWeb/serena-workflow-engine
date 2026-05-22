@@ -95,6 +95,9 @@ languages:
 def ensure_memory_paths_conf(project_root, extra_paths=None):
     """Create or update .serena/memory-paths.conf with SWE memory paths.
 
+    SWE required paths are always placed at the top of the file (after the
+    header comments), before any user-defined paths.
+
     Args:
         project_root: Project root directory
         extra_paths: Optional list of additional paths (e.g. ['./docs:ro'])
@@ -104,14 +107,32 @@ def ensure_memory_paths_conf(project_root, extra_paths=None):
 
     if os.path.exists(conf_path):
         with open(conf_path) as f:
-            content = f.read()
-        missing = [line for line in required_lines if line not in content]
+            lines = f.read().splitlines()
+
+        # Separate comment lines from path lines
+        comment_lines = []
+        path_lines = []
+        for line in lines:
+            if line.startswith('#') or line.strip() == '':
+                comment_lines.append(line)
+            else:
+                path_lines.append(line)
+
+        missing = [p for p in required_lines if p not in path_lines]
         if extra_paths:
-            missing.extend(p for p in extra_paths if p not in content)
+            missing.extend(p for p in extra_paths if p not in path_lines)
         if not missing:
             return False  # All paths already present
-        with open(conf_path, 'a') as f:
-            for line in missing:
+
+        # Insert missing required paths at top, extra paths at bottom
+        missing_required = [p for p in missing if p in required_lines]
+        missing_extra = [p for p in missing if p not in required_lines]
+        new_path_lines = missing_required + path_lines + missing_extra
+
+        with open(conf_path, 'w') as f:
+            for line in comment_lines:
+                f.write(f'{line}\n')
+            for line in new_path_lines:
                 f.write(f'{line}\n')
         return True
 

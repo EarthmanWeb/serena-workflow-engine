@@ -317,72 +317,14 @@ This creates a symlink from `~/.vscode/extensions/serena-log-viewer` to the exte
 
 ### Task 9: Auto-Memory Symlink
 
-Replace Claude Code's auto-memory directory with a symlink to `.serena/memory/` so auto-memory writes land in the project repo.
+Run `/swe-sym-link` to set up the auto-memory symlink. This command handles:
 
-```bash
-PROJECT_PATH=$(pwd)
-ENCODED_PATH=$(echo "$PROJECT_PATH" | sed 's|/|-|g')
-AUTO_MEMORY_DIR="$HOME/.claude/projects/$ENCODED_PATH/memory"
-SERENA_MEMORY_DIR="$PROJECT_PATH/.serena/memory"
+- Migrating existing auto-memory files to `.serena/memory/`
+- Creating the symlink from `~/.claude/projects/<encoded>/memory` to `.serena/memory/`
+- Updating `memory-paths.conf`
+- Adding CLAUDE.md directives
 
-echo "Auto-memory path: $AUTO_MEMORY_DIR"
-echo "Symlink target: $SERENA_MEMORY_DIR"
-
-# Ensure target exists
-mkdir -p "$SERENA_MEMORY_DIR"
-
-# Migrate existing auto-memory files before creating symlink
-if [ -d "$AUTO_MEMORY_DIR" ] && [ ! -L "$AUTO_MEMORY_DIR" ]; then
-    echo "Migrating existing auto-memory files..."
-    for f in "$AUTO_MEMORY_DIR"/*; do
-        [ -f "$f" ] || continue
-        basename=$(basename "$f")
-        if [ ! -f "$SERENA_MEMORY_DIR/$basename" ]; then
-            cp "$f" "$SERENA_MEMORY_DIR/$basename"
-            echo "  Migrated: $basename"
-        else
-            echo "  Skipped (already exists in target): $basename"
-        fi
-    done
-    rm -rf "$AUTO_MEMORY_DIR"
-elif [ -L "$AUTO_MEMORY_DIR" ]; then
-    CURRENT_TARGET=$(readlink "$AUTO_MEMORY_DIR")
-    if [ "$CURRENT_TARGET" = "$SERENA_MEMORY_DIR" ]; then
-        echo "✅ Symlink already correct"
-    else
-        echo "Updating symlink from $CURRENT_TARGET"
-        rm "$AUTO_MEMORY_DIR"
-    fi
-fi
-
-# Create symlink
-if [ ! -L "$AUTO_MEMORY_DIR" ]; then
-    mkdir -p "$(dirname "$AUTO_MEMORY_DIR")"
-    ln -s "$SERENA_MEMORY_DIR" "$AUTO_MEMORY_DIR"
-    echo "✅ Created symlink: $AUTO_MEMORY_DIR -> $SERENA_MEMORY_DIR"
-fi
-
-# Verify write-through
-echo "test" > "$AUTO_MEMORY_DIR/.symlink-test"
-if [ -f "$SERENA_MEMORY_DIR/.symlink-test" ]; then
-    echo "✅ Write-through verified"
-    rm "$SERENA_MEMORY_DIR/.symlink-test"
-else
-    echo "❌ Write-through failed"
-fi
-```
-
-Also add CLAUDE.md directive if not already present. Check for `## Auto-Memory Symlink` heading — if missing, append:
-
-```markdown
-## Auto-Memory Symlink
-
-This project uses a symlink to redirect Claude Code's auto-memory into `.serena/memory/`.
-
-- Use `write_memory()` for all memory operations (not the Write tool)
-- Update MEMORY.md index when adding new memories
-- Never write directly to `~/.claude/projects/.../memory/`
-```
+See [commands/swe-sym-link.md](../commands/swe-sym-link.md) for full steps.
 
 ### Task 10: Finalize Setup
 

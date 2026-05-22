@@ -37,19 +37,31 @@ mkdir -p "$SERENA_MEMORY_DIR"
 
 ```bash
 if [ -d "$AUTO_MEMORY_DIR" ] && [ ! -L "$AUTO_MEMORY_DIR" ]; then
-    echo "Found existing auto-memory directory — migrating all files..."
-    for f in "$AUTO_MEMORY_DIR"/*; do
-        [ -f "$f" ] || continue
-        basename=$(basename "$f")
-        if [ ! -f "$SERENA_MEMORY_DIR/$basename" ]; then
-            cp "$f" "$SERENA_MEMORY_DIR/$basename"
-            echo "  Migrated: $basename"
-        else
-            echo "  Skipped (already exists in target): $basename"
-        fi
-    done
-    rm -rf "$AUTO_MEMORY_DIR"
-    echo "Removed original auto-memory directory"
+    # Check for actual files (not just an empty directory)
+    FILE_COUNT=$(find "$AUTO_MEMORY_DIR" -maxdepth 1 -type f | wc -l | tr -d ' ')
+    if [ "$FILE_COUNT" -gt 0 ]; then
+        echo "Found $FILE_COUNT file(s) in auto-memory directory — migrating..."
+        for f in "$AUTO_MEMORY_DIR"/*; do
+            [ -f "$f" ] || continue
+            basename=$(basename "$f")
+            if [ ! -f "$SERENA_MEMORY_DIR/$basename" ]; then
+                cp "$f" "$SERENA_MEMORY_DIR/$basename"
+                echo "  Migrated: $basename"
+            else
+                echo "  Skipped (already exists in target): $basename"
+            fi
+        done
+    else
+        echo "Auto-memory directory exists but contains no files"
+    fi
+    # Verify no files remain before removing
+    REMAINING=$(find "$AUTO_MEMORY_DIR" -maxdepth 1 -type f | wc -l | tr -d ' ')
+    if [ "$REMAINING" -eq 0 ]; then
+        rm -rf "$AUTO_MEMORY_DIR"
+        echo "Removed empty auto-memory directory"
+    else
+        echo "Warning: $REMAINING file(s) still in auto-memory dir — not removing"
+    fi
 elif [ -L "$AUTO_MEMORY_DIR" ]; then
     CURRENT_TARGET=$(readlink "$AUTO_MEMORY_DIR")
     if [ "$CURRENT_TARGET" = "$SERENA_MEMORY_DIR" ]; then
