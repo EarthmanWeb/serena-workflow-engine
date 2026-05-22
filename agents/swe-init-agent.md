@@ -317,14 +317,14 @@ This creates a symlink from `~/.vscode/extensions/serena-log-viewer` to the exte
 
 ### Task 9: Auto-Memory Symlink
 
-Run `/swe-sym-link` to set up the auto-memory symlink. This command handles:
+Run `/swe-symlink-memory` to set up the auto-memory symlink. This command handles:
 
 - Migrating existing auto-memory files to `.serena/memory/`
 - Creating the symlink from `~/.claude/projects/<encoded>/memory` to `.serena/memory/`
 - Updating `memory-paths.conf`
 - Adding CLAUDE.md directives
 
-See [commands/swe-sym-link.md](../commands/swe-sym-link.md) for full steps.
+See [commands/swe-symlink-memory.md](../commands/swe-symlink-memory.md) for full steps.
 
 ### Task 10: Finalize Setup
 

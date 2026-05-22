@@ -1,9 +1,9 @@
 ---
-name: swe-sym-link
+name: swe-symlink-memory
 description: Set up auto-memory symlink to redirect Claude Code memory into project repo
 ---
 
-# /swe-sym-link
+# /swe-symlink-memory
 
 Replace Claude Code's auto-memory directory with a symlink pointing to the project's `.serena/memory/` directory. This unifies auto-memory with Serena's memory system and makes memory files version-controllable.
 
