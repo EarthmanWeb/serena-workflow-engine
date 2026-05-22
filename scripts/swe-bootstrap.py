@@ -100,7 +100,7 @@ def ensure_memory_paths_conf(project_root, extra_paths=None):
         extra_paths: Optional list of additional paths (e.g. ['./docs:ro'])
     """
     conf_path = os.path.join(project_root, '.serena', 'memory-paths.conf')
-    required_lines = ['./.serena/swe', './.serena/memories']
+    required_lines = ['./.serena/memory', './.serena/memories']
 
     if os.path.exists(conf_path):
         with open(conf_path) as f:
@@ -294,6 +294,7 @@ def main():
     # Create directories
     dirs = [
         os.path.join(project_root, '.serena'),
+                os.path.join(project_root, '.serena', 'memory'),
         os.path.join(project_root, '.serena', 'swe'),
         os.path.join(project_root, '.serena', 'swe', 'feature'),
         os.path.join(project_root, '.serena', 'memories'),

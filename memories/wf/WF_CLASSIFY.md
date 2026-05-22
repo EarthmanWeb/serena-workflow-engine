@@ -182,15 +182,28 @@ mcp__plugin_swe_serena__read_memory("_INDEX")  # Full navigation hub
 - Multi-layer design changes
   → **WF_ARCH_REVIEW** (swarm assessment happens there)
 
-#### Large Tasks (Potential Swarm)
+#### Large Tasks — Parallel Agents (File-Access Work)
 
-When ANY of these apply, note `swarm_candidate: true` in WM:
+When the task involves file reads/edits at scale, use Claude Code's built-in `Agent` tool — NOT Ruflo:
 
 - **Scale**: 6+ files affected OR 3+ architectural layers
-- **Parallel Work**: Independent subtasks that can run concurrently
-- **Research-Heavy**: Requires analyzing multiple areas simultaneously
-- **Complexity**: Multi-domain coordination needed
-- **Keywords**: "swarm", "parallel agents", "multi-agent", "hive-mind", "ruflo", "DAA"
+- **Parallel Work**: Independent subtasks that can run concurrently (e.g., update multiple modules, research multiple areas)
+- **All agents need file access**: grep, read, edit, glob, Serena tools
+
+Note `parallel_agents: true` in WM. These tasks use Claude Code `Agent` tool with `run_in_background: true` and optionally `isolation: "worktree"` for edit conflicts. No Ruflo ceremony needed.
+
+→ **WF_ARCH_REVIEW** (parallel agent plan defined there)
+
+#### Large Tasks — Swarm (Cognitive-Only / Consensus)
+
+When the task involves reasoning, planning, or consensus that does NOT need file access:
+
+- **Reasoning-only**: Spec writing, framework comparison, architecture evaluation
+- **Multi-iteration**: Round 1 findings shape Round 2 prompts (DAA tracking)
+- **Consensus**: Architecture decisions requiring agreement (Hive-Mind)
+- **Keywords**: "swarm", "hive-mind", "ruflo", "DAA", "consensus"
+
+Note `swarm_candidate: true` in WM.
 
 **⚠️ MANDATORY: Load FEATURE_SWARM:**
 

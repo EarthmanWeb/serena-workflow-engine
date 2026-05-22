@@ -36,7 +36,7 @@ Task({
 
 ## TASKS
 
-Execute ALL tasks (1-9) in order, then run verifications.
+Execute ALL tasks (1-10) in order, then run verifications.
 
 ### Task 1: Detect Environment and Resolve Plugin Root
 
@@ -315,7 +315,76 @@ fi
 
 This creates a symlink from `~/.vscode/extensions/serena-log-viewer` to the extension source in the plugin directory. The extension tails `~/.serena/logs/<date>/mcp_*.txt` and displays them in the VSCode Output panel under "SWE: Serena Logs".
 
-### Task 9: Finalize Setup
+### Task 9: Auto-Memory Symlink
+
+Replace Claude Code's auto-memory directory with a symlink to `.serena/memory/` so auto-memory writes land in the project repo.
+
+```bash
+PROJECT_PATH=$(pwd)
+ENCODED_PATH=$(echo "$PROJECT_PATH" | sed 's|/|-|g')
+AUTO_MEMORY_DIR="$HOME/.claude/projects/$ENCODED_PATH/memory"
+SERENA_MEMORY_DIR="$PROJECT_PATH/.serena/memory"
+
+echo "Auto-memory path: $AUTO_MEMORY_DIR"
+echo "Symlink target: $SERENA_MEMORY_DIR"
+
+# Ensure target exists
+mkdir -p "$SERENA_MEMORY_DIR"
+
+# Migrate existing auto-memory files before creating symlink
+if [ -d "$AUTO_MEMORY_DIR" ] && [ ! -L "$AUTO_MEMORY_DIR" ]; then
+    echo "Migrating existing auto-memory files..."
+    for f in "$AUTO_MEMORY_DIR"/*; do
+        [ -f "$f" ] || continue
+        basename=$(basename "$f")
+        if [ ! -f "$SERENA_MEMORY_DIR/$basename" ]; then
+            cp "$f" "$SERENA_MEMORY_DIR/$basename"
+            echo "  Migrated: $basename"
+        else
+            echo "  Skipped (already exists in target): $basename"
+        fi
+    done
+    rm -rf "$AUTO_MEMORY_DIR"
+elif [ -L "$AUTO_MEMORY_DIR" ]; then
+    CURRENT_TARGET=$(readlink "$AUTO_MEMORY_DIR")
+    if [ "$CURRENT_TARGET" = "$SERENA_MEMORY_DIR" ]; then
+        echo "✅ Symlink already correct"
+    else
+        echo "Updating symlink from $CURRENT_TARGET"
+        rm "$AUTO_MEMORY_DIR"
+    fi
+fi
+
+# Create symlink
+if [ ! -L "$AUTO_MEMORY_DIR" ]; then
+    mkdir -p "$(dirname "$AUTO_MEMORY_DIR")"
+    ln -s "$SERENA_MEMORY_DIR" "$AUTO_MEMORY_DIR"
+    echo "✅ Created symlink: $AUTO_MEMORY_DIR -> $SERENA_MEMORY_DIR"
+fi
+
+# Verify write-through
+echo "test" > "$AUTO_MEMORY_DIR/.symlink-test"
+if [ -f "$SERENA_MEMORY_DIR/.symlink-test" ]; then
+    echo "✅ Write-through verified"
+    rm "$SERENA_MEMORY_DIR/.symlink-test"
+else
+    echo "❌ Write-through failed"
+fi
+```
+
+Also add CLAUDE.md directive if not already present. Check for `## Auto-Memory Symlink` heading — if missing, append:
+
+```markdown
+## Auto-Memory Symlink
+
+This project uses a symlink to redirect Claude Code's auto-memory into `.serena/memory/`.
+
+- Use `write_memory()` for all memory operations (not the Write tool)
+- Update MEMORY.md index when adding new memories
+- Never write directly to `~/.claude/projects/.../memory/`
+```
+
+### Task 10: Finalize Setup
 
 Mark setup as complete. Only run after all previous tasks pass.
 
@@ -336,7 +405,7 @@ echo "✅ Setup complete (version $PLUGIN_VERSION)"
 
 ## VERIFICATION
 
-After all tasks, verify these 6 conditions:
+After all tasks, verify these 7 conditions:
 
 1. **MCP Servers**: Serena and swe-wm respond
 2. **SWE Plugin Enabled**: Plugin is active
@@ -358,6 +427,16 @@ After all tasks, verify these 6 conditions:
    ```bash
    [ -L "$HOME/.vscode/extensions/serena-log-viewer" ] || [ -d "$HOME/.vscode/extensions/serena-log-viewer" ] && echo "✅ Log Viewer installed" || echo "⚠️ Log Viewer not installed"
    ```
+7. **Auto-Memory Symlink**: Symlink redirects to `.serena/memory/`
+   ```bash
+   ENCODED_PATH=$(echo "$(pwd)" | sed 's|/|-|g')
+   AUTO_MEMORY_DIR="$HOME/.claude/projects/$ENCODED_PATH/memory"
+   if [ -L "$AUTO_MEMORY_DIR" ] && [ "$(readlink "$AUTO_MEMORY_DIR")" = "$(pwd)/.serena/memory" ]; then
+     echo "✅ Auto-memory symlink correct"
+   else
+     echo "⚠️ Auto-memory symlink not configured"
+   fi
+   ```
 
 ## COMPLETION
 
@@ -370,6 +449,7 @@ Output summary after all verifications pass:
 - Serena Onboarding: Complete
 - SWE Plugin: Enabled (hooks load from plugin folder)
 - Template Memories: Installed to .serena/swe/
+- Auto-Memory Symlink: Configured
 - Log Viewer: VSCode extension installed
 
 **Next steps:**
