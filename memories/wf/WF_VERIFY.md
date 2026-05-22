@@ -18,18 +18,43 @@ Check for violations:
 - [ ] Created files without permission?
 - [ ] Guessed paths without Serena?
 
-## 2. Architecture Check
+## 2. Architecture & Compliance Check
 
 ```
 mcp__plugin_swe_serena__read_memory("arch/ARCH_INDEX")
 mcp__plugin_swe_serena__read_memory("feature/FEATURE_DEV_STANDARDS")
 ```
 
-Verify:
+### 2a. Generic Layer Verification
 
 - [ ] Components follow documented layer patterns?
 - [ ] Functions follow coding standards?
 - [ ] Data flow follows architecture documentation?
+
+### 2b. Project Compliance Checklist Verification
+
+**Read the `## Compliance Checklist` from WM** (written at WF_ARCH_REVIEW Step 2c).
+
+**For EACH item in the checklist:**
+
+- [ ] Verify it was satisfied in the implementation
+- [ ] If violated, note what needs fixing
+
+**If no compliance checklist exists in WM** (e.g., task skipped WF_ARCH_REVIEW): use the generic checks in 2a only.
+
+### 2c. Integration Completeness Check
+
+**For any NEW files or components created, verify they are wired in:**
+
+- [ ] New scripts/styles enqueued in the asset loader?
+- [ ] New handlers/modules registered in the registration system?
+- [ ] New templates/blocks discoverable by the template engine?
+- [ ] New PHP classes instantiated or autoloaded?
+- [ ] New routes/endpoints registered with the framework?
+
+**Check FEATURE_[KEY] for the feature's specific integration points.** Not all of the above apply to every project — use the ones relevant to your feature.
+
+**Integration completeness failures are silent** — code works in isolation but is never loaded. This is the most common post-implementation defect.
 
 ## 3. Test Coverage Check
 

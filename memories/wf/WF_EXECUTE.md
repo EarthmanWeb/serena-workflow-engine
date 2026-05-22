@@ -170,6 +170,21 @@ TaskOutput({ task_id: '...', block: true });
 - Tests are required for functional code
 - Integration tests are required for components that interact with external systems
 
+### New File Creation
+
+**If creating new files, you MUST:**
+
+1. **Check naming conventions** from the relevant `DEV_*` memory (e.g., `DEV_PHP` for class files, `DEV_JAVASCRIPT` for modules, `DEV_BLADEONE` for templates)
+2. **Include required boilerplate** from `DEV_*` (file headers, direct-access guards, variable defaults blocks)
+3. **Register/wire the new file** per `FEATURE_[KEY]` or `DOM_*` patterns (enqueue scripts, register handlers, add to discovery paths)
+4. **Verify the compliance checklist in WM** (written at WF_ARCH_REVIEW Step 2c) — each new file should satisfy its relevant checklist items
+
+**Forgetting registration is the #1 cause of "code is correct but doesn't work" failures.**
+
+### Compliance Checklist Reference
+
+**If WM contains a `## Compliance Checklist` (from WF_ARCH_REVIEW Step 2c), consult it before each file edit.** The checklist contains project-specific rules extracted from DEV_*, DOM_*, and SYS_* memories. Verify each item as you go — don't defer to WF_VERIFY.
+
 ## MANDATORY NEXT STEP
 
 **YOU ARE NOT FINISHED.** After each significant action:

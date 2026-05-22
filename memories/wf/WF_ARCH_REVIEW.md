@@ -51,26 +51,78 @@ mcp__plugin_swe_serena__read_memory("arch/ARCH_INDEX")          # Architecture o
 ```
 mcp__plugin_swe_serena__read_memory("sys/SYS_[SYSTEM]")     # System documentation (feature-specific)
 mcp__plugin_swe_serena__read_memory("ref/REF_[TOPIC]")      # Reference patterns (codebase-shared)
-mcp__plugin_swe_serena__read_memory("feature/FEATURE_DEV_STANDARDS") # Coding standards (codebase-shared)
 mcp__plugin_swe_serena__read_memory("dom/DOM_[DOMAIN]")     # Domain-specific context (feature-specific)
 ```
+
+### 2b. Load Development Standards for Affected Languages/Layers
+
+**Read `FEATURE_DEV_STANDARDS` and follow links to the specific `DEV_*` memories for languages/layers this task touches.**
+
+```
+mcp__plugin_swe_serena__read_memory("feature/FEATURE_DEV_STANDARDS")  # Index of all DEV_* standards
+```
+
+**Then for EACH language/layer involved in the task, read the relevant standard:**
+
+| Task involves...       | Read                |
+| ---------------------- | ------------------- |
+| PHP classes/functions  | `dev/DEV_PHP`       |
+| JavaScript/jQuery      | `dev/DEV_JAVASCRIPT` |
+| SCSS/CSS               | `dev/DEV_SCSS`      |
+| Blade/templates        | `dev/DEV_BLADEONE`  |
+| Tests                  | `dev/DEV_TESTS`     |
+| Cross-language patterns| `dev/DEV_PATTERNS`  |
+
+**If a `DEV_*` memory doesn't exist yet for the language, skip it — but note the gap.**
+
+### 2c. Derive Project Compliance Checklist
+
+**From the DEV_*, DOM_*, SYS_*, and FEATURE_[KEY] memories you just loaded, extract the concrete rules that apply to THIS task.** Write them as a checklist in WM under `## Compliance Checklist`.
+
+**How to derive:**
+
+1. Scan each loaded DEV_* memory for rules relevant to the files you'll touch (naming conventions, boilerplate requirements, security patterns, formatting rules)
+2. Scan each loaded DOM_* memory for registration contracts, integration points, required interfaces
+3. Scan FEATURE_[KEY] for testing commands, related memory references, common file patterns
+4. If creating new files: extract naming patterns, required headers, registration steps
+
+**Example output (written to WM):**
+
+```markdown
+## Compliance Checklist
+
+- [ ] PHP file header with @package and @since (DEV_PHP)
+- [ ] Handler implements getFieldHTML + initField (DOM_BUILDER_FIELDS)
+- [ ] Blade template has variable defaults block at top (DEV_BLADEONE)
+- [ ] filemtime() for asset versioning, not hardcoded (DEV_PHP)
+- [ ] Handler registered via registerComponentHandler (DOM_BUILDER_FIELDS)
+- [ ] New JS/CSS enqueued in builder-assets.php (FEATURE_builder)
+- [ ] Nonce verification in any AJAX handler (DEV_PHP)
+```
+
+**This checklist will be verified at WF_VERIFY. Do not skip this step.**
+
+⛔ **WRITING CODE WITHOUT A PROJECT COMPLIANCE CHECKLIST = working without guardrails.**
 
 ### 3. Design With Explicit File Paths
 
 Define which files/components are affected:
 
 - Files to be modified (with what changes)
-- Files to be created (with justification)
+- Files to be created (with justification — include naming convention source from DEV_*)
 - Data flow between components
+- Integration points (what must be registered/wired for new components to work)
 - Test coverage plan
 
 ### 4. Architecture Compliance Check
 
-**Answer these questions:**
+**Answer the generic layer questions:**
 
 - [ ] Which layer OWNS this logic?
 - [ ] Am I putting logic in the correct layer?
 - [ ] Am I following the project's documented data flow pattern?
+
+**Then verify the project compliance checklist (from Step 2c) is consistent with the design.**
 
 ## STOP CONDITIONS
 
@@ -90,7 +142,13 @@ Define which files/components are affected:
 - View imports services/functions directly instead of using provided context
 - View is doing more than display/formatting
 
-**Read REF** memories (codebase-shared) for correct patterns._*
+### Project-Specific Violations
+
+- Any item in the compliance checklist (Step 2c) that the design would violate
+- New files that don't follow naming conventions from DEV_* memories
+- Missing integration points (registration, enqueuing, discovery)
+
+**Read REF_* memories (codebase-shared) for correct patterns.**
 
 ---
 

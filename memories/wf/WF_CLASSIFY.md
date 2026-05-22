@@ -184,15 +184,15 @@ mcp__plugin_swe_serena__read_memory("feature/FEATURE_[KEY]")
 
 ### 4d. Load Supporting Memories
 
-From each FEATURE_[KEY], load relevant:
+**Read the Related Memories / Domains / Systems table inside each FEATURE_[KEY] you loaded.** These tables list the specific DOM_*, SYS_*, ARCH_*, and INDEX_* memories that are relevant to that feature. Follow those links — don't guess which memories to load.
 
-| Memory Type                     | When to Read                               |
-| ------------------------------- | ------------------------------------------ |
-| `dom/DOM_[KEY]_*`               | Always - contains domain-specific patterns |
-| `sys/SYS_[SYSTEM]`              | For system/infrastructure work             |
-| `ref/REF_[TOPIC]`               | For coding standards and patterns          |
-| `arch/ARCH_[KEY]` or `arch/ARCH_*` | For multi-layer architecture work       |
-| `index/INDEX_[KEY]_*`           | For locating specific files/classes        |
+| Memory Type                         | When to Read                               | How to Find                              |
+| ----------------------------------- | ------------------------------------------ | ---------------------------------------- |
+| `dom/DOM_[KEY]_*`                   | Always - contains domain-specific patterns | Listed in FEATURE_[KEY] "Domains" table  |
+| `sys/SYS_[SYSTEM]`                  | For system/infrastructure work             | Listed in FEATURE_[KEY] "Systems" table  |
+| `arch/ARCH_INDEX` or `arch/ARCH_*`  | For multi-layer architecture work          | Listed in FEATURE_[KEY] or INDEX_FEATURES|
+| `index/INDEX_[KEY]_*`              | For locating specific files/classes        | Listed in FEATURE_[KEY] "Indexes" table  |
+| `ref/REF_[TOPIC]`                   | For coding standards and patterns          | Codebase-shared, check INDEX_FEATURES    |
 
 ### 4e. Update WM with Features
 
