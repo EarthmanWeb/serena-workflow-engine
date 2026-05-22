@@ -41,6 +41,7 @@ If not already loaded at WF_CLASSIFY (check WM):
 ```
 mcp__plugin_swe_serena__read_memory("index/INDEX_FEATURES")   # Get active feature
 mcp__plugin_swe_serena__read_memory("feature/FEATURE_[KEY]")    # Get feature config with layers
+mcp__plugin_swe_serena__read_memory("arch/ARCH_INDEX")          # Architecture overview (if exists)
 ```
 
 ### 2. Read Layer Documentation
