@@ -69,6 +69,55 @@ Fuzzy-match for phrases indicating the user wants uninterrupted execution:
 
 **If not detected:** Normal flow — approval will be required at WF_ARCH_REVIEW.
 
+### 2c. Command & Skill Identification
+
+**Before planning manual implementation, check if an existing command or skill already handles this task. Commands and skills encode tested procedures — always prefer them over ad-hoc work.**
+
+#### How Claude Code's Skill System Works
+
+Claude Code uses **description-based LLM matching**: each skill has a `description` and optional `when_to_use` field in its YAML frontmatter. At runtime, Claude receives all skill descriptions in an `<available_skills>` listing embedded in the Skill tool and uses natural language understanding to match user intent. There is no keyword index or classifier — it's pure LLM reasoning over descriptions.
+
+#### What to Scan
+
+**1. System-reminder skills list** (already in context)
+
+The system-reminder at conversation start contains a section:
+> "The following skills are available for use with the Skill tool:"
+
+This lists ALL skills from all installed plugins with their descriptions. Scan this list against the user's request. Skills are namespaced as `plugin:skill-name` (e.g., `swe:swe-workflow-research`).
+
+**2. Project-level commands** (may not be in the skills list)
+
+Projects can define their own slash commands that are NOT plugin skills:
+
+```
+.claude/commands/*.md      — Project-level commands
+~/.claude/commands/*.md    — User-level commands
+.claude/skills/*/SKILL.md  — Project-level skills
+~/.claude/skills/*/SKILL.md — User-level skills
+```
+
+If the user's request doesn't match any plugin skill, scan these directories for project-specific commands. Read the file's frontmatter `description` field to understand purpose.
+
+**3. Plugin commands** (from installed plugin `commands/` directories)
+
+Plugin commands are invoked via `/command-name` and expand into prompt templates. They may handle operational tasks like status checks, resets, or scaffolding.
+
+#### How to Match
+
+1. **Scan the skills list in context** — match user intent against skill descriptions using natural language understanding (same mechanism Claude Code uses natively)
+2. **Check project commands** — if no skill matches, scan project command directories for `.md` files with matching purposes
+3. **Fuzzy intent matching** — "debug the tests" → `debug-tdd` skill; "review architecture" → `arch-review` skill; "check status" → a status command
+4. **Respect `disable-model-invocation`** — skills with this flag are user-only; do not auto-invoke them
+
+#### Record & Route
+
+1. **If match found** — note in WM: `matched_skill: plugin:skill-name` or `matched_command: /command-name`
+2. **Invoke matched skill** — `Skill({ skill: "plugin:skill-name", args: "..." })` — commands/skills may handle routing themselves
+3. **If NO match** — continue to Step 3 (task type assessment) for manual routing
+
+**Always prefer an existing command/skill over manual implementation.** They encode best practices, handle edge cases, and are maintained with the project.
+
 ### 3. Assess task type and complexity:
 
 #### Research Tasks (Skill-Based)

@@ -9,15 +9,6 @@
 | **DAA** (subsystem) | `mcp__ruflo__daa_*` |
 | **Coordination** (subsystem) | `mcp__ruflo__coordination_*` |
 
-**NOTE:** Ruflo unifies what was previously separate Claude-Flow and RUV-Swarm MCP servers into a single system. All tools use the `mcp__ruflo__` prefix.
-
-**⛔ OLD WRONG PREFIXES (never use):**
-
-- ~~`mcp__claude-flow__`~~ — OLD (replaced by `mcp__ruflo__`)
-- ~~`mcp__ruv-swarm__`~~ — OLD (replaced by `mcp__ruflo__`)
-- ~~`mcp__plugin_claude-flow_claude-flow__`~~ — WRONG
-- ~~`mcp__plugin_claude-flow_ruv-swarm__`~~ — WRONG
-
 **IMPORTANT:** Use `ToolSearch` to load MCP tools before calling them. Only load what you need (3-5 tools max per session).
 
 ---

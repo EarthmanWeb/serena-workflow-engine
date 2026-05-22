@@ -4,17 +4,21 @@
 
 ## Overview
 
-This workflow uses a multi-agent swarm to research existing codebase patterns and compile them into indexed, navigable documentation.
+This workflow uses parallel agents to research existing codebase patterns and compile them into indexed, navigable documentation.
 
-## Phase 1: Initialize Research Swarm
+## Phase 1: Launch Research Agents
 
+Launch specialized research agents in parallel using Claude Code's `Agent` tool — all in ONE message:
+
+```javascript
+Agent({ description: "PHP standards", run_in_background: true, model: "sonnet",
+  prompt: "You are a swarm agent. BYPASS WF_INIT. Research PHP coding patterns..." })
+Agent({ description: "JS standards", run_in_background: true, model: "sonnet",
+  prompt: "You are a swarm agent. BYPASS WF_INIT. Research JavaScript patterns..." })
+// ... launch one agent per focus area
 ```
-mcp__ruflo__swarm_init(topology: "mesh", maxAgents: 10, strategy: "balanced")
-```
 
-Spawn specialized research agents:
-
-| Agent Type         | Focus Area                            |
+| Agent Focus        | Research Area                         |
 | ------------------ | ------------------------------------- |
 | php-standards      | PHP coding patterns, class structure  |
 | js-standards       | JavaScript patterns, module structure |
@@ -50,10 +54,11 @@ For each language/area, analyze representative files:
 4. **Templates**: Find templates, examine inheritance, safe output
 5. **Tests**: Find test files, examine fixtures, assertions, setup
 
-Use swarm orchestration:
+Launch analysis agents in parallel — one per language/area:
 
-```
-mcp__ruflo__coordination_orchestrate(task: "[specific research task]", strategy: "parallel")
+```javascript
+Agent({ description: "Analyze PHP patterns", run_in_background: true, model: "sonnet",
+  prompt: "You are a swarm agent. BYPASS WF_INIT. Analyze PHP class files for patterns..." })
 ```
 
 ## Phase 4: Compile Findings

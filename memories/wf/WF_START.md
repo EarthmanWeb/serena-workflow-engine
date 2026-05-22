@@ -33,7 +33,7 @@ If you are thinking of going to WF_EXECUTE from here:
 
 ---
 
-## ⚡ SWARM AGENT BYPASS (Ruflo / DAA / Claude Code Agent)
+## ⚡ SPAWNED AGENT BYPASS
 
 **How to detect you are a spawned agent — ANY of these in your initial prompt:**
 
@@ -43,7 +43,7 @@ If you are thinking of going to WF_EXECUTE from here:
 - Agent role assignment from a coordinator with task-specific instructions
 - No user conversation — just a task prompt from another agent
 
-**IF you are a spawned agent (Ruflo `agent_execute`, Claude Code `Agent` tool, or `claude -p`):**
+**IF you are a spawned agent (Claude Code `Agent` tool, `claude -p`, or Ruflo `agent_execute`):**
 
 - ✅ **STOP HERE. Do NOT continue reading this file.**
 - ✅ **SKIP ALL workflow steps** (WF_INIT, WF_START, WF_CLASSIFY, WF_ARCH_REVIEW, etc.)

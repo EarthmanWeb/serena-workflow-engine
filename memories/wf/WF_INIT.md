@@ -2,7 +2,7 @@
 
 ---
 
-## ⚡ SWARM / RUFLO AGENT BYPASS — CHECK THIS FIRST
+## ⚡ SPAWNED AGENT BYPASS — CHECK THIS FIRST
 
 **Before ANY initialization, check if you are a spawned agent:**
 

@@ -87,9 +87,10 @@ If user instruction contradicts memory:
 
 ## Parallel Processing
 
-- Use swarms to parallel process tasks when appropriate
-- Spawn multiple agents for independent subtasks
-- Leverage `mcp__ruflo__` tools for coordination
+- Use Claude Code `Agent` tool for parallel tasks — launch multiple in ONE message
+- Use `run_in_background: true` for concurrent execution
+- Use `isolation: "worktree"` when agents edit overlapping files
+- Only use Ruflo MCP tools for cognitive-only tasks (reasoning, consensus) — see FEATURE_SWARM
 
 ## Quality Standards
 

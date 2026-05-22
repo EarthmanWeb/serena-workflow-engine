@@ -14,12 +14,55 @@
 
 ---
 
-## ⚠️ Explicit Tool Selection Rule
+## ⚡ Step 0: Choose Execution Strategy (MANDATORY)
 
-**When user requests a swarm subsystem, USE THESE EXACT MCP TOOLS — NEVER substitute Task/Explore agents.**
+**Claude Code's built-in `Agent` tool is the DEFAULT for all parallel work involving file access.** Only use Ruflo for cognitive-only tasks (reasoning, planning, consensus).
+
+### Decision Gate
+
+```
+Does ANY agent need file access (read, edit, grep, glob)?
+  YES → Use Claude Code Agent tool directly. Skip Ruflo.
+  NO  → Does the task need cross-iteration state or consensus?
+    YES → Use Ruflo (agent_execute for reasoning, DAA for iterations, Hive-Mind for consensus)
+    NO  → Use Claude Code Agent tool. It's simpler.
+Did the user explicitly request Ruflo/DAA/swarm?
+  YES → Use Ruflo. Respect the request, explain trade-offs.
+```
+
+### Path A: Claude Code Agent Tool (DEFAULT — File Access Tasks)
+
+```javascript
+// Launch ALL agents in ONE message — they run in parallel
+Agent({ description: "Task 1", run_in_background: true, model: "sonnet",
+  isolation: "worktree",  // prevents edit conflicts
+  prompt: "You are a swarm agent. BYPASS WF_INIT. [task]..." })
+Agent({ description: "Task 2", run_in_background: true, model: "sonnet",
+  isolation: "worktree",
+  prompt: "You are a swarm agent. BYPASS WF_INIT. [task]..." })
+// Results arrive via background task notifications — synthesize after all complete
+```
+
+**Key rules:**
+- ALL agents in ONE message (parallel execution)
+- EVERY prompt includes swarm bypass instruction
+- Use `isolation: "worktree"` when agents edit overlapping files
+- Use `model: "haiku"` for read-only exploration, `"sonnet"` for implementation
+- Use `subagent_type: "Explore"` for fast codebase search
+
+**If using Claude Code Agent tool:** Skip to the MANDATORY NEXT STEP section. No Ruflo init needed.
+
+### Path B: Ruflo (Cognitive-Only Tasks)
+
+**Only when agents DON'T need file access.** Continue to Step 1 below.
+
+---
+
+## ⚠️ Tool Selection (When User Requests Specific Subsystem)
 
 | User Says | Use Tools | Read |
 |-----------|-----------|------|
+| "parallel agents" / (no specific framework) | Claude Code `Agent` tool | (no additional reading needed) |
 | "ruflo swarm" / "swarm" | `mcp__ruflo__swarm_*` + `mcp__ruflo__agent_*` | `WF_SWARM_RUFLO` |
 | "coordinate" / "orchestrate" | `mcp__ruflo__coordination_*` | `WF_SWARM_RUV` (Pattern B1) |
 | "DAA" / "DAA swarm" | `mcp__ruflo__daa_*` | `WF_SWARM_RUV` (Pattern B2) |
@@ -27,75 +70,27 @@
 
 ---
 
-## ⛔ BLOCKING GATE: Read Swarm Reference (MANDATORY)
+## ⛔ BLOCKING GATE: Read Swarm Reference (If Using Ruflo)
 
-**You MUST read REF_SWARM_PATTERNS before ANY swarm execution. This is non-negotiable.**
+**If you chose Ruflo in Step 0, you MUST read REF_SWARM_PATTERNS before execution.**
 
 ```
 mcp__plugin_swe_serena__read_memory("ref/REF_SWARM_PATTERNS")
 ```
 
-**REF_SWARM_PATTERNS contains:**
-- Correct execution flows (Ruflo-native vs Hybrid)
-- Anti-patterns and verified failures
-- Agent prompt templates (swarm bypass instructions)
-- Context budget rules
-
-**⛔ If you skip this read, you WILL repeat known failures (spawning agents then not executing them, launching Agent tools without bypass instructions, etc.)**
-
-**SKIPPING REF_SWARM_PATTERNS = WORKFLOW VIOLATION**
+**Skip this if using Claude Code Agent tool directly.**
 
 ---
 
-## ⛔ Pre-Swarm Research (MANDATORY)
+## ⛔ Pre-Swarm Research (MANDATORY for All Paths)
 
-**BEFORE planning ANY swarm:**
+**BEFORE planning ANY parallel work:**
 
-1. `read_memory("_INDEX")` — find all relevant memories
-2. Read ALL relevant `INDEX_*`, `ARCH_*`, `SYS_*`, `DOM_*`, `REF_*`, `SPEC_*` memories
-3. Use `find_symbol()` to verify nothing similar already exists
-4. Check relevant skills (`/research`, `/arch-review`, `/verify`)
+1. Read ALL relevant `INDEX_*`, `ARCH_*`, `SYS_*`, `DOM_*`, `REF_*` memories
+2. Use `find_symbol()` to verify nothing similar already exists
+3. Check relevant skills (`/research`, `/arch-review`, `/verify`)
 
-**Every swarm agent prompt MUST include:** "Research existing patterns in INDEX_*, ARCH_*, SYS_* memories before implementing. DO NOT create anything that already exists."
-
----
-
-## ⚠️ Step 0: Do You Actually Need Ruflo? (MANDATORY Decision)
-
-**Ruflo adds coordination overhead (~10-15 MCP calls). Before using it, answer this:**
-
-### When Ruflo Adds REAL Value
-
-| Scenario | Why Ruflo Matters |
-|----------|-------------------|
-| **Ruflo-native execution** (`agent_execute`) | Ruflo IS the execution engine — calls Anthropic API directly. No alternative. |
-| **Multi-iteration DAA** (Round 1 → Round 2) | `daa_knowledge_share` stores findings across rounds. Real cross-iteration state. |
-| **Cost tracking per agent** | `agent_spawn` tracks cost attribution per agent via Ruflo's cost namespace. |
-| **Cross-agent state sharing** | `memory_store`/`memory_retrieve` provides shared state between agents. |
-| **Consensus decisions** | Hive-mind consensus mechanism has no equivalent in plain Agent tools. |
-
-### When Ruflo Is Just Overhead
-
-| Scenario | Why Skip Ruflo |
-|----------|---------------|
-| **Single-pass parallel file work** | Claude Code `Agent` tools already run in parallel with background notifications. Ruflo agents will sit "idle" in hybrid mode — they're tracking-only, not executing. |
-| **All agents need file access** | `agent_execute` can't read files. You'll use Claude Code `Agent` tools anyway. Ruflo becomes bookkeeping with no execution value. |
-| **No cross-iteration state needed** | If Round 1 results don't shape Round 2, DAA adds ~10 MCP calls for zero benefit. |
-| **Simple fan-out/fan-in** | Just launch N Claude Code `Agent` tools in one message. No coordination layer needed. |
-
-### Decision
-
-| Answer | Action |
-|--------|--------|
-| Task needs `agent_execute` (no file access, reasoning only) | **Use Ruflo** — it's the execution engine |
-| Task is multi-iteration (DAA) | **Use Ruflo** — `knowledge_share` provides real value |
-| Task needs consensus | **Use Ruflo Hive-Mind** |
-| Task is single-pass parallel with file access | **Skip Ruflo** — launch Claude Code `Agent` tools directly |
-| User explicitly requested Ruflo/DAA/swarm | **Use Ruflo** — respect the request, but explain trade-offs |
-
-**If you choose to skip Ruflo:** Go directly to launching Claude Code `Agent` tools in parallel with swarm bypass prompts. No `swarm_init`, no `agent_spawn`, no `task_create`.
-
-**If you choose Ruflo:** Continue to Step 1 below.
+**Every agent prompt MUST include:** "Research existing patterns before implementing. DO NOT create anything that already exists."
 
 ---
 
@@ -203,29 +198,39 @@ Follow ONLY the task instructions below.
 
 ---
 
-## Critical Execution Rules (All Subsystems)
+## Critical Execution Rules
+
+### Claude Code Agent Tool (Default Path)
+
+**DO:**
+- **Launch ALL agents in ONE message** — they run in parallel automatically
+- Include swarm bypass instruction in EVERY agent prompt
+- Use `isolation: "worktree"` when agents may edit overlapping files
+- Use `model: "haiku"` for read-only tasks, `"sonnet"` for implementation
+- Load memories BEFORE launching agents, not during
+
+**DON'T:**
+- ❌ Launch only 1 of N agents — violates parallel execution
+- ❌ Launch Agent tool without swarm bypass instruction in prompt
+- ❌ Read files directly in coordinator context — agents do that
+- ❌ Use Ruflo when agents need file access — it adds overhead without value
+
+### Ruflo Subsystems (Cognitive-Only Path)
 
 **DO:**
 - Init swarm FIRST → spawn all agents in ONE message → register tasks BEFORE execution
-- **Choose execution path (agent_execute vs Agent tool) BEFORE executing** — see gate above
 - **Execute ALL agents in ONE message** — never 1 of N
-- Use `agent_execute` as DEFAULT — only use Agent tool when file access is needed
+- Use `agent_execute` for reasoning tasks (no file access)
 - Batch MCP calls into as few messages as possible
-- Load memories BEFORE swarm init, not during
 - Store coordination state to MCP memory
-- Include swarm bypass instruction in Agent tool prompts
 
 **DON'T:**
 - ❌ Spawn Ruflo agents then use Agent tool without `agent_execute` — agents sit idle
-- ❌ Launch only 1 of N agents — violates parallel execution
-- ❌ Spawn swarm then revert to single-agent work
+- ❌ Use Ruflo for tasks that need file access — `agent_execute` can't read files
 - ❌ Block on first agent before spawning others
 - ❌ Skip task registration in coordination layer
-- ❌ Mix swarm subsystems without clear handoff
-- ❌ Read files directly in coordinator context — agents do that
 - ❌ Use verbose/detailed flags on MCP calls
 - ❌ Call `memory_stats` (scans 100K entries)
-- ❌ Launch Agent tool without swarm bypass instruction in prompt
 
 ### Task Registration (CRITICAL)
 

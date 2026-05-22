@@ -1,6 +1,53 @@
 # REF_SWARM_PATTERNS - Swarm Coordination Reference
 
-Multi-agent swarm patterns for parallel processing and complex task coordination.
+Multi-agent patterns for parallel processing and complex task coordination.
+
+---
+
+## ⚡ DEFAULT: Claude Code Built-In Agent Tool
+
+**The Claude Code `Agent` tool is the PRIMARY mechanism for all parallel work involving file access.** Ruflo/DAA/Hive-Mind are secondary — use them ONLY for cognitive load tasks (reasoning, planning, consensus) where no file system access is needed.
+
+### When to Use Claude Code Agent Tool (DEFAULT)
+
+| Scenario | Method |
+|----------|--------|
+| Parallel file reads/edits | Multiple `Agent` calls in ONE message |
+| Codebase exploration | `Agent` with `subagent_type: "Explore"` (Haiku, read-only) |
+| Multi-file implementation | `Agent` with `isolation: "worktree"` per agent |
+| Research across codebase | `Agent` with `run_in_background: true` |
+| Repo-wide mechanical changes | `/batch` command (auto-worktree, auto-PR) |
+
+### Quick Reference: Claude Code Agent Parameters
+
+| Parameter | Values | Purpose |
+|-----------|--------|---------|
+| `model` | `"haiku"`, `"sonnet"`, `"opus"` | Cost/capability trade-off |
+| `run_in_background` | `true/false` | Fire-and-forget vs blocking |
+| `isolation` | `"worktree"` | Git worktree per agent (prevents edit conflicts) |
+| `subagent_type` | `"Explore"`, `"Plan"`, `"general-purpose"` | Specialized behavior |
+
+### Parallel Execution Pattern
+
+```javascript
+// All agents launch simultaneously — no orchestration framework needed
+Agent({ description: "Task A", run_in_background: true, model: "sonnet",
+  prompt: "You are a swarm agent. BYPASS WF_INIT. [task]..." })
+Agent({ description: "Task B", run_in_background: true, model: "sonnet",
+  prompt: "You are a swarm agent. BYPASS WF_INIT. [task]..." })
+Agent({ description: "Task C", run_in_background: true, model: "haiku",
+  subagent_type: "Explore", prompt: "You are a swarm agent. BYPASS WF_INIT. [task]..." })
+// Results arrive via background task notifications
+```
+
+### When to Escalate to Ruflo
+
+Only when ALL of these are true:
+1. Agents do NOT need file system access (reasoning/planning only)
+2. Task benefits from cross-iteration state tracking (DAA) OR consensus (Hive-Mind)
+3. The overhead of ~10-15 MCP calls is justified by the coordination value
+
+**If any agent needs file access → use Claude Code `Agent` tool directly. Ruflo's `agent_execute` cannot read files.**
 
 ---
 
@@ -14,14 +61,6 @@ Multi-agent swarm patterns for parallel processing and complex task coordination
 | **Hive-Mind** | `mcp__ruflo__` | `mcp__ruflo__hive-mind_init` |
 | **DAA** | `mcp__ruflo__` | `mcp__ruflo__daa_agent_create` |
 | **Coordination** | `mcp__ruflo__` | `mcp__ruflo__coordination_orchestrate` |
-
-**⛔ OLD WRONG PREFIXES (DO NOT USE):**
-
-- ~~`mcp__claude-flow__`~~ — OLD
-- ~~`mcp__ruv-swarm__`~~ — OLD
-- ~~`mcp__plugin_claude-flow_claude-flow__`~~ — WRONG
-- ~~`mcp__plugin_claude-flow_ruv-swarm__`~~ — WRONG
-- ~~`mcp__plugin_swe_ruv-swarm__`~~ — WRONG
 
 ---
 
@@ -61,16 +100,17 @@ export ENABLE_TOOL_SEARCH=auto:5     # Defer tools at 5% context threshold (defa
 
 ---
 
-## ⚠️ EXPLICIT TOOL SELECTION RULE
+## ⚠️ TOOL SELECTION HIERARCHY
 
-**When user explicitly requests a specific swarm subsystem, USE THOSE EXACT MCP TOOLS.**
+**Default to Claude Code `Agent` tool. Only use Ruflo when explicitly requested or when cognitive-only tasks need it.**
 
-| User Says | YOU MUST USE | NOT |
-| --------- | ------------ | --- |
-| "launch swarm" / "ruflo swarm" | `mcp__ruflo__swarm_*` + `mcp__ruflo__agent_*` tools | Task/Explore agents |
-| "use hive-mind" | `mcp__ruflo__hive-mind_*` | Task/Explore agents |
-| "use DAA" / "DAA swarm" | `mcp__ruflo__daa_*` | Task/Explore agents |
-| "coordinate tasks" | `mcp__ruflo__coordination_*` | Task/Explore agents |
+| User Says | Use | Why |
+|-----------|-----|-----|
+| "parallel agents" / "do this in parallel" / (no specific framework) | Claude Code `Agent` tool | Default — native file access, parallel execution |
+| "launch swarm" / "ruflo swarm" | `mcp__ruflo__swarm_*` + `mcp__ruflo__agent_*` | User explicitly requested Ruflo |
+| "use hive-mind" | `mcp__ruflo__hive-mind_*` | Consensus mechanism |
+| "use DAA" / "DAA swarm" | `mcp__ruflo__daa_*` | Multi-iteration tracking |
+| "coordinate tasks" | `mcp__ruflo__coordination_*` | Task orchestration |
 
 ---
 
@@ -117,12 +157,13 @@ npx ruflo init
 **⛔ NEVER create `daa_agent_create` agents and then expect them to execute. They are metadata ONLY.**
 **✅ ALWAYS use `agent_spawn` → `agent_execute` for Ruflo-native execution.**
 
-### Two Execution Paths
+### Three Execution Paths (Ordered by Preference)
 
-| Path | Tools | Has File Access? | Use When |
-|------|-------|-------------------|----------|
-| **Ruflo-native** | `agent_spawn` → `agent_execute` | ❌ No (API call only) | Reasoning, planning, spec writing, framework comparison — anything not needing project files |
-| **Hybrid** | `agent_spawn` (tracking) + Claude Code `Agent` tool (execution) | ✅ Yes (full tool access) | Codebase analysis, file reads, grep, symbol lookup — anything needing file system |
+| Path | Tools | File Access? | Use When |
+|------|-------|-------------|----------|
+| **Claude Code Agent (DEFAULT)** | Claude Code `Agent` tool directly | ✅ Yes (full tool access) | **Any task needing file access** — codebase analysis, file edits, grep, symbol lookup. No Ruflo needed. |
+| **Ruflo-native** | `agent_spawn` → `agent_execute` | ❌ No (API call only) | Reasoning, planning, spec writing — cognitive tasks not needing project files |
+| **Hybrid** | `agent_spawn` (tracking) + Claude Code `Agent` tool (execution) | ✅ Yes (full tool access) | When you need BOTH file access AND Ruflo's cross-iteration tracking |
 
 **Minimal workflow — Ruflo-native (reasoning tasks):**
 
@@ -294,11 +335,13 @@ Without explicit `ToolSearch` + `hive-mind_memory` instructions in agent prompts
 
 ---
 
-## ⛔ Agent Communication Constraints (Verified 2026-04-27)
+## ⛔ Agent Communication Constraints (Updated 2026-05-22)
 
-**`SendMessage` does NOT exist.** The Agent tool's completion output says "Use SendMessage with to: 'agentId' to continue this agent" — this is misleading. The tool is not available.
+**Standard mode: `SendMessage` does NOT exist.** The Agent tool's completion output suggests it, but the tool is not available in standard sessions.
 
-**What this means:**
+**Experimental Agent Teams mode:** `SendMessage` IS available when `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` is set. This enables peer-to-peer messaging between teammates. However, Agent Teams are experimental — no session resumption, high token cost (~3-7x), no file isolation.
+
+**Standard mode constraints:**
 
 | Need | Solution | Limitation |
 |------|----------|------------|
@@ -309,9 +352,8 @@ Without explicit `ToolSearch` + `hive-mind_memory` instructions in agent prompts
 
 **Rules:**
 - All agent instructions must be **complete and self-contained** in the initial prompt
-- For scope refinements, update hive-mind shared memory keys and hope the agent hasn't read them yet
-- For cross-referencing, agents should read hive-mind memory at the END of their analysis (Step 5), not just at the start
 - Treat agents as **fire-and-forget workers** — plan accordingly
+- For file isolation between parallel agents, use `isolation: "worktree"` on the Agent tool
 
 ---
 

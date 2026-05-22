@@ -97,7 +97,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/stop/swe_stop_workflow_check.py",
+            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/stop/swe_stop_continue_working.py",
             "timeout": 10
           }
         ]

@@ -11,8 +11,6 @@
 |--------|---------------|
 | **Ruflo** | `mcp__ruflo__` |
 
-**⛔ WRONG prefixes (never use):** ~~`mcp__claude-flow__`~~, ~~`mcp__plugin_claude-flow_claude-flow__`~~
-
 ---
 
 ## When To Use

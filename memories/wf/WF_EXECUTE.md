@@ -129,37 +129,22 @@ Use Serena tools directly:
 ### Execute with Parallel Agents
 
 ```javascript
-// Launch work agents via Claude Code Task tool (ALL in ONE message)
-Task({ subagent_type: 'Explore', run_in_background: true, prompt: '...' });
-Task({
-  subagent_type: 'general-purpose',
-  run_in_background: true,
-  prompt: '...',
-});
-
-// Monitor swarm status (non-blocking)
-mcp__ruflo__swarm_status({});
-
-// Store progress to memory
-mcp__ruflo__memory_store({
-  key: 'swarm:progress',
-  value: '...',
-});
-
-// Collect results (blocking)
-TaskOutput({ task_id: '...', block: true });
+// Launch ALL agents in ONE message — they run concurrently
+Agent({ description: "Task A", run_in_background: true, model: "sonnet",
+  prompt: "You are a swarm agent. BYPASS WF_INIT. [task]..." })
+Agent({ description: "Task B", run_in_background: true, model: "sonnet",
+  prompt: "You are a swarm agent. BYPASS WF_INIT. [task]..." })
+// Results arrive via background task notifications
 ```
 
-### Swarm Coordination During Execution
+### Coordination During Execution
 
-- **Track agent IDs** in WM
-- **Update swarm memory** after each completed subtask
-- **Monitor for failures** and reassign if needed
-- **Synchronize findings** between agents via memory
+- **Track agent task IDs** in WM
+- **Use `isolation: "worktree"`** when agents edit overlapping files
+- **Collect results** as background task notifications arrive
+- **Synthesize findings** after all agents complete
 
-**⛔ NEVER run CLI init commands** - use MCP tools only. See `WF_SWARM_ORCHESTRATE`.
-
-**Read `REF_SWARM_PATTERNS` for detailed patterns.**
+**See `FEATURE_SWARM` for the full decision gate (Claude Agent vs Ruflo).**
 
 ---
 
