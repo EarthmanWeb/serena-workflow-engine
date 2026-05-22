@@ -12,3 +12,15 @@ Thumbs.db
 *.local.md
 **/__pycache__/**
 __init__.*
+# SWE workflow engine
+.serena/swe-bypass.json
+.serena/swe-setup-complete.json
+.serena/swe-state/
+
+# Override global .serena/* ignore — un-ignore swe memories
+!.serena/swe/
+!.serena/swe/**/*.md
+!.serena/memories/
+!.serena/memories/**/*.md
+.serena/memories/WM_*.md
+.serena/swe
