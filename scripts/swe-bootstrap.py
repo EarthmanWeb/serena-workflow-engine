@@ -86,6 +86,9 @@ def create_project_yml(project_root, languages):
 # Detected languages from project file extensions
 languages:
 {lang_lines}
+
+# Exclude Working Memory files from list_memories output (they are accessed directly by hooks)
+ignored_memory_patterns: ["WM_.*"]
 """
     with open(yml_path, 'w') as f:
         f.write(content)
