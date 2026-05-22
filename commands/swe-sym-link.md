@@ -19,9 +19,21 @@ Replace Claude Code's auto-memory directory with a symlink pointing to the proje
 
 ```bash
 PROJECT_PATH=$(pwd)
-ENCODED_PATH=$(echo "$PROJECT_PATH" | sed 's|/|-|g')
-AUTO_MEMORY_DIR="$HOME/.claude/projects/$ENCODED_PATH/memory"
 SERENA_MEMORY_DIR="$PROJECT_PATH/.serena/memory"
+
+# Claude Code encodes project paths by replacing both / and _ with -
+ENCODED_PATH=$(echo "$PROJECT_PATH" | sed 's|[/_]|-|g')
+AUTO_MEMORY_DIR="$HOME/.claude/projects/$ENCODED_PATH/memory"
+
+# Verify: if the encoded dir doesn't exist, check for underscore-preserving variant
+if [ ! -d "$HOME/.claude/projects/$ENCODED_PATH" ]; then
+    ALT_ENCODED=$(echo "$PROJECT_PATH" | sed 's|/|-|g')
+    if [ -d "$HOME/.claude/projects/$ALT_ENCODED" ]; then
+        ENCODED_PATH="$ALT_ENCODED"
+        AUTO_MEMORY_DIR="$HOME/.claude/projects/$ENCODED_PATH/memory"
+        echo "Note: Using underscore-preserving encoding (older Claude Code version)"
+    fi
+fi
 
 echo "Auto-memory path: $AUTO_MEMORY_DIR"
 echo "Serena memory target: $SERENA_MEMORY_DIR"

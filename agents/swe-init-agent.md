@@ -371,8 +371,13 @@ After all tasks, verify these 7 conditions:
    ```
 7. **Auto-Memory Symlink**: Symlink redirects to `.serena/memory/`
    ```bash
-   ENCODED_PATH=$(echo "$(pwd)" | sed 's|/|-|g')
+   ENCODED_PATH=$(echo "$(pwd)" | sed 's|[/_]|-|g')
    AUTO_MEMORY_DIR="$HOME/.claude/projects/$ENCODED_PATH/memory"
+   # Fall back to underscore-preserving encoding if needed
+   if [ ! -e "$AUTO_MEMORY_DIR" ]; then
+     ALT=$(echo "$(pwd)" | sed 's|/|-|g')
+     [ -e "$HOME/.claude/projects/$ALT/memory" ] && AUTO_MEMORY_DIR="$HOME/.claude/projects/$ALT/memory"
+   fi
    if [ -L "$AUTO_MEMORY_DIR" ] && [ "$(readlink "$AUTO_MEMORY_DIR")" = "$(pwd)/.serena/memory" ]; then
      echo "✅ Auto-memory symlink correct"
    else
