@@ -165,12 +165,11 @@ Registered in `plugin.json` as `swe-wm`, started via `scripts/start-wm-mcp.sh`.
 | `/swe-scaffold-project` | Scaffold new project (skill) |
 | `/swe-cleanup`  | Archive completed memories |
 
-### Agents (2 total)
+### Agents (1 total)
 
 | Agent                      | Purpose                   |
 | -------------------------- | ------------------------- |
 | `swe-init-agent`           | Autonomous initialization |
-| `swe-workflow-coordinator` | Swarm task coordination   |
 
 ## Memories Organization
 
