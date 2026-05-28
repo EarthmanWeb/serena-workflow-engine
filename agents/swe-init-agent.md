@@ -116,6 +116,7 @@ Bootstrap handles:
 - `memory-paths.conf` creation/update
 - Template rendering and installation (`MEMORY.md`, `FEEDBACK_RESPONSE_FORMAT.md`, `FEEDBACK_READ_DOCS_MEANS_LIST.md`, `REF_MCP_BROWSER_DEVTOOLS.md`, `FEATURE_TESTS.md`, `FEATURE_DEV_STANDARDS.md`, `FEATURE_AGENTS.md`) — placeholders like `{{project_name}}`, `{{primary_language}}`, `{{test_framework}}` are auto-filled from detected project info
 - `.gitignore` updates
+- `.mcp.json` creation/merge (adds `browser-devtools` MCP server)
 - `swe-setup-complete.json` creation with `bootstrapped: true`
 
 **If bootstrap fails**, report the error and stop.

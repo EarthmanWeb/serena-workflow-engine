@@ -636,6 +636,51 @@ def update_gitignore(project_root):
     return True
 
 
+
+def ensure_mcp_json(project_root):
+    """Create or merge .mcp.json with browser-devtools MCP server entry.
+
+    If .mcp.json exists, merges browser-devtools into existing mcpServers
+    without overwriting other entries. If it doesn't exist, creates it.
+    Returns True if file was created or modified, False if already configured.
+    """
+    mcp_file = os.path.join(project_root, '.mcp.json')
+    browser_devtools_config = {
+        "type": "stdio",
+        "command": "npx",
+        "args": ["-y", "browser-devtools-mcp"],
+        "env": {
+            "BROWSER_HEADLESS_ENABLE": "false",
+            "TELEMETRY_ENABLE": "false"
+        }
+    }
+
+    if os.path.exists(mcp_file):
+        try:
+            with open(mcp_file) as f:
+                data = json.load(f)
+        except (json.JSONDecodeError, IOError):
+            data = {}
+
+        servers = data.get('mcpServers', {})
+        if 'browser-devtools' in servers:
+            return False  # Already configured
+
+        servers['browser-devtools'] = browser_devtools_config
+        data['mcpServers'] = servers
+    else:
+        data = {
+            "mcpServers": {
+                "browser-devtools": browser_devtools_config
+            }
+        }
+
+    with open(mcp_file, 'w') as f:
+        json.dump(data, f, indent=2)
+        f.write('\n')
+
+    return True
+
 def main():
     project_root = os.getcwd()
 
@@ -718,6 +763,9 @@ def main():
     # Update project .gitignore
     gitignore_updated = update_gitignore(project_root)
 
+    # Create/merge .mcp.json with browser-devtools
+    mcp_json_updated = ensure_mcp_json(project_root)
+
     # Inject CLAUDE_PREFIX.md into CLAUDE.md
     claude_prefix_injected = inject_claude_prefix(project_root)
 
@@ -740,6 +788,7 @@ def main():
         print(f"  Templates: all already exist (skipped)")
     print(f"  .serena/.gitignore: {'created' if serena_gitignore_created else 'already exists'}")
     print(f"  .gitignore: {'updated' if gitignore_updated else 'already configured'}")
+    print(f"  .mcp.json: {'updated' if mcp_json_updated else 'already configured'}")
     print(f"  CLAUDE.md: {'prefix injected' if claude_prefix_injected else 'already configured'}")
     print(f"  Setup status: bootstrapped (run /swe-init to complete, or /swe-scaffold-project for manual setup)")
 
