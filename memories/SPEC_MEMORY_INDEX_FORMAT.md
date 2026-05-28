@@ -146,7 +146,7 @@ For each memory file type:
 
 1. `FEATURE_DEV_STANDARDS` — convert tables to one-line pointers (preserve Key Rules Summary)
 2. `INDEX_FEATURES` — convert feature registry table to grouped one-line pointers (preserve metadata in FEATURE_[KEY] frontmatter)
-3. `_INDEX` — already close to flat format, minor cleanup
+3. `MEMORY.md` — already close to flat format, minor cleanup
 4. Any other index-style files
 
 ### Phase 3: Update Workflow References

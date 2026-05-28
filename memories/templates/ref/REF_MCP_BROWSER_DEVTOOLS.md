@@ -1,10 +1,10 @@
 ---
-name: REF_MCP_BROWSER
+name: REF_MCP_BROWSER_DEVTOOLS
 description: Browser DevTools MCP — tool reference, scenario automation, session isolation for parallel agents, debugging workflows
 type: reference
 ---
 
-# REF_MCP_BROWSER - Browser DevTools MCP Reference
+# REF_MCP_BROWSER_DEVTOOLS - Browser DevTools MCP Reference
 
 Browser DevTools MCP (`browser-devtools-mcp`) provides Playwright-powered browser
 control for debugging, testing, and exploration.

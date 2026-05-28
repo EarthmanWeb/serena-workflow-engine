@@ -125,7 +125,7 @@ Each DEV_* memory should include:
 
 ### Update Navigation Index
 
-Add to `_INDEX`:
+Add to `MEMORY.md`:
 
 ```markdown
 ## Development Standards
@@ -146,7 +146,7 @@ Add to `_INDEX`:
 - [ ] Code samples examined for patterns
 - [ ] `FEATURE_DEV_STANDARDS` created as index entry point
 - [ ] Individual `DEV_*` memories created (~100-120 lines each)
-- [ ] `_INDEX` updated with Development Standards section
+- [ ] `MEMORY.md` updated with Development Standards section
 - [ ] WM updated with completion status
 
 ## Output Structure

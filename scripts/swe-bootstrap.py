@@ -45,6 +45,168 @@ EXT_TO_LANGUAGE = {
 }
 
 
+# Test framework detection: manifest key -> (framework name, test commands, test root)
+TEST_FRAMEWORK_HINTS = {
+    'package.json': {
+        '@playwright/test': ('Playwright', 'npx playwright test', 'tests/'),
+        'jest': ('Jest', 'npx jest', 'tests/'),
+        'vitest': ('Vitest', 'npx vitest', 'tests/'),
+        'mocha': ('Mocha', 'npx mocha', 'test/'),
+    },
+    'composer.json': {
+        'phpunit/phpunit': ('PHPUnit', 'vendor/bin/phpunit', 'tests/'),
+        'pestphp/pest': ('Pest', 'vendor/bin/pest', 'tests/'),
+    },
+    'Cargo.toml': {
+        '_default': ('cargo test', 'cargo test', 'tests/'),
+    },
+    'go.mod': {
+        '_default': ('go test', 'go test ./...', 'tests/'),
+    },
+}
+
+
+def detect_project_name(project_root):
+    """Detect project name from manifests or directory name."""
+    # Try package.json
+    pkg = os.path.join(project_root, 'package.json')
+    if os.path.exists(pkg):
+        try:
+            with open(pkg) as f:
+                data = json.load(f)
+            name = data.get('name', '')
+            if name and not name.startswith('@'):
+                return name
+            if name:
+                # @scope/name -> name
+                return name.split('/')[-1]
+        except (IOError, json.JSONDecodeError):
+            pass
+
+    # Try composer.json
+    composer = os.path.join(project_root, 'composer.json')
+    if os.path.exists(composer):
+        try:
+            with open(composer) as f:
+                data = json.load(f)
+            name = data.get('name', '')
+            if name:
+                return name.split('/')[-1]
+        except (IOError, json.JSONDecodeError):
+            pass
+
+    # Try Cargo.toml (simple parse)
+    cargo = os.path.join(project_root, 'Cargo.toml')
+    if os.path.exists(cargo):
+        try:
+            with open(cargo) as f:
+                for line in f:
+                    m = re.match(r'^name\s*=\s*"([^"]+)"', line)
+                    if m:
+                        return m.group(1)
+        except IOError:
+            pass
+
+    # Fall back to directory name
+    return os.path.basename(project_root)
+
+
+def detect_test_framework(project_root):
+    """Detect test framework from project manifests.
+
+    Returns (framework_name, test_commands, test_root) or defaults.
+    """
+    # Check package.json devDependencies / dependencies
+    pkg = os.path.join(project_root, 'package.json')
+    if os.path.exists(pkg):
+        try:
+            with open(pkg) as f:
+                data = json.load(f)
+            all_deps = {}
+            all_deps.update(data.get('dependencies', {}))
+            all_deps.update(data.get('devDependencies', {}))
+            for dep, info in TEST_FRAMEWORK_HINTS.get('package.json', {}).items():
+                if dep in all_deps:
+                    return info
+        except (IOError, json.JSONDecodeError):
+            pass
+
+    # Check composer.json require-dev
+    composer = os.path.join(project_root, 'composer.json')
+    if os.path.exists(composer):
+        try:
+            with open(composer) as f:
+                data = json.load(f)
+            all_deps = {}
+            all_deps.update(data.get('require', {}))
+            all_deps.update(data.get('require-dev', {}))
+            for dep, info in TEST_FRAMEWORK_HINTS.get('composer.json', {}).items():
+                if dep in all_deps:
+                    return info
+        except (IOError, json.JSONDecodeError):
+            pass
+
+    # Check Cargo.toml
+    if os.path.exists(os.path.join(project_root, 'Cargo.toml')):
+        return TEST_FRAMEWORK_HINTS['Cargo.toml']['_default']
+
+    # Check go.mod
+    if os.path.exists(os.path.join(project_root, 'go.mod')):
+        return TEST_FRAMEWORK_HINTS['go.mod']['_default']
+
+    # Check for pytest
+    for marker in ('pytest.ini', 'pyproject.toml', 'setup.cfg'):
+        marker_path = os.path.join(project_root, marker)
+        if os.path.exists(marker_path):
+            try:
+                with open(marker_path) as f:
+                    content = f.read()
+                if 'pytest' in content or '[tool.pytest' in content:
+                    return ('pytest', 'pytest', 'tests/')
+            except IOError:
+                pass
+
+    return ('unknown', '# TODO: Add test commands', 'tests/')
+
+
+def detect_primary_language(languages):
+    """Pick the primary language from detected list (exclude markdown)."""
+    for lang in languages:
+        if lang != 'markdown':
+            return lang
+    return 'unknown'
+
+
+def build_template_variables(project_root, languages):
+    """Build a dict of template variables from project detection."""
+    primary = detect_primary_language(languages)
+    project_name = detect_project_name(project_root)
+    test_framework, test_commands, test_root = detect_test_framework(project_root)
+
+    return {
+        'project_name': project_name,
+        'primary_language': primary,
+        'primary_language_upper': primary.upper(),
+        'languages': ', '.join(languages),
+        'test_framework': test_framework,
+        'test_commands': test_commands,
+        'test_root': test_root,
+        'year': str(datetime.now().year),
+    }
+
+
+def render_template(content, variables):
+    """Replace {{variable}} placeholders in template content.
+
+    Unknown placeholders are left as-is so they serve as visible TODOs.
+    """
+    def replacer(match):
+        key = match.group(1).strip()
+        return variables.get(key, match.group(0))
+
+    return re.sub(r'\{\{(\w+)\}\}', replacer, content)
+
+
 def get_plugin_version():
     """Read version from plugin.json."""
     plugin_json = os.path.join(PLUGIN_ROOT, '.claude-plugin', 'plugin.json')
@@ -151,8 +313,14 @@ def ensure_memory_paths_conf(project_root, extra_paths=None):
     return True
 
 
-def copy_template_memories(project_root):
-    """Copy template memories from plugin to project .serena/memory/."""
+def copy_template_memories(project_root, template_variables=None):
+    """Copy template memories from plugin to project .serena/memory/.
+
+    Supports subdirectories: templates in ref/, feedback/, etc. are copied
+    to the matching subdirectory under .serena/memory/.
+    _INDEX.md is skipped (replaced by MEMORY.md template).
+    Template variables ({{key}}) are rendered if template_variables is provided.
+    """
     templates_dir = os.path.join(PLUGIN_ROOT, 'memories', 'templates')
     target_dir = os.path.join(project_root, '.serena', 'memory')
     copied = []
@@ -160,18 +328,39 @@ def copy_template_memories(project_root):
     if not os.path.isdir(templates_dir):
         return copied
 
-    for filename in os.listdir(templates_dir):
-        if not filename.endswith('.md'):
-            continue
-        source = os.path.join(templates_dir, filename)
-        target = os.path.join(target_dir, filename)
-        if os.path.exists(target):
-            continue  # Don't overwrite existing
-        with open(source) as f:
-            content = f.read()
-        with open(target, 'w') as f:
-            f.write(content)
-        copied.append(filename)
+    for dirpath, _dirnames, filenames in os.walk(templates_dir):
+        for filename in filenames:
+            if not filename.endswith('.md'):
+                continue
+            # Skip deprecated _INDEX.md (replaced by MEMORY.md template)
+            if filename == '_INDEX.md':
+                continue
+
+            source = os.path.join(dirpath, filename)
+            # Compute relative subdirectory from templates root
+            rel_subdir = os.path.relpath(dirpath, templates_dir)
+            if rel_subdir == '.':
+                target_subdir = target_dir
+            else:
+                target_subdir = os.path.join(target_dir, rel_subdir)
+                os.makedirs(target_subdir, exist_ok=True)
+
+            target = os.path.join(target_subdir, filename)
+            if os.path.exists(target):
+                continue  # Don't overwrite existing
+            with open(source) as f:
+                content = f.read()
+
+            # Render template variables
+            if template_variables:
+                for key, value in template_variables.items():
+                    content = content.replace('{{' + key + '}}', str(value))
+
+            with open(target, 'w') as f:
+                f.write(content)
+
+            rel_path = os.path.relpath(target, target_dir)
+            copied.append(rel_path)
 
     return copied
 
@@ -498,11 +687,14 @@ def main():
     # Create/update memory-paths.conf
     conf_updated = ensure_memory_paths_conf(project_root, extra_paths=extra_paths)
 
-    # Migrate existing auto-memory files (before template copy to avoid conflicts)
-    migrated_files = migrate_auto_memory(project_root)
+    # Build template variables from detected project info
+    template_variables = build_template_variables(project_root, languages)
 
-    # Copy template memories (skips files that already exist from migration)
-    copied_templates = copy_template_memories(project_root)
+    # Copy and render template memories FIRST (establishes MEMORY.md base + defaults)
+    copied_templates = copy_template_memories(project_root, template_variables)
+
+    # Migrate existing auto-memory files (appends to MEMORY.md, skips files that exist)
+    migrated_files = migrate_auto_memory(project_root)
 
     # Create swe-setup-complete.json (bootstrapped, not complete)
     version = get_plugin_version()
@@ -536,7 +728,10 @@ def main():
     # Report
     print("SWE Bootstrap Complete")
     print(f"  Plugin version: {version}")
+    print(f"  Project name: {template_variables['project_name']}")
+    print(f"  Primary language: {template_variables['primary_language']}")
     print(f"  Languages detected: {', '.join(languages)}")
+    print(f"  Test framework: {template_variables['test_framework']}")
     print(f"  project.yml: {'created' if yml_created else 'already exists'}")
     print(f"  memory-paths.conf: {'updated' if conf_updated else 'already configured'}")
     if extra_paths:
@@ -544,7 +739,9 @@ def main():
     if migrated_files:
         print(f"  Auto-memory migrated: {', '.join(migrated_files)}")
     if copied_templates:
-        print(f"  Templates copied: {', '.join(copied_templates)}")
+        print(f"  Templates rendered: {', '.join(copied_templates)}")
+    else:
+        print(f"  Templates: all already exist (skipped)")
     print(f"  .serena/.gitignore: {'created' if serena_gitignore_created else 'already exists'}")
     print(f"  .gitignore: {'updated' if gitignore_updated else 'already configured'}")
     print(f"  CLAUDE.md: {'prefix injected' if claude_prefix_injected else 'already configured'}")

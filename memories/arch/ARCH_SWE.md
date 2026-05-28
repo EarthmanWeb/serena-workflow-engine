@@ -94,7 +94,7 @@ See: `REF_SWARM_PATTERNS`, `RUFLO`
 
 Workflows interact with feature memories:
 
-- `_INDEX` for navigation
+- `MEMORY.md` for navigation (auto-loaded by Claude Code)
 - `FEATURE_*` for scope
 - `DOM_*`, `SYS_*` for domain/system context
 - `ARCH_*` for architecture patterns
@@ -144,8 +144,8 @@ When modifying the workflow system:
 | Component       | Depends On                             |
 | --------------- | -------------------------------------- |
 | WF_START        | CLAUDE_OBLIGATIONS, INDEX_FEATURES, WM |
-| WF_CLASSIFY     | _INDEX, FEATURE_*, REF_SWARM_PATTERNS  |
-| WF_CLASSIFY     | (also) _INDEX, DOM_*, SYS_*, INDEX_*   |
+| WF_CLASSIFY     | MEMORY.md, FEATURE_*, REF_SWARM_PATTERNS |
+| WF_CLASSIFY     | (also) DOM_*, SYS_*, INDEX_*           |
 | WF_ARCH_REVIEW  | ARCH_INDEX, ARCH__, REF__              |
 | WF_VERIFY       | CLAUDE_OBLIGATIONS, ARCH_INDEX         |
 | Skills          | REF_SKILL_PROTOCOLS, WM                |

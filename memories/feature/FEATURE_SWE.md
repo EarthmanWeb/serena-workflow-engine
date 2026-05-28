@@ -285,7 +285,7 @@ If user says "skip swe" / "no swe" / "disable swe":
 ### Tier 3: Full Init (user accepts)
 
 1. User says "yes" → `swe-bootstrap.py` runs inline (via UserPromptSubmit hook)
-2. Bootstrap creates: `.serena/`, `.serena/swe/`, `.serena/memories/`, `.serena/.gitignore`, `project.yml`, `memory-paths.conf`, `CLAUDE_PREFIX.md` injection, template memories, `swe-setup-complete.json` with `bootstrapped: true`
+2. Bootstrap creates: `.serena/`, `.serena/swe/`, `.serena/memories/`, `.serena/.gitignore`, `project.yml`, `memory-paths.conf`, `CLAUDE_PREFIX.md` injection, rendered template memories (with `{{placeholders}}` filled from detected project info), `swe-setup-complete.json` with `bootstrapped: true`
 3. Init gate is **unblocked** (gate checks `complete` field; bootstrapped-but-not-complete passes through)
 4. User runs `/swe-init` which launches the init agent (9 tasks):
    - Detect environment + resolve plugin root

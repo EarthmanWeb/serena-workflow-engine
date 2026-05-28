@@ -1,19 +1,15 @@
-# _INDEX - Navigation Hub
+## Response & Style
+- [Response Format](feedback/FEEDBACK_RESPONSE_FORMAT.md) — no conversational language, use functional/direct phrasing only
+- [Read docs = list memories](feedback/FEEDBACK_READ_DOCS_MEANS_LIST.md) — "read the docs" means check MEMORY.md and use Serena to list_memories, not external docs
 
-## Project: {{project_name}}
+## Browser Session Isolation
+- [MCP Browser DevTools](ref/REF_MCP_BROWSER_DEVTOOLS.md) — scenarios-first rule, storageState reuse for parallel agents, tool reference
 
-**Primary Language:** {{primary_language}}
-**Detected Languages:** {{languages}}
+## Features
+- [Feature Index](index/INDEX_FEATURES.md) — Feature registry with relationships and types
 
-## Feature Memories
-
-| Memory                   | Purpose                     |
-| ------------------------ | --------------------------- |
-| `INDEX_FEATURES`         | Feature registry            |
-| `ARCH_INDEX`             | Architecture overview       |
-| `FEATURE_DEV_STANDARDS`  | Development standards       |
-| `FEATURE_TESTS`          | Test suite configuration    |
-| `FEATURE_AGENTS`         | Custom agent definitions    |
+## Architecture
+- [Architecture Index](arch/ARCH_INDEX.md) — Architecture overview
 
 ## Workflow Routing
 

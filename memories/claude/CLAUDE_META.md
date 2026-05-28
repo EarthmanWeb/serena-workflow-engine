@@ -124,7 +124,7 @@ project/
     +-- INDEX_*.md               # Lookup tables
     +-- REF_*.md                 # Reference documentation
     |
-    +-- _INDEX.md                # Memory navigation
+    +-- MEMORY.md                # Memory index (auto-loaded by Claude Code)
 ```
 
 ---
@@ -280,7 +280,7 @@ Key verification points that can't be skipped:
 2. Define: what to do, what to read, next states
 3. Update upstream states to route to new state
 4. Update `CLAUDE_WORKFLOW` diagram
-5. Update `_INDEX` memory list
+5. Update `MEMORY.md` index
 
 Example:
 

@@ -114,11 +114,25 @@ Bootstrap handles:
 - Directory creation (`.serena/`, `.serena/memory/`, `.serena/swe-state/`)
 - Language detection → `project.yml`
 - `memory-paths.conf` creation/update
-- Template memory copying (`_INDEX.md`, `FEATURE_TESTS.md`, `FEATURE_DEV_STANDARDS.md`, `FEATURE_AGENTS.md`)
+- Template rendering and installation (`MEMORY.md`, `FEEDBACK_RESPONSE_FORMAT.md`, `FEEDBACK_READ_DOCS_MEANS_LIST.md`, `REF_MCP_BROWSER_DEVTOOLS.md`, `FEATURE_TESTS.md`, `FEATURE_DEV_STANDARDS.md`, `FEATURE_AGENTS.md`) — placeholders like `{{project_name}}`, `{{primary_language}}`, `{{test_framework}}` are auto-filled from detected project info
 - `.gitignore` updates
 - `swe-setup-complete.json` creation with `bootstrapped: true`
 
 **If bootstrap fails**, report the error and stop.
+
+**After bootstrap succeeds**, verify templates were filled out (not left with raw `{{placeholders}}`):
+
+```bash
+# Check for unfilled placeholders in rendered templates
+grep -r '{{' .serena/memory/MEMORY.md .serena/memory/feature/FEATURE_*.md 2>/dev/null
+```
+
+If any `{{variable}}` placeholders remain, they couldn't be auto-detected. Fill them manually:
+
+1. Read each file with remaining placeholders
+2. Determine the correct value from the project context
+3. Replace the placeholder with the actual value
+4. Report which values were filled manually vs auto-detected
 
 ### Task 3: Verify MCP Servers
 
@@ -368,9 +382,17 @@ After all tasks, verify these 7 conditions:
    jq '.hooks | keys' $SWE_PLUGIN_ROOT/hooks/hooks.json
    # Expected: ["PostToolUse", "PreToolUse", "SessionStart", "Stop", "UserPromptSubmit"]
    ```
-4. **Template Memories Installed**: Template files exist in `.serena/memory/`
+4. **Template Memories Rendered**: Template files exist in `.serena/memory/` with placeholders filled
    ```bash
-   ls .serena/memory/_INDEX.md .serena/memory/feature/FEATURE_TESTS.md .serena/memory/feature/FEATURE_DEV_STANDARDS.md .serena/memory/feature/FEATURE_AGENTS.md
+   # Check files exist
+   ls .serena/memory/MEMORY.md .serena/memory/feedback/FEEDBACK_RESPONSE_FORMAT.md .serena/memory/feedback/FEEDBACK_READ_DOCS_MEANS_LIST.md .serena/memory/ref/REF_MCP_BROWSER_DEVTOOLS.md .serena/memory/feature/FEATURE_TESTS.md .serena/memory/feature/FEATURE_DEV_STANDARDS.md .serena/memory/feature/FEATURE_AGENTS.md
+   # Check no unfilled placeholders remain
+   UNFILLED=$(grep -rl '{{' .serena/memory/MEMORY.md .serena/memory/feature/FEATURE_*.md 2>/dev/null)
+   if [ -n "$UNFILLED" ]; then
+     echo "⚠️ Unfilled placeholders in: $UNFILLED"
+   else
+     echo "✅ All templates rendered"
+   fi
    ```
 5. **Serena Onboarding**: Complete
 6. **Log Viewer Extension**: Symlink exists at `~/.vscode/extensions/serena-log-viewer`
@@ -403,7 +425,7 @@ Output summary after all verifications pass:
 - MCP Servers: serena, swe-wm
 - Serena Onboarding: Complete
 - SWE Plugin: Enabled (hooks load from plugin folder)
-- Template Memories: Installed to .serena/memory/
+- Template Memories: Rendered to .serena/memory/ (placeholders filled)
 - Auto-Memory Symlink: Configured
 - Log Viewer: VSCode extension installed
 

@@ -168,7 +168,7 @@ mcp__plugin_swe_serena__read_memory("feature/FEATURE_DEV_STANDARDS")
 **⚠️ MANDATORY RESEARCH BEFORE ROUTING:**
 
 ```
-mcp__plugin_swe_serena__read_memory("_INDEX")  # Full navigation hub
+mcp__plugin_swe_serena__list_memories()  # Discover available memories
 ```
 
 - Read ALL relevant: `INDEX_*`, `ARCH_*`, `SYS_*`, `DOM_*`, `REF_*`, `SPEC_*`

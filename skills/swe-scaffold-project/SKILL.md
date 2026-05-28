@@ -105,33 +105,35 @@ mkdir -p .claude/hooks
 
 ### Stage 3: Core Memory Creation
 
-Create from templates:
+**Templates are rendered with detected project values, not just copied.**
 
-1. **_INDEX** - Navigation hub
+The bootstrap script (`swe-bootstrap.py`) auto-detects project name, primary language, test framework, and other values from manifests (`package.json`, `composer.json`, `Cargo.toml`, etc.) and file extensions. These are substituted into `{{variable}}` placeholders in template files.
 
-```markdown
-# _INDEX - Memory Navigation
+**Template variables auto-detected:**
 
-## Quick Reference
+| Variable | Source |
+|----------|--------|
+| `{{project_name}}` | Manifest `name` field, or directory name |
+| `{{primary_language}}` | Most common language by file count |
+| `{{languages}}` | All detected languages, comma-separated |
+| `{{test_framework}}` | Detected from devDependencies/require-dev |
+| `{{test_commands}}` | Default commands for detected framework |
+| `{{test_root}}` | Default test directory for detected framework |
+| `{{year}}` | Current year |
 
-- Features: INDEX_FEATURES
-- Architecture: ARCH_INDEX
-- Workflows: INDEX_WORKFLOWS_STATES
+**Templates rendered (from `memories/templates/`):**
 
-## Memory Types
+1. **MEMORY.md** — Memory index with default entries (response format, MCP browser devtools, workflow routing)
+2. **feedback/FEEDBACK_RESPONSE_FORMAT.md** — Functional language directive (no conversational filler)
+3. **feedback/FEEDBACK_READ_DOCS_MEANS_LIST.md** — "Read docs" = use Serena list_memories
+4. **ref/REF_MCP_BROWSER_DEVTOOLS.md** — Browser DevTools MCP reference with scenarios-first rule, session isolation
+5. **FEATURE_TESTS.md** — Test configuration with detected framework and commands
+6. **FEATURE_DEV_STANDARDS.md** — Development standards index with primary language
+7. **FEATURE_AGENTS.md** — Agent registry with project name
 
-| Prefix   | Purpose           |
-| -------- | ----------------- |
-| FEATURE_ | Feature configs   |
-| DOM_     | Domain behaviors  |
-| SYS_     | System references |
-| REF_     | Reference docs    |
-| INDEX_   | Navigation        |
-| WF_      | Workflow states   |
-| WM_      | Session state     |
-```
+**Additionally, create these non-template memories:**
 
-2. **INDEX_FEATURES** - Empty feature registry
+1. **INDEX_FEATURES** - Empty feature registry
 
 ```markdown
 # INDEX_FEATURES
@@ -146,27 +148,29 @@ Create from templates:
 2. `/swe-onboard-quick [KEY]` - Fast setup
 ```
 
-3. **ARCH_INDEX** - Basic architecture placeholder
+2. **ARCH_INDEX** - Architecture overview filled with detected values
 
 ```markdown
 # ARCH_INDEX - Architecture Overview
 
 ## Project Type
 
-[Detected or unknown]
+[Detected from manifests or unknown]
 
 ## Primary Language
 
-[Detected]
+[Detected — e.g., "typescript", "php", "python"]
 
 ## Framework
 
-[Detected or none]
+[Detected from manifests or none]
 
 ## Structure
 
 (Run /swe-feature-onboard to populate)
 ```
+
+**After creation, verify templates were filled out** — check that `{{project_name}}` and `{{primary_language}}` are no longer raw placeholders in the generated files. If they are, the bootstrap detection failed and they should be filled manually.
 
 ### Stage 4: First Feature Prompt
 
@@ -175,7 +179,10 @@ Create from templates:
 **Created:**
 
 - .serena/memory/
-- _INDEX
+- MEMORY.md (with default entries)
+- feedback/FEEDBACK_RESPONSE_FORMAT.md
+- feedback/FEEDBACK_READ_DOCS_MEANS_LIST.md
+- ref/REF_MCP_BROWSER_DEVTOOLS.md
 - INDEX_FEATURES
 - ARCH_INDEX
 
@@ -247,7 +254,7 @@ If user skips feature setup, enable minimal mode:
 - **Project Root**: [path]
 - **Language**: [detected]
 - **Framework**: [detected or none]
-- **Memories Created**: _INDEX, INDEX_FEATURES, ARCH_INDEX
+- **Memories Created**: MEMORY.md, FEEDBACK_RESPONSE_FORMAT, FEEDBACK_READ_DOCS_MEANS_LIST, REF_MCP_BROWSER_DEVTOOLS, INDEX_FEATURES, ARCH_INDEX
 - **Next Step Hint**: WF_START or /swe-feature-onboard
 ```
 
