@@ -318,7 +318,6 @@ def copy_template_memories(project_root, template_variables=None):
 
     Supports subdirectories: templates in ref/, feedback/, etc. are copied
     to the matching subdirectory under .serena/memory/.
-    _INDEX.md is skipped (replaced by MEMORY.md template).
     Template variables ({{key}}) are rendered if template_variables is provided.
     """
     templates_dir = os.path.join(PLUGIN_ROOT, 'memories', 'templates')
@@ -331,9 +330,6 @@ def copy_template_memories(project_root, template_variables=None):
     for dirpath, _dirnames, filenames in os.walk(templates_dir):
         for filename in filenames:
             if not filename.endswith('.md'):
-                continue
-            # Skip deprecated _INDEX.md (replaced by MEMORY.md template)
-            if filename == '_INDEX.md':
                 continue
 
             source = os.path.join(dirpath, filename)

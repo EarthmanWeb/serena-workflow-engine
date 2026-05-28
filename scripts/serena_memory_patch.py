@@ -58,7 +58,7 @@ def _normalize_name(name):
     base = clean.split("/")[-1] if "/" in clean else clean
     prefix = _derive_prefix(base)
     if prefix is None:
-        return clean  # Can't derive prefix (e.g. _INDEX)
+        return clean  # Can't derive prefix (e.g. MEMORY.md)
     # WM and LITE files live flat in .serena/memories/ — no subdirectory
     if prefix in _MEMORIES_DIR_PREFIXES:
         return base
