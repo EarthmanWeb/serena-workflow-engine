@@ -47,26 +47,129 @@ mkdir -p "$SERENA_MEMORY_DIR"
 
 ### Step 3: Migrate Existing Auto-Memory Content
 
+Auto-memory files are flat (e.g., `feedback_test.md`, `user_role.md`). SWE organizes memories into typed subdirectories with uppercase names. This step migrates and reorganizes.
+
+#### Prefix-to-Subdirectory Mapping
+
+| Auto-Memory Pattern | Target Subdirectory | Rename Rule |
+|---|---|---|
+| `feedback_*.md` | `feedback/` | `FEEDBACK_*.md` |
+| `user_*.md` | `user/` | `USER_*.md` |
+| `project_*.md` | `project/` | `PROJECT_*.md` |
+| `reference_*.md` | `ref/` | `REF_*.md` (note: `reference` → `ref`) |
+| `SPEC_*.md` | `spec/` | Keep as-is (already uppercase) |
+| `MEMORY.md` | root | **Merge** (see below) |
+| Other `*.md` | root | Uppercase the filename |
+
+#### Migration Script
+
 ```bash
 if [ -d "$AUTO_MEMORY_DIR" ] && [ ! -L "$AUTO_MEMORY_DIR" ]; then
-    # Check for actual files (not just an empty directory)
-    FILE_COUNT=$(find "$AUTO_MEMORY_DIR" -maxdepth 1 -type f | wc -l | tr -d ' ')
+    FILE_COUNT=$(find "$AUTO_MEMORY_DIR" -maxdepth 1 -type f -name "*.md" | wc -l | tr -d ' ')
     if [ "$FILE_COUNT" -gt 0 ]; then
-        echo "Found $FILE_COUNT file(s) in auto-memory directory — migrating..."
-        for f in "$AUTO_MEMORY_DIR"/*; do
+        echo "Found $FILE_COUNT file(s) in auto-memory directory — migrating with reorganization..."
+
+        for f in "$AUTO_MEMORY_DIR"/*.md; do
             [ -f "$f" ] || continue
             basename=$(basename "$f")
-            if [ ! -f "$SERENA_MEMORY_DIR/$basename" ]; then
-                cp "$f" "$SERENA_MEMORY_DIR/$basename"
-                echo "  Migrated: $basename"
+
+            # Skip MEMORY.md — handled separately below
+            [ "$basename" = "MEMORY.md" ] && continue
+
+            # Determine target subdirectory and new filename
+            case "$basename" in
+                feedback_*)
+                    subdir="feedback"
+                    newname="$(echo "$basename" | sed 's/^feedback_/FEEDBACK_/' | tr '[:lower:]' '[:upper:]')"
+                    # Preserve .md extension casing
+                    newname="${newname%.MD}.md"
+                    ;;
+                user_*)
+                    subdir="user"
+                    newname="$(echo "$basename" | sed 's/^user_/USER_/' | tr '[:lower:]' '[:upper:]')"
+                    newname="${newname%.MD}.md"
+                    ;;
+                project_*)
+                    subdir="project"
+                    newname="$(echo "$basename" | sed 's/^project_/PROJECT_/' | tr '[:lower:]' '[:upper:]')"
+                    newname="${newname%.MD}.md"
+                    ;;
+                reference_*)
+                    subdir="ref"
+                    newname="$(echo "$basename" | sed 's/^reference_/REF_/' | tr '[:lower:]' '[:upper:]')"
+                    newname="${newname%.MD}.md"
+                    ;;
+                SPEC_*)
+                    subdir="spec"
+                    newname="$basename"  # Already uppercase
+                    ;;
+                *)
+                    subdir=""  # Root level
+                    newname="$(echo "$basename" | tr '[:lower:]' '[:upper:]')"
+                    newname="${newname%.MD}.md"
+                    ;;
+            esac
+
+            # Create subdirectory if needed
+            if [ -n "$subdir" ]; then
+                mkdir -p "$SERENA_MEMORY_DIR/$subdir"
+                target="$SERENA_MEMORY_DIR/$subdir/$newname"
             else
-                echo "  Skipped (already exists in target): $basename"
+                target="$SERENA_MEMORY_DIR/$newname"
+            fi
+
+            if [ ! -f "$target" ]; then
+                cp "$f" "$target"
+                echo "  Migrated: $basename → ${subdir:+$subdir/}$newname"
+            else
+                echo "  Skipped (already exists): ${subdir:+$subdir/}$newname"
             fi
         done
+
+        # Merge MEMORY.md
+        SOURCE_MEMORY="$AUTO_MEMORY_DIR/MEMORY.md"
+        TARGET_MEMORY="$SERENA_MEMORY_DIR/MEMORY.md"
+        if [ -f "$SOURCE_MEMORY" ]; then
+            echo "  Merging MEMORY.md index entries..."
+            if [ ! -f "$TARGET_MEMORY" ]; then
+                # No target — just copy (will be rewritten with updated paths)
+                cp "$SOURCE_MEMORY" "$TARGET_MEMORY"
+                echo "  Copied MEMORY.md (no existing target)"
+            else
+                # Append unique entries from source that aren't in target
+                # Process each non-empty, non-heading line from source
+                while IFS= read -r line; do
+                    # Skip empty lines and heading lines
+                    [ -z "$line" ] && continue
+                    echo "$line" | grep -q '^#' && continue
+
+                    # Extract the link target if it's a markdown link line
+                    link_target=$(echo "$line" | sed -n 's/.*](\([^)]*\)).*/\1/p')
+                    if [ -n "$link_target" ]; then
+                        # Check if this link target (or its migrated version) already exists in target
+                        if ! grep -qF "$link_target" "$TARGET_MEMORY"; then
+                            echo "$line" >> "$TARGET_MEMORY"
+                            echo "    Added entry: $line"
+                        fi
+                    fi
+                done < "$SOURCE_MEMORY"
+            fi
+
+            # Rewrite paths in MEMORY.md to match new subdirectory structure
+            sed -i '' \
+                -e 's|(feedback_\([^)]*\))|(feedback/FEEDBACK_\U\1)|g' \
+                -e 's|(user_\([^)]*\))|(user/USER_\U\1)|g' \
+                -e 's|(project_\([^)]*\))|(project/PROJECT_\U\1)|g' \
+                -e 's|(reference_\([^)]*\))|(ref/REF_\U\1)|g' \
+                -e 's|(SPEC_\([^)]*\))|(spec/SPEC_\1)|g' \
+                "$TARGET_MEMORY" 2>/dev/null || true
+            echo "  Updated MEMORY.md paths to match new structure"
+        fi
     else
-        echo "Auto-memory directory exists but contains no files"
+        echo "Auto-memory directory exists but contains no .md files"
     fi
-    # Verify no files remain before removing
+
+    # Remove source directory if empty
     REMAINING=$(find "$AUTO_MEMORY_DIR" -maxdepth 1 -type f | wc -l | tr -d ' ')
     if [ "$REMAINING" -eq 0 ]; then
         rm -rf "$AUTO_MEMORY_DIR"

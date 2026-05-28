@@ -111,7 +111,7 @@ python3 "$SWE_PLUGIN_ROOT/scripts/swe-bootstrap.py"
 ```
 
 Bootstrap handles:
-- Directory creation (`.serena/`, `.serena/swe/`, `.serena/swe-state/`)
+- Directory creation (`.serena/`, `.serena/memory/`, `.serena/swe-state/`)
 - Language detection → `project.yml`
 - `memory-paths.conf` creation/update
 - Template memory copying (`_INDEX.md`, `FEATURE_TESTS.md`, `FEATURE_DEV_STANDARDS.md`, `FEATURE_AGENTS.md`)
@@ -319,10 +319,18 @@ This creates a symlink from `~/.vscode/extensions/serena-log-viewer` to the exte
 
 Run `/swe-symlink-memory` to set up the auto-memory symlink. This command handles:
 
-- Migrating existing auto-memory files to `.serena/memory/`
+- **Migrating and reorganizing** existing auto-memory files into `.serena/memory/` with proper subdirectory structure:
+  - `feedback_*.md` → `feedback/FEEDBACK_*.md`
+  - `user_*.md` → `user/USER_*.md`
+  - `project_*.md` → `project/PROJECT_*.md`
+  - `reference_*.md` → `ref/REF_*.md`
+  - `SPEC_*.md` → `spec/SPEC_*.md`
+- **Merging MEMORY.md** index entries (appends unique entries with updated paths, never overwrites)
 - Creating the symlink from `~/.claude/projects/<encoded>/memory` to `.serena/memory/`
 - Updating `memory-paths.conf`
 - Adding CLAUDE.md directives
+
+**Note:** The bootstrap script (`swe-bootstrap.py` Task 2) also runs migration before copying templates, so files are reorganized even if this task runs later.
 
 See [commands/swe-symlink-memory.md](../commands/swe-symlink-memory.md) for full steps.
 
@@ -360,9 +368,9 @@ After all tasks, verify these 7 conditions:
    jq '.hooks | keys' $SWE_PLUGIN_ROOT/hooks/hooks.json
    # Expected: ["PostToolUse", "PreToolUse", "SessionStart", "Stop", "UserPromptSubmit"]
    ```
-4. **Template Memories Installed**: Template files exist in `.serena/swe/`
+4. **Template Memories Installed**: Template files exist in `.serena/memory/`
    ```bash
-   ls .serena/swe/_INDEX.md .serena/swe/feature/FEATURE_TESTS.md .serena/swe/feature/FEATURE_DEV_STANDARDS.md .serena/swe/feature/FEATURE_AGENTS.md
+   ls .serena/memory/_INDEX.md .serena/memory/feature/FEATURE_TESTS.md .serena/memory/feature/FEATURE_DEV_STANDARDS.md .serena/memory/feature/FEATURE_AGENTS.md
    ```
 5. **Serena Onboarding**: Complete
 6. **Log Viewer Extension**: Symlink exists at `~/.vscode/extensions/serena-log-viewer`
@@ -395,7 +403,7 @@ Output summary after all verifications pass:
 - MCP Servers: serena, swe-wm
 - Serena Onboarding: Complete
 - SWE Plugin: Enabled (hooks load from plugin folder)
-- Template Memories: Installed to .serena/swe/
+- Template Memories: Installed to .serena/memory/
 - Auto-Memory Symlink: Configured
 - Log Viewer: VSCode extension installed
 

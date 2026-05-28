@@ -153,7 +153,7 @@ Registered in `plugin.json` as `swe-wm`, started via `scripts/start-wm-mcp.sh`.
 | `swe-workflow-research`    | Code exploration/research                           |
 | `swe-workflow-arch-review` | Architecture compliance review                      |
 
-### Commands (7 total)
+### Commands (6 total)
 
 | Command         | Purpose                    |
 | --------------- | -------------------------- |
@@ -162,7 +162,7 @@ Registered in `plugin.json` as `swe-wm`, started via `scripts/start-wm-mcp.sh`.
 | `/swe-reset`    | Reset workflow state       |
 | `/swe-goto`     | Force transition to state  |
 | `/swe-memory`   | Manage session WM          |
-| `/swe-scaffold` | Scaffold new project       |
+| `/swe-scaffold-project` | Scaffold new project (skill) |
 | `/swe-cleanup`  | Archive completed memories |
 
 ### Agents (2 total)

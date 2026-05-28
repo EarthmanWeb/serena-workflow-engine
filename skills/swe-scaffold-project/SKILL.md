@@ -33,12 +33,15 @@ Initialize workflow system for new or empty projects.
 - New projects without existing memories
 - Projects missing INDEX_FEATURES
 - Converting existing projects to workflow system
+- **Lightweight alternative to `/swe-init`** — creates memories and prompts for features without running the full autonomous verification agent (MCP checks, LSP install, VSCode extension, etc.)
+
+**Prefer `/swe-init`** for first-time setup — it runs bootstrap, scaffold, AND verification in one autonomous flow.
 
 ## Detection Triggers
 
 Automatically suggested when:
 
-- No `.serena/swe/` directory exists
+- No `.serena/memory/` directory exists
 - No `INDEX_FEATURES.md` file exists
 - `INDEX_FEATURES.md` has zero features registered
 
@@ -95,7 +98,7 @@ find . -name "*.go" | head -1                   # Go
 ### Stage 2: Directory Setup
 
 ```bash
-mkdir -p .serena/swe
+mkdir -p .serena/memory
 mkdir -p .claude/skills
 mkdir -p .claude/hooks
 ```
@@ -171,7 +174,7 @@ Create from templates:
 
 **Created:**
 
-- .serena/swe/
+- .serena/memory/
 - _INDEX
 - INDEX_FEATURES
 - ARCH_INDEX

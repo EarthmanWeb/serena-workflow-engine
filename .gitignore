@@ -23,4 +23,3 @@ __init__.*
 !.serena/memories/
 !.serena/memories/**/*.md
 .serena/memories/WM_*.md
-.serena/swe

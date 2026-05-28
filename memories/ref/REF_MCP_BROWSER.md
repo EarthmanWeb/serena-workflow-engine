@@ -18,10 +18,10 @@ Each scenario is documented in Serena memory as `mcp/MCP_{name}`.
 
 ### Creating New Batches
 
-After performing browser steps in a conversation (navigate, fill, click, etc.), use `/swe-mcp-batch` to convert those steps into a reusable scenario:
+After performing browser steps in a conversation (navigate, fill, click, etc.), manually create a reusable scenario using `scenario-add`:
 
 ```
-/swe-mcp-batch login to wp-admin
+mcp__browser-devtools__scenario-add({ name: "MCP_login", description: "Login to wp-admin", script: "..." })
 ```
 
 The command will:

@@ -93,7 +93,7 @@ Deduplicate the combined list. These are all the memory files to index.
 
 ```javascript
 mcp__plugin_swe_serena__get_symbols_overview({
-  relative_path: ".serena/swe/[memory_subdir]/[MEMORY_NAME].md",
+  relative_path: ".serena/memory/[memory_subdir]/[MEMORY_NAME].md",
   depth: 1
 })
 ```
@@ -120,7 +120,7 @@ mcp__plugin_swe_serena__get_symbols_overview({
 | `FEATURE_` | `feature/`   |
 | `WF_`      | `wf/`        |
 
-**If `get_symbols_overview` fails** for a memory (file not in .serena/swe/), try the plugin path:
+**If `get_symbols_overview` fails** for a memory (file not in .serena/memory/), try the plugin path:
 
 ```javascript
 mcp__plugin_swe_serena__get_symbols_overview({
@@ -256,7 +256,7 @@ Consider running /swe-feature-update [KEY] first.
 
 ### Symbol extraction fails for a memory
 
-- Memory may not exist in .serena/swe/ or plugin memories/
+- Memory may not exist in .serena/memory/ or plugin memories/
 - Try `search_for_pattern` as fallback to find heading patterns: `^##`
 - Log skipped memories in the summary report
 

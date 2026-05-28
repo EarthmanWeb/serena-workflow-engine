@@ -150,7 +150,7 @@ When updating the **SWE** feature itself, memories follow a dual-location archit
 
 This ensures changes are preserved in the portable plugin and propagated correctly.
 
-**DO NOT** edit SWE memories directly in `.serena/swe/` - they will be overwritten on sync.
+**DO NOT** edit SWE memories directly in `.serena/memory/` - they will be overwritten on sync.
 
 ### 5.1 Update FEATURE_[KEY]
 

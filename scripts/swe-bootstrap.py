@@ -14,6 +14,7 @@ Guards:
 import os
 import sys
 import json
+import re
 from datetime import datetime
 from collections import Counter
 
@@ -86,6 +87,10 @@ def create_project_yml(project_root, languages):
 # Detected languages from project file extensions
 languages:
 {lang_lines}
+
+# Exclude session Working Memory files from list_memories output.
+# WM files are accessed via the swe-wm MCP server, not Serena's memory API.
+ignored_memory_patterns: ["WM_.*"]
 """
     with open(yml_path, 'w') as f:
         f.write(content)
@@ -147,9 +152,9 @@ def ensure_memory_paths_conf(project_root, extra_paths=None):
 
 
 def copy_template_memories(project_root):
-    """Copy template memories from plugin to project .serena/swe/."""
+    """Copy template memories from plugin to project .serena/memory/."""
     templates_dir = os.path.join(PLUGIN_ROOT, 'memories', 'templates')
-    target_dir = os.path.join(project_root, '.serena', 'swe')
+    target_dir = os.path.join(project_root, '.serena', 'memory')
     copied = []
 
     if not os.path.isdir(templates_dir):
@@ -169,6 +174,164 @@ def copy_template_memories(project_root):
         copied.append(filename)
 
     return copied
+
+
+def migrate_auto_memory(project_root):
+    """Migrate auto-memory files from ~/.claude/projects/<encoded>/memory/ to .serena/memory/.
+
+    Reorganizes flat files into typed subdirectories with uppercase names:
+      feedback_test.md  → feedback/FEEDBACK_TEST.md
+      user_role.md      → user/USER_ROLE.md
+      project_notes.md  → project/PROJECT_NOTES.md
+      reference_api.md  → ref/REF_API.md
+      SPEC_Foo.md       → spec/SPEC_Foo.md
+      other.md          → OTHER.md (root, uppercased)
+
+    MEMORY.md is merged (unique entries appended with updated paths).
+
+    Returns list of migrated filenames (new paths).
+    """
+    target_dir = os.path.join(project_root, '.serena', 'memory')
+
+    # Determine auto-memory source path
+    encoded_both = project_root.replace('/', '-').replace('_', '-')
+    if encoded_both.startswith('-'):
+        encoded_both = encoded_both  # keep leading dash
+    auto_dir = os.path.join(os.path.expanduser('~'), '.claude', 'projects', encoded_both, 'memory')
+
+    if not os.path.isdir(auto_dir) or os.path.islink(auto_dir):
+        # Try underscore-preserving encoding (older Claude Code)
+        encoded_slash = project_root.replace('/', '-')
+        auto_dir = os.path.join(os.path.expanduser('~'), '.claude', 'projects', encoded_slash, 'memory')
+        if not os.path.isdir(auto_dir) or os.path.islink(auto_dir):
+            return []
+
+    # Prefix-to-subdirectory mapping
+    PREFIX_MAP = {
+        'feedback_': ('feedback', 'FEEDBACK_'),
+        'user_': ('user', 'USER_'),
+        'project_': ('project', 'PROJECT_'),
+        'reference_': ('ref', 'REF_'),
+    }
+
+    migrated = []
+    memory_md_source = None
+
+    for filename in os.listdir(auto_dir):
+        if not filename.endswith('.md'):
+            continue
+        source = os.path.join(auto_dir, filename)
+        if not os.path.isfile(source):
+            continue
+
+        # Handle MEMORY.md separately
+        if filename == 'MEMORY.md':
+            memory_md_source = source
+            continue
+
+        # Determine target subdir and new name
+        subdir = ''
+        newname = filename
+        matched = False
+
+        # Check SPEC_ first (already uppercase, just move to subdir)
+        if filename.startswith('SPEC_'):
+            subdir = 'spec'
+            newname = filename
+            matched = True
+
+        if not matched:
+            for prefix, (target_subdir, new_prefix) in PREFIX_MAP.items():
+                if filename.startswith(prefix):
+                    subdir = target_subdir
+                    # Strip old prefix, uppercase the rest, prepend new prefix
+                    rest = filename[len(prefix):]
+                    name_part = rest.rsplit('.md', 1)[0]
+                    newname = new_prefix + name_part.upper() + '.md'
+                    matched = True
+                    break
+
+        if not matched:
+            # Unknown prefix — uppercase and keep at root
+            name_part = filename.rsplit('.md', 1)[0]
+            newname = name_part.upper() + '.md'
+
+        # Create subdirectory if needed
+        if subdir:
+            target_subdir_path = os.path.join(target_dir, subdir)
+            os.makedirs(target_subdir_path, exist_ok=True)
+            target = os.path.join(target_subdir_path, newname)
+            rel_path = f"{subdir}/{newname}"
+        else:
+            target = os.path.join(target_dir, newname)
+            rel_path = newname
+
+        if not os.path.exists(target):
+            with open(source) as f:
+                content = f.read()
+            with open(target, 'w') as f:
+                f.write(content)
+            migrated.append(rel_path)
+
+    # Merge MEMORY.md
+    if memory_md_source:
+        target_memory = os.path.join(target_dir, 'MEMORY.md')
+        _merge_memory_md(memory_md_source, target_memory, project_root)
+        migrated.append('MEMORY.md (merged)')
+
+    return migrated
+
+
+def _merge_memory_md(source_path, target_path, project_root):
+    """Merge auto-memory MEMORY.md entries into target, rewriting paths to match new structure."""
+    PREFIX_MAP = {
+        'feedback_': 'feedback/FEEDBACK_',
+        'user_': 'user/USER_',
+        'project_': 'project/PROJECT_',
+        'reference_': 'ref/REF_',
+    }
+
+    with open(source_path) as f:
+        source_lines = f.readlines()
+
+    # Read existing target content (may not exist yet)
+    target_content = ''
+    if os.path.exists(target_path):
+        with open(target_path) as f:
+            target_content = f.read()
+
+    new_entries = []
+    for line in source_lines:
+        stripped = line.strip()
+        if not stripped or stripped.startswith('#'):
+            continue
+
+        # Rewrite link paths in the line
+        rewritten = line
+        for old_prefix, new_prefix in PREFIX_MAP.items():
+            # Match markdown links like ](feedback_test.md)
+            pattern = re.escape(old_prefix) + r'([^)]+\.md)'
+            def _rewrite(m):
+                rest = m.group(1)
+                name_part = rest.rsplit('.md', 1)[0]
+                return new_prefix + name_part.upper() + '.md'
+            rewritten = re.sub(pattern, _rewrite, rewritten)
+
+        # Handle SPEC_ links — just add spec/ prefix
+        rewritten = re.sub(r'\]\((SPEC_[^)]+)\)', r'](spec/\1)', rewritten)
+
+        # Check if this entry (by link target) already exists in target
+        link_match = re.search(r'\]\(([^)]+)\)', rewritten)
+        if link_match:
+            link_target = link_match.group(1)
+            if link_target not in target_content:
+                new_entries.append(rewritten)
+
+    if new_entries:
+        with open(target_path, 'a') as f:
+            f.write('\n## Migrated from Auto-Memory\n')
+            for entry in new_entries:
+                f.write(entry if entry.endswith('\n') else entry + '\n')
 
 
 def prompt_extra_memory_paths():
@@ -246,8 +409,8 @@ swe-bypass.json
 swe-setup-complete.json
 
 # Keep everything else (feature memories, specs, etc.)
-!swe/
-!swe/**/*.md
+!memory/
+!memory/**/*.md
 !memories/
 !/memory-paths.conf
 """
@@ -264,9 +427,9 @@ def update_gitignore(project_root):
         '.serena/swe-setup-complete.json',
         '.serena/swe-state/',
         '',
-        '# Override global .serena/* ignore — un-ignore swe memories',
-        '!.serena/swe/',
-        '!.serena/swe/**/*.md',
+        '# Override global .serena/* ignore — un-ignore project memories',
+        '!.serena/memory/',
+        '!.serena/memory/**/*.md',
         '!.serena/memories/',
         '!.serena/memories/**/*.md',
         '.serena/memories/WM_*.md',
@@ -278,7 +441,7 @@ def update_gitignore(project_root):
             existing_content = f.read()
 
     # Check if already configured (use the negation pattern as marker)
-    if '!.serena/swe/' in existing_content:
+    if '!.serena/memory/' in existing_content:
         return False
 
     with open(gitignore_path, 'a') as f:
@@ -307,7 +470,7 @@ def main():
                 print("Already fully initialized. Nothing to do.")
                 sys.exit(0)
             if setup_data.get('bootstrapped'):
-                print("Already bootstrapped. Run /swe-init or /swe-scaffold-project to complete setup.")
+                print("Already bootstrapped. Run /swe-init to complete setup (recommended), or /swe-scaffold-project for manual setup.")
                 sys.exit(0)
         except (json.JSONDecodeError, IOError):
             pass  # Corrupt file — proceed with bootstrap
@@ -316,8 +479,7 @@ def main():
     dirs = [
         os.path.join(project_root, '.serena'),
                 os.path.join(project_root, '.serena', 'memory'),
-        os.path.join(project_root, '.serena', 'swe'),
-        os.path.join(project_root, '.serena', 'swe', 'feature'),
+        os.path.join(project_root, '.serena', 'memory', 'feature'),
         os.path.join(project_root, '.serena', 'memories'),
         os.path.join(project_root, '.serena', 'swe-state'),
     ]
@@ -336,7 +498,10 @@ def main():
     # Create/update memory-paths.conf
     conf_updated = ensure_memory_paths_conf(project_root, extra_paths=extra_paths)
 
-    # Copy template memories
+    # Migrate existing auto-memory files (before template copy to avoid conflicts)
+    migrated_files = migrate_auto_memory(project_root)
+
+    # Copy template memories (skips files that already exist from migration)
     copied_templates = copy_template_memories(project_root)
 
     # Create swe-setup-complete.json (bootstrapped, not complete)
@@ -376,12 +541,14 @@ def main():
     print(f"  memory-paths.conf: {'updated' if conf_updated else 'already configured'}")
     if extra_paths:
         print(f"  Extra paths added: {', '.join(extra_paths)}")
+    if migrated_files:
+        print(f"  Auto-memory migrated: {', '.join(migrated_files)}")
     if copied_templates:
         print(f"  Templates copied: {', '.join(copied_templates)}")
     print(f"  .serena/.gitignore: {'created' if serena_gitignore_created else 'already exists'}")
     print(f"  .gitignore: {'updated' if gitignore_updated else 'already configured'}")
     print(f"  CLAUDE.md: {'prefix injected' if claude_prefix_injected else 'already configured'}")
-    print(f"  Setup status: bootstrapped (needs /swe-scaffold-project to complete)")
+    print(f"  Setup status: bootstrapped (run /swe-init to complete, or /swe-scaffold-project for manual setup)")
 
 
 if __name__ == '__main__':

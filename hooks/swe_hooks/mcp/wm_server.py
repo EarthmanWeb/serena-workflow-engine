@@ -107,6 +107,19 @@ TOOL_DEFINITIONS = [
         },
     },
     {
+        "name": "swe_wm_list",
+        "description": (
+            "List all Working Memory files for the project. Returns session IDs, "
+            "file paths, and modification times. Use this when you need to see WM "
+            "files that are hidden from Serena's list_memories by ignored_memory_patterns."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+        },
+    },
+    {
         "name": "swe_wm_update_status",
         "description": (
             "Update the task status tag in Current Task (e.g., [IN_PROGRESS] -> [COMPLETED]). "
@@ -298,9 +311,35 @@ def tool_swe_wm_update_status(status: str, session_id: str = None) -> dict:
     }
 
 
+def tool_swe_wm_list() -> dict:
+    """List all WM files in the project's .serena/memories/ directory."""
+    import glob as _glob
+    from datetime import datetime
+
+    cwd = get_project_root()
+    memories_dir = os.path.join(cwd, '.serena', 'memories')
+    wm_files = sorted(_glob.glob(os.path.join(memories_dir, 'WM_*.md')), key=os.path.getmtime, reverse=True)
+
+    results = []
+    for wm_path in wm_files:
+        basename = os.path.basename(wm_path)
+        match = re.search(r'WM_([a-f0-9]{8})', basename)
+        session_id = match.group(1) if match else None
+        mtime = os.path.getmtime(wm_path)
+        results.append({
+            "session_id": session_id,
+            "filename": basename,
+            "filepath": wm_path,
+            "modified": datetime.fromtimestamp(mtime).strftime('%Y-%m-%d %H:%M'),
+        })
+
+    return {"wm_files": results, "count": len(results)}
+
+
 # Register tools
 TOOL_REGISTRY = {
     "swe_wm_read": tool_swe_wm_read,
+    "swe_wm_list": tool_swe_wm_list,
     "swe_wm_update_section": tool_swe_wm_update_section,
     "swe_wm_update_status": tool_swe_wm_update_status,
 }
