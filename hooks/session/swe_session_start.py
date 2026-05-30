@@ -12,8 +12,10 @@ Includes self-update workaround for Claude Code plugin auto-update bugs:
 import os
 import sys
 import json
+import shutil
 import subprocess
-from datetime import datetime
+import time
+from datetime import datetime, timezone
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import swe_hooks.bootstrap  # noqa: E402
 
@@ -29,23 +31,29 @@ except ImportError as e:
 
 
 def _self_update():
-    """Pull latest from remote if the marketplace clone is behind.
+    """Pull latest and install as new cache entry if version changed.
 
-    Claude Code's autoUpdate fetches but never pulls (anthropics/claude-code#29071).
-    This runs git pull in the marketplace clone so hooks/memories stay current.
+    For git-managed installs (dev checkouts): git pull in place.
+    For marketplace cache installs: pull marketplace clone, create new versioned
+    cache directory, orphan old cache, update installed_plugins.json.
 
     Returns: (updated: bool, old_version: str|None, new_version: str|None)
     """
-    # Find the marketplace clone — walk up from this hook file
-    # hooks/session/swe_session_start.py -> hooks/ -> plugin root
-    plugin_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    git_dir = os.path.join(plugin_root, '.git')
+    plugin_root = os.path.normpath(
+        os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    )
 
-    # Only act on git-managed installs (marketplace clones), not submodules
-    if not os.path.isdir(git_dir):
-        return False, None, None
+    # Git-managed install (dev checkout) — pull in place
+    if os.path.isdir(os.path.join(plugin_root, '.git')):
+        return _self_update_git(plugin_root)
 
-    # Don't update if this is a local dev checkout (has uncommitted changes)
+    # Marketplace cache install — replicate Claude Code's install mechanism
+    return _self_update_marketplace(plugin_root)
+
+
+def _self_update_git(plugin_root):
+    """Git pull in place for dev checkouts with a .git directory."""
+    # Don't update if this is a local dev checkout with uncommitted changes
     try:
         result = subprocess.run(
             ['git', 'status', '--porcelain'],
@@ -81,7 +89,7 @@ def _self_update():
     except (subprocess.TimeoutExpired, FileNotFoundError, ValueError):
         return False, old_version, None
 
-    # Pull (fast-forward only — safe, no merge conflicts possible)
+    # Pull (fast-forward only)
     try:
         result = subprocess.run(
             ['git', 'pull', '--ff-only', 'origin', 'main'],
@@ -103,6 +111,129 @@ def _self_update():
     return True, old_version, new_version
 
 
+def _self_update_marketplace(plugin_root):
+    """Update marketplace cache install by pulling the marketplace clone and
+    creating a new versioned cache directory — replicating Claude Code's
+    install mechanism.
+
+    Cache path structure: ~/.claude/plugins/cache/{marketplace}/{plugin}/{version}/
+    Marketplace clone:    ~/.claude/plugins/marketplaces/{marketplace}/
+    """
+    # Derive paths from cache directory structure
+    version_dir = plugin_root  # .../cache/Marketplace/plugin/1.1.30
+    plugin_dir = os.path.dirname(version_dir)  # .../cache/Marketplace/plugin
+    marketplace_dir = os.path.dirname(plugin_dir)  # .../cache/Marketplace
+    cache_dir = os.path.dirname(marketplace_dir)  # .../cache
+
+    # Validate we're actually in a cache directory
+    if os.path.basename(cache_dir) != 'cache':
+        return False, None, None
+
+    marketplace_name = os.path.basename(marketplace_dir)
+    plugin_name = os.path.basename(plugin_dir)
+    plugins_dir = os.path.dirname(cache_dir)  # ~/.claude/plugins
+
+    # Find the marketplace clone (git repo that Claude Code maintains)
+    marketplace_clone = os.path.join(plugins_dir, 'marketplaces', marketplace_name)
+    if not os.path.isdir(os.path.join(marketplace_clone, '.git')):
+        return False, None, None
+
+    # Read current version from cache
+    plugin_json_path = os.path.join(plugin_root, '.claude-plugin', 'plugin.json')
+    old_version = None
+    try:
+        with open(plugin_json_path) as f:
+            old_version = json.load(f).get('version')
+    except (IOError, json.JSONDecodeError):
+        pass
+
+    # Pull marketplace clone (same as Claude Code's auto-update)
+    try:
+        result = subprocess.run(
+            ['git', 'pull', '--ff-only', 'origin', 'main'],
+            cwd=marketplace_clone, capture_output=True, text=True, timeout=15
+        )
+        if result.returncode != 0:
+            return False, old_version, None
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        return False, old_version, None
+
+    # Read new version from pulled marketplace clone
+    marketplace_plugin_json = os.path.join(
+        marketplace_clone, '.claude-plugin', 'plugin.json'
+    )
+    new_version = None
+    try:
+        with open(marketplace_plugin_json) as f:
+            new_version = json.load(f).get('version')
+    except (IOError, json.JSONDecodeError):
+        return False, old_version, None
+
+    # No update needed
+    if not new_version or new_version == old_version:
+        return False, old_version, old_version
+
+    # Create new versioned cache directory
+    new_cache_dir = os.path.join(plugin_dir, new_version)
+    if os.path.exists(new_cache_dir):
+        return False, old_version, new_version  # Already exists
+
+    try:
+        shutil.copytree(
+            marketplace_clone, new_cache_dir,
+            ignore=shutil.ignore_patterns('.git'),
+            symlinks=True
+        )
+    except (OSError, shutil.Error):
+        # Clean up partial copy
+        if os.path.exists(new_cache_dir):
+            shutil.rmtree(new_cache_dir, ignore_errors=True)
+        return False, old_version, None
+
+    # Get git commit SHA from marketplace clone
+    git_sha = None
+    try:
+        result = subprocess.run(
+            ['git', 'rev-parse', 'HEAD'],
+            cwd=marketplace_clone, capture_output=True, text=True, timeout=5
+        )
+        if result.returncode == 0:
+            git_sha = result.stdout.strip()
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        pass
+
+    # Orphan old cache directory (Claude Code cleans up after 7 days)
+    try:
+        with open(os.path.join(plugin_root, '.orphaned_at'), 'w') as f:
+            f.write(str(int(time.time() * 1000)))
+    except IOError:
+        pass
+
+    # Update installed_plugins.json — point all matching entries to new cache
+    installed_json = os.path.join(plugins_dir, 'installed_plugins.json')
+    try:
+        with open(installed_json) as f:
+            registry = json.load(f)
+
+        plugin_key = f"{plugin_name}@{marketplace_name}"
+        now_iso = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.') + \
+            f"{datetime.now(timezone.utc).microsecond // 1000:03d}Z"
+
+        for entry in registry.get('plugins', {}).get(plugin_key, []):
+            if os.path.normpath(entry.get('installPath', '')) == plugin_root:
+                entry['installPath'] = new_cache_dir
+                entry['version'] = new_version
+                entry['lastUpdated'] = now_iso
+                if git_sha:
+                    entry['gitCommitSha'] = git_sha
+
+        with open(installed_json, 'w') as f:
+            json.dump(registry, f, indent=2)
+            f.write('\n')
+    except (IOError, json.JSONDecodeError, KeyError):
+        pass
+
+    return True, old_version, new_version
 
 
 
@@ -192,7 +323,8 @@ The workflow will not block you while you decide."""
 
         update_line = ""
         if updated:
-            update_line = f"\n🔄 Auto-updated: v{old_ver} → v{plugin_version}"
+            plugin_version = new_ver or plugin_version
+            update_line = f"\n🔄 Auto-updated: v{old_ver} → v{new_ver}"
 
         context = f"""🚀 SERENA WORKFLOW ENGINE v{plugin_version} - Session {session_id}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━{update_line}
