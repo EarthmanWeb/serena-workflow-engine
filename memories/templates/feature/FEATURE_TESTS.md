@@ -7,8 +7,8 @@
 | **Name**      | Test Suite             |
 | **Key**       | TESTS                  |
 | **Type**      | infrastructure         |
-| **Language**  | {{primary_language}}   |
-| **Framework** | {{test_framework}}     |
+| **Language**  | python   |
+| **Framework** | unknown     |
 
 ## Running Tests
 
@@ -16,7 +16,7 @@
 
 ```bash
 # TODO: Customize these per project
-{{test_commands}}
+# TODO: Add test commands
 ```
 
 ### Test Gate
@@ -51,14 +51,14 @@ When adapting this template for a project:
 
 | Directory           | Purpose                        |
 | ------------------- | ------------------------------ |
-| `{{test_root}}/`    | Root of the test suite         |
+| `tests/`    | Root of the test suite         |
 
 ## Test Runner Config
 
 | Setting      | Value                  |
 | ------------ | ---------------------- |
-| **Framework**| `{{test_framework}}`   |
-| **Root**     | `{{test_root}}`        |
+| **Framework**| `unknown`   |
+| **Root**     | `tests/`        |
 
 ## Test Suites
 

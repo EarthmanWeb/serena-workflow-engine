@@ -690,7 +690,7 @@ def main():
         print("SWE bypassed for this project. Remove .serena/swe-bypass.json to re-enable.")
         sys.exit(0)
 
-    # Guard: Check if already fully initialized
+    # Guard: Check if already fully initialized (complete=true is the ONLY early exit)
     setup_file = os.path.join(project_root, '.serena', 'swe-setup-complete.json')
     if os.path.exists(setup_file):
         try:
@@ -699,11 +699,11 @@ def main():
             if setup_data.get('complete'):
                 print("Already fully initialized. Nothing to do.")
                 sys.exit(0)
-            if setup_data.get('bootstrapped'):
-                print("Already bootstrapped. Run /swe-init to complete setup (recommended), or /swe-scaffold-project for manual setup.")
-                sys.exit(0)
         except (json.JSONDecodeError, IOError):
             pass  # Corrupt file — proceed with bootstrap
+
+    # All operations below are idempotent — safe to re-run.
+    # Existing files are preserved; only missing items are created.
 
     # Create directories
     dirs = [
@@ -732,22 +732,11 @@ def main():
     template_variables = build_template_variables(project_root, languages)
 
     # Copy and render template memories FIRST (establishes MEMORY.md base + defaults)
+    # Idempotent: skips files that already exist at the correct location
     copied_templates = copy_template_memories(project_root, template_variables)
 
     # Migrate existing auto-memory files (appends to MEMORY.md, skips files that exist)
     migrated_files = migrate_auto_memory(project_root)
-
-    # Create swe-setup-complete.json (bootstrapped, not complete)
-    version = get_plugin_version()
-    setup_data = {
-        "complete": False,
-        "bootstrapped": True,
-        "bootstrapped_at": datetime.now().isoformat(),
-        "version": version,
-        "needs_full_init": True,
-    }
-    with open(setup_file, 'w') as f:
-        json.dump(setup_data, f, indent=2)
 
     # Create README.md only if zero non-dot files exist
     non_dot_files = [f for f in os.listdir(project_root) if not f.startswith('.')]
@@ -755,7 +744,7 @@ def main():
         readme_path = os.path.join(project_root, 'README.md')
         if not os.path.exists(readme_path):
             with open(readme_path, 'w') as f:
-                f.write('# Project\n')
+                f.write('# Project\\n')
 
     # Create .serena/.gitignore
     serena_gitignore_created = ensure_serena_gitignore(project_root)
@@ -768,6 +757,18 @@ def main():
 
     # Inject CLAUDE_PREFIX.md into CLAUDE.md
     claude_prefix_injected = inject_claude_prefix(project_root)
+
+    # Create swe-setup-complete.json LAST — only after all operations succeed
+    version = get_plugin_version()
+    setup_data = {
+        "complete": False,
+        "bootstrapped": True,
+        "bootstrapped_at": datetime.now().isoformat(),
+        "version": version,
+        "needs_full_init": True,
+    }
+    with open(setup_file, 'w') as f:
+        json.dump(setup_data, f, indent=2)
 
     # Report
     print("SWE Bootstrap Complete")

@@ -205,7 +205,7 @@ bash .claude/plugins/serena-workflow-engine/scripts/install-hooks.sh
 | Location | Path | Purpose |
 |---|---|---|
 | Plugin folder | `.claude/plugins/serena-workflow-engine/` | Generic/portable code |
-| Local memories | `.serena/swe/` | Project-specific feature memories |
+| Local memories | `.serena/memory/` | Project-specific feature memories |
 | Working memory | `.serena/memories/` | Session-scoped WM files |
 | State files | `.serena/swe-state/` | Authoritative workflow state |
 

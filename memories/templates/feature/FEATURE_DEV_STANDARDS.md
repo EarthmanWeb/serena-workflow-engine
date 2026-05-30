@@ -1,8 +1,8 @@
 # FEATURE_DEV_STANDARDS - Development Standards Index
 
-## Project: {{project_name}}
+## Project: serena-workflow-engine
 
-**Primary Language:** {{primary_language}}
+**Primary Language:** python
 
 ## Standards by Language
 
@@ -10,7 +10,7 @@
 
 | Language               | Memory          | Status      |
 | ---------------------- | --------------- | ----------- |
-| {{primary_language}}   | `DEV_{{primary_language_upper}}` | TODO: Create |
+| python   | `DEV_PYTHON` | TODO: Create |
 
 ## General Standards
 

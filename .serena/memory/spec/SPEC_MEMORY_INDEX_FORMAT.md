@@ -20,7 +20,7 @@ Claude's auto-memory system uses a different pattern that solves all of these:
 
 ### Individual Memory Files: Add Frontmatter
 
-Every memory file (DEV_*, DOM_*, SYS_*, REF_*, ARCH_*, FEATURE_*) gets a YAML frontmatter block:
+Every memory file (DEV_*, DOM_*, SYS_*, REF_*, ARCH_*, FEATURE_*, SPEC_*) gets a YAML frontmatter block:
 
 ```markdown
 ---

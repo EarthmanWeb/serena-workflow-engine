@@ -1,6 +1,6 @@
 # FEATURE_AGENTS - Custom Agents Index
 
-## Project: {{project_name}}
+## Project: serena-workflow-engine
 
 ## Registered Agents
 

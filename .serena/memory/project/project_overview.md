@@ -36,7 +36,7 @@ vscode-ext/           # Serena Log Viewer VSCode extension
 
 ## Per-Project Runtime Directories (created by bootstrap)
 ```
-.serena/swe/          # Feature memories, refs, specs
+.serena/memory/       # Project memories (features, domain, refs, specs)
 .serena/memories/     # Working Memory files (per-session)
 .serena/swe-state/    # Authoritative workflow state files
 .serena/streams/      # Append-only event logs
