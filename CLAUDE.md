@@ -39,3 +39,12 @@ Hooks will send you data to guide you. ALWAYS LISTEN TO THEM.
 - Did you read all references mentioned in hook responses COMPLETELY?
 - Did you use Serena tools before Read/Edit?
 - Did you check the codebase for existing patterns before creating new ones?
+
+
+## Auto-Memory Symlink
+
+This project uses a symlink to redirect Claude Code's auto-memory into `.serena/memory/`.
+
+- Use `write_memory()` for all memory operations (not the Write tool)
+- Update MEMORY.md index when adding new memories
+- Never write directly to `~/.claude/projects/.../memory/`

@@ -82,6 +82,16 @@
         ]
       },
       {
+        "matcher": "mcp__serena__write_memory|mcp__plugin_swe_serena__write_memory",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/post/swe_post_memory_index.py",
+            "timeout": 5
+          }
+        ]
+      },
+      {
         "matcher": "TodoWrite",
         "hooks": [
           {

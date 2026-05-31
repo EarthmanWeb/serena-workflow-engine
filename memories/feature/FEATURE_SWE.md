@@ -130,6 +130,7 @@ Registered in `plugin.json` as `swe-wm`, started via `scripts/start-wm-mcp.sh`.
 | `swe_post_edit_checkpoint.py`         | PostToolUse (Edit/Write/Serena) | Track edits, trigger checkpoints |
 | `swe_post_todo_wm_sync.py`            | PostToolUse (TodoWrite)         | WM sync reminder on todo changes |
 | `swe_post_write_continue.py`          | PostToolUse (Write)             | Post-write continuation          |
+| `swe_post_memory_index.py`            | PostToolUse (write_memory)      | Enforce MEMORY.md index update   |
 
 #### Stop Hooks (`hooks/stop/`)
 

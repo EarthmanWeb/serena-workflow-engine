@@ -23,3 +23,14 @@ __init__.*
 !.serena/memories/
 !.serena/memories/**/*.md
 .serena/memories/WM_*.md
+# SWE workflow engine
+.serena/swe-bypass.json
+.serena/swe-setup-complete.json
+.serena/swe-state/
+
+# Override global .serena/* ignore — un-ignore project memories
+!.serena/memory/
+!.serena/memory/**/*.md
+!.serena/memories/
+!.serena/memories/**/*.md
+.serena/memories/WM_*.md

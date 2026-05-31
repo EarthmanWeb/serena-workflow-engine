@@ -89,7 +89,11 @@ Determine which feature(s) this conversation is about:
 
 **Record the feature key(s) in WM. Feature memories will be loaded in WF_CLASSIFY.**
 
-If any FEATURE_[KEY] doesn't exist → `WF_ONBOARD`
+**⚠️ FALLBACK: If a feature is NOT found in MEMORY.md or INDEX_FEATURES**, call `list_memories(topic="feature")` to discover feature memories that exist but are not yet indexed. MEMORY.md can fall out of sync — `list_memories()` is the authoritative source for what actually exists. If the feature memory exists but is missing from MEMORY.md, **add the index entry to MEMORY.md immediately** before proceeding.
+
+If, after checking `list_memories()`, the FEATURE_[KEY] still doesn't exist → `WF_ONBOARD`
+
+**📌 MEMORY.md Maintenance:** MEMORY.md MUST be kept up to date whenever new memories are created. Every `write_memory()` call MUST be followed by adding a corresponding one-line index entry to MEMORY.md. A memory without an index entry is invisible to future sessions that rely on MEMORY.md for discovery.
 
 ### 3. Read CLAUDE_OBLIGATIONS
 
