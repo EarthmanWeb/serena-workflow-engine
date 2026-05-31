@@ -64,7 +64,32 @@ mcp__plugin_swe_serena__read_memory("feature/FEATURE_DEV_STANDARDS")
 - [ ] Visual regression tests if UI changed?
 - [ ] Tests run and pass?
 
-**Missing tests = GO BACK to WF_EXECUTE and add them.**
+**If automated tests exist:** Run them. Failing tests = GO BACK to WF_EXECUTE and fix them.
+
+### 3b. Browser Verification Fallback (No Automated Tests)
+
+**If NO automated tests exist for this feature**, you MUST verify the work visually in the dev browser when a local environment is available.
+
+#### Prerequisites
+
+1. **Check for local environment** — look for local dev server URLs in FEATURE_[KEY], project config, or `.serena/` files. If no local environment is available, note it in WM and skip to Step 4.
+2. **Check for saved scenarios** — call `mcp__browser-devtools__scenario-list()` FIRST.
+
+#### Verification Steps
+
+| Step | Action |
+|------|--------|
+| 1 | **Use scenarios first** — if a saved scenario covers the flow you changed, run it with `scenario-run`. Scenarios are more reliable than manual step-by-step interaction. |
+| 2 | **Manual verification** — if no scenario matches, navigate to the affected page(s), take an ARIA snapshot, and verify the changes are reflected in the UI. |
+| 3 | **Screenshot evidence** — take a screenshot of the verified state for WM documentation. |
+| 4 | **Create scenario** — if you performed manual steps that would be useful for future verification, save them as a new scenario with `scenario-add`. |
+
+**⚠️ CRITICAL: Follow browser devtools rules:**
+- ARIA snapshot FIRST for structure — NOT screenshots
+- NEVER guess selectors — always snapshot before interacting
+- Use `scenario-run` over individual tool calls whenever possible
+
+**If no local environment AND no automated tests:** Note in WM that verification was not possible and flag for user attention before proceeding to WF_DONE.
 
 ## 4. Fix Violations
 
@@ -88,10 +113,11 @@ comprehensively. Do NOT manually construct WM content or read REF_WM separately.
 
 | Condition                               | MUST Read Next                               |
 | --------------------------------------- | -------------------------------------------- |
-| Violations found                        | `WF_EXECUTE` (fix them)                      |
-| Tests missing                           | `WF_EXECUTE` (add them)                      |
-| WM not updated comprehensively          | **Invoke `/swe-wm-update --from WF_VERIFY`** |
-| All clean, tests pass, WM fully updated | `WF_DONE`                                    |
+| Violations found                                     | `WF_EXECUTE` (fix them)                      |
+| Tests missing AND no browser verification possible   | `WF_EXECUTE` (add tests)                     |
+| Browser verification failed (visual defects found)   | `WF_EXECUTE` (fix them)                      |
+| WM not updated comprehensively                       | **Invoke `/swe-wm-update --from WF_VERIFY`** |
+| All clean, tests/browser verification pass, WM updated | `WF_DONE`                                  |
 
 **SKIPPING WM UPDATE = WORKFLOW VIOLATION**
 **SKIPPING THIS TRANSITION = WORKFLOW VIOLATION**
