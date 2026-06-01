@@ -58,6 +58,25 @@ mcp__plugin_swe_serena__read_memory("feature/FEATURE_DEV_STANDARDS")
 
 ## 3. Test Coverage Check
 
+### 3a. Tests-as-Deliverable Verification
+
+**If the task deliverable IS tests (writing new tests, fixing tests, adding test coverage):**
+
+The tests themselves are NOT the verification. Verification means confirming the tests work correctly:
+
+- [ ] Run the new/modified tests — they must execute without runtime errors
+- [ ] Tests pass when they should pass (happy path assertions hold)
+- [ ] Tests fail when they should fail (if feasible: temporarily break the feature under test → confirm the test catches it)
+- [ ] No false positives (tests don't pass trivially or vacuously)
+
+**Failing to run the tests = unverified deliverable. GO BACK to WF_EXECUTE.**
+
+After confirming test behavior, skip to Section 4 (no browser verification needed for test-only deliverables).
+
+---
+
+### 3b. Standard Test Coverage (Non-Test Deliverables)
+
 **For multi-layer work or user-facing changes:**
 
 - [ ] Functional tests cover the feature?
@@ -66,7 +85,7 @@ mcp__plugin_swe_serena__read_memory("feature/FEATURE_DEV_STANDARDS")
 
 **If automated tests exist:** Run them. Failing tests = GO BACK to WF_EXECUTE and fix them.
 
-### 3b. Browser Verification Fallback (No Automated Tests)
+### 3c. Browser Verification Fallback (No Automated Tests)
 
 **If NO automated tests exist for this feature**, you MUST verify the work visually in the dev browser when a local environment is available.
 
