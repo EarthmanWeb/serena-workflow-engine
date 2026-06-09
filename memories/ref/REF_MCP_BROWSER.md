@@ -6,12 +6,12 @@ type: reference
 
 # REF_MCP_BROWSER - Browser DevTools MCP Reference
 
-Browser DevTools MCP (`browser-devtools-mcp`) provides Playwright-powered browser
+Browser DevTools MCP (`@ironbee-ai/devtools`) provides Playwright-powered browser
 control for debugging, testing, and exploration.
 
 **MCP server name:** `browser-devtools` (registered in `.mcp.json`)
 **Tool namespace:** `mcp__browser-devtools__*`
-**Scenario storage:** `.browser-devtools-mcp/scenarios.json`
+**Scenario storage:** `.ironbee-devtools/scenarios.json`
 
 ---
 
@@ -96,7 +96,7 @@ session, expiring the previous one).
 
 1. **First agent** runs a login scenario. After successful login, the scenario
    saves browser state (cookies + localStorage) via `storageState()` to an auth
-   cache file (e.g. `.browser-devtools-mcp/.auth/{siteKey}.json`).
+   cache file (e.g. `.ironbee-devtools/.auth/{siteKey}.json`).
 2. **Subsequent agents** run the same login scenario. The scenario detects saved
    state, restores cookies via `page.context().addCookies()`, verifies the
    session is still valid, and returns early — no new login needed.
@@ -111,7 +111,7 @@ session, expiring the previous one).
 - ALWAYS use login scenarios — never manually navigate to login pages
 - NEVER login as the same user in parallel without session reuse
 - One login, many consumers — first agent creates session, others reuse it
-- Auth cache files (`.browser-devtools-mcp/.auth/`) should be gitignored
+- Auth cache files (`.ironbee-devtools/.auth/`) should be gitignored
 
 ### Login Scenario Template
 
@@ -120,7 +120,7 @@ When creating a new login scenario for a project, follow this pattern:
 ```javascript
 // Template: adapt URLs, selectors, and credentials to your project
 const siteKey = 'my-app-local';
-const authDir = '.browser-devtools-mcp/.auth';
+const authDir = '.ironbee-devtools/.auth';
 const authFile = `${authDir}/${siteKey}.json`;
 const loginUrl = 'https://your-app.local/login';
 const dashboardIndicator = 'Dashboard'; // text visible after successful login

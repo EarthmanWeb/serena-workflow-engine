@@ -638,7 +638,7 @@ def update_gitignore(project_root):
 
 
 def ensure_mcp_json(project_root):
-    """Create or merge .mcp.json with browser-devtools MCP server entry.
+    """Create or merge .mcp.json with ironbee devtools MCP server entry.
 
     If .mcp.json exists, merges browser-devtools into existing mcpServers
     without overwriting other entries. If it doesn't exist, creates it.
@@ -648,7 +648,7 @@ def ensure_mcp_json(project_root):
     browser_devtools_config = {
         "type": "stdio",
         "command": "npx",
-        "args": ["-y", "browser-devtools-mcp"],
+        "args": ["-y", "-p", "@ironbee-ai/devtools", "ironbee-browser-devtools-mcp"],
         "env": {
             "BROWSER_HEADLESS_ENABLE": "false",
             "TELEMETRY_ENABLE": "false"
@@ -752,7 +752,7 @@ def main():
     # Update project .gitignore
     gitignore_updated = update_gitignore(project_root)
 
-    # Create/merge .mcp.json with browser-devtools
+    # Create/merge .mcp.json with ironbee devtools
     mcp_json_updated = ensure_mcp_json(project_root)
 
     # Inject CLAUDE_PREFIX.md into CLAUDE.md
