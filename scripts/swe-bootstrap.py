@@ -25,6 +25,49 @@ PLUGIN_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SKIP_DIRS = {'.git', 'node_modules', 'vendor', '.serena', '.claude', '__pycache__',
              '.vscode', '.idea', 'dist', 'build', '.cache'}
 
+# Directories that should NEVER be indexed by Serena (always excluded).
+# These contain third-party code, build artifacts, or infrastructure files
+# that pollute symbol resolution and bloat caches.
+ALWAYS_IGNORED_DIRS = {
+    'node_modules',   # npm/pnpm/yarn dependencies
+    '.pnpm-store',    # pnpm global store
+    'vendor',         # Composer/Go/Ruby dependencies
+    'dist',           # Build output
+    'build',          # Build output
+    '.cache',         # Various caches
+    '__pycache__',    # Python bytecode
+    '.venv',          # Python virtualenv
+    'venv',           # Python virtualenv
+    '.tox',           # Python tox
+    '.mypy_cache',    # mypy cache
+    '.pytest_cache',  # pytest cache
+    'target',         # Rust/Java build output
+    '.gradle',        # Gradle cache
+    '.next',          # Next.js build
+    '.nuxt',          # Nuxt.js build
+    '.output',        # Nitro/Nuxt output
+    'coverage',       # Test coverage reports
+    '.nyc_output',    # NYC coverage
+}
+
+# Framework-specific directories to ignore (detected by project markers)
+FRAMEWORK_IGNORED = {
+    'wordpress': [
+        'wp/',             # WordPress core
+        'uploads/',        # Media uploads
+        'index.php',       # WP entry point
+        'wp-*.php',        # WP root scripts
+    ],
+    'laravel': [
+        'storage/',        # Laravel storage
+        'bootstrap/cache/', # Laravel bootstrap cache
+    ],
+    'rails': [
+        'tmp/',            # Rails temp
+        'log/',            # Rails logs
+    ],
+}
+
 # Extension to Serena language name mapping
 EXT_TO_LANGUAGE = {
     '.php': 'php',
@@ -238,18 +281,127 @@ def detect_languages(project_root):
     return sorted(languages)
 
 
+def detect_ignored_paths(project_root):
+    """Scan the project and determine which paths Serena should ignore.
+
+    Returns a list of gitignore-style patterns for directories that exist
+    in the project but should not be indexed (dependencies, build output,
+    framework infrastructure, etc.).
+    """
+    ignored = []
+
+    # Check for always-ignored directories that actually exist
+    for dirname in sorted(ALWAYS_IGNORED_DIRS):
+        # Check at project root
+        if os.path.isdir(os.path.join(project_root, dirname)):
+            ignored.append(f'{dirname}/')
+        # Also add glob pattern for nested occurrences of common deps
+        if dirname in ('node_modules', '.pnpm-store'):
+            ignored.append(f'**/{dirname}/')
+
+    # Detect framework and add framework-specific ignores
+    framework = _detect_framework_type(project_root)
+    if framework and framework in FRAMEWORK_IGNORED:
+        for pattern in FRAMEWORK_IGNORED[framework]:
+            # Only add if the path actually exists (or is a glob)
+            if '*' in pattern:
+                ignored.append(pattern)
+            elif os.path.exists(os.path.join(project_root, pattern.rstrip('/'))):
+                ignored.append(pattern)
+
+    # Detect other common infrastructure dirs that exist
+    infra_dirs = {
+        '.devcontainer': '.devcontainer/',
+        '.pantheon': '.pantheon/',
+        '.platform': '.platform/',
+        '.docker': '.docker/',
+        'docker': 'docker/',
+    }
+    for dirname, pattern in infra_dirs.items():
+        if os.path.isdir(os.path.join(project_root, dirname)):
+            ignored.append(pattern)
+
+    # Deduplicate (nested glob patterns may overlap with root patterns)
+    seen = set()
+    deduped = []
+    for p in ignored:
+        if p not in seen:
+            seen.add(p)
+            deduped.append(p)
+
+    return deduped
+
+
+def _detect_framework_type(project_root):
+    """Detect the project framework type from file markers."""
+    # WordPress: wp-config.php, wp/ directory, or style.css with Theme Name
+    wp_markers = ['wp-config.php', 'wp-config-pantheon.php']
+    if any(os.path.exists(os.path.join(project_root, m)) for m in wp_markers):
+        return 'wordpress'
+    if os.path.isdir(os.path.join(project_root, 'wp')):
+        return 'wordpress'
+    style_css = os.path.join(project_root, 'wp-content', 'themes')
+    if os.path.isdir(style_css):
+        return 'wordpress'
+
+    # Laravel: artisan file
+    if os.path.exists(os.path.join(project_root, 'artisan')):
+        return 'laravel'
+
+    # Rails: Gemfile with rails, or config/routes.rb
+    if os.path.exists(os.path.join(project_root, 'config', 'routes.rb')):
+        return 'rails'
+    gemfile = os.path.join(project_root, 'Gemfile')
+    if os.path.exists(gemfile):
+        try:
+            with open(gemfile) as f:
+                if 'rails' in f.read().lower():
+                    return 'rails'
+        except IOError:
+            pass
+
+    return None
+
+
 def create_project_yml(project_root, languages):
-    """Create .serena/project.yml with detected languages. Skip if exists."""
+    """Create .serena/project.yml with detected languages and ignored paths.
+
+    Scans the project to detect directories that should not be indexed
+    (dependencies, build output, framework infrastructure) and includes
+    them as ignored_paths. This prevents Serena from wasting time indexing
+    irrelevant code, which bloats caches and degrades symbol resolution.
+
+    Skip if project.yml already exists.
+    """
     yml_path = os.path.join(project_root, '.serena', 'project.yml')
     if os.path.exists(yml_path):
         return False
 
     lang_lines = '\n'.join(f'  - {lang}' for lang in languages)
+    ignored = detect_ignored_paths(project_root)
+
+    if ignored:
+        ignored_lines = '\n'.join(f'  - "{p}"' for p in ignored)
+        ignored_section = f"""
+# Paths excluded from Serena indexing.
+# Auto-detected: dependencies, build output, framework infrastructure.
+# These directories contain third-party or generated code that pollutes
+# symbol resolution and bloats language server caches.
+ignored_paths:
+{ignored_lines}
+"""
+    else:
+        ignored_section = """
+# No directories detected for exclusion.
+# Add paths here if Serena indexes unwanted code (e.g. vendor/, node_modules/).
+ignored_paths: []
+"""
+
     content = f"""# Auto-generated by SWE bootstrap
 # Detected languages from project file extensions
 languages:
 {lang_lines}
-
+{ignored_section}
 # Exclude session Working Memory files from list_memories output.
 # WM files are accessed via the swe-wm MCP server, not Serena's memory API.
 ignored_memory_patterns: ["WM_.*"]
@@ -719,7 +871,10 @@ def main():
     # Detect languages
     languages = detect_languages(project_root)
 
-    # Create project.yml
+    # Detect ignored paths (dependencies, build output, framework dirs)
+    ignored_paths = detect_ignored_paths(project_root)
+
+    # Create project.yml with languages and ignored paths
     yml_created = create_project_yml(project_root, languages)
 
     # Prompt for additional memory paths
@@ -778,6 +933,10 @@ def main():
     print(f"  Languages detected: {', '.join(languages)}")
     print(f"  Test framework: {template_variables['test_framework']}")
     print(f"  project.yml: {'created' if yml_created else 'already exists'}")
+    if ignored_paths:
+        print(f"  ignored_paths: {len(ignored_paths)} exclusions detected ({', '.join(ignored_paths[:5])}{'...' if len(ignored_paths) > 5 else ''})")
+    else:
+        print(f"  ignored_paths: none detected (clean project)")
     print(f"  memory-paths.conf: {'updated' if conf_updated else 'already configured'}")
     if extra_paths:
         print(f"  Extra paths added: {', '.join(extra_paths)}")

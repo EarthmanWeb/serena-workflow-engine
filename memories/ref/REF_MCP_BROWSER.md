@@ -259,9 +259,47 @@ mcp__browser-devtools__debug_get-probe-snapshots({})
 
 ```
 mcp__browser-devtools__scenario-list({})
-mcp__browser-devtools__scenario-run({ name: "..." })
+mcp__browser-devtools__scenario-run({ name: "...", args: { key: "value" } })
 mcp__browser-devtools__scenario-add({ name: "...", description: "...", script: "..." })
 ```
+
+---
+
+## Scenario Composition (Nested Recursion)
+
+**Scenarios support nested `callTool('scenario-run', ...)` calls (max depth: 5).**
+Use existing scenarios as reusable macros to eliminate duplication.
+
+### Rules for creating scenarios
+
+1. **Check `scenario-list` first** — if an existing scenario already handles part
+   of your flow (login, navigation, publish, dismiss modal), call it instead of
+   inlining the same logic.
+2. **Compose, don't duplicate** — a new scenario that needs admin access should
+   call `wp-admin-navigate` (which itself calls `wp-login-local` if needed),
+   not copy-paste login + navigation code.
+3. **Extract shared patterns** — if 2+ scenarios share the same block of logic
+   (e.g. a publish flow, a modal dismiss), extract it into a standalone scenario
+   and have both call it.
+4. **Pass args through** — nested scenarios receive `args` from the parent call:
+   ```javascript
+   await callTool('scenario-run', { name: 'wp-admin-navigate', args: { path: 'post-new.php?post_type=page', includeSnapshot: false } });
+   ```
+5. **Keep leaf scenarios focused** — a reusable scenario should do one thing well
+   (login, dismiss modal, publish). Orchestration belongs in the caller.
+
+### Composition example
+
+```
+wp-create-page (caller)
+  → wp-admin-navigate (navigate + auto-login)
+      → wp-login-local (auth + storageState reuse)
+  → wp-dismiss-welcome (modal dismiss)
+  → [fill page-specific fields]
+  → wp-gutenberg-publish (2-click publish flow)
+```
+
+**Three levels of nesting, zero duplicated code.**
 
 ---
 
@@ -275,8 +313,9 @@ mcp__browser-devtools__scenario-add({ name: "...", description: "...", script: "
    tokens vs individual calls.
 4. **`waitForNavigation: true`** on clicks that navigate — ensures page loads
    before next action.
-5. **Scenarios compose** — `callTool('scenario-run', { name: '...' })` inside an
-   execute block chains reusable flows.
+5. **Scenarios compose** — use `callTool('scenario-run', { name: '...' })` to
+   chain reusable flows. Always prefer calling an existing scenario over inlining
+   duplicate logic. See "Scenario Composition" section above.
 6. **Scenarios-first** — always check `scenario-list` before manual browser
    interaction.
 

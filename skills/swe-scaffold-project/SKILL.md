@@ -95,6 +95,29 @@ find . -name "*.rs" | head -1                   # Rust
 find . -name "*.go" | head -1                   # Go
 ```
 
+### Stage 1b: Ignored Paths Detection
+
+The bootstrap script automatically scans the project to detect directories that
+should NOT be indexed by Serena. This prevents bloated caches and polluted symbol
+resolution from third-party code.
+
+**Auto-detected categories:**
+
+| Category | Examples |
+|----------|----------|
+| Dependencies | `node_modules/`, `vendor/`, `.pnpm-store/`, `.venv/` |
+| Build output | `dist/`, `build/`, `target/`, `.next/`, `.nuxt/` |
+| Framework infra | `wp/`, `uploads/` (WordPress); `storage/` (Laravel); `tmp/` (Rails) |
+| Infrastructure | `.devcontainer/`, `.pantheon/`, `.docker/` |
+| Caches | `.cache/`, `__pycache__/`, `.mypy_cache/`, `coverage/` |
+
+**Only directories that actually exist in the project are added.** Framework-specific
+paths are detected by framework markers (e.g., `wp-config.php` → WordPress).
+
+**Why this matters:** Without `ignored_paths`, Serena indexes everything — a WordPress
+project with `node_modules/` and `vendor/` can produce 778MB of cache (vs ~180MB with
+proper exclusions), degrading every `find_symbol` and `search_for_pattern` call.
+
 ### Stage 2: Directory Setup
 
 ```bash
