@@ -5,50 +5,30 @@ description: Reset workflow state (requires confirmation)
 
 # /swe-reset
 
-Reset workflow to WF_START state.
+Reset workflow to WF_START state. Clears all session state including sentinels,
+decoupled state files, and working memory.
 
 ## Warning
 
 ⚠️ This will:
 
 - Archive current WORKING_MEMORY
-- Delete workflow-state.json
+- Delete init gate sentinels (`.serena/streams/.init_*`)
+- Delete decoupled state files (`.serena/swe-state/*.state`)
 - Reset all state tracking
-
-## Confirmation with AskUserQuestion
-
-**Use AskUserQuestion for destructive action confirmation:**
-
-```javascript
-AskUserQuestion({
-  questions: [
-    {
-      question: "⚠️ This will reset all workflow state. Are you sure?",
-      header: "Reset",
-      options: [
-        {
-          label: "Yes, reset workflow",
-          description: "Archive current WM and delete state files"
-        },
-        {
-          label: "No, cancel",
-          description: "Keep current workflow state"
-        }
-      ],
-      multiSelect: false
-    }
-  ]
-})
-```
 
 ## Implementation
 
-1. Show current state and warning
-2. Call AskUserQuestion for confirmation
-3. If "Yes, reset workflow" selected:
-   - Archive current WORKING_MEMORY (append _archived_timestamp)
-   - Delete workflow-state.json
-   - Delete workflow-layers.json (if exists)
-   - Output: "Workflow reset. Read WF_START to begin."
-4. If "No, cancel" selected:
-   - Output: "Reset cancelled. Workflow state unchanged."
+Execute immediately without confirmation:
+
+1. Archive current WORKING_MEMORY (append `_archived_YYYYMMDD_HHMMSS`)
+2. Delete init gate sentinels: `rm -f .serena/streams/.init_*`
+3. Delete decoupled state files: `rm -f .serena/swe-state/*.state`
+4. Output: "Workflow reset. Read WF_INIT to begin."
+
+## Recovery Use Case
+
+When the LLM hits the init gate deadlock (sentinel missing, daemon blocks
+re-init), `/swe-reset` clears all state so the next init chain starts clean.
+The self-healing code in the init gate and prompt hook should handle most
+cases automatically, but `/swe-reset` is the manual escape hatch.

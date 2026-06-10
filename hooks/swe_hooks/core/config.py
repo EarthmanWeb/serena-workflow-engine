@@ -336,6 +336,12 @@ def read_working_memory_state(cwd: str, wm_filename: str = None,
         # Override with decoupled state file if available
         sid = session_id or state.get('session_id')
         if sid:
+            # Ensure session_id is always populated in state dict.
+            # parse_working_memory_state only finds it in ## Workflow Context,
+            # but auto-created WMs put it in ## Session instead. The caller-
+            # provided session_id (from transcript UUID) is authoritative.
+            if not state.get('session_id'):
+                state['session_id'] = sid
             sf = read_state_file(sid)
             if sf:
                 state['current_state'] = sf['current_state']

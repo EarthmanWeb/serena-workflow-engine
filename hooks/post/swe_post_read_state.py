@@ -170,6 +170,7 @@ def main():
 ## Workflow Context
 **Current State**: WF_START
 **Previous State**: WF_INIT
+**Session ID**: {session_id}
 
 ## Task Context
 - **Feature(s)**: (to be determined)
