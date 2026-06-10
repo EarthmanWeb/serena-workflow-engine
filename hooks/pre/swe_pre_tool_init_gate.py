@@ -336,6 +336,9 @@ DO NOT read task-specific memories before initialization is complete."""
                 'mcp__plugin_swe_serena__activate_project', 'mcp__serena__activate_project',
                 'mcp__plugin_swe_serena__list_projects', 'mcp__serena__list_projects',
                 'mcp__plugin_swe_serena__add_project', 'mcp__serena__add_project',
+                'mcp__plugin_swe_serena__initial_instructions', 'mcp__serena__initial_instructions',
+                'mcp__plugin_swe_serena__check_onboarding_performed', 'mcp__serena__check_onboarding_performed',
+                'mcp__plugin_swe_serena__onboarding', 'mcp__serena__onboarding',
             ):
                 print(json.dumps({}))
                 sys.exit(0)
