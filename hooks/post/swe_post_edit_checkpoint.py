@@ -21,7 +21,7 @@ except ImportError as e:
     swe_hooks.bootstrap.import_error_exit(e)
 
 # Edit threshold before checkpoint reminder
-CHECKPOINT_THRESHOLD = 3
+CHECKPOINT_THRESHOLD = 10
 
 
 def main():

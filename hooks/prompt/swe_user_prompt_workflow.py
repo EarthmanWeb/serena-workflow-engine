@@ -30,18 +30,27 @@ except ImportError as e:
 
 
 # Patterns that indicate a continuation of the current task
+# NOTE: No $ anchors — "okay, do that thing" should match, not just "okay"
 CONTINUATION_PATTERNS = [
-    r'^(yes|yeah|yep|yup|ok|okay|sure|continue|proceed|go ahead|keep going|next|do it)[\s\.\!\?]*$',
-    r'^(sounds good|looks good|perfect|great|good|fine|alright)[\s\.\!\?]*$',
-    r'^(please continue|please proceed|go on|carry on)[\s\.\!\?]*$',
-    r'^(that\'?s? (good|great|fine|correct|right))[\s\.\!\?]*$',
-    r'^(approved?|confirmed?|accept(ed)?)[\s\.\!\?]*$',
+    r'^(yes|yeah|yep|yup|ok|okay|sure|continue|proceed|go ahead|keep going|next|do it)\b',
+    r'^(sounds good|looks good|perfect|great|good|fine|alright)\b',
+    r'^(please continue|please proceed|go on|carry on)\b',
+    r'^(that\'?s? (good|great|fine|correct|right))\b',
+    r'^(approved?|confirmed?|accept(ed)?)\b',
+    r'^(all of them|do (all|both|everything|it all))\b',
     r'continue (with )?the',
     r'keep (working|going)',
     r'finish (the|this|it)',
     r'modify (the|this|it)',
     r'add (a|the|this|it)',
     r'complete (the|this|it)',
+    # Conversational — questions/status checks about current work
+    r'(are|is) (there|that|this|it) (fixed|done|ready|working|correct)',
+    r'(did|does) (that|this|it) (work|fix|help|resolve)',
+    r'(how|what).{0,20}(look|going|coming|progress)',
+    r'any (other|more|further) (issues|problems|optimizations|suggestions|recommendations)',
+    r'let me know (if|when|what)',
+    r'(you should|should be|latest version|already committed)',
 ]
 
 # Patterns that indicate an addition to the current task (not a new task)
@@ -51,6 +60,8 @@ ADDITION_PATTERNS = [
     r'^(can you also|could you also|please also)',
     r'^(don\'?t forget|remember to|make sure)',
     r'^(oh and|oh,? also)',
+    r'^(while you\'?re at it|and also|also,?\s)',
+    r'^(remove|change|update|tweak) (the|that|this)',
 ]
 
 # Patterns that suggest a completely new task
@@ -87,9 +98,10 @@ def analyze_prompt(prompt: str, current_state: str) -> str:
         if re.search(pattern, prompt_lower, re.IGNORECASE):
             return 'new_task'
     
-    # If we're in an active execution state and prompt is short, likely continuation
-    active_states = ['WF_EXECUTE', 'WF_CHECKPOINT', 'WF_VERIFY', 'WF_DEBUG_TDD']
-    if current_state in active_states and len(prompt_lower) < 50:
+    # If we're in an active state and prompt is short/medium, likely continuation
+    active_states = ['WF_EXECUTE', 'WF_CHECKPOINT', 'WF_VERIFY', 'WF_DEBUG_TDD',
+                     'WF_ARCH_REVIEW', 'WF_CLASSIFY', 'WF_RESEARCH', 'WF_DONE']
+    if current_state in active_states and len(prompt_lower) < 120:
         return 'continuation'
     
     # Default: treat as potential new task for safety
@@ -166,25 +178,20 @@ def main():
         transcript_path = input_data.get('transcript_path', '')
         session_id = extract_session_id(transcript_path)
 
-        # Get current state from WM using session-isolated lookup
+        # Get current state from WM and state file using session-isolated lookup
         wm_file = None
         state_data = None
-        wm_session_id = None
 
         if session_id:
             wm_filepath = find_working_memory_for_session(cwd, session_id)
             if wm_filepath:
                 wm_file = os.path.basename(wm_filepath).replace('.md', '')
                 state_data, _ = read_working_memory_state(cwd, wm_file, session_id=session_id)
-                if state_data:
-                    wm_session_id = state_data.get("session_id")
 
-        # If no working memory for this session, start fresh at WF_INIT
-        should_reset = (
-            not state_data or              # No working memory found for this session
-            not wm_session_id or           # WM has no session ID (old format)
-            (session_id and session_id != wm_session_id)  # Session mismatch
-        )
+        # Session is valid if WM file exists for this session AND state data parsed.
+        # WM filename already contains session_id (WM_{session_id}.md), so no need
+        # to also parse session_id from WM markdown content — that was fragile.
+        should_reset = not state_data or not wm_file
 
         if should_reset:
             # No working memory for this session - start at WF_INIT
@@ -254,9 +261,7 @@ If your next output contains ANY text instead of a tool call, you have failed.
             # If so, this is a "new task in same session" - preserve working memory
             is_same_session_new_task = (
                 wm_file and
-                wm_session_id and
                 session_id and
-                wm_session_id == session_id and
                 current_state == 'WF_DONE'
             )
 
@@ -333,23 +338,33 @@ If scope changes significantly, transition to WF_CLASSIFY.
                 event_count = get_event_count(stream_path)
                 if event_count > 0:
                     stream_info = f"\nStream Events: {event_count}"
+            # Extract previous feature keys for fast-path detection
+            prev_features = ""
+            if state_data:
+                fk = state_data.get("feature_keys", [])
+                if fk:
+                    prev_features = f"\nPrevious Feature(s): {', '.join(fk)}"
+
             context = f"""🔄 NEW TASK IN SAME SESSION - WORKFLOW STATE: {current_state}
-Working Memory: {wm_file}{stream_info}
+Working Memory: {wm_file}{stream_info}{prev_features}
 Session: {session_id}
 
-**IMPORTANT: This is a NEW TASK in the SAME SESSION after completing WF_DONE.**
+**This is a NEW TASK in the SAME SESSION after completing WF_DONE.**
 
-**DO NOT create a new WM file.** Instead:
+**DO NOT create a new WM file.** Update the existing WM ({wm_file}):
+- Move previous task to `## Previous Task`
+- Update `## Current Task` with the new task
+- Reset `Edit Count Since Checkpoint` to 0
 
-1. **UPDATE the existing WM ({wm_file}):**
-   - Increment `Task Iteration` counter
-   - Move previous task to `## Completed Tasks (This Session)` section
-   - Add new task to `## Active Task`
-   - Reset `Edit Count Since Checkpoint` to 0
-   - Set `Current State` to `WF_CLASSIFY`
+**Fast-path:** If the new task involves the SAME feature(s) as the previous task,
+skip WF_CLASSIFY feature loading and go directly to WF_ARCH_REVIEW — the feature
+memories are already loaded in context.
 
-2. **Then proceed with task classification:**
-   Use: mcp__plugin_swe_serena__read_memory(memory_name="wf/WF_CLASSIFY")
+**Full path:** If the new task involves DIFFERENT feature(s), go to WF_CLASSIFY
+to load the correct feature memories.
+
+Use: mcp__plugin_swe_serena__read_memory(memory_name="wf/WF_CLASSIFY")
+Or fast-path: mcp__plugin_swe_serena__read_memory(memory_name="wf/WF_ARCH_REVIEW")
 """
 
         elif prompt_intent == 'new_task':
