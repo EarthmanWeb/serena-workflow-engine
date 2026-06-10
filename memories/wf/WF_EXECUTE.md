@@ -2,63 +2,37 @@
 
 > **On step WF_EXECUTE**
 
-OUTPUT THE ABOVE LINE IMMEDIATELY. Do not read further until you have reported your step to the user.
-
 ---
 
-## 🛑 BLOCKING: Feature Memory Verification
+## Feature Memory Verification
 
-**BEFORE ANY WORK, you MUST verify feature memories were loaded.**
+Before starting work, confirm feature memories are loaded.
 
-### 1. Check WM for Feature Key(s)
+Check WM for `Feature Key(s)`. For each key, verify you have read `FEATURE_[KEY]`.
 
-Look at your WM's `Feature Key(s)` field (e.g., `- **Feature Key(s)**: [KEY1], [KEY2]`)
-
-### 2. Verify FEATURE_[KEY] Was Read for EACH
-
-**Ask yourself:** "Did I read `FEATURE_[KEY]` for every key listed in my WM?"
-
-| If...                         | Then...                      |
-| ----------------------------- | ---------------------------- |
-| You read all feature memories | ✅ Continue to WM section    |
-| You skipped feature loading   | ❌ **STOP - Read them NOW**  |
-| WM has no Feature Key(s)      | ❌ **STOP - Go to WF_START** |
-
-### 3. If Features Not Loaded - DO THIS NOW
+| If...                         | Then...                     |
+| ----------------------------- | --------------------------- |
+| All feature memories loaded   | Continue below               |
+| Feature memories not loaded   | Read them now (see below)   |
+| WM has no Feature Key(s)      | Go to WF_START              |
 
 ```
-# First, get the feature registry
 mcp__plugin_swe_serena__read_memory("index/INDEX_FEATURES")
-
-# Then, for EACH feature key in WM:
 mcp__plugin_swe_serena__read_memory("feature/FEATURE_[KEY1]")
 mcp__plugin_swe_serena__read_memory("feature/FEATURE_[KEY2]")
-# ... continue for ALL features in WM
 ```
 
-**Only proceed after ALL feature memories are loaded.**
-
-**⛔ EXECUTING WITHOUT FEATURE MEMORIES = WORKFLOW VIOLATION**
-
-You CANNOT understand the architecture, file locations, testing patterns, or coding standards without the feature memory. Skipping this leads to:
-
-- Writing code in wrong locations
-- Missing architectural patterns
-- Ignoring feature-specific requirements
-- Creating inconsistent implementations
+Proceed only after all feature memories are loaded.
 
 ---
 
-## ⚠️ MANDATORY: WM
+## WM Check
 
-**Before starting any work, verify WM exists and is current.**
+Verify WM exists and reflects the current task before starting work.
 
-If WM is stale or doesn't reflect current task, invoke
-`/swe-wm-update --from WF_EXECUTE` — provides the step-specific checklist and template.
-Do NOT manually construct WM content or read REF_WM separately.
+If WM is stale or missing, invoke `/swe-wm-update --from WF_EXECUTE`.
 
-**WM must be updated (via the skill):**
-
+Update WM (via the skill):
 - Before starting significant work
 - After completing each subtask
 - When task state changes
@@ -66,53 +40,44 @@ Do NOT manually construct WM content or read REF_WM separately.
 
 ---
 
-## BEFORE ANY WORK - Architecture Check
+## Before Starting Work
 
-**Is this multi-layer work?** (touches >1 architectural layer as defined in FEATURE_[KEY])
-
-If YES, you MUST first:
+If multi-layer (touches >1 architectural layer):
 
 ```
 mcp__plugin_swe_serena__read_memory("arch/ARCH_INDEX")
 ```
 
-Then for EACH layer involved, read:
+For each layer, load context:
 
 ```
-# Feature-specific (from FEATURE_[KEY]):
-mcp__plugin_swe_serena__read_memory("sys/SYS_[SYSTEM]")     # For system components
-
-# Codebase-shared:
-mcp__plugin_swe_serena__read_memory("ref/REF_[PATTERN]")    # For patterns/standards
-mcp__plugin_swe_serena__read_memory("feature/FEATURE_DEV_STANDARDS") # For coding standards
+mcp__plugin_swe_serena__read_memory("sys/SYS_[SYSTEM]")      # System docs
+mcp__plugin_swe_serena__read_memory("ref/REF_[PATTERN]")     # Coding patterns
+mcp__plugin_swe_serena__read_memory("dom/DOM_[DOMAIN]")      # Domain behavior
+mcp__plugin_swe_serena__read_memory("feature/FEATURE_DEV_STANDARDS")  # Dev standards index
 ```
 
-**DO NOT write code until you have read the relevant memories.**
+Then load language-specific DEV_* for affected languages:
+
+```
+mcp__plugin_swe_serena__read_memory("dev/DEV_PHP")           # If touching PHP
+mcp__plugin_swe_serena__read_memory("dev/DEV_JAVASCRIPT")    # If touching JS
+```
+
+Do not write code until relevant memories are loaded.
 
 ---
 
-## For Multi-Layer Work
+## Multi-Layer Implementation
 
-### Step 1: Read Architecture Documentation
-
-- Read ARCH_INDEX
-- Read relevant SYS_* memories for system understanding
-- Read relevant DOM_* memories for domain understanding
-- Understand the data flow pattern from ARCH_INDEX
-
-### Step 2: Implementation
-
-For each layer, follow patterns from relevant SYS_* and REF_* memories.
-
-### Step 3: Testing
-
-- Read REF_TESTING for testing patterns
-- Implement tests for functional code
-- Run tests and verify (commands from FEATURE_[KEY] or FEATURE_DEV_STANDARDS)
+1. Read architecture docs (ARCH_INDEX, SYS_*, DOM_*)
+2. Understand data flow from ARCH_INDEX
+3. Implement each layer following patterns from SYS_* and REF_*
+4. Read REF_TESTING, implement tests, run and verify
 
 ---
 
-## For Single-Layer Work
+## Single-Layer Implementation
 
 Use Serena tools directly:
 
@@ -122,29 +87,20 @@ Use Serena tools directly:
 
 ---
 
-## For Swarm-Coordinated Work
+## Parallel Execution
 
-**If swarm was initialized at WF_SWARM_ORCHESTRATE:**
-
-### Execute with Parallel Agents
+For tasks with independent subtasks, use Claude Code Agent tool:
 
 ```javascript
-// Launch ALL agents in ONE message — they run concurrently
 Agent({ description: "Task A", run_in_background: true, model: "sonnet",
+  isolation: "worktree",
   prompt: "You are a swarm agent. BYPASS WF_INIT. [task]..." })
-Agent({ description: "Task B", run_in_background: true, model: "sonnet",
-  prompt: "You are a swarm agent. BYPASS WF_INIT. [task]..." })
-// Results arrive via background task notifications
 ```
 
-### Coordination During Execution
-
-- **Track agent task IDs** in WM
-- **Use `isolation: "worktree"`** when agents edit overlapping files
-- **Collect results** as background task notifications arrive
-- **Synthesize findings** after all agents complete
-
-**See `FEATURE_SWARM` for the full decision gate (Claude Agent vs Ruflo).**
+- Launch ALL agents in ONE message for parallel execution
+- Use `isolation: "worktree"` when agents edit overlapping files
+- Use `model: "haiku"` for read-only tasks, `"sonnet"` for implementation
+- Collect results from background task notifications, then synthesize
 
 ---
 
@@ -157,35 +113,30 @@ Agent({ description: "Task B", run_in_background: true, model: "sonnet",
 
 ### New File Creation
 
-**If creating new files, you MUST:**
+When creating new files:
 
-1. **Check naming conventions** from the relevant `DEV_*` memory (e.g., `DEV_PHP` for class files, `DEV_JAVASCRIPT` for modules, `DEV_BLADEONE` for templates)
-2. **Include required boilerplate** from `DEV_*` (file headers, direct-access guards, variable defaults blocks)
-3. **Register/wire the new file** per `FEATURE_[KEY]` or `DOM_*` patterns (enqueue scripts, register handlers, add to discovery paths)
-4. **Verify the compliance checklist in WM** (written at WF_ARCH_REVIEW Step 2c) — each new file should satisfy its relevant checklist items
+1. Check naming conventions from the relevant `DEV_*` memory
+2. Include required boilerplate from `DEV_*` (file headers, guards, defaults)
+3. Register/wire the new file per `FEATURE_[KEY]` or `DOM_*` patterns
+4. Verify any compliance checklist items in WM
 
-**Forgetting registration is the #1 cause of "code is correct but doesn't work" failures.**
+Registration is the most common cause of "code is correct but doesn't work" failures.
 
-### Compliance Checklist Reference
+---
 
-**If WM contains a `## Compliance Checklist` (from WF_ARCH_REVIEW Step 2c), consult it before each file edit.** The checklist contains project-specific rules extracted from DEV_*, DOM_*, and SYS_* memories. Verify each item as you go — don't defer to WF_VERIFY.
+## Next Step
 
-## MANDATORY NEXT STEP
+After each significant action:
 
-**YOU ARE NOT FINISHED.** After each significant action:
-
-| Condition                       | MUST Read Next  |
+| Condition                       | Read Next       |
 | ------------------------------- | --------------- |
 | Created/modified file           | `WF_CHECKPOINT` |
 | Completed a phase               | `WF_CHECKPOINT` |
 | All work done (including tests) | `WF_VERIFY`     |
 
 1. Determine which condition applies
-2. **UPDATE WM** with current progress
-3. Read that WF_* memory NOW
+2. Update WM with current progress
+3. Read that WF_* memory
 4. Report the new step to user
 
-**SKIPPING THIS TRANSITION = WORKFLOW VIOLATION**
-**SKIPPING WM UPDATE = WORKFLOW VIOLATION**
-
-[CRITICAL: Did you load FEATURE memories? Did you update WM? Are you on a WF_* workflow step? Did you report on it?]
+Update WM via /swe-wm-update before transitioning.

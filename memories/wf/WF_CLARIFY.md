@@ -2,8 +2,6 @@
 
 > **On step WF_CLARIFY**
 
-OUTPUT THE ABOVE LINE IMMEDIATELY. Do not read further until you have reported your step to the user.
-
 ---
 
 ## When To Use
@@ -13,9 +11,13 @@ OUTPUT THE ABOVE LINE IMMEDIATELY. Do not read further until you have reported y
 - User declined proposed changes
 - Need to choose between approaches
 
-## Ask User with AskUserQuestion Tool
+## Before Asking the User
 
-**Use the `AskUserQuestion` tool for interactive clarification:**
+If the clarification involves domain behavior:
+- Read the relevant DOM_* memory to understand documented behavior
+- Reference the specific DOM_* doc in the question so the user can verify
+
+## Ask User with AskUserQuestion Tool
 
 ### Conflict Resolution
 
@@ -26,18 +28,9 @@ AskUserQuestion({
       question: 'Your request says X, but the documented behavior (DOM_[DOMAIN]) says Z. Which should I follow?',
       header: 'Conflict',
       options: [
-        {
-          label: 'Follow my request',
-          description: 'Override the documented behavior for this task',
-        },
-        {
-          label: 'Follow documentation',
-          description: 'Use the documented behavior instead',
-        },
-        {
-          label: 'Update documentation',
-          description: 'My request is correct - update the docs',
-        },
+        { label: 'Follow my request', description: 'Override the documented behavior for this task' },
+        { label: 'Follow documentation', description: 'Use the documented behavior instead' },
+        { label: 'Update documentation', description: 'My request is correct - update the docs' },
       ],
       multiSelect: false,
     },
@@ -54,14 +47,8 @@ AskUserQuestion({
       question: 'I need clarification on your request. Which approach do you prefer?',
       header: 'Clarify',
       options: [
-        {
-          label: 'Option A',
-          description: '[Description of first interpretation]',
-        },
-        {
-          label: 'Option B',
-          description: '[Description of second interpretation]',
-        },
+        { label: 'Option A', description: '[First interpretation]' },
+        { label: 'Option B', description: '[Second interpretation]' },
       ],
       multiSelect: false,
     },
@@ -78,18 +65,9 @@ AskUserQuestion({
       question: 'You declined the proposed changes. How should I proceed?',
       header: 'Next Step',
       options: [
-        {
-          label: 'Different approach',
-          description: 'Try a different implementation strategy',
-        },
-        {
-          label: 'Modify scope',
-          description: "Reduce or change what we're implementing",
-        },
-        {
-          label: 'Cancel task',
-          description: 'Stop working on this task',
-        },
+        { label: 'Different approach', description: 'Try a different implementation strategy' },
+        { label: 'Modify scope', description: 'Reduce or change what we are implementing' },
+        { label: 'Cancel task', description: 'Stop working on this task' },
       ],
       multiSelect: false,
     },
@@ -107,24 +85,19 @@ AskUserQuestion({
 | `options`     | Array of 2-4 choices with `label` and `description` |
 | `multiSelect` | If `true`, allows multiple selections               |
 
-**Users can always select "Other" for custom text input.**
+Users can always select "Other" for custom text input.
 
-## MANDATORY NEXT STEP
-
-**YOU ARE NOT FINISHED.** After user responds:
-
-| Return To         | MUST Read Next    |
-| ----------------- | ----------------- |
-| From CLASSIFY     | `WF_CLASSIFY`     |
-| From CLASSIFY     | `WF_CLASSIFY`     |
-| From ARCH_REVIEW  | `WF_ARCH_REVIEW`  |
+## After User Responds
 
 1. Note where you came from
 2. After user responds via AskUserQuestion, read that WF_* memory
 3. Report the new step to user
 
-**SKIPPING THIS TRANSITION = WORKFLOW VIOLATION**
+## Routing
 
-📋 **WM:** If task state changed, invoke `/swe-wm-update --from WF_CLARIFY`
+| Return From   | Next State        |
+| ------------- | ----------------- |
+| CLASSIFY      | `WF_CLASSIFY`     |
+| ARCH_REVIEW   | `WF_ARCH_REVIEW`  |
 
-[CRITICAL: Are you on a WF_* workflow step? Did you report on it?]
+Update WM via /swe-wm-update before transitioning.

@@ -1,49 +1,48 @@
 # WF_RESEARCH - Research Only
 
-> **🔬 On step WF_RESEARCH**
-
-⬆️ OUTPUT THE ABOVE LINE IMMEDIATELY. Do not read further until you have reported your step to the user.
+> **On step WF_RESEARCH**
 
 ---
 
 ## For Questions/Exploration Without Code Changes
 
-1. **Use Serena tools to explore:**
-   - `mcp__plugin_swe_serena__find_symbol`
-   - `mcp__plugin_swe_serena__get_symbols_overview`
-   - `mcp__plugin_swe_serena__search_for_pattern`
+### Step 1: Check Knowledge Base First
 
-2. **Read relevant memories if needed.**
+Before exploring code, check if existing memories answer the question:
 
-3. **Report findings to user.**
+```
+list_memories(topic="dom")       # Domain behavior docs
+list_memories(topic="ref")       # Reference patterns
+list_memories(topic="feature")   # Feature configs
+```
+
+Read any memories relevant to the research question. These may contain file paths, architecture notes, and behavioral patterns that shortcut code exploration.
+
+### Step 2: Explore with Serena Tools
+
+If memories do not fully answer the question, use Serena tools to explore:
+
+- `mcp__plugin_swe_serena__find_symbol`
+- `mcp__plugin_swe_serena__get_symbols_overview`
+- `mcp__plugin_swe_serena__search_for_pattern`
+
+### Step 3: Report Findings
+
+Provide findings directly to the user.
 
 ## Rules
 
-- NO code changes in this path
-- NO file creation
+- No code changes in this path
+- No file creation
 - Information gathering only
 
-## ⛔ MANDATORY NEXT STEP
+## Routing
 
-**YOU ARE NOT FINISHED.** After reporting findings:
+| Condition                            | Next Step     |
+| ------------------------------------ | ------------- |
+| Research complete, user wants changes | `WF_CLASSIFY` |
+| Research complete, no changes needed  | `WF_DONE`     |
 
-| Condition                             | MUST Read Next    |
-| ------------------------------------- | ----------------- |
-| Research complete, user wants changes | `WF_CLASSIFY`     |
-| Research complete, no changes needed  | `WF_DONE`         |
+If the user wants to proceed with implementation based on research findings, route to `WF_CLASSIFY` to classify the task and load feature context.
 
-If the user wants to proceed with implementation based on research findings, route to `WF_CLASSIFY` to classify the task, load feature context, and route to implementation.
-
-If research answered the user's question with no further action needed, route to `WF_DONE`.
-
-**SKIPPING THIS TRANSITION = WORKFLOW VIOLATION**
-
-## ⚠️ MANDATORY: WM UPDATE
-
-**Before transitioning, invoke `/swe-wm-update --from WF_RESEARCH`** — provides the
-step-specific checklist ensuring no fields are missed. Do NOT manually update WM
-without it.
-
-**SKIPPING WM UPDATE = WORKFLOW VIOLATION**
-
-[CRITICAL: Are you on a WF_* workflow step? Did you report on it?]
+Update WM via /swe-wm-update before transitioning.

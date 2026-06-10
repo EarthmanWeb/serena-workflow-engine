@@ -2,8 +2,6 @@
 
 > **On step WF_UPDATE_MEMORY**
 
-OUTPUT THE ABOVE LINE IMMEDIATELY. Do not read further until you have reported your step to the user.
-
 ---
 
 ## When To Use
@@ -13,6 +11,18 @@ OUTPUT THE ABOVE LINE IMMEDIATELY. Do not read further until you have reported y
 - Creating/updating index files (`INDEX_*`)
 - Updating `WM_*` with task progress
 - Capturing architectural decisions after WF_ARCH_REVIEW
+
+## Before Updating
+
+Always read the target memory before modifying it:
+
+```
+read_memory("[memory_name]")
+```
+
+This prevents data loss and ensures targeted edits rather than blind overwrites.
+
+Use `list_memories()` or `INDEX_FEATURES` to find the correct memory name.
 
 ## Execute These Steps
 
@@ -28,9 +38,7 @@ OUTPUT THE ABOVE LINE IMMEDIATELY. Do not read further until you have reported y
 
 ### 2. For WM Updates
 
-**Invoke `/swe-wm-update --from {calling_step}`** — provides the complete
-checklist and template. The skill handles reading, validating, and writing WM
-comprehensively. Do NOT manually construct WM content or read REF_WM separately.
+Invoke `/swe-wm-update --from {calling_step}` — provides the complete checklist and template. The skill handles reading, validating, and writing WM comprehensively.
 
 ### 3. For Non-WM Memory Updates
 
@@ -47,18 +55,11 @@ mcp__plugin_swe_serena__edit_memory("MEMORY_NAME", "old", "new", "literal")
 
 ---
 
-## MANDATORY NEXT STEP
+## Routing
 
-**YOU ARE NOT FINISHED.** Before responding to user:
-
-| Condition             | MUST Read Next                   |
+| Condition             | Next Step                        |
 | --------------------- | -------------------------------- |
 | Domain memory updated | `WF_CLASSIFY`                    |
 | WM updated            | Return to previous workflow step |
 
-1. Read the appropriate WF_* memory NOW
-2. Report the new step to user
-
-**SKIPPING THIS TRANSITION = WORKFLOW VIOLATION**
-
-[CRITICAL: Are you on a WF_* workflow step? Did you report on it?]
+Update WM via `/swe-wm-update` before transitioning.

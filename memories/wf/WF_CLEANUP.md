@@ -1,14 +1,12 @@
 # WF_CLEANUP
 
-> **🧹 On step WF_CLEANUP**
-
-OUTPUT THE ABOVE LINE IMMEDIATELY.
+> **On step WF_CLEANUP**
 
 ---
 
 ## Purpose
 
-Archive completed work - terminal state.
+Archive completed work. This is a terminal state.
 
 ## Entry
 
@@ -22,11 +20,6 @@ Archive completed work - terminal state.
 3. `move_to_archive` - Archive completed WM
 4. `update_indexes` - Remove from active, add to archive index
 
-## Permissions
-
-- **Edit**: false | **Write**: false
-- **Plan Mode**: never
-
 ## Archive Process
 
 ```bash
@@ -37,22 +30,4 @@ mv .serena/swe/wm/WM_*.md .serena/archive-memories/
 rm -f .ruflo/workflow-state.json
 ```
 
-## Transitions
-
-| Condition | Next State      |
-| --------- | --------------- |
-| complete  | null (terminal) |
-
-**This is a terminal state - workflow ends here.**
-
-## RLVR Signal
-
-- **Type**: cleanup | **Impact**: neutral
-
-## MANDATORY NEXT STEP
-
-None - this is the terminal state.
-
-Workflow complete. Ready for next task (new WF_START).
-
-[CRITICAL: Are you on a WF_* workflow step? Did you report on it?]
+Terminal state. Ready for next task (new WF_START).

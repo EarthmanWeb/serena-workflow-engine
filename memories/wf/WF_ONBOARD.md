@@ -2,8 +2,6 @@
 
 > **On step WF_ONBOARD**
 
-OUTPUT THE ABOVE LINE IMMEDIATELY.
-
 ---
 
 ## Purpose
@@ -31,15 +29,11 @@ Or with options:
 /swe-feature-onboard [KEY] --quick # Quick mode (minimal)
 ```
 
-## MANDATORY NEXT STEP
+## Routing
 
-| Condition                           | MUST Read Next         |
+| Condition                           | Read Next              |
 | ----------------------------------- | ---------------------- |
 | Feature configured (DAA swarm used) | `WF_SWARM_ORCHESTRATE` |
 | Feature configured (quick/manual)   | `WF_START`             |
 | Feature configured (task pending)   | `WF_CLASSIFY`          |
 | User cancelled                      | End conversation       |
-
-**If DAA swarm analysis was used during onboarding**, the swarm context is already loaded — route directly to `WF_SWARM_ORCHESTRATE` to continue with swarm coordination rather than restarting from `WF_START`.
-
-**SKIPPING THIS TRANSITION = WORKFLOW VIOLATION**

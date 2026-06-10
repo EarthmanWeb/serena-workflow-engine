@@ -1,8 +1,6 @@
 # WF_INITIAL_SETUP
 
-> **🔧 On step WF_INITIAL_SETUP**
-
-OUTPUT THE ABOVE LINE IMMEDIATELY.
+> **On step WF_INITIAL_SETUP**
 
 ---
 
@@ -41,13 +39,9 @@ First-time plugin setup - install MCPs, configure environment.
 
 - **Type**: setup | **Impact**: neutral
 
-## MANDATORY NEXT STEP
+## Routing
 
-| Condition          | MUST Read Next |
-| ------------------ | -------------- |
-| Setup complete     | `WF_START`     |
-| Issues encountered | `WF_CLARIFY`   |
-
-**SKIPPING THIS TRANSITION = WORKFLOW VIOLATION**
-
-[CRITICAL: Are you on a WF_* workflow step? Did you report on it?]
+| Condition          | Read Next  |
+| ------------------ | ---------- |
+| Setup complete     | `WF_START`   |
+| Issues encountered | `WF_CLARIFY` |
