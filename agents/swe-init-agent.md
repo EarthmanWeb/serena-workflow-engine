@@ -17,7 +17,7 @@ Autonomous agent for initializing the SWE plugin. Completes all setup tasks and 
 1. **Environment Detection** - Check project state, git, resolve plugin root
 2. **Prerequisite Check** - Run bootstrap if project not yet bootstrapped
 3. **MCP Verification** - Test Serena and swe-wm MCP servers respond
-4. **Serena Onboarding** - Run one-time Serena setup
+4. **Serena Onboarding** - Run one-time Serena setup + migrate default memories into SWE templates
 5. **LSP Verification** - Verify and install language servers
 6. **Plugin Verification** - Verify SWE plugin is enabled
 7. **CLAUDE.md Review** - Remove conflicting workflow commands
@@ -152,6 +152,72 @@ if (!status.performed) {
   await mcp__plugin_swe_serena__onboarding();
 }
 ```
+
+### Task 4b: Migrate Serena Default Memories Into SWE Templates
+
+Serena's onboarding (Task 4) creates four memories in its own naming convention:
+- `project/project_overview`
+- `style/style_conventions` (or `style/style_and_conventions`)
+- `suggested/suggested_commands`
+- `task/task_completion`
+
+These contain valuable project-specific knowledge discovered during onboarding (tech stack, conventions, commands, verification steps). However, our SWE bootstrap templates already provide the structural framework for this information. This step migrates the discovered content into our templates, then removes the Serena defaults.
+
+**Step 1: Read all four Serena default memories** (skip any that don't exist):
+
+```javascript
+const defaults = [
+  'project/project_overview',
+  'style/style_conventions',
+  'style/style_and_conventions',  // alternate name
+  'suggested/suggested_commands',
+  'task/task_completion'
+];
+for (const name of defaults) {
+  await mcp__plugin_swe_serena__read_memory({ memory_name: name });
+}
+```
+
+**Step 2: Merge discovered knowledge into SWE templates.**
+
+Read each SWE template memory, then update it with the content from the Serena defaults:
+
+| Serena Default | Merge Into | What to Merge |
+|---|---|---|
+| `project/project_overview` | `feature/FEATURE_DEV_STANDARDS` | Add a `## Project Overview` section at the top with: project purpose, tech stack, architecture summary, entry points, class/file naming conventions |
+| `style/style_conventions` | `feature/FEATURE_DEV_STANDARDS` | Populate the language-specific sections (replace generic "follow existing conventions" advice with the actual discovered conventions per language) |
+| `suggested/suggested_commands` | `feature/FEATURE_DEV_STANDARDS` | Add a `## Commands` section with: build commands, lint commands, package management commands, git branch info |
+| `task/task_completion` | `feature/FEATURE_TESTS` | Add a `## Task Completion Checklist` section with the project-specific verification steps (lint, build, test commands) |
+
+Use `mcp__plugin_swe_serena__edit_memory` to update each target memory. Preserve all existing template structure — add new sections, don't overwrite existing ones.
+
+**Step 3: Delete the Serena default memories and their empty folders.**
+
+```javascript
+const toDelete = [
+  'project/project_overview',
+  'style/style_conventions',
+  'style/style_and_conventions',
+  'suggested/suggested_commands',
+  'task/task_completion'
+];
+for (const name of toDelete) {
+  await mcp__plugin_swe_serena__delete_memory({ memory_name: name });
+}
+```
+
+Then remove the now-empty topic folders from the Serena memories directory:
+
+```bash
+SERENA_MEMORIES_DIR=".serena/memories"
+for dir in project style suggested task; do
+  if [ -d "$SERENA_MEMORIES_DIR/$dir" ]; then
+    rmdir "$SERENA_MEMORIES_DIR/$dir" 2>/dev/null && echo "Removed empty folder: $SERENA_MEMORIES_DIR/$dir" || echo "Folder not empty, skipping: $SERENA_MEMORIES_DIR/$dir"
+  fi
+done
+```
+
+**Note:** Uses `rmdir` (not `rm -rf`) so only truly empty folders are removed. If a folder has other files, it's left intact.
 
 ### Task 5: Verify and Install Language Servers
 
