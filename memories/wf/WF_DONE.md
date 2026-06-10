@@ -41,8 +41,7 @@ To start a new task in the same session: update WM (increment Task Iteration, mo
 
 ## Next Step
 
-| Condition                    | Read Next    |
+| Condition                    | Next         |
 | ---------------------------- | ------------ |
-| Learning/cleanup needed      | `WF_CLEANUP` |
 | New task in same session     | `WF_CLASSIFY` |
 | Session complete             | End          |

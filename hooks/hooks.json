@@ -40,6 +40,16 @@
         ]
       },
       {
+        "matcher": "Edit|Write|mcp__plugin_swe_serena__replace_symbol_body|mcp__plugin_swe_serena__replace_content|mcp__plugin_swe_serena__insert_before_symbol|mcp__plugin_swe_serena__insert_after_symbol|mcp__serena__replace_symbol_body|mcp__serena__replace_content|mcp__serena__insert_before_symbol|mcp__serena__insert_after_symbol",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/pre/swe_pre_edit_validate.py",
+            "timeout": 10
+          }
+        ]
+      },
+      {
         "matcher": "mcp__ruv-swarm__swarm_init",
         "hooks": [
           {
@@ -68,6 +78,16 @@
             "type": "command",
             "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/post/swe_post_read_state.py",
             "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write|mcp__plugin_swe_serena__replace_symbol_body|mcp__plugin_swe_serena__replace_content|mcp__plugin_swe_serena__insert_before_symbol|mcp__plugin_swe_serena__insert_after_symbol|mcp__serena__replace_symbol_body|mcp__serena__replace_content|mcp__serena__insert_before_symbol|mcp__serena__insert_after_symbol",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/post/swe_post_edit_checkpoint.py",
+            "timeout": 5
           }
         ]
       },

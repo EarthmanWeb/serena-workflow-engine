@@ -323,10 +323,21 @@ DO NOT read task-specific memories before initialization is complete."""
                     print(json.dumps(output))
                     sys.exit(0)
 
-            # write_memory / edit_memory: allow (needed for WM creation during init)
+            # write_memory / edit_memory / list_memories: allow (needed for WM creation and feature loading during init)
             if tool_name in (
                 'mcp__plugin_swe_serena__write_memory', 'mcp__serena__write_memory',
                 'mcp__plugin_swe_serena__edit_memory', 'mcp__serena__edit_memory',
+                'mcp__plugin_swe_serena__list_memories', 'mcp__serena__list_memories',
+            ):
+                print(json.dumps({}))
+                sys.exit(0)
+
+            # swe-wm MCP tools: allow (needed for WM updates during init chain)
+            if tool_name in (
+                'mcp__plugin_swe_swe-wm__swe_wm_read',
+                'mcp__plugin_swe_swe-wm__swe_wm_update_section',
+                'mcp__plugin_swe_swe-wm__swe_wm_update_status',
+                'mcp__plugin_swe_swe-wm__swe_wm_list',
             ):
                 print(json.dumps({}))
                 sys.exit(0)
@@ -344,7 +355,7 @@ DO NOT read task-specific memories before initialization is complete."""
                 sys.exit(0)
 
             # BLANKET DENY: Everything not explicitly allowed above is blocked pre-init
-            # This catches Bash, Grep, Glob, Edit, Write (non-WM), list_memories,
+            # This catches Bash, Grep, Glob, Edit, Write (non-WM),
             # find_symbol, get_symbols_overview, and ANY other tool
             output = {
                 "hookSpecificOutput": {
@@ -353,12 +364,15 @@ DO NOT read task-specific memories before initialization is complete."""
                     "permissionDecisionReason": f"""🛑 BLOCKED: {tool_name} called before WF_INIT complete.
 
 This tool is NOT allowed before initialization.
-Only read_memory with init-chain memories (wf/WF_INIT, wf/WF_START, etc.) is permitted.
+Only read_memory and list_memories (init-chain) are permitted.
 
-MANDATORY ACTION — Call this tool NOW:
-   → mcp__plugin_swe_serena__read_memory(memory_name="wf/WF_INIT")
+MANDATORY ACTION — Complete the full init chain:
+   1. mcp__plugin_swe_serena__read_memory(memory_name="wf/WF_INIT")
+   2. mcp__plugin_swe_serena__read_memory(memory_name="claude/CLAUDE_OBLIGATIONS")
+   3. mcp__plugin_swe_serena__read_memory(memory_name="wf/WF_START")
 
-Then follow the init chain. Do NOT use {tool_name} until Working Memory exists."""
+The sentinel that unlocks all tools is created when WF_START is read.
+Do NOT use {tool_name} until the full chain is complete."""
                 }
             }
             print(json.dumps(output))
@@ -416,12 +430,13 @@ You must complete the WF_INIT workflow before using other tools.
 - "But it's just a simple edit" → NO. Initialize first.
 DO NOT RATIONALIZE. DO NOT NEGOTIATE. INITIALIZE.
 
-MANDATORY ACTION - Call this tool NOW:
-   → mcp__plugin_swe_serena__read_memory(memory_name="wf/WF_INIT")
+MANDATORY ACTION — Complete the full init chain:
+   1. mcp__plugin_swe_serena__read_memory(memory_name="wf/WF_INIT")
+   2. mcp__plugin_swe_serena__read_memory(memory_name="claude/CLAUDE_OBLIGATIONS")
+   3. mcp__plugin_swe_serena__read_memory(memory_name="wf/WF_START")
 
-Then follow WF_INIT instructions to:
-1. Read WF_START (which creates the Working Memory)
-2. Proceed with task classification
+The sentinel that unlocks all tools is created when WF_START is read.
+Do NOT stop after reading WF_INIT — you must complete all 3 steps.
 
 Diagnostic: {diagnostic}
 

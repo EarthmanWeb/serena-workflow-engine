@@ -22,15 +22,24 @@ If not a spawned agent, continue below.
 
 ---
 
-## Rules
+## Do Not Skip This Workflow
 
-- ALL tasks go through the workflow. No exceptions for "simple" tasks.
-- Do not use allowed tools (Read, Grep, Glob, list_memories) for task work before init completes — they are infrastructure for init only.
-- Follow each step sequentially. Do not batch workflow steps with implementation actions.
+These rationalizations are never valid:
+
+- "This is a simple task" — complexity is irrelevant. All tasks follow the workflow.
+- "I already know what to do" — the workflow exists for consistency, not knowledge.
+- "The user wants a quick answer" — speed does not override the init chain.
+- "I can batch this with other calls" — do not combine workflow steps with task work.
+- "CLAUDE_OBLIGATIONS doesn't apply here" — it always applies. Read it every time.
+- "The hook didn't block me, so it's fine" — the hook allowlist (Read, Grep, Glob, list_memories) exists so WF_INIT can run, not so you can start task work before init completes.
+
+If you make any tool call that searches code, edits files, or does task work before completing the init chain: you are in violation. The hook cannot distinguish "reading for init" from "reading to skip init." You must.
 
 ---
 
-## Entry Point
+## Mandatory Entry Point
+
+**Every session starts here. No exceptions.** This includes meta-work, simple questions, continuing previous conversations, and any other interaction.
 
 1. Read obligations:
 ```
@@ -42,7 +51,7 @@ mcp__plugin_swe_serena__read_memory("claude/CLAUDE_OBLIGATIONS")
 mcp__plugin_swe_serena__read_memory("wf/WF_START")
 ```
 
-Then follow WF_START instructions completely.
+Then follow WF_START instructions completely. Do not respond to the user before completing these reads.
 
 ---
 
@@ -68,8 +77,6 @@ Use Serena symbolic tools before reading full files:
 - `search_for_pattern` — targeted search when symbol name is unknown
 
 ### Multi-Level Extraction with `depth`
-
-Both `get_symbols_overview` and `find_symbol` accept a `depth` parameter (default 0):
 
 | depth | Returns |
 |-------|---------|

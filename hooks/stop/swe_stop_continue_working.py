@@ -35,12 +35,13 @@ except ImportError as e:
 
 # Workflow states where active work is in progress — should block stopping
 INCOMPLETE_STATES = {
-    'WF_EXECUTE', 'WF_DEBUG_TDD', 'WF_VERIFY', 'WF_ARCH_REVIEW',
+    'WF_EXECUTE', 'WF_DEBUG_TDD', 'WF_ARCH_REVIEW',
     'WF_CHECKPOINT', 'WF_SWARM_ORCHESTRATE'
 }
 
-# Workflow states where stopping is fine
-ALLOW_STOP_STATES = {'WF_DONE', 'UNINITIALIZED', ''}
+# Workflow states where stopping is fine (completion states + uninitialized)
+# WF_VERIFY is allowed to stop — continuation directives guide transition to WF_DONE
+ALLOW_STOP_STATES = {'WF_DONE', 'WF_VERIFY', 'UNINITIALIZED', ''}
 
 # Max consecutive stop blocks in same state before allowing (escape hatch)
 # Inspired by IronBee's retry-limited verify-gate pattern

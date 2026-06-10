@@ -4,6 +4,17 @@
 
 ---
 
+## This Step Cannot Be Skipped
+
+All tasks go through WF_CLASSIFY — it loads feature memories, detects requirements, and routes correctly. Valid paths to WF_EXECUTE:
+
+- Code changes: WF_CLASSIFY → WF_ARCH_REVIEW → WF_EXECUTE
+- Operational tasks only: WF_CLASSIFY → WF_EXECUTE
+
+Having a feature key in WM is not the same as having loaded the FEATURE_[KEY] memory. Features are loaded HERE, in Step 4.
+
+---
+
 ## Steps
 
 ### 1. Clarity Check

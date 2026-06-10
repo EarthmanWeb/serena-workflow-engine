@@ -4,6 +4,18 @@
 
 ---
 
+## No Direct Path to WF_EXECUTE
+
+There is no valid path from WF_START to WF_EXECUTE. All paths go through WF_CLASSIFY first (which loads feature memories):
+
+- Code changes: WF_START → WF_CLASSIFY → WF_ARCH_REVIEW → WF_EXECUTE
+- Operational: WF_START → WF_CLASSIFY → WF_EXECUTE
+- Continue: WF_START → WF_CONTINUE → (resume point)
+
+If your next step would be WF_EXECUTE, go to WF_CLASSIFY instead. Having a feature key is not the same as loading the FEATURE_[KEY] memory.
+
+---
+
 ## Execute These Steps
 
 ### 1. Check Feature Registry

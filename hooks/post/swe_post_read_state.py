@@ -73,6 +73,8 @@ def _get_continuation(current_state: str) -> str:
         "WF_ARCH_REVIEW": "Complete architecture review → present plan → route to WF_EXECUTE",
         "WF_EXECUTE": "Continue implementation → checkpoint at 3+ edits → WF_VERIFY when done",
         "WF_RESEARCH": "Continue investigation → record findings → route when complete",
+        "WF_VERIFY": "Complete verification checks → update WM → read wf/WF_DONE when all clean",
+        "WF_DONE": "Update WM with final status → summarize to user → end session",
     }
     d = directives.get(current_state)
     return f"⏩ CONTINUE ({current_state}): {d}" if d else ""

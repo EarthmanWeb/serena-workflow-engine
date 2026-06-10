@@ -23,42 +23,51 @@ pattern.
 hooks/
 ├── swe_hooks/
 │   ├── __init__.py
-│   └── core/
-│       ├── __init__.py
-│       ├── output.py             # HookOutput class, helpers
-│       ├── input.py              # Input parsing helpers
-│       ├── config.py             # Path helpers, state loading
-│       ├── session.py            # Session ID, WM management
-│       ├── state_manager.py      # State machine logic
-│       ├── wm_validator.py       # Working Memory validation
-│       └── wm_writer_daemon.py   # Async WM writing
+│   ├── bootstrap.py              # Import fallback, path setup
+│   ├── core/
+│   │   ├── __init__.py
+│   │   ├── output.py             # HookOutput class, helpers
+│   │   ├── input.py              # Input parsing helpers
+│   │   ├── config.py             # Path helpers, state loading
+│   │   ├── session.py            # Session ID, WM management
+│   │   ├── state_manager.py      # State machine logic
+│   │   ├── stream.py             # Append-only JSONL event log
+│   │   └── wm_validator.py       # Working Memory validation
+│   ├── mcp/
+│   │   └── wm_server.py          # swe-wm MCP server
+│   └── tools/
+│       └── set_state.py          # State manipulation utility
 ├── session/
-│   └── swe_session_start.py
+│   ├── swe_session_start.py
+│   └── swe_session_end.py
 ├── prompt/
 │   ├── swe_user_prompt_workflow.py
 │   └── swe_user_prompt_swarm.py
 ├── pre/
 │   ├── swe_pre_tool_init_gate.py
 │   ├── swe_pre_edit_validate.py
-│   └── swe_pre_bash_test_gate.py
+│   ├── swe_pre_bash_test_gate.py
+│   └── swe_pre_swarm_feature_gate.py
 ├── post/
 │   ├── swe_post_read_state.py
 │   ├── swe_post_edit_checkpoint.py
-│   ├── swe_post_serena_replace_fallback.py
-│   ├── swe_post_task_learn.py
-│   └── swe_post_ruv_swarm_init.py
+│   ├── swe_post_write_continue.py
+│   ├── swe_post_todo_wm_sync.py
+│   ├── swe_post_memory_index.py
+│   └── swe_post_tool_failure.py
 ├── stop/
-│   └── swe_stop_workflow_check.py
+│   └── swe_stop_continue_working.py
 └── hooks.json
 ```
 
-## Hook Inventory (13 Python Scripts)
+## Hook Inventory (13 Hook Scripts)
 
 ### Session Hooks (`session/`)
 
 | Hook                   | Event        | Purpose                                   |
 | ---------------------- | ------------ | ----------------------------------------- |
-| `swe_session_start.py` | SessionStart | Initialize workflow state, create WM file |
+| `swe_session_start.py` | SessionStart | Initialize workflow state, auto-update    |
+| `swe_session_end.py`   | SessionEnd   | Clean up sentinels, mark WM abandoned     |
 
 ### User Prompt Hooks (`prompt/`)
 
@@ -69,28 +78,29 @@ hooks/
 
 ### Pre-Tool Hooks (`pre/`) - Gatekeepers
 
-| Hook                        | Event                          | Purpose                                     |
-| --------------------------- | ------------------------------ | ------------------------------------------- |
-| `swe_pre_tool_init_gate.py` | PreToolUse                     | Block ALL tools until WF_INIT is read       |
-| `swe_pre_edit_validate.py`  | PreToolUse (Edit/Write/Serena) | Block edits in planning states              |
-| `swe_pre_bash_test_gate.py` | PreToolUse (Bash)              | Validate test commands against WF_DEBUG_TDD |
+| Hook                            | Event                          | Purpose                                     |
+| ------------------------------- | ------------------------------ | ------------------------------------------- |
+| `swe_pre_tool_init_gate.py`     | PreToolUse                     | Block ALL tools until WF_INIT chain complete |
+| `swe_pre_edit_validate.py`      | PreToolUse (Edit/Write/Serena) | Block edits in planning states              |
+| `swe_pre_bash_test_gate.py`     | PreToolUse (Bash)              | Validate test commands against WF_DEBUG_TDD |
+| `swe_pre_swarm_feature_gate.py` | PreToolUse (ruflo swarm)       | Feature gate: FEATURE_SWARM                 |
 
 ### Post-Tool Hooks (`post/`) - Observers/Learners
 
-| Hook                                  | Event                           | Purpose                            |
-| ------------------------------------- | ------------------------------- | ---------------------------------- |
-| `swe_post_read_state.py`              | PostToolUse (read_memory)       | State transitions, plan mode       |
-| `swe_post_edit_checkpoint.py`         | PostToolUse (Edit/Write/Serena) | Edit counting, checkpoint triggers |
-| `swe_post_serena_replace_fallback.py` | PostToolUse (Serena replace)    | Symbol replace error handling      |
-| `swe_post_task_learn.py`              | PostToolUse (read_memory)       | RLVR trajectory tracking           |
-| `swe_post_ruv_swarm_init.py`          | PostToolUse (ruflo)             | Ruflo swarm initialization         |
-| `swe_post_memory_index.py`            | PostToolUse (write_memory)      | Enforce MEMORY.md index update     |
+| Hook                          | Event                           | Purpose                            |
+| ----------------------------- | ------------------------------- | ---------------------------------- |
+| `swe_post_read_state.py`      | PostToolUse (read_memory)       | State transitions, plan mode       |
+| `swe_post_edit_checkpoint.py` | PostToolUse (Edit/Write/Serena) | Edit counting, checkpoint triggers |
+| `swe_post_write_continue.py`  | PostToolUse (write_memory)      | Post-write continuation            |
+| `swe_post_todo_wm_sync.py`    | PostToolUse (TodoWrite)         | WM sync reminder on todo changes   |
+| `swe_post_memory_index.py`    | PostToolUse (write_memory)      | Enforce MEMORY.md index update     |
+| `swe_post_tool_failure.py`    | PostToolUseFailure              | Flailing detection, failure logging |
 
 ### Stop Hooks (`stop/`)
 
-| Hook                         | Event | Purpose                           |
-| ---------------------------- | ----- | --------------------------------- |
-| `swe_stop_workflow_check.py` | Stop  | Verify WF_DONE before session end |
+| Hook                              | Event | Purpose                                       |
+| --------------------------------- | ----- | --------------------------------------------- |
+| `swe_stop_continue_working.py`    | Stop  | Block unnecessary stops, continue-working     |
 
 ## Prompt Intent Analysis (swe_user_prompt_workflow.py)
 
@@ -113,11 +123,12 @@ intent:
 
 ## Init Gate (swe_pre_tool_init_gate.py)
 
-Blocks ALL tool calls until `read_memory("wf/WF_INIT")` has been called:
+Blocks ALL tool calls until the full init chain is complete (sentinel created at WF_START):
 
 - Ensures workflow instructions are read before any work begins
-- Allows: read_memory tool calls (to enable reading WF_INIT)
-- Blocks: All other tools with message directing to read WF_INIT
+- **Allowed pre-init:** read_memory (wf/* and init-chain), write_memory, edit_memory, list_memories, swe_wm tools, ToolSearch, Serena project setup tools
+- **Blocked pre-init:** Bash, Grep, Glob, Edit, Write (non-WM), find_symbol, get_symbols_overview, and all other tools
+- Sentinel created at WF_START transition unlocks all tools for the session
 
 ## Instruction File Strategy
 
@@ -265,7 +276,7 @@ The plugin's `hooks/hooks.json` uses `${CLAUDE_PLUGIN_ROOT}` which is resolved b
 
 ```bash
 jq '.hooks | keys' .claude/plugins/serena-workflow-engine/hooks/hooks.json
-# Expected: ["PostToolUse", "PreToolUse", "SessionStart", "Stop", "UserPromptSubmit"]
+# Expected: ["PostToolUse", "PostToolUseFailure", "PreToolUse", "SessionEnd", "SessionStart", "Stop", "UserPromptSubmit"]
 ```
 
 ## Diagnostic Checklist
