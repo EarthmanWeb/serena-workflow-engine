@@ -98,13 +98,14 @@ Registered in `plugin.json` as `swe-wm`, started via `scripts/start-wm-mcp.sh`.
 
 **Usage**: `mcp__swe-wm__swe_wm_update_section(session_id="...", section="Progress", content="...")`
 
-### Hooks (13 Python scripts organized by event type)
+### Hooks (15 Python scripts organized by event type)
 
 #### Session Hooks (`hooks/session/`)
 
 | Hook                   | Trigger      | Purpose                              |
 | ---------------------- | ------------ | ------------------------------------ |
 | `swe_session_start.py` | SessionStart | Initialize workflow state, create WM |
+| `swe_session_end.py`   | SessionEnd   | Clean up sentinels, mark WM abandoned |
 
 #### User Prompt Hooks (`hooks/prompt/`)
 
@@ -131,12 +132,13 @@ Registered in `plugin.json` as `swe-wm`, started via `scripts/start-wm-mcp.sh`.
 | `swe_post_todo_wm_sync.py`            | PostToolUse (TodoWrite)         | WM sync reminder on todo changes |
 | `swe_post_write_continue.py`          | PostToolUse (Write)             | Post-write continuation          |
 | `swe_post_memory_index.py`            | PostToolUse (write_memory)      | Enforce MEMORY.md index update   |
+| `swe_post_tool_failure.py`            | PostToolUseFailure              | Flailing detection, failure logging |
 
 #### Stop Hooks (`hooks/stop/`)
 
-| Hook                         | Trigger | Purpose                |
-| ---------------------------- | ------- | ---------------------- |
-| `swe_stop_workflow_check.py` | Stop    | Verify WF_DONE reached |
+| Hook                              | Trigger | Purpose                                   |
+| --------------------------------- | ------- | ----------------------------------------- |
+| `swe_stop_continue_working.py`    | Stop    | Block unnecessary stops, continue-working |
 
 ### Skills (10 total)
 
@@ -165,6 +167,12 @@ Registered in `plugin.json` as `swe-wm`, started via `scripts/start-wm-mcp.sh`.
 | `/swe-memory`   | Manage session WM          |
 | `/swe-scaffold-project` | Scaffold new project (skill) |
 | `/swe-cleanup`  | Archive completed memories |
+
+**CLI Tools (non-skill):**
+
+| Command | Purpose |
+| ------- | ------- |
+| `python3 hooks/pre/swe_pre_tool_init_gate.py --reset-sentinel [session_id]` | Manual sentinel reset for deadlock recovery |
 
 ### Agents (1 total)
 
@@ -260,7 +268,7 @@ read. All feature gates use **session-scoped sentinel files** for O(1) checks.
 | `.serena/swe-bypass.json`          | SWE permanently disabled flag      |
 | `.serena/swe-state/<session>.state`| Decoupled workflow state (authoritative) |
 | `.serena/streams/<session>.jsonl`  | Append-only event log              |
-| `.serena/streams/.init_<session>`  | Init gate sentinel cache           |
+| `.serena/streams/.init_<session>`  | Init gate sentinel cache (self-healing: recreated from WM if missing) |
 | `.serena/memories/WM_<session>.md` | Working Memory (per-session)       |
 
 ## Bootstrap & Init Flow (New Projects)

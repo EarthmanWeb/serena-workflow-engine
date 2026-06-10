@@ -192,7 +192,29 @@ def main():
             wm_file = None  # Don't show old session's working memory
         else:
             current_state = state_data.get("current_state", "WF_INIT")
-        
+
+            # Ensure init sentinel exists for this session.
+            # If WM is valid but sentinel is missing (e.g., mid-session pivot,
+            # context compression, or sentinel cleanup), recreate it now.
+            # This prevents the init gate deadlock where the daemon blocks
+            # re-running the init chain but the gate demands it.
+            if session_id and wm_file:
+                try:
+                    from swe_hooks.core.stream import get_sentinel_path
+                    import time as _time
+                    sentinel = get_sentinel_path(session_id)
+                    if not os.path.exists(sentinel):
+                        os.makedirs(os.path.dirname(sentinel), exist_ok=True)
+                        sentinel_data = {
+                            "session_id": session_id,
+                            "wm_file": wm_file,
+                            "validated_at": int(_time.time()),
+                        }
+                        with open(sentinel, 'w') as f:
+                            json.dump(sentinel_data, f, separators=(',', ':'))
+                except (IOError, ImportError):
+                    pass
+
         # Create StateManager for potential transitions
         state_mgr = StateManager(cwd, session_id=session_id)
         

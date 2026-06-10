@@ -120,6 +120,7 @@ intent:
 - In WF_START + continuation → MANDATORY instruction to read WF_START
 - In active states (WF_EXECUTE, etc.) + continuation → Brief "Continue with workflow" message
 - New task detected → Transition to WF_START regardless of current state
+- Valid WM but missing sentinel → Recreates sentinel before routing (prevents init gate deadlock on mid-session pivots)
 
 ## Init Gate (swe_pre_tool_init_gate.py)
 
@@ -129,6 +130,26 @@ Blocks ALL tool calls until the full init chain is complete (sentinel created at
 - **Allowed pre-init:** read_memory (wf/* and init-chain), write_memory, edit_memory, list_memories, swe_wm tools, ToolSearch, Serena project setup tools
 - **Blocked pre-init:** Bash, Grep, Glob, Edit, Write (non-WM), find_symbol, get_symbols_overview, and all other tools
 - Sentinel created at WF_START transition unlocks all tools for the session
+
+### Sentinel Recovery (Self-Healing)
+
+If the sentinel is missing but a valid WM exists for the session, it is recreated automatically. This prevents a deadlock on mid-session task pivots where the daemon blocks re-running the init chain but the gate demands it.
+
+Recovery points (checked in order):
+1. **Prompt hook** (`swe_user_prompt_workflow.py`) — creates sentinel when WM is valid but sentinel missing, before any tool call
+2. **Init gate** (`swe_pre_tool_init_gate.py`) — WM-based fallback if prompt hook didn't fire or failed
+
+### Manual Reset
+
+CLI escape hatch for deadlock recovery:
+
+```bash
+# Reset sentinel for a specific session
+python3 hooks/pre/swe_pre_tool_init_gate.py --reset-sentinel <session_id>
+
+# Clear ALL sentinels (next init chain recreates them)
+python3 hooks/pre/swe_pre_tool_init_gate.py --reset-sentinel
+```
 
 ## Instruction File Strategy
 

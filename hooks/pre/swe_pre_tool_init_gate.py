@@ -285,6 +285,26 @@ def main():
                 print(json.dumps({}))
                 sys.exit(0)
 
+        # Self-healing sentinel recovery: if sentinel missing but WM valid,
+        # recreate sentinel. Fixes deadlock on mid-session task pivots where
+        # the daemon blocks re-running the init chain but the gate demands it.
+        if not session_initialized and session_id and _STREAM_AVAILABLE:
+            is_valid, _ = check_working_memory_exists(session_id)
+            if is_valid:
+                sentinel = get_sentinel_path(session_id)
+                try:
+                    os.makedirs(os.path.dirname(sentinel), exist_ok=True)
+                    sentinel_data = {
+                        "session_id": session_id,
+                        "wm_file": f"WM_{session_id}",
+                        "validated_at": int(__import__('time').time()),
+                    }
+                    with open(sentinel, 'w') as f:
+                        json.dump(sentinel_data, f, separators=(',', ':'))
+                    session_initialized = True
+                except IOError:
+                    pass
+
         # Fallback: if stream unavailable, check WM directly for init status
         if not session_initialized and not _STREAM_AVAILABLE:
             is_valid, _ = check_working_memory_exists(session_id)
@@ -452,5 +472,61 @@ Diagnostic: {diagnostic}
         print(json.dumps({"systemMessage": f"Init gate error: {e}"}))
         sys.exit(0)
 
+def reset_sentinel(session_id=None):
+    """Manual escape hatch: reset init sentinel for a session.
+
+    Usage:
+        python3 swe_pre_tool_init_gate.py --reset-sentinel [session_id]
+
+    If session_id is omitted, resets ALL sentinels in the streams directory.
+    Creates a fresh sentinel if a valid WM exists for the session.
+    """
+    import time as _time
+
+    try:
+        project_root = get_project_root() if _STREAM_AVAILABLE else _get_project_root()
+    except Exception:
+        project_root = _get_project_root()
+
+    stream_dir = os.path.join(project_root, '.serena', 'streams')
+    if not os.path.isdir(stream_dir):
+        print(f"No streams directory at {stream_dir}")
+        return
+
+    # Delete existing sentinel(s)
+    if session_id:
+        targets = [os.path.join(stream_dir, f'.init_{session_id}')]
+    else:
+        targets = glob.glob(os.path.join(stream_dir, '.init_*'))
+
+    for sentinel_path in targets:
+        if os.path.exists(sentinel_path):
+            os.remove(sentinel_path)
+            print(f"Deleted: {os.path.basename(sentinel_path)}")
+
+    # Recreate sentinel if WM is valid for the specified session
+    if session_id:
+        is_valid, diag = check_working_memory_exists(session_id)
+        if is_valid:
+            sentinel = os.path.join(stream_dir, f'.init_{session_id}')
+            sentinel_data = {
+                "session_id": session_id,
+                "wm_file": f"WM_{session_id}",
+                "validated_at": int(_time.time()),
+            }
+            with open(sentinel, 'w') as f:
+                json.dump(sentinel_data, f, separators=(',', ':'))
+            print(f"Created: .init_{session_id} (WM valid)")
+        else:
+            print(f"No valid WM for session {session_id}: {diag}")
+            print("Sentinel deleted but not recreated — next init chain will create it.")
+    else:
+        print("All sentinels cleared. Next init chain will recreate them.")
+
+
 if __name__ == '__main__':
-    main()
+    if len(sys.argv) > 1 and sys.argv[1] == '--reset-sentinel':
+        sid = sys.argv[2] if len(sys.argv) > 2 else None
+        reset_sentinel(sid)
+    else:
+        main()
