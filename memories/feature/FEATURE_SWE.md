@@ -111,7 +111,7 @@ Registered in `plugin.json` as `swe-wm`, started via `scripts/start-wm-mcp.sh`.
 
 | Hook                          | Trigger          | Purpose                         |
 | ----------------------------- | ---------------- | ------------------------------- |
-| `swe_user_prompt_workflow.py` | UserPromptSubmit | WF_INIT gate, state transitions |
+| `swe_user_prompt_workflow.py` | UserPromptSubmit | Intent analysis, state transitions, sentinel recovery |
 | `swe_user_prompt_swarm.py`    | UserPromptSubmit | Detect swarm keywords           |
 
 #### Pre-Tool Hooks (`hooks/pre/`)
@@ -128,7 +128,7 @@ Registered in `plugin.json` as `swe-wm`, started via `scripts/start-wm-mcp.sh`.
 | Hook                                  | Trigger                         | Purpose                          |
 | ------------------------------------- | ------------------------------- | -------------------------------- |
 | `swe_post_read_state.py`              | PostToolUse (read_memory)       | State transitions, plan mode     |
-| `swe_post_edit_checkpoint.py`         | PostToolUse (Edit/Write/Serena) | Track edits, trigger checkpoints |
+| `swe_post_edit_checkpoint.py`         | PostToolUse (Edit/Write/Serena) | Track edits, checkpoint at 10 edits |
 | `swe_post_todo_wm_sync.py`            | PostToolUse (TodoWrite)         | WM sync reminder on todo changes |
 | `swe_post_write_continue.py`          | PostToolUse (Write)             | Post-write continuation          |
 | `swe_post_memory_index.py`            | PostToolUse (write_memory)      | Enforce MEMORY.md index update   |

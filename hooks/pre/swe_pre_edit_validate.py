@@ -29,8 +29,8 @@ EDIT_ALLOWED = {'WF_EXECUTE', 'WF_DEBUG_TDD', 'WF_CHECKPOINT', 'WF_INITIAL_SETUP
 # States where edits should show a warning
 WARN_STATES = {'WF_ARCH_REVIEW', 'WF_RESEARCH'}
 
-# Edit threshold for staleness check
-STALENESS_THRESHOLD = 5
+# Edit threshold for staleness check (must match CHECKPOINT_THRESHOLD in swe_post_edit_checkpoint.py)
+STALENESS_THRESHOLD = 10
 
 
 def main():

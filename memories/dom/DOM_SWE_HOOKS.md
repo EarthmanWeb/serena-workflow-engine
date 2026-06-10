@@ -60,7 +60,7 @@ hooks/
 └── hooks.json
 ```
 
-## Hook Inventory (13 Hook Scripts)
+## Hook Inventory (15 Hook Scripts)
 
 ### Session Hooks (`session/`)
 
@@ -81,7 +81,7 @@ hooks/
 | Hook                            | Event                          | Purpose                                     |
 | ------------------------------- | ------------------------------ | ------------------------------------------- |
 | `swe_pre_tool_init_gate.py`     | PreToolUse                     | Block ALL tools until WF_INIT chain complete |
-| `swe_pre_edit_validate.py`      | PreToolUse (Edit/Write/Serena) | Block edits in planning states              |
+| `swe_pre_edit_validate.py`      | PreToolUse (Edit/Write/Serena) | Block edits in planning states, staleness at 10 edits |
 | `swe_pre_bash_test_gate.py`     | PreToolUse (Bash)              | Validate test commands against WF_DEBUG_TDD |
 | `swe_pre_swarm_feature_gate.py` | PreToolUse (ruflo swarm)       | Feature gate: FEATURE_SWARM                 |
 
@@ -90,7 +90,7 @@ hooks/
 | Hook                          | Event                           | Purpose                            |
 | ----------------------------- | ------------------------------- | ---------------------------------- |
 | `swe_post_read_state.py`      | PostToolUse (read_memory)       | State transitions, plan mode       |
-| `swe_post_edit_checkpoint.py` | PostToolUse (Edit/Write/Serena) | Edit counting, checkpoint triggers |
+| `swe_post_edit_checkpoint.py` | PostToolUse (Edit/Write/Serena) | Edit counting, checkpoint at 10 edits |
 | `swe_post_write_continue.py`  | PostToolUse (write_memory)      | Post-write continuation            |
 | `swe_post_todo_wm_sync.py`    | PostToolUse (TodoWrite)         | WM sync reminder on todo changes   |
 | `swe_post_memory_index.py`    | PostToolUse (write_memory)      | Enforce MEMORY.md index update     |
@@ -109,18 +109,28 @@ intent:
 
 | Intent           | Detection Patterns                                                   | Behavior                              |
 | ---------------- | -------------------------------------------------------------------- | ------------------------------------- |
-| **continuation** | "yes", "continue", "proceed", "go ahead", "ok", "sounds good"        | Stay in current state, brief reminder |
-| **addition**     | "also", "additionally", "can you also", "one more thing"             | Stay in state, incorporate addition   |
+| **continuation** | "yes", "okay, do X", "any other issues?", "let me know if", status checks | Stay in current state, brief reminder |
+| **addition**     | "also", "remove/change/update the", "while you're at it"            | Stay in state, incorporate addition   |
 | **new_task**     | "help me build", "create", "fix", "implement", action verbs at start | Transition to WF_START                |
-| **unknown**      | Doesn't match patterns                                               | Provide full workflow instructions    |
+| **unknown**      | Doesn't match patterns AND message >120 chars in non-active state    | Provide full workflow instructions    |
+
+**Pattern Design:**
+- No `$` anchors on continuation patterns — "okay, you should have the latest" matches, not just "okay" alone
+- Conversational patterns detect questions/status checks about current work
+- Active-state heuristic: messages <120 chars in any active state (WF_EXECUTE, WF_CLASSIFY, WF_RESEARCH, WF_DONE, etc.) default to continuation
+
+**Session Validation:**
+- `should_reset` uses WM filename + state data existence, not fragile WM markdown parsing
+- WM filename already contains session_id (`WM_{session_id}.md`) — no need to parse content
 
 **State-Aware Responses:**
 
 - In WF_INIT → MANDATORY instruction to read WF_INIT (blocking gate)
 - In WF_START + continuation → MANDATORY instruction to read WF_START
-- In active states (WF_EXECUTE, etc.) + continuation → Brief "Continue with workflow" message
+- In active states + continuation → Brief "Continue with workflow" message
 - New task detected → Transition to WF_START regardless of current state
-- Valid WM but missing sentinel → Recreates sentinel before routing (prevents init gate deadlock on mid-session pivots)
+- Valid WM but missing sentinel → Recreates sentinel before routing (prevents init gate deadlock)
+- Same-session new task (WF_DONE) → Includes previous feature keys for fast-path to WF_ARCH_REVIEW
 
 ## Init Gate (swe_pre_tool_init_gate.py)
 
