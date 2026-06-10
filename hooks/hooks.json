@@ -1,5 +1,5 @@
 {
-  "description": "SWE v3 - 15-state simplified workflow with TodoWrite WM sync",
+  "description": "SWE v3 - 15-state workflow with failure tracking, session lifecycle, and metadata injection",
   "hooks": {
     "SessionStart": [
       {
@@ -109,6 +109,29 @@
             "type": "command",
             "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/stop/swe_stop_continue_working.py",
             "timeout": 10
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/session/swe_session_end.py",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/post/swe_post_tool_failure.py",
+            "timeout": 5
           }
         ]
       }

@@ -45,6 +45,30 @@ When adapting this template for a project:
 6. **Add auth setup** -- document how authentication storage state works (if applicable)
 7. **Remove this section** after customization
 
+## Gherkin BDD Specs
+
+Gherkin `.feature` files define testable behavioral specifications using Given/When/Then syntax.
+
+| Property | Value |
+| -------- | ----- |
+| **Specs Directory** | `tests/specs/` |
+| **File Pattern** | `[feature-key]-[slug].feature` |
+| **Spec Authoring** | `/swe-gherkin-spec [KEY]` |
+| **TDD from Spec** | `/swe-gherkin-dev [slug]` |
+
+### Workflow Integration
+
+- **New features**: Gherkin specs are prompted during `/swe-feature-onboard` and enforced at `WF_ARCH_REVIEW`
+- **Feature additions**: `WF_VERIFY` checks if existing specs need new scenarios for changed behavior
+- **Spec memories**: Each spec creates a `SPEC_[KEY]_[SLUG]` memory tracking coverage status
+
+### Convention
+
+- One `.feature` file per logical feature area
+- Scenarios cover happy path, error cases, edge cases, and state transitions
+- Each Given/When/Then step maps 1:1 to a test assertion
+- No `test.fixme()` or `test.skip()` — 100% coverage required
+
 ## Scope Definition
 
 ### Primary Directories
@@ -52,6 +76,7 @@ When adapting this template for a project:
 | Directory           | Purpose                        |
 | ------------------- | ------------------------------ |
 | `tests/`    | Root of the test suite         |
+| `tests/specs/` | Gherkin BDD specification files |
 
 ## Test Runner Config
 

@@ -42,6 +42,10 @@ INCOMPLETE_STATES = {
 # Workflow states where stopping is fine
 ALLOW_STOP_STATES = {'WF_DONE', 'UNINITIALIZED', ''}
 
+# Max consecutive stop blocks in same state before allowing (escape hatch)
+# Inspired by IronBee's retry-limited verify-gate pattern
+MAX_STOP_RETRIES = 3
+
 # Patterns that indicate Claude is asking unnecessary permission to continue
 CONTINUE_PATTERNS = re.compile(
     r'(?:shall I (?:continue|proceed|go ahead|move on|start|begin)|'
@@ -77,6 +81,37 @@ GENUINE_INPUT_PATTERNS = re.compile(
     r'what (?:format|schema|structure) (?:should|do you))',
     re.IGNORECASE
 )
+
+
+def count_stop_blocks(stream_path: str, current_state: str) -> int:
+    """Count consecutive stop_blocked events in the same state from end of stream.
+
+    Resets when state changes or a non-stop-block event occurs.
+    """
+    if not os.path.exists(stream_path):
+        return 0
+    try:
+        file_size = os.path.getsize(stream_path)
+        with open(stream_path, 'r') as f:
+            if file_size > 10240:
+                f.seek(max(0, file_size - 10240))
+                f.readline()
+            lines = f.readlines()
+
+        count = 0
+        for line in reversed(lines):
+            try:
+                event = json.loads(line.strip())
+                if (event.get('type') == 'stop_blocked' and
+                        event.get('state') == current_state):
+                    count += 1
+                else:
+                    break
+            except (json.JSONDecodeError, ValueError):
+                continue
+        return count
+    except IOError:
+        return 0
 
 
 def block_stop(reason: str):
@@ -169,8 +204,31 @@ def main():
             # Check transcript for WHY Claude stopped
             last_msg = extract_last_assistant_text(transcript_path)
 
+            # Check retry count — escape hatch after MAX_STOP_RETRIES
+            stream_path = get_stream_path(session_id) if session_id else None
+            if stream_path:
+                retry_count = count_stop_blocks(stream_path, current_state)
+                if retry_count >= MAX_STOP_RETRIES:
+                    # Escape hatch: allow stop after too many blocks
+                    append_event(stream_path, 'stop_escaped',
+                                 state=current_state, s=session_id,
+                                 retries=retry_count)
+                    result = {
+                        "stopReason": (
+                            f"⚠️ Stop allowed after {retry_count} blocks in {current_state}. "
+                            f"Claude may be genuinely stuck. Review the situation."
+                        )
+                    }
+                    print(json.dumps(result), file=sys.stdout)
+                    sys.exit(0)
+                    return
+
             # If asking unnecessary confirmation — block with continuation directive
             if last_msg and CONTINUE_PATTERNS.search(last_msg):
+                if stream_path:
+                    append_event(stream_path, 'stop_blocked',
+                                 state=current_state, s=session_id,
+                                 reason='confirmation_pattern')
                 block_stop(
                     f"Workflow is in {current_state} — work is not complete. "
                     "You have consent to continue. Do not ask for permission "
@@ -181,6 +239,10 @@ def main():
             # If presenting options instead of choosing — block
             if last_msg and OPTIONS_PATTERNS.search(last_msg):
                 if not GENUINE_INPUT_PATTERNS.search(last_msg):
+                    if stream_path:
+                        append_event(stream_path, 'stop_blocked',
+                                     state=current_state, s=session_id,
+                                     reason='options_pattern')
                     block_stop(
                         f"Workflow is in {current_state} — work is not complete. "
                         "Pick the best approach based on existing patterns and "

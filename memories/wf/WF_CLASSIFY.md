@@ -38,6 +38,22 @@ Before planning manual implementation, check if an existing command or skill han
 
 **If no match:** Continue to Step 3.
 
+### 2d. Gherkin Spec Detection
+
+Check if the task involves new feature development or feature additions that should have Gherkin specs:
+
+1. **Explicit Gherkin request** — user asks to write specs, create `.feature` files, or do BDD/TDD from specs
+   - Note `gherkin_spec: true` in WM
+   - Route directly to `/swe-gherkin-spec` (spec authoring) or `/swe-gherkin-dev` (TDD from existing spec)
+
+2. **New feature development** — user describes new functionality to build
+   - Check if SPEC_* memories exist for the affected feature: `list_memories(topic="spec")`
+   - If no specs exist: note `gherkin_spec_needed: true` in WM (enforced at WF_ARCH_REVIEW)
+
+3. **Feature addition** — user adds behavior to an existing feature that has Gherkin specs
+   - Check for existing `.feature` files: `Glob(pattern="tests/specs/*[feature-key]*.feature")`
+   - If specs exist for this feature: note `gherkin_spec_update: true` in WM (enforced at WF_VERIFY)
+
 ### 3. Task Type Assessment
 
 #### Research (no code changes, exploration only)
@@ -186,6 +202,8 @@ When routing to a workflow-aware skill (e.g., `/research`):
 | Conflicting requirement | WF_CLARIFY |
 | Operational task (no code changes) | WF_EXECUTE |
 | Code changes (any size) | WF_ARCH_REVIEW |
+| Gherkin spec authoring (explicit) | `/swe-gherkin-spec` |
+| Gherkin TDD from existing spec | `/swe-gherkin-dev` |
 
 1. Determine which condition applies
 2. Read that WF_* memory

@@ -157,7 +157,7 @@ if (!status.performed) {
 
 Serena's onboarding (Task 4) creates four memories in its own naming convention:
 - `project/project_overview`
-- `style/style_conventions` (or `style/style_and_conventions`)
+- `style/style_conventions`
 - `suggested/suggested_commands`
 - `task/task_completion`
 
@@ -169,7 +169,6 @@ These contain valuable project-specific knowledge discovered during onboarding (
 const defaults = [
   'project/project_overview',
   'style/style_conventions',
-  'style/style_and_conventions',  // alternate name
   'suggested/suggested_commands',
   'task/task_completion'
 ];
@@ -197,7 +196,6 @@ Use `mcp__plugin_swe_serena__edit_memory` to update each target memory. Preserve
 const toDelete = [
   'project/project_overview',
   'style/style_conventions',
-  'style/style_and_conventions',
   'suggested/suggested_commands',
   'task/task_completion'
 ];

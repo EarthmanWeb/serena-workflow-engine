@@ -61,9 +61,43 @@ Check FEATURE_[KEY] for the feature's specific integration points. Not all items
 
 Integration completeness failures are silent — code works in isolation but is never loaded. This is the most common post-implementation defect.
 
-## 3. Test Coverage Check
+## 3. Gherkin Spec Coverage Check
 
-### 3a. Tests-as-Deliverable Verification
+If the affected feature has existing Gherkin specs OR WM contains `gherkin_spec_update: true`:
+
+### 3.0a. Check for Existing Specs
+
+```
+Glob(pattern="tests/specs/*[feature-key]*.feature")
+mcp__plugin_swe_serena__list_memories(topic="spec")
+```
+
+### 3.0b. If Specs Exist — Verify Coverage
+
+For each existing `.feature` file related to the affected feature:
+
+1. **Read the spec** and extract all Given/When/Then/And steps
+2. **Compare against changes made** — did this task add or modify behavior covered by the spec?
+3. **Check for gaps:**
+   - [ ] New behavior added that is NOT covered by existing spec scenarios → **spec update needed**
+   - [ ] Existing spec scenarios that now behave differently due to changes → **spec update needed**
+   - [ ] All changed behavior is covered by existing specs → **pass**
+
+### 3.0c. If Spec Updates Needed
+
+Invoke `/swe-gherkin-spec` to add new scenarios covering the new behavior, then invoke `/swe-gherkin-dev` to create matching tests.
+
+**This is NOT optional when specs exist.** If a feature has Gherkin specs, every behavioral change must be reflected in both the specs and their tests.
+
+### 3.0d. If No Specs Exist
+
+Skip this section. Gherkin specs are enforced at WF_ARCH_REVIEW for new features. Existing features without specs are not retroactively required to add them (unless the user requests it).
+
+---
+
+## 4. Test Coverage Check
+
+### 4a. Tests-as-Deliverable Verification
 
 If the task deliverable IS tests (writing new tests, fixing tests, adding test coverage):
 
@@ -74,11 +108,11 @@ The tests themselves are not the verification. Verification means confirming the
 - [ ] Tests fail when they should fail (if feasible: temporarily break the feature under test and confirm the test catches it)
 - [ ] No false positives (tests don't pass trivially or vacuously)
 
-After confirming test behavior, skip to Section 4 (no browser verification needed for test-only deliverables).
+After confirming test behavior, skip to Section 5 (no browser verification needed for test-only deliverables).
 
 ---
 
-### 3b. Standard Test Coverage (Non-Test Deliverables)
+### 4b. Standard Test Coverage (Non-Test Deliverables)
 
 For multi-layer work or user-facing changes:
 
@@ -88,7 +122,7 @@ For multi-layer work or user-facing changes:
 
 If automated tests exist, run them.
 
-### 3c. Browser Verification Fallback (No Automated Tests)
+### 4c. Browser Verification Fallback (No Automated Tests)
 
 If no automated tests exist for this feature, verify the work visually in the dev browser when a local environment is available.
 
@@ -110,11 +144,11 @@ See `REF_MCP_BROWSER_DEVTOOLS` for browser interaction rules and best practices.
 
 If no local environment AND no automated tests: note in WM that verification was not possible and flag for user attention before proceeding.
 
-## 4. Fix Violations
+## 5. Fix Violations
 
 If any violations found, fix them before proceeding.
 
-## 5. Update WM
+## 6. Update WM
 
 Invoke `/swe-wm-update --from WF_VERIFY` — provides the complete checklist and template. The skill handles reading, validating, and writing WM comprehensively.
 

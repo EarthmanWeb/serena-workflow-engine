@@ -55,6 +55,10 @@ INIT_ALLOWED_MEMORIES = frozenset([
     'claude/CLAUDE_OBLIGATIONS',
 ])
 
+# Tools eligible for metadata injection (Serena MCP tools)
+SERENA_TOOL_PREFIX = 'mcp__plugin_swe_serena__'
+SERENA_TOOL_PREFIX_ALT = 'mcp__serena__'
+
 # Tools to skip in stream logging (too noisy, low value)
 SKIP_STREAM_TOOLS = frozenset([
     'ToolSearch', 'TaskList', 'TaskGet', 'TaskUpdate', 'TaskCreate',
@@ -178,6 +182,41 @@ def check_working_memory_exists(session_id):
         return False, f"Error reading {filename}: {e}"
 
 
+def inject_metadata(tool_name, tool_input, session_id, cwd):
+    """Inject _swe_metadata into Serena tool calls for session correlation.
+
+    Inspired by IronBee's require-verification input rewriting pattern.
+    Enables server-side correlation of tool calls to workflow sessions.
+    """
+    if not (tool_name.startswith(SERENA_TOOL_PREFIX) or
+            tool_name.startswith(SERENA_TOOL_PREFIX_ALT)):
+        return None  # Not a Serena tool — no injection
+
+    # Read current workflow state from decoupled state file
+    current_state = ''
+    feature_keys = ''
+    try:
+        state_dir = os.path.join(cwd, '.serena', 'swe-state')
+        state_file = os.path.join(state_dir, f'{session_id}.state')
+        if os.path.exists(state_file):
+            with open(state_file, 'r') as f:
+                state_data = json.load(f)
+            current_state = state_data.get('current_state', '')
+            feature_keys = state_data.get('feature_keys', '')
+    except (IOError, json.JSONDecodeError):
+        pass
+
+    metadata = {
+        'session_id': session_id,
+        'state': current_state,
+        'feature_keys': feature_keys,
+    }
+
+    updated_input = dict(tool_input)
+    updated_input['_swe_metadata'] = metadata
+    return updated_input
+
+
 def main():
     try:
         input_data = read_stdin_safe(timeout_seconds=2.0) if _STREAM_AVAILABLE else json.load(sys.stdin)
@@ -228,6 +267,21 @@ def main():
                 if tool_name not in SKIP_STREAM_TOOLS:
                     stream_path = get_stream_path(session_id)
                     append_event(stream_path, 'tool', name=tool_name, s=session_id)
+
+                # Inject metadata into Serena tool calls for session correlation
+                cwd = input_data.get('cwd', os.getcwd())
+                updated_input = inject_metadata(tool_name, tool_input, session_id, cwd)
+                if updated_input is not None:
+                    result = {
+                        'hookSpecificOutput': {
+                            'hookEventName': 'PreToolUse',
+                            'permissionDecision': 'allow',
+                            'updatedInput': updated_input
+                        }
+                    }
+                    print(json.dumps(result))
+                    sys.exit(0)
+
                 print(json.dumps({}))
                 sys.exit(0)
 

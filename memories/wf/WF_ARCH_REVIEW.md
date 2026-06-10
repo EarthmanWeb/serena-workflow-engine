@@ -15,6 +15,25 @@ Single planning gate for all code changes: design, architecture compliance, para
 If a `SPEC_*` memory is already loaded (check WM), skip steps 1-4 and reference the SPEC by name. Proceed to step 5 (Parallel Execution Assessment) and then Approval.
 If no SPEC loaded, follow steps 1-4 below.
 
+## Gherkin Spec Gate
+
+If WM contains `gherkin_spec_needed: true` (set at WF_CLASSIFY step 2d):
+
+1. **Check for existing specs:** `Glob(pattern="tests/specs/**/*.feature")`
+2. **If no specs exist for this feature**, prompt:
+
+```
+> This feature has no Gherkin BDD specs. Writing specs before implementation ensures
+> testable requirements and enables TDD.
+>
+> Options:
+> - [A] Write specs now with /swe-gherkin-spec (recommended)
+> - [B] Skip specs and proceed to implementation
+```
+
+3. **If user chooses [A]:** Invoke `/swe-gherkin-spec` with the feature key. On return, the SPEC_* memory will be loaded and the SPEC Fast-Path applies.
+4. **If user chooses [B]:** Clear `gherkin_spec_needed` from WM and continue to Step 1.
+
 ---
 
 ## Execute These Steps

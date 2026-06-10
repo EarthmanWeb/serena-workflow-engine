@@ -335,6 +335,66 @@ mcp__plugin_swe_serena__write_memory("sys/SYS_[KEY]_[SYSTEM]", "<content>")
 
 ---
 
+## Stage 5b: Gherkin Spec Setup
+
+After creating feature memories, prompt for Gherkin BDD spec setup:
+
+```javascript
+AskUserQuestion({
+  questions: [{
+    question: "Should this feature use Gherkin BDD specs for test-driven development?",
+    header: "Gherkin BDD",
+    options: [
+      {
+        label: "Yes, write specs now (Recommended)",
+        description: "Creates tests/specs/ directory and invokes /swe-gherkin-spec to write .feature files"
+      },
+      {
+        label: "Yes, but later",
+        description: "Sets up tests/specs/ directory, adds SPEC convention to feature memory. Write specs before implementation."
+      },
+      {
+        label: "No, skip Gherkin",
+        description: "Feature will use standard test patterns without formal BDD specs"
+      }
+    ],
+    multiSelect: false
+  }]
+})
+```
+
+### If "Yes, write specs now":
+
+1. Create the specs directory:
+```bash
+mkdir -p tests/specs
+```
+
+2. Invoke `/swe-gherkin-spec [KEY]` — the spec authoring skill will guide the user through writing `.feature` files.
+
+### If "Yes, but later":
+
+1. Create the specs directory:
+```bash
+mkdir -p tests/specs
+```
+
+2. Add a note to FEATURE_[KEY] memory:
+```
+mcp__plugin_swe_serena__edit_memory(
+  "feature/FEATURE_[KEY]",
+  "## Testing",
+  "## Testing\n\n**Gherkin BDD:** Enabled — specs go in `tests/specs/[key]-*.feature`\nRun `/swe-gherkin-spec [KEY]` before starting implementation.\n",
+  "literal"
+)
+```
+
+### If "No, skip Gherkin":
+
+Continue to Stage 6. No spec setup needed.
+
+---
+
 ## Stage 6: Symbol Index (Related Docs)
 
 **After creating FEATURE_[KEY] and any DOM__/SYS__ memories, generate the Related Docs table.**
