@@ -48,13 +48,13 @@ Then follow WF_START instructions completely.
 
 ## Continuing a Previous Task
 
-When resuming work from a prior session, re-research the knowledge base:
+**After completing the init chain** (WF_INIT → CLAUDE_OBLIGATIONS → WF_START), if WF_START routes to WF_CONTINUE, re-research the knowledge base at that step:
 
 1. `list_memories(topic="dom")` — load any DOM_* memories relevant to the task
 2. `list_memories(topic="ref")` — load any REF_* memories relevant to the task
 3. `list_memories(topic="dev")` — load any DEV_* memories relevant to the task
 
-Then proceed to WF_CONTINUE.
+Do NOT skip the init chain to get here. Complete WF_INIT → WF_START first, then WF_START will route to WF_CONTINUE where these steps run.
 
 ---
 

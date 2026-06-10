@@ -79,7 +79,11 @@ def is_valid_transition(from_state: str, to_state: str) -> Tuple[bool, str]:
     if from_state not in matrix:
         return False, f"BLOCKED: Unknown state {from_state}. Valid states: {', '.join(matrix.keys())}"
 
-    valid_targets = matrix[from_state]
+    valid_targets = [t for t in matrix[from_state] if t is not None]
+
+    # Terminal state with no valid transitions
+    if not valid_targets:
+        return True, ""
 
     # Check if to_state is valid
     if to_state in valid_targets:
