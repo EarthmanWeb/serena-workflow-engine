@@ -74,13 +74,24 @@ OPTIONS_PATTERNS = re.compile(
     re.IGNORECASE
 )
 
-# Patterns that indicate genuine requirement clarification (should NOT block)
+# Patterns that indicate genuine user-facing questions (should NOT block)
+# Covers: requirement clarification, destructive operations, approach choices,
+# trade-off questions, file/data deletion, and any question needing real user input
 GENUINE_INPUT_PATTERNS = re.compile(
     r'(?:requirement|specification|business logic|'
     r'user.*(?:want|need|expect)|'
     r'stakeholder|product (?:owner|manager)|'
-    r'which (?:database|api|service|endpoint)|'
-    r'what (?:format|schema|structure) (?:should|do you))',
+    r'which (?:database|api|service|endpoint|approach|option|method|strategy)|'
+    r'what (?:format|schema|structure|approach|behavior) (?:should|do you|would you)|'
+    r'(?:delet|remov|drop|destroy|overwrite|discard|reset|revert)(?:e|ing)?.*\?|'
+    r'(?:safe|okay|acceptable|appropriate) to (?:delete|remove|drop|overwrite|reset)|'
+    r'(?:break|breaking) change|'
+    r'trade.?off|downside|risk|concern|'
+    r'(?:prefer|rather|instead|better|worse)|'
+    r'how (?:should|would you like|do you want)|'
+    r'(?:which|what) (?:one|way|direction|path)|'
+    r'are you sure|do you (?:want|confirm|agree)|'
+    r'is (?:that|this) (?:okay|acceptable|correct|right|what you))',
     re.IGNORECASE
 )
 
@@ -250,16 +261,20 @@ def main():
                     sys.exit(0)
                     return
 
-            # If asking unnecessary confirmation — block with continuation directive
+            # If asking unnecessary confirmation — check if it's a genuine question first
             if last_msg and CONTINUE_PATTERNS.search(last_msg):
+                # Genuine questions (deletions, trade-offs, approach choices) must reach the user
+                if GENUINE_INPUT_PATTERNS.search(last_msg):
+                    _persist_state_on_stop(session_id, current_state)
+                    output_empty()
+                    return
                 if stream_path:
                     append_event(stream_path, 'stop_blocked',
                                  state=current_state, s=session_id,
                                  reason='confirmation_pattern')
                 block_stop(
                     f"Workflow is in {current_state} — work is not complete. "
-                    "You have consent to continue. Do not ask for permission "
-                    "to proceed — just do the next step."
+                    "Continue with the next step."
                 )
                 return
 
@@ -288,15 +303,14 @@ def main():
             return
 
         # --- Case 3: Other states (WF_START, WF_CLASSIFY, etc.) ---
-        # Check for unnecessary pauses even outside INCOMPLETE_STATES
+        # In non-incomplete states, allow stops so the user can respond.
+        # Only block if it's a pure workflow-navigation pause (not a real question).
         if stop_reason == 'end_turn':
             last_msg = extract_last_assistant_text(transcript_path)
             if last_msg and CONTINUE_PATTERNS.search(last_msg):
-                block_stop(
-                    "You have consent to continue. Do not ask for permission "
-                    "to proceed — just do the next step. Continue working on "
-                    "the task without repeating yourself or asking again."
-                )
+                # Always allow stop here — the user should be able to answer
+                _persist_state_on_stop(session_id, current_state)
+                output_empty()
                 return
 
         # --- Default: Allow the stop ---

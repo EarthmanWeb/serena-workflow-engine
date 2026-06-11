@@ -117,7 +117,7 @@ intent:
 **Pattern Design:**
 - No `$` anchors on continuation patterns — "okay, you should have the latest" matches, not just "okay" alone
 - Conversational patterns detect questions/status checks about current work
-- Active-state heuristic: messages <120 chars in any active state (WF_EXECUTE, WF_CLASSIFY, WF_RESEARCH, WF_DONE, etc.) default to continuation
+- No length-based heuristic — intent is determined solely by pattern matching, not message length
 
 **Session Validation:**
 - `should_reset` uses WM filename + state data existence, not fragile WM markdown parsing

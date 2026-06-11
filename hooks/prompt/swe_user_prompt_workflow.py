@@ -99,13 +99,8 @@ def analyze_prompt(prompt: str, current_state: str) -> str:
         if re.search(pattern, prompt_lower, re.IGNORECASE):
             return 'new_task'
     
-    # If we're in an active state and prompt is short/medium, likely continuation
-    active_states = ['WF_EXECUTE', 'WF_CHECKPOINT', 'WF_VERIFY', 'WF_DEBUG_TDD',
-                     'WF_ARCH_REVIEW', 'WF_CLASSIFY', 'WF_RESEARCH', 'WF_DONE']
-    if current_state in active_states and len(prompt_lower) < 120:
-        return 'continuation'
-    
-    # Default: treat as potential new task for safety
+    # Default: treat as unknown — do not assume intent from message length alone.
+    # Short messages in active states could be new tasks, corrections, or questions.
     return 'unknown'
 
 
@@ -335,7 +330,7 @@ If you need to review instructions: mcp__plugin_swe_serena__read_memory(memory_n
             context = f"""➕ TASK ADDITION - WORKFLOW STATE: {current_state}
 Working Memory: {wm_file or 'None'}{stream_info}
 
-User is adding to the current task. Incorporate this into your current workflow step.
+This message may relate to the current task. Evaluate whether it adds to the current step or changes direction.
 If scope changes significantly, transition to WF_CLASSIFY.
 """
         

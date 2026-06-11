@@ -28,10 +28,15 @@ Scan user message for behavioral/UX requirements ("should", "must", "needs to", 
 
 ### 2b. Auto-Approve Detection
 
-Scan for intent to skip the WF_ARCH_REVIEW approval gate (e.g., "just do it", "don't stop for approval", "run unattended", or similar phrasing).
+Scan for **explicit** intent to skip the WF_ARCH_REVIEW approval gate. Only these narrow phrases qualify:
+- "skip approval" / "skip the approval gate"
+- "don't ask for approval" / "don't stop for approval"
+- "auto-approve" / "auto approve"
 
-- **If detected:** Note `auto_approve: true` in WM. The plan is still presented at WF_ARCH_REVIEW but the approval gate is skipped.
-- **If not detected:** Normal flow — approval required at WF_ARCH_REVIEW.
+Ambiguous phrases like "just do it", "continue through to completion", "run unattended", or "go ahead" do **NOT** qualify — these express urgency or agreement with a specific action, not blanket approval-gate bypass.
+
+- **If explicit opt-out detected:** Note `auto_approve: true` in WM. The plan is still presented at WF_ARCH_REVIEW but the approval gate is skipped.
+- **If not detected (default):** Normal flow — approval required at WF_ARCH_REVIEW.
 
 ### 2c. Command & Skill Identification
 
