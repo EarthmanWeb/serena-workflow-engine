@@ -23,6 +23,8 @@ if _hooks_dir not in sys.path:
 from swe_hooks.core.config import (
     parse_working_memory_state,
     read_working_memory_state,
+    read_state_file,
+    write_state_file,
 )
 from swe_hooks.core.session import (
     find_working_memory_for_session,
@@ -178,24 +180,87 @@ def _resolve_session_id(explicit: str = None) -> Optional[str]:
 # Tool implementations
 # ──────────────────────────────────────────────────────────────────
 
+
+def _sync_section_to_state_file(session_id: str, section: str, content: str):
+    """Sync key WM sections to the JSON state file.
+
+    Maps WM markdown sections to state file fields so state persists
+    without the WM markdown file.
+    """
+    section_lower = section.lower().replace(' ', '_')
+    state = read_state_file(session_id)
+    if not state:
+        return
+
+    updated = False
+    if section_lower in ('current_task', 'task_context'):
+        # Extract first meaningful line as task summary
+        state['task'] = content.split('\n')[0].strip().lstrip('#').strip()
+        updated = True
+    elif section_lower in ('affected_features', 'feature(s)'):
+        features = re.findall(r'\*\*(?:Primary|Secondary)\*\*:\s*(\w+)', content)
+        if features:
+            state['features'] = features
+            updated = True
+    elif section_lower == 'progress':
+        lines = [l.strip() for l in content.split('\n') if l.strip().startswith('- [x]')]
+        if lines:
+            state['progress'] = [l.replace('- [x] ', '') for l in lines]
+            updated = True
+
+    if updated:
+        write_state_file(
+            session_id,
+            state.get('current_state', 'WF_EXECUTE'),
+            prev_state=state.get('prev_state'),
+            task=state.get('task'),
+            features=state.get('features'),
+            progress=state.get('progress'),
+        )
+
 def tool_swe_wm_read(session_id: str = None) -> dict:
-    """Read WM state and content for a session."""
+    """Read WM state and content for a session.
+
+    Returns state from expanded JSON state file (authoritative) merged with
+    WM markdown content (display). If WM markdown doesn't exist but state
+    file does, returns state-only response.
+    """
     session_id = _resolve_session_id(session_id)
     if not session_id:
         return {"error": "No session_id provided and no SWE_SESSION_ID env var set"}
 
     cwd = get_project_root()
-    wm_filepath = find_working_memory_for_session(cwd, session_id)
-    if not wm_filepath:
-        return {"error": f"No WM file found for session {session_id}"}
 
-    state, _ = read_working_memory_state(cwd, session_id=session_id)
-    with open(wm_filepath, "r") as f:
-        content = f.read()
+    # Read authoritative state from JSON state file
+    state_file = read_state_file(session_id)
+
+    # Read WM markdown (optional display artifact)
+    wm_filepath = find_working_memory_for_session(cwd, session_id)
+    content = ""
+    if wm_filepath:
+        with open(wm_filepath, "r") as f:
+            content = f.read()
+
+    # Merge: state file is authoritative, WM content for display
+    if state_file:
+        state = {
+            "current_state": state_file.get("current_state"),
+            "prev_state": state_file.get("prev_state"),
+            "session_id": session_id,
+            "task": state_file.get("task", ""),
+            "features": state_file.get("features", []),
+            "progress": state_file.get("progress", []),
+            "return_step": state_file.get("return"),
+        }
+    elif wm_filepath:
+        # Fallback: parse from WM markdown
+        state, _ = read_working_memory_state(cwd, session_id=session_id)
+    else:
+        return {"error": f"No state file or WM found for session {session_id}"}
 
     return {
         "session_id": session_id,
-        "wm_filepath": wm_filepath,
+        "wm_filepath": wm_filepath or "",
         "state": state,
         "content": content,
     }
@@ -204,7 +269,11 @@ def tool_swe_wm_read(session_id: str = None) -> dict:
 def tool_swe_wm_update_section(
     section: str, content: str, session_id: str = None, append: bool = False
 ) -> dict:
-    """Update a specific WM section without touching daemon-managed fields."""
+    """Update a specific WM section without touching daemon-managed fields.
+
+    Also persists key fields (task, features, progress) to the JSON state file
+    so state survives without WM markdown.
+    """
     session_id = _resolve_session_id(session_id)
     if not session_id:
         return {"error": "No session_id provided and no SWE_SESSION_ID env var set"}
@@ -252,11 +321,14 @@ def tool_swe_wm_update_section(
         else:
             wm_content = wm_content.rstrip("\n") + f"\n\n## {section}\n\n{content}\n"
 
-    # Atomic write
+    # Atomic write to WM markdown (display artifact)
     tmp_path = wm_filepath + ".tmp"
     with open(tmp_path, "w") as f:
         f.write(wm_content)
     os.replace(tmp_path, wm_filepath)
+
+    # Persist key fields to JSON state file (authoritative)
+    _sync_section_to_state_file(session_id, section, content)
 
     return {
         "success": True,

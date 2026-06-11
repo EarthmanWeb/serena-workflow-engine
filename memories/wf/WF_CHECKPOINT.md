@@ -1,25 +1,38 @@
-# WF_CHECKPOINT - Update Progress
+# WF_CHECKPOINT - Optional Progress Check
 
 > **On step WF_CHECKPOINT**
 
 ---
 
-## Update WM Now
+## This State Is Optional
 
-**Invoke `/swe-wm-update --from WF_CHECKPOINT`** — provides the complete checklist and
-template. The skill handles reading, validating, and writing WM comprehensively.
+WF_CHECKPOINT is a self-check, not a mandatory gate. The edit counter provides
+an informational nudge at 10 edits — it never blocks. Use this state when you
+want to pause and update progress, not because a hook forced you.
 
-Do NOT manually construct WM content or read REF_WM separately — the skill
-contains everything needed.
+State is automatically persisted to the JSON state file at message boundaries
+(Stop hook) and state transitions (post-read hook). Manual WM updates are only
+needed when you want to record progress notes for cross-message recovery.
 
 ---
 
-## Triggers for this state
+## When to Use
 
-- Created/deleted a file
-- Modified multiple symbols
-- Completed a phase
-- ~5 minutes elapsed since last update
+- You've completed a significant phase and want to record it
+- You're about to switch to a different area of the codebase
+- You want to update the task description or feature keys
+
+## How to Update
+
+Update progress via swe-wm MCP (does not trigger edit hooks):
+```
+swe_wm_update_section(section="Progress", content="...")
+```
+
+Or invoke the skill for a comprehensive update:
+```
+/swe-wm-update --from WF_CHECKPOINT
+```
 
 ## Next Step
 
@@ -27,5 +40,3 @@ contains everything needed.
 | ----------------- | ------------ |
 | More work remains | `WF_EXECUTE` |
 | All work complete | `WF_VERIFY`  |
-
-Update WM via `/swe-wm-update --from WF_CHECKPOINT` before transitioning.

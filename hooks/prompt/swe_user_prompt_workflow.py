@@ -20,7 +20,8 @@ import swe_hooks.bootstrap  # noqa: E402
 try:
     from swe_hooks.core.config import (
         load_setup_complete,
-        get_working_memory_filename, read_working_memory_state
+        get_working_memory_filename, read_working_memory_state,
+        read_state_file,
     )
     from swe_hooks.core.session import extract_session_id, find_working_memory_for_session
     from swe_hooks.core.state_manager import StateManager
@@ -178,20 +179,29 @@ def main():
         transcript_path = input_data.get('transcript_path', '')
         session_id = extract_session_id(transcript_path)
 
-        # Get current state from WM and state file using session-isolated lookup
+        # Get current state — JSON state file is authoritative, WM is display artifact
         wm_file = None
         state_data = None
 
         if session_id:
+            # Primary: read JSON state file directly (fast, no markdown parsing)
+            sf = read_state_file(session_id)
+            if sf:
+                state_data = {
+                    "current_state": sf.get("current_state", "WF_INIT"),
+                    "session_id": sf.get("session_id", session_id),
+                    "feature_keys": sf.get("features", []),
+                    "task": sf.get("task", ""),
+                    "progress": sf.get("progress", []),
+                    "return_step": sf.get("return"),
+                }
+            # Also check if WM markdown exists (for display references)
             wm_filepath = find_working_memory_for_session(cwd, session_id)
             if wm_filepath:
                 wm_file = os.path.basename(wm_filepath).replace('.md', '')
-                state_data, _ = read_working_memory_state(cwd, wm_file, session_id=session_id)
 
-        # Session is valid if WM file exists for this session AND state data parsed.
-        # WM filename already contains session_id (WM_{session_id}.md), so no need
-        # to also parse session_id from WM markdown content — that was fragile.
-        should_reset = not state_data or not wm_file
+        # Session is valid if state file exists for this session
+        should_reset = not state_data
 
         if should_reset:
             # No working memory for this session - start at WF_INIT

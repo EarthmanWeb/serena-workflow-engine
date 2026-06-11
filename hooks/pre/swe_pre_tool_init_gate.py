@@ -115,14 +115,31 @@ def check_lite_mode(session_id):
 
 
 def check_working_memory_exists(session_id):
-    """Check if a WORKING_MEMORY file exists for THIS SESSION.
+    """Check if workflow state exists for THIS SESSION.
 
+    Checks JSON state file first (fast), falls back to WM markdown.
     Returns: tuple (bool, str) - (is_valid, diagnostic_message)
     """
     try:
         project_root = get_project_root() if _STREAM_AVAILABLE else _get_project_root()
     except Exception:
         project_root = _get_project_root()
+
+    # Primary: check JSON state file (fast, no markdown parsing)
+    if session_id:
+        state_dir = os.path.join(project_root, '.serena', 'swe-state')
+        state_file = os.path.join(state_dir, f'{session_id}.state')
+        if os.path.exists(state_file):
+            try:
+                with open(state_file, 'r') as f:
+                    content = f.read().strip()
+                if content:
+                    # JSON format or legacy text — either means session was initialized
+                    return True, "Valid (state file)"
+            except IOError:
+                pass
+
+    # Fallback: check WM markdown file
     memories_dir = os.path.join(project_root, '.serena', 'memories')
     if not os.path.exists(memories_dir):
         return False, "No .serena/memories directory found"
@@ -135,49 +152,20 @@ def check_working_memory_exists(session_id):
         working_memories = glob.glob(pattern)
 
     if not working_memories:
-        return False, f"No WM_{session_id}.md file found"
+        return False, f"No state file or WM_{session_id}.md found"
 
+    # WM file exists — check it has basic structure
     latest = max(working_memories, key=os.path.getmtime)
     filename = os.path.basename(latest)
 
     try:
         with open(latest, 'r') as f:
             content = f.read()
-
-        required_patterns = [
-            ('## Workflow Context', 'Section header'),
-            ('**Current State**:', 'Current State field'),
-        ]
-
-        missing = []
-        for pattern_str, desc in required_patterns:
-            if pattern_str not in content:
-                missing.append(f"'{pattern_str}' ({desc})")
-
-        if missing:
-            found_patterns = []
-            alt_patterns = [
-                ('## Workflow State', 'Wrong section header'),
-                ('**Current**:', 'Wrong field format'),
-                ('Current State:', 'Missing bold markers'),
-            ]
-            for alt_pat, alt_desc in alt_patterns:
-                if alt_pat in content:
-                    found_patterns.append(f"'{alt_pat}' ({alt_desc})")
-
-            diag = f"File {filename} missing: {', '.join(missing)}"
-            if found_patterns:
-                diag += f". Found instead: {', '.join(found_patterns)}"
-            return False, diag
-
-        if session_id:
-            session_match = re.search(r'\*\*Session ID\*\*:\s*(\S+)', content)
-            if session_match and session_match.group(1) == session_id:
-                return True, "Valid"
-            if session_id in filename:
-                return True, "Valid"
-            return False, f"Session ID mismatch: expected {session_id}"
-        return True, "Valid"
+        if '## Workflow Context' in content or '**Current State**:' in content:
+            return True, "Valid (WM file)"
+        if session_id and session_id in filename:
+            return True, "Valid (WM filename match)"
+        return False, f"File {filename} missing workflow context"
     except Exception as e:
         return False, f"Error reading {filename}: {e}"
 

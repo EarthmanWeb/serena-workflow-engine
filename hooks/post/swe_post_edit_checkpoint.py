@@ -44,14 +44,14 @@ def main():
         # Count edits since last checkpoint or state event
         edit_count = count_edits_since_checkpoint(stream_path)
 
-        # Check if checkpoint reminder is needed
+        # Informational nudge at threshold — never blocks
         if edit_count >= CHECKPOINT_THRESHOLD:
             output = HookOutput(event_name="PostToolUse")
-            output.add_message(f"\U0001f4be CHECKPOINT ({edit_count} edits) - Update your WM progress section")
+            output.add_message(f"\U0001f4dd {edit_count} edits since last state change — staying on track?")
             output.output_and_exit()
             return
 
-        # Under threshold - track with concise status
+        # Under threshold - concise status
         output_status(f"WM: edit #{edit_count}")
 
     except Exception as e:

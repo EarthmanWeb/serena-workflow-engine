@@ -30,6 +30,7 @@ try:
     from swe_hooks.core.state_manager import StateManager
     from swe_hooks.core.stream import get_stream_path, append_event
     from swe_hooks.core.session import extract_session_id
+    from swe_hooks.core.config import read_state_file, write_state_file
 except ImportError as e:
     swe_hooks.bootstrap.import_error_exit(e, "Stop")
 
@@ -151,6 +152,30 @@ def extract_last_assistant_text(transcript_path: str) -> str:
         return ""
 
 
+
+def _persist_state_on_stop(session_id: str, current_state: str):
+    """Persist current state to JSON state file at end of response.
+
+    This is the stop-hook anchoring pattern: state is saved at message
+    boundaries so the prompt hook can recover context on the next message.
+    """
+    if not session_id:
+        return
+    try:
+        existing = read_state_file(session_id)
+        if existing:
+            # Touch the timestamp to mark last activity
+            write_state_file(
+                session_id,
+                current_state,
+                prev_state=existing.get('prev_state'),
+                task=existing.get('task'),
+                features=existing.get('features'),
+                progress=existing.get('progress'),
+            )
+    except Exception:
+        pass  # Best-effort, never block stop
+
 def main():
     try:
         input_data = read_stdin_safe(timeout_seconds=2.0)
@@ -168,6 +193,7 @@ def main():
 
         # WF_DONE or uninitialized — always allow stop
         if current_state in ALLOW_STOP_STATES:
+            _persist_state_on_stop(session_id, current_state)
             output_empty()
             return
 
@@ -253,6 +279,7 @@ def main():
 
             # Incomplete state but Claude isn't asking confirmation —
             # still warn but allow stop (might be genuinely stuck)
+            _persist_state_on_stop(session_id, current_state)
             result = {
                 "stopReason": f"⚠️ Stopping with incomplete work: {current_state}"
             }
@@ -273,6 +300,7 @@ def main():
                 return
 
         # --- Default: Allow the stop ---
+        _persist_state_on_stop(session_id, current_state)
         output_empty()
 
     except Exception:

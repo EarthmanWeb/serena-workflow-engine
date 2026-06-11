@@ -81,14 +81,38 @@ def get_state_file_path(session_id: str) -> str:
     return os.path.join(get_state_dir(), f'{session_id}.state')
 
 
-def read_state_file(session_id: str) -> Optional[Dict[str, str]]:
-    """Read decoupled state. Returns None if no file."""
+def read_state_file(session_id: str) -> Optional[Dict[str, Any]]:
+    """Read decoupled state file (JSON). Returns None if no file.
+
+    State file format:
+    {
+        "current_state": "WF_EXECUTE",
+        "prev_state": "WF_CLASSIFY",
+        "ts": 1780111623,
+        "session_id": "abc12345",
+        "task": "Fix init gate deadlock",
+        "features": ["SWE"],
+        "progress": ["Fixed sentinel", "Updated thresholds"],
+        "return": null
+    }
+    """
     path = get_state_file_path(session_id)
     if not os.path.exists(path):
         return None
     try:
         with open(path, 'r') as f:
-            lines = f.read().strip().split('\n')
+            content = f.read().strip()
+        if not content:
+            return None
+        # Try JSON first (new format)
+        if content.startswith('{'):
+            data = json.loads(content)
+            # Normalize: ensure current_state key exists
+            if 'current_state' not in data and len(content) > 2:
+                return None
+            return data
+        # Fallback: legacy line-delimited format
+        lines = content.split('\n')
         if not lines or not lines[0].strip():
             return None
         result = {'current_state': lines[0].strip()}
@@ -97,27 +121,41 @@ def read_state_file(session_id: str) -> Optional[Dict[str, str]]:
                 k, _, v = line.partition('=')
                 result[k.strip()] = v.strip()
         return result
-    except IOError:
+    except (IOError, json.JSONDecodeError):
         return None
 
 
 def write_state_file(session_id: str, new_state: str,
                      prev_state: str = None,
-                     return_step: str = None) -> bool:
-    """Atomic write to state file."""
+                     return_step: str = None,
+                     task: str = None,
+                     features: list = None,
+                     progress: list = None) -> bool:
+    """Atomic write to JSON state file. Merges with existing data."""
     state_dir = get_state_dir()
     os.makedirs(state_dir, exist_ok=True)
     path = get_state_file_path(session_id)
     tmp = path + '.tmp'
-    lines = [new_state]
-    if prev_state:
-        lines.append(f'prev={prev_state}')
-    lines.append(f'ts={int(datetime.now().timestamp())}')
+
+    # Read existing state to merge (preserve task/features/progress if not provided)
+    existing = read_state_file(session_id) or {}
+
+    data = {
+        "current_state": new_state,
+        "prev_state": prev_state or existing.get("prev_state"),
+        "ts": int(datetime.now().timestamp()),
+        "session_id": session_id,
+        "task": task if task is not None else existing.get("task", ""),
+        "features": features if features is not None else existing.get("features", []),
+        "progress": progress if progress is not None else existing.get("progress", []),
+    }
     if return_step:
-        lines.append(f'return={return_step}')
+        data["return"] = return_step
+
     try:
         with open(tmp, 'w') as f:
-            f.write('\n'.join(lines) + '\n')
+            json.dump(data, f, separators=(',', ':'))
+            f.write('\n')
         os.replace(tmp, path)
         return True
     except (IOError, OSError):
@@ -356,9 +394,7 @@ def read_working_memory_state(cwd: str, wm_filename: str = None,
 def write_working_memory_state(cwd: str, wm_filepath: str, new_state: str,
                                 return_step: str = None,
                                 session_id: str = None) -> bool:
-    """Update state in a WORKING_MEMORY file.
-
-    Writes to decoupled state file FIRST (authoritative), then best-effort WM.
+    """Update state in decoupled state file (authoritative) and WM (best-effort display).
 
     Args:
         cwd: Working directory
@@ -370,13 +406,13 @@ def write_working_memory_state(cwd: str, wm_filepath: str, new_state: str,
     Returns:
         True if successful, False otherwise
     """
-    # 1. State file first (authoritative)
+    # 1. State file first (authoritative) — merges with existing task/features/progress
     if session_id:
         current = read_state_file(session_id)
         prev = current.get('current_state') if current else None
         write_state_file(session_id, new_state, prev_state=prev, return_step=return_step)
 
-    # 2. WM update (best-effort, for display)
+    # 2. WM update (best-effort, for display only)
     if not os.path.exists(wm_filepath):
         return session_id is not None
 
