@@ -144,6 +144,8 @@ Test that the SWE plugin's MCP servers respond:
 
 If any fail, report which ones and stop — these are required for the plugin to function.
 
+**WordPress projects only — wp-cli MCP config:** If the project is a WordPress project with a `.devcontainer/` directory, the bootstrap (Task 2) auto-creates `.serena/wp-cli.conf`. Confirm it exists and that `LOCAL_CONTAINER`/`LOCAL_PATH` point at the real container/path (run `docker ps` to confirm the container name). If `REMOTE_SSH` was left as a placeholder (`user@host.example.com`), note that the user must fill in real production SSH details before `target="production"` works. The `wp-cli` MCP server itself is optional — a missing/placeholder config does not block init.
+
 ### Task 4: Serena Onboarding
 
 ```javascript

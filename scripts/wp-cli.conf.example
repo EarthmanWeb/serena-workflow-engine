@@ -1,0 +1,25 @@
+# WP-CLI MCP server — per-project configuration.
+# Copy this file to <project-root>/.serena/wp-cli.conf and fill in real values.
+# This file is read at runtime by the swe plugin's wp-cli MCP server.
+# Nothing here is stored in the plugin — values are project-specific.
+
+# ── Local Docker target (required) ──────────────────────────────────
+# Name of the running container that has WP-CLI installed.
+LOCAL_CONTAINER=myproject-devcontainer-1
+# Absolute --path to the WordPress install INSIDE that container.
+LOCAL_PATH=/workspaces/myproject/public_html
+# Optional working dir inside the container (set so WP-CLI finds wp-cli.yml
+# if the project uses one). Leave blank if not needed.
+LOCAL_WORKDIR=/workspaces/myproject
+
+# ── Remote production target (optional) ─────────────────────────────
+# WP-CLI --ssh connection string: [user@]host[:port][path]
+# When set, target="production" runs commands over SSH from inside the
+# local container. Omit this block for local-only projects.
+REMOTE_SSH=user@host.example.com:18765/home/user/www/example.com/public_html
+
+# ── Safety ──────────────────────────────────────────────────────────
+# When true, destructive WP-CLI commands on production (db reset/import,
+# post/user delete, search-replace without --dry-run, plugin/theme delete)
+# are blocked unless the tool is called with confirm=true.
+PROD_GUARD=true
