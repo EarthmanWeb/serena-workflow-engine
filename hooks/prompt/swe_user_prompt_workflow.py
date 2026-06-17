@@ -160,7 +160,7 @@ def main():
             if setup and setup.get('bootstrapped'):
                 context = "SWE bootstrapped but not fully initialized. Run /swe-init or /swe-scaffold-project to complete."
             else:
-                context = "SWE plugin detected but not initialized. Say \"yes\" to set up, or \"skip swe\" to disable."
+                context = "SWE plugin detected but not initialized. Say \"yes\" to set up, or run the /swe-bypass command yourself to disable (user-only)."
             output = {
                 "hookSpecificOutput": {
                     "hookEventName": "UserPromptSubmit",

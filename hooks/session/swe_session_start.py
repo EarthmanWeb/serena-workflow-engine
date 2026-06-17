@@ -21,7 +21,7 @@ import swe_hooks.bootstrap  # noqa: E402
 
 try:
     from swe_hooks.core.config import (
-        load_setup_complete,
+        load_setup_complete, resolve_setup_state, BYPASS_NOTICE,
         get_most_recent_working_memory, get_working_memory_filename,
         read_working_memory_state, get_paths
     )
@@ -265,10 +265,25 @@ def main():
         else:
             session_id = datetime.now().strftime('%Y%m%d_%H%M%S')
 
-        # Check bypass FIRST
-        bypass_file = os.path.join(cwd, '.serena', 'swe-bypass.json')
-        if os.path.exists(bypass_file):
-            print(json.dumps({}))  # Silent — plugin disabled
+        # Check bypass FIRST. Bypass lives as "bypass": true inside
+        # swe-setup-complete.json (the same file used for init). When set, SWE
+        # is disabled for the project — but we ANNOUNCE it (with removal
+        # instructions) rather than exiting silently, so it's never forgotten.
+        # NOTE: the bypass is only ever written by the user via /swe-bypass —
+        # never by the assistant.
+        try:
+            _setup_state = resolve_setup_state(cwd)
+        except Exception:
+            _setup_state = {}
+        legacy_bypass_file = os.path.join(cwd, '.serena', 'swe-bypass.json')
+        if _setup_state.get('bypassed') or os.path.exists(legacy_bypass_file):
+            output = {
+                "hookSpecificOutput": {
+                    "hookEventName": "SessionStart",
+                    "additionalContext": BYPASS_NOTICE,
+                }
+            }
+            print(json.dumps(output))
             sys.exit(0)
 
         # Check setup
@@ -286,8 +301,8 @@ This project doesn't have SWE workflow configured.
 **Option 1:** Set up SWE for this project:
    → Say "yes" or run /swe-init
 
-**Option 2:** Permanently disable SWE for this project:
-   → Say "skip swe" or "no swe"
+**Option 2:** Disable SWE for this project:
+   → Run the /swe-bypass command yourself (user-only; the assistant cannot do this for you)
 
 The workflow will not block you while you decide."""
             # Return as additionalContext (NOT a hard block)

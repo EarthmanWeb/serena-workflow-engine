@@ -26,10 +26,50 @@ EDIT_ALLOWED = {'WF_EXECUTE', 'WF_DEBUG_TDD', 'WF_CHECKPOINT', 'WF_INITIAL_SETUP
 WARN_STATES = {'WF_ARCH_REVIEW', 'WF_RESEARCH'}
 
 
+def _is_bypass_write_attempt(input_data):
+    """True if this Edit/Write would enable the project bypass.
+
+    The bypass ("bypass": true in swe-setup-complete.json) may ONLY be set by
+    the user via /swe-bypass — never by the assistant, under any rationalization.
+    This guard makes it un-settable by an LLM tool call regardless of intent:
+    any Edit/Write/write_memory that targets swe-setup-complete.json AND
+    introduces a truthy bypass is hard-blocked here, before the state check.
+    """
+    tool_input = input_data.get('tool_input', {}) or {}
+    target = (
+        tool_input.get('file_path')
+        or tool_input.get('memory_name')
+        or ''
+    )
+    if 'swe-setup-complete' not in str(target):
+        return False
+    # Gather any content this call would write.
+    blob = ' '.join(str(tool_input.get(k, '')) for k in (
+        'content', 'new_string', 'new_str', 'replacement', 'repl',
+    ))
+    normalized = blob.replace(' ', '').replace("'", '"').lower()
+    # Match "bypass":true / "bypass": true (whitespace/quote-insensitive)
+    return '"bypass":true' in normalized
+
+
 def main():
     try:
         input_data = read_stdin_safe(timeout_seconds=2.0)
         cwd = get_input_field(input_data, 'cwd', default=os.getcwd())
+
+        # HARD GUARD (runs before any state logic): the assistant may NEVER
+        # set the project bypass. Only the user, via /swe-bypass, can do that.
+        if _is_bypass_write_attempt(input_data):
+            output = HookOutput(event_name="PreToolUse")
+            output.block(
+                "🛑 BLOCKED: the SWE workflow bypass can only be enabled by the "
+                "user via the /swe-bypass command — never by the assistant.\n"
+                "Do not edit swe-setup-complete.json to add \"bypass\": true. "
+                "If the user wants to disable the workflow, tell them to run "
+                "/swe-bypass themselves."
+            )
+            output.output_and_exit()
+            return
 
         # Extract session ID for session isolation
         transcript_path = get_input_field(input_data, 'transcript_path', default='')

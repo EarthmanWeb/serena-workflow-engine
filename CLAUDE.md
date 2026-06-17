@@ -30,6 +30,8 @@ mcp__plugin_swe_serena__read_memory(memory_name="wf/WF_INIT")
 - If your first `read_memory` call is anything other than `wf/WF_INIT`, you are violating the workflow.
 - If you use `Read`, `Glob`, `Grep`, or `ToolSearch` to start working on the user's task before WF_INIT completes, you are violating the workflow — even though the hook did not block you.
 - **The hook allowlist is not permission to skip init. It is infrastructure for init.**
+- **An investigation / debugging / operational task is still task work.** Inspecting a container, reading logs, running Bash, or "just looking" does NOT exempt you. Task TYPE is irrelevant — the first call is still `wf/WF_INIT`.
+- **A gate that didn't fire is not permission.** The PreToolUse gate can be misconfigured or absent in a given project. Enforcement is your obligation regardless of whether a hook stops you.
 
 ### CRITICAL: Mandatory Hook Actions
 

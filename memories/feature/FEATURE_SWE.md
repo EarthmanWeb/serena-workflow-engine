@@ -156,7 +156,7 @@ Registered in `plugin.json` as `swe-wm`, started via `scripts/start-wm-mcp.sh`.
 | `swe-workflow-research`    | Code exploration/research                           |
 | `swe-workflow-arch-review` | Architecture compliance review                      |
 
-### Commands (6 total)
+### Commands (7 total)
 
 | Command         | Purpose                    |
 | --------------- | -------------------------- |
@@ -164,6 +164,7 @@ Registered in `plugin.json` as `swe-wm`, started via `scripts/start-wm-mcp.sh`.
 | `/swe-status`   | Show workflow state        |
 | `/swe-reset`    | Reset workflow state       |
 | `/swe-goto`     | Force transition to state  |
+| `/swe-bypass`   | Disable SWE for project — USER-ONLY (`disable-model-invocation: true`) |
 | `/swe-memory`   | Manage session WM          |
 | `/swe-scaffold-project` | Scaffold new project (skill) |
 | `/swe-cleanup`  | Archive completed memories |
@@ -280,15 +281,25 @@ uses a three-tier approach to avoid blocking the user:
 
 SessionStart detects no `swe-setup-complete.json` and **prompts** (not blocks):
 - Option 1: Say "yes" or run `/swe-init` to set up
-- Option 2: Say "skip swe" to permanently disable
+- Option 2: Run the `/swe-bypass` command to disable (user-only)
 
-### Tier 2: Permanent Bypass (user declines)
+### Tier 2: Project Bypass (user-only command)
 
-If user says "skip swe" / "no swe" / "disable swe":
-- Creates `.serena/swe-bypass.json` with `{"bypass": true, "reason": "user_declined"}`
-- All three hooks (SessionStart, UserPromptSubmit, PreToolUse init gate) check for this file first and exit silently
-- Plugin becomes invisible in that project
-- Remove `.serena/swe-bypass.json` to re-enable
+The bypass is a `"bypass": true` field **inside `swe-setup-complete.json`** (the
+same file used for init — no separate `swe-bypass.json`). When set:
+- All three hooks (SessionStart, UserPromptSubmit, PreToolUse init gate) skip enforcement
+- SessionStart **announces** the bypass each session (`BYPASS_NOTICE`) with removal instructions — it is NOT silent
+- Re-enable by setting `"bypass": false` (or removing the field) in `.serena/swe-setup-complete.json`
+
+**Bypass is user-only and un-rationalizable.** It is set ONLY by the user running
+the `/swe-bypass` command (`disable-model-invocation: true`). The assistant must
+never set it — and cannot: a hard guard in both `swe_pre_tool_init_gate.py` and
+`swe_pre_edit_validate.py` denies any Edit/Write/Bash that would write
+`"bypass": true` into `swe-setup-complete.json`. Intent phrases like "skip swe"
+are NOT triggers; only the explicit command works.
+
+> Legacy: `.serena/swe-bypass.json` is still honored for backward compatibility,
+> but new bypasses use the in-file field.
 
 ### Tier 3: Full Init (user accepts)
 
@@ -313,7 +324,7 @@ If user says "skip swe" / "no swe" / "disable swe":
 New Project → No setup file
   → SessionStart prompts (not blocks)
   ├── "yes" → Bootstrap runs → bootstrapped: true → Scaffold → complete: true → Full workflow
-  └── "skip swe" → swe-bypass.json → All hooks silent → Plugin invisible
+  └── user runs /swe-bypass → "bypass": true in swe-setup-complete.json → hooks skip + announce bypass each session
 ```
 
 ### swe-bootstrap.py Guards

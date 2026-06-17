@@ -17,7 +17,9 @@ import swe_hooks.bootstrap  # noqa: E402
 
 try:
     from swe_hooks.core.session import extract_session_id
-    from swe_hooks.core.config import get_project_root
+    from swe_hooks.core.config import (
+        get_project_root, resolve_setup_state, migrate_legacy_setup_file,
+    )
     from swe_hooks.core.stream import get_sentinel_path, get_stream_path, append_event
     from swe_hooks.core.input import read_stdin_safe
     _STREAM_AVAILABLE = True
@@ -92,6 +94,37 @@ def _extract_session_id(transcript_path):
     if uuid_match:
         return uuid_match.group(1)[:8]
     return None
+
+
+def _is_bypass_write_attempt(tool_name, tool_input):
+    """True if this tool call would enable the project bypass by ANY means.
+
+    Covers file edits (Edit/Write/Serena content tools) AND Bash commands that
+    write into swe-setup-complete.json. The bypass is user-only (/swe-bypass);
+    the assistant must never set it, so this is a hard, un-rationalizable block.
+    """
+    tool_input = tool_input or {}
+
+    # Bash vector: echo/cat/sed/printf redirecting bypass into the setup file.
+    if tool_name == 'Bash':
+        cmd = str(tool_input.get('command', ''))
+        c = cmd.replace(' ', '').replace("'", '"').lower()
+        if 'swe-setup-complete' in cmd and '"bypass":true' in c:
+            return True
+        # Also catch shell-quoted/spaced variants like bypass = true near the file
+        if 'swe-setup-complete' in cmd and 'bypass' in c and 'true' in c:
+            return True
+        return False
+
+    # File/memory edit vectors.
+    target = (tool_input.get('file_path') or tool_input.get('memory_name') or '')
+    if 'swe-setup-complete' not in str(target):
+        return False
+    blob = ' '.join(str(tool_input.get(k, '')) for k in (
+        'content', 'new_string', 'new_str', 'replacement', 'repl',
+    ))
+    normalized = blob.replace(' ', '').replace("'", '"').lower()
+    return '"bypass":true' in normalized
 
 
 def is_working_memory_write(tool_name, tool_input):
@@ -212,27 +245,73 @@ def main():
         transcript_path = input_data.get('transcript_path', '')
         tool_input = input_data.get('tool_input', {})
 
+        # HARD GUARD: the assistant may NEVER enable the project bypass, by ANY
+        # tool — including shelling out via Bash (echo/cat/sed into the setup
+        # file). The bypass is user-only, via /swe-bypass. This guard cannot be
+        # rationalized around: any tool call that would write a truthy "bypass"
+        # into swe-setup-complete.json is denied here, before all other logic.
+        if _is_bypass_write_attempt(tool_name, tool_input):
+            output = {
+                "hookSpecificOutput": {
+                    "hookEventName": "PreToolUse",
+                    "permissionDecision": "deny",
+                    "permissionDecisionReason": (
+                        "🛑 BLOCKED: the SWE workflow bypass is user-only. It can "
+                        "be enabled solely by the user running /swe-bypass — never "
+                        "by the assistant, by any tool, under any reasoning.\n"
+                        "Do not write \"bypass\": true into swe-setup-complete.json. "
+                        "If the user wants the workflow off, tell them to run "
+                        "/swe-bypass themselves."
+                    ),
+                }
+            }
+            print(json.dumps(output))
+            sys.exit(0)
+
         # Resolve project root for setup checks
         try:
             project_root = get_project_root() if _STREAM_AVAILABLE else _get_project_root()
         except Exception:
             project_root = _get_project_root()
 
-        # If setup not complete, don't enforce init gate
-        # This allows /swe-init and bootstrap to run freely
-        setup_file = os.path.join(project_root, '.serena', 'swe-setup-complete.json')
-        if not os.path.exists(setup_file):
-            print(json.dumps({}))  # No setup at all — don't block
-            sys.exit(0)
+        # Resolve setup state from canonical (.serena/) AND legacy (.claude/)
+        # locations plus prior-use evidence. A project set up under the old
+        # <=v1.0.x layout writes the flag to .claude/; checking only .serena/
+        # made such projects look pristine, so the gate no-opped and let Bash
+        # through before WF_INIT. resolve_setup_state() closes that hole.
         try:
-            with open(setup_file) as f:
-                setup_data = json.load(f)
-            if not setup_data.get('complete'):
-                print(json.dumps({}))  # Bootstrapped but not complete — don't block
-                sys.exit(0)
-        except (json.JSONDecodeError, IOError):
-            print(json.dumps({}))  # Corrupt — don't block
+            setup = resolve_setup_state(project_root)
+        except Exception:
+            setup = {'initialized': False, 'complete': False, 'bypassed': False,
+                     'source': 'none', 'needs_migration': False}
+
+        # Project-level bypass ("bypass": true in swe-setup-complete.json):
+        # skip all enforcement, allow every tool. SessionStart announces it.
+        if setup.get('bypassed'):
+            print(json.dumps({}))
             sys.exit(0)
+
+        # Pristine project (no setup flag in either location, no prior use):
+        # don't enforce — lets onboarding / first-run proceed freely.
+        if not setup.get('initialized'):
+            print(json.dumps({}))
+            sys.exit(0)
+
+        # Self-heal legacy layout: migrate .claude/ flag to canonical .serena/
+        # so future sessions resolve via the canonical path directly.
+        if setup.get('needs_migration'):
+            try:
+                migrate_legacy_setup_file(project_root)
+            except Exception:
+                pass  # Migration is best-effort; enforcement continues regardless
+
+        # Initialized but setup not marked complete (bootstrapped, mid-init):
+        # don't block — /swe-init and bootstrap must be able to run.
+        if not setup.get('complete'):
+            print(json.dumps({}))
+            sys.exit(0)
+
+        # Initialized AND complete → enforce the full init gate below.
 
         # Extract session ID
         try:

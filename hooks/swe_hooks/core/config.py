@@ -525,6 +525,127 @@ def is_setup_complete(cwd: str) -> bool:
     return status is not None and status.get("complete", False)
 
 
+# =============================================================================
+# Setup-State Resolution (canonical + legacy + prior-use detection)
+#
+# Historical bug: plugin <= v1.0.x wrote swe-setup-complete.json into .claude/.
+# The current init gate reads it from .serena/ only. A project initialized under
+# the old layout therefore looked "unset up" to the gate, which then NO-OPPED
+# (treating it as a pristine project) and allowed ALL tools — including Bash —
+# before WF_INIT ran. That silently disabled workflow enforcement.
+#
+# resolve_setup_state() treats a project as initialized if EITHER setup file
+# exists (canonical .serena/ OR legacy .claude/) OR if there is prior-use
+# evidence under .serena/ (swe-state sessions, WM files). Only a project with
+# none of these is "pristine" (safe to leave permissive for onboarding).
+# =============================================================================
+
+def _legacy_setup_file(project_root: str) -> str:
+    return os.path.join(project_root, ".claude", "swe-setup-complete.json")
+
+
+def _canonical_setup_file(project_root: str) -> str:
+    return os.path.join(project_root, ".serena", "swe-setup-complete.json")
+
+
+def _read_setup_json(path: str) -> Optional[Dict[str, Any]]:
+    if not os.path.exists(path):
+        return None
+    try:
+        with open(path, 'r') as f:
+            return json.load(f)
+    except (json.JSONDecodeError, IOError):
+        return None
+
+
+def _has_prior_use(project_root: str) -> bool:
+    """True if .serena/ shows evidence this project was used with SWE before."""
+    serena = os.path.join(project_root, '.serena')
+    if not os.path.isdir(serena):
+        return False
+    if glob.glob(os.path.join(serena, 'swe-state', '*.state')):
+        return True
+    if glob.glob(os.path.join(serena, 'memories', 'WM_*.md')):
+        return True
+    return False
+
+
+def resolve_setup_state(project_root: str) -> Dict[str, Any]:
+    """Resolve setup state from canonical, legacy, and prior-use sources.
+
+    Returns dict:
+        initialized: bool   — project has been set up (gate MUST enforce)
+        complete:    bool   — setup flag has complete=true
+        bootstrapped:bool   — setup flag has bootstrapped=true (init in progress)
+        source:      str    — 'canonical' | 'legacy' | 'prior_use' | 'none'
+        needs_migration: bool — legacy flag present but canonical missing
+        data:        dict|None — the parsed setup flag (canonical preferred)
+    """
+    canonical = _read_setup_json(_canonical_setup_file(project_root))
+    legacy = _read_setup_json(_legacy_setup_file(project_root))
+    data = canonical if canonical is not None else legacy
+
+    if canonical is not None:
+        source = 'canonical'
+    elif legacy is not None:
+        source = 'legacy'
+    elif _has_prior_use(project_root):
+        source = 'prior_use'
+    else:
+        source = 'none'
+
+    initialized = source != 'none'
+    complete = bool(data and data.get('complete'))
+    bootstrapped = bool(data and data.get('bootstrapped'))
+    needs_migration = canonical is None and legacy is not None
+    # Project-level workflow bypass: a "bypass": true field in the SAME
+    # swe-setup-complete.json file. When set, all SWE enforcement is skipped
+    # and SessionStart announces the bypass + how to remove it.
+    bypassed = bool(data and data.get('bypass'))
+
+    return {
+        'initialized': initialized,
+        'complete': complete,
+        'bootstrapped': bootstrapped,
+        'bypassed': bypassed,
+        'source': source,
+        'needs_migration': needs_migration,
+        'data': data,
+    }
+
+
+# Brief, reusable notice shown when a project is workflow-bypassed.
+BYPASS_NOTICE = (
+    "🚫 SWE workflow BYPASSED for this project.\n"
+    "To reinstate: set \"bypass\": false (or remove the field) in "
+    ".serena/swe-setup-complete.json."
+)
+
+
+def migrate_legacy_setup_file(project_root: str) -> bool:
+    """Copy a legacy .claude/swe-setup-complete.json to canonical .serena/.
+
+    Idempotent: no-op if canonical already exists or legacy is absent.
+    The legacy file is left in place (harmless once canonical exists); callers
+    that want it removed can do so explicitly.
+    Returns True if a migration write occurred.
+    """
+    canonical_path = _canonical_setup_file(project_root)
+    if os.path.exists(canonical_path):
+        return False
+    legacy = _read_setup_json(_legacy_setup_file(project_root))
+    if legacy is None:
+        return False
+    legacy.setdefault('migrated_from', '.claude/swe-setup-complete.json')
+    try:
+        os.makedirs(os.path.dirname(canonical_path), exist_ok=True)
+        with open(canonical_path, 'w') as f:
+            json.dump(legacy, f, indent=2)
+        return True
+    except (IOError, OSError):
+        return False
+
+
 def generate_session_id() -> str:
     """Generate a new session ID based on timestamp."""
     return datetime.now().strftime("%Y%m%d_%H%M%S")

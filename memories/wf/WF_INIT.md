@@ -31,7 +31,8 @@ These rationalizations are never valid:
 - "The user wants a quick answer" — speed does not override the init chain.
 - "I can batch this with other calls" — do not combine workflow steps with task work.
 - "CLAUDE_OBLIGATIONS doesn't apply here" — it always applies. Read it every time.
-- "The hook didn't block me, so it's fine" — the hook allowlist (Read, Grep, Glob, list_memories) exists so WF_INIT can run, not so you can start task work before init completes.
+- "The hook didn't block me, so it's fine" — the hook allowlist (read_memory init-chain + ToolSearch) exists so WF_INIT can run, not so you can start task work before init completes. A misconfigured or disabled gate is not permission either.
+- "This is an investigation / debugging / operational task, not code" — task TYPE is irrelevant. Inspecting a container, reading logs, running Bash, checking a database, and "just looking" are all task work. All task work waits for the init chain.
 
 If you make any tool call that searches code, edits files, or does task work before completing the init chain: you are in violation. The hook cannot distinguish "reading for init" from "reading to skip init." You must.
 
@@ -40,6 +41,8 @@ If you make any tool call that searches code, edits files, or does task work bef
 ## Mandatory Entry Point
 
 **Every session starts here. No exceptions.** This includes meta-work, simple questions, continuing previous conversations, and any other interaction.
+
+The FIRST tool call of any session MUST be `read_memory("wf/WF_INIT")`. If your first tool call is anything else (Bash, Read, Grep, Agent, an MCP tool), you have already violated this. Do not "explain" the skip — just run the init chain. The PreToolUse gate is the backstop, but it can be misconfigured or absent in a given project; enforcement is YOUR obligation regardless of whether a hook stops you.
 
 1. Read obligations:
 ```

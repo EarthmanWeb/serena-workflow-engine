@@ -18,6 +18,19 @@ If your next step would be WF_EXECUTE, go to WF_CLASSIFY instead. Having a featu
 
 ## Execute These Steps
 
+### 0. Project Initialization Check
+
+Distinguish a **new session** in a set-up project from a project that has **never been initialized**.
+
+If the project is NOT initialized (no `swe-setup-complete.json` in `.serena/` or `.claude/`, INDEX_FEATURES absent, and the SessionStart banner prompted to run `/swe-init`):
+
+- The init gate intentionally does **not** block in this state — setup tools (Bash, Edit, `/swe-init`) are allowed so initialization can run.
+- Recommend moving to the execute/onboarding phase to allow the init to occur: run `/swe-init` (or `/swe-scaffold-project` for an empty project).
+- Disabling the workflow is **user-only**: the user runs the `/swe-bypass` command themselves. You must NEVER set the bypass, suggest editing `swe-setup-complete.json` to add it, or infer it from phrases like "skip swe". Only mention that the `/swe-bypass` command exists.
+- Do NOT loop on the init chain waiting for state to advance — there is no project state to advance yet. Proceed to `WF_ONBOARD`.
+
+If the project IS initialized (setup flag present), continue to Step 1 normally.
+
 ### 1. Check Feature Registry
 
 ```
