@@ -59,10 +59,14 @@ TOOL_DEFINITIONS = [
     {
         "name": "wp_cli",
         "description": (
-            "Run a WP-CLI command against this project's local Docker WordPress "
-            "(default) or its remote production host (over SSH). Configuration is "
-            "read from <project-root>/.serena/wp-cli.conf. Pass the WP-CLI command "
-            "WITHOUT a leading 'wp' (e.g. args='plugin list --status=active'). "
+            "Run a WP-CLI command against a configured WordPress site's local Docker "
+            "container (default) or its remote production host (over SSH). Configuration "
+            "is read from <project-root>/.serena/wp-cli.conf, which may define one or "
+            "MANY sites. Pass the WP-CLI command WITHOUT a leading 'wp' "
+            "(e.g. args='plugin list --status=active'). "
+            "When the conf defines multiple sites, pass 'site' = the site's top-level "
+            "folder name (e.g. 'convenely-pleasurehuntfestival-com'); omit it to use the "
+            "configured DEFAULT_SITE or the sole site. "
             "On production, destructive commands (db reset/import, post/user delete, "
             "search-replace without --dry-run, plugin/theme delete, etc.) are blocked "
             "unless confirm=true and the guard is enabled."
@@ -73,6 +77,10 @@ TOOL_DEFINITIONS = [
                 "args": {
                     "type": "string",
                     "description": "The WP-CLI command and its flags, without the leading 'wp'. Example: 'option get blogname' or 'plugin list --status=active --format=json'.",
+                },
+                "site": {
+                    "type": "string",
+                    "description": "Which configured site to target — the site's top-level folder name (matches a [site:NAME] section in wp-cli.conf). Omit to use DEFAULT_SITE, or the sole site if only one is configured.",
                 },
                 "target": {
                     "type": "string",
@@ -104,12 +112,28 @@ def get_project_root() -> str:
     return os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd()
 
 
-def load_config() -> Dict[str, str]:
+def load_config() -> Dict[str, Any]:
     """Read .serena/wp-cli.conf from the project root.
 
-    Format: KEY=VALUE lines, '#' comments and blank lines ignored.
-    Let-it-fail: missing file or missing required keys raise ConfigError with
-    a clear message — no silent defaults that would mask misconfiguration.
+    One format, sectioned INI:
+
+        # top-level globals
+        DEFAULT_SITE=my-site
+        PROD_GUARD=true
+
+        [site:my-site]
+        LOCAL_CONTAINER=my-site-devcontainer-1
+        LOCAL_PATH=/workspaces/my-site/public_html
+        LOCAL_WORKDIR=/workspaces/my-site
+        REMOTE_SSH=user@host:22/path        # optional
+
+    A single-project setup is simply this same format with one [site:NAME]
+    section. There is no separate "flat" shape.
+
+    Returns: {"globals": {KEY: VALUE}, "sites": {NAME: {KEY: VALUE}}}.
+
+    Let-it-fail: missing file, no sections, or duplicate sections raise
+    ConfigError with a clear message — no silent defaults.
     """
     root = get_project_root()
     conf_path = os.path.join(root, CONF_RELATIVE_PATH)
@@ -117,35 +141,104 @@ def load_config() -> Dict[str, str]:
     if not os.path.isfile(conf_path):
         raise ConfigError(
             f"No WP-CLI config found at {conf_path}. "
-            f"Create it (see wp-cli.conf.example in the swe plugin) with at least "
-            f"LOCAL_CONTAINER and LOCAL_PATH."
+            f"Run /swe-wp-cli-setup to generate it (see wp-cli.conf.example in the "
+            f"swe plugin for the format)."
         )
 
-    conf: Dict[str, str] = {}
+    globals_: Dict[str, str] = {}
+    sites: Dict[str, Dict[str, str]] = {}
+    current: Optional[Dict[str, str]] = None  # None = global scope
+
     with open(conf_path, "r", encoding="utf-8") as fh:
         for raw in fh:
             line = raw.strip()
             if not line or line.startswith("#"):
                 continue
+
+            if line.startswith("[") and line.endswith("]"):
+                header = line[1:-1].strip()
+                if not header.startswith("site:"):
+                    raise ConfigError(
+                        f"Unknown section header '[{header}]' in {CONF_RELATIVE_PATH}. "
+                        f"Only [site:NAME] sections are allowed."
+                    )
+                name = header[len("site:"):].strip()
+                if not name:
+                    raise ConfigError(
+                        f"Empty site name in section header in {CONF_RELATIVE_PATH}."
+                    )
+                if name in sites:
+                    raise ConfigError(
+                        f"Duplicate [site:{name}] section in {CONF_RELATIVE_PATH}."
+                    )
+                current = {}
+                sites[name] = current
+                continue
+
             if "=" not in line:
                 continue
             key, _, value = line.partition("=")
-            conf[key.strip()] = value.strip().strip('"').strip("'")
+            value = value.strip().strip('"').strip("'")
+            if current is None:
+                globals_[key.strip()] = value
+            else:
+                current[key.strip()] = value
 
-    return conf
-
-
-def require(conf: Dict[str, str], key: str) -> str:
-    val = conf.get(key, "")
-    if not val:
+    if not sites:
         raise ConfigError(
-            f"Missing required key '{key}' in {CONF_RELATIVE_PATH}."
+            f"No [site:NAME] sections found in {CONF_RELATIVE_PATH}. "
+            f"Run /swe-wp-cli-setup to (re)generate it."
+        )
+
+    return {"globals": globals_, "sites": sites}
+
+
+def resolve_site(conf: Dict[str, Any], site: Optional[str]) -> Dict[str, str]:
+    """Pick the target site's config block.
+
+    Resolution order: explicit `site` arg → DEFAULT_SITE global → sole site.
+    Ambiguity (multiple sites, no arg, no DEFAULT_SITE) is an error.
+    """
+    sites: Dict[str, Dict[str, str]] = conf["sites"]
+    names = sorted(sites.keys())
+
+    if site:
+        if site not in sites:
+            raise ConfigError(
+                f"Unknown site '{site}'. Configured sites: {', '.join(names)}."
+            )
+        return sites[site]
+
+    default = conf["globals"].get("DEFAULT_SITE", "")
+    if default:
+        if default not in sites:
+            raise ConfigError(
+                f"DEFAULT_SITE='{default}' has no matching [site:{default}] section. "
+                f"Configured sites: {', '.join(names)}."
+            )
+        return sites[default]
+
+    if len(sites) == 1:
+        return sites[names[0]]
+
+    raise ConfigError(
+        f"Multiple sites configured and no 'site' given (and no DEFAULT_SITE set). "
+        f"Pass site=<name>. Configured sites: {', '.join(names)}."
+    )
+
+
+def require(block: Dict[str, str], key: str, site_name: str = "") -> str:
+    val = block.get(key, "")
+    if not val:
+        where = f"[site:{site_name}] in " if site_name else ""
+        raise ConfigError(
+            f"Missing required key '{key}' in {where}{CONF_RELATIVE_PATH}."
         )
     return val
 
 
-def guard_enabled(conf: Dict[str, str]) -> bool:
-    return conf.get("PROD_GUARD", "true").lower() not in ("false", "0", "no", "off")
+def guard_enabled(conf: Dict[str, Any]) -> bool:
+    return conf["globals"].get("PROD_GUARD", "true").lower() not in ("false", "0", "no", "off")
 
 
 # ──────────────────────────────────────────────────────────────────
@@ -178,24 +271,24 @@ def is_destructive(arg_tokens: List[str]) -> bool:
     return False
 
 
-def build_command(conf: Dict[str, str], target: str, arg_tokens: List[str]) -> List[str]:
+def build_command(block: Dict[str, str], site_name: str, target: str, arg_tokens: List[str]) -> List[str]:
     """Build the full docker exec argv for the requested target.
 
     local:      docker exec [-w WORKDIR] CONTAINER wp --path=PATH <args> --allow-root
     production: docker exec CONTAINER wp --ssh=REMOTE_SSH <args> --allow-root
     """
-    container = require(conf, "LOCAL_CONTAINER")
+    container = require(block, "LOCAL_CONTAINER", site_name)
 
     cmd: List[str] = ["docker", "exec"]
 
     if target == "production":
-        remote_ssh = require(conf, "REMOTE_SSH")
+        remote_ssh = require(block, "REMOTE_SSH", site_name)
         cmd += [container, "wp", f"--ssh={remote_ssh}"]
         cmd += arg_tokens
         cmd += ["--allow-root"]
     else:
-        path = require(conf, "LOCAL_PATH")
-        workdir = conf.get("LOCAL_WORKDIR", "")
+        path = require(block, "LOCAL_PATH", site_name)
+        workdir = block.get("LOCAL_WORKDIR", "")
         if workdir:
             cmd += ["-w", workdir]
         cmd += [container, "wp", f"--path={path}"]
@@ -209,7 +302,7 @@ def build_command(conf: Dict[str, str], target: str, arg_tokens: List[str]) -> L
 # Tool implementation
 # ──────────────────────────────────────────────────────────────────
 
-def tool_wp_cli(args: str, target: str = "local", confirm: bool = False) -> dict:
+def tool_wp_cli(args: str, site: Optional[str] = None, target: str = "local", confirm: bool = False) -> dict:
     if target not in ("local", "production"):
         raise ValueError(f"Invalid target '{target}'. Use 'local' or 'production'.")
 
@@ -223,6 +316,8 @@ def tool_wp_cli(args: str, target: str = "local", confirm: bool = False) -> dict
             raise ValueError("'args' contained only 'wp' — provide a command.")
 
     conf = load_config()
+    block = resolve_site(conf, site)
+    resolved_name = site or conf["globals"].get("DEFAULT_SITE", "") or sorted(conf["sites"])[0]
 
     # Production destructive guard
     if target == "production" and guard_enabled(conf) and is_destructive(arg_tokens):
@@ -233,11 +328,12 @@ def tool_wp_cli(args: str, target: str = "local", confirm: bool = False) -> dict
                     "Destructive WP-CLI command blocked on production by PROD_GUARD. "
                     "Re-run with confirm=true to proceed."
                 ),
+                "site": resolved_name,
                 "command": "wp " + " ".join(arg_tokens),
                 "target": target,
             }
 
-    full_cmd = build_command(conf, target, arg_tokens)
+    full_cmd = build_command(block, resolved_name, target, arg_tokens)
 
     proc = subprocess.run(
         full_cmd,
@@ -246,6 +342,7 @@ def tool_wp_cli(args: str, target: str = "local", confirm: bool = False) -> dict
     )
 
     return {
+        "site": resolved_name,
         "target": target,
         "command": " ".join(shlex.quote(c) for c in full_cmd),
         "exit_code": proc.returncode,

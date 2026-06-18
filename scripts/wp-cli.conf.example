@@ -1,25 +1,42 @@
 # WP-CLI MCP server — per-project configuration.
-# Copy this file to <project-root>/.serena/wp-cli.conf and fill in real values.
-# This file is read at runtime by the swe plugin's wp-cli MCP server.
-# Nothing here is stored in the plugin — values are project-specific.
+# Copy to <project-root>/.serena/wp-cli.conf (or run /swe-wp-cli-setup to
+# generate it automatically). Read at runtime by the swe plugin's wp-cli MCP
+# server. Nothing here is stored in the plugin — values are project-specific.
+#
+# ONE format, sectioned. Every site is a [site:NAME] block. A single-project
+# setup is simply this same format with one section. There is no separate flat
+# shape.
+#
+# NAME is the site's top-level folder name — the same string passed as the
+# wp_cli tool's `site` argument when multiple sites are configured.
 
-# ── Local Docker target (required) ──────────────────────────────────
+# ── Globals ─────────────────────────────────────────────────────────
+# Default site used when the wp_cli tool is called without a `site` arg.
+# Optional: if exactly one site is configured it is used automatically.
+DEFAULT_SITE=my-site
+
+# Block destructive WP-CLI commands on production (db reset/import,
+# post/user delete, search-replace without --dry-run, plugin/theme delete)
+# unless the tool is called with confirm=true.
+PROD_GUARD=true
+
+# ── A site ──────────────────────────────────────────────────────────
+[site:my-site]
 # Name of the running container that has WP-CLI installed.
-LOCAL_CONTAINER=myproject-devcontainer-1
-# Absolute --path to the WordPress install INSIDE that container.
-LOCAL_PATH=/workspaces/myproject/public_html
-# Optional working dir inside the container (set so WP-CLI finds wp-cli.yml
-# if the project uses one). Leave blank if not needed.
-LOCAL_WORKDIR=/workspaces/myproject
-
-# ── Remote production target (optional) ─────────────────────────────
-# WP-CLI --ssh connection string: [user@]host[:port][path]
-# When set, target="production" runs commands over SSH from inside the
-# local container. Omit this block for local-only projects.
+LOCAL_CONTAINER=my-site-devcontainer-1
+# Absolute --path to the WordPress install INSIDE that container
+# (derived from the site's .devcontainer config by /swe-wp-cli-setup).
+LOCAL_PATH=/workspaces/my-site/public_html
+# Optional working dir inside the container (so WP-CLI finds wp-cli.yml).
+LOCAL_WORKDIR=/workspaces/my-site
+# Optional remote production target. WP-CLI --ssh string: [user@]host[:port][path]
+# Omit for local-only sites — `target="production"` then fails loudly.
 REMOTE_SSH=user@host.example.com:18765/home/user/www/example.com/public_html
 
-# ── Safety ──────────────────────────────────────────────────────────
-# When true, destructive WP-CLI commands on production (db reset/import,
-# post/user delete, search-replace without --dry-run, plugin/theme delete)
-# are blocked unless the tool is called with confirm=true.
-PROD_GUARD=true
+# ── Additional sites (multi-repo workspaces) ────────────────────────
+# Add one [site:NAME] block per site. Example:
+#
+# [site:another-site]
+# LOCAL_CONTAINER=another-site-devcontainer-1
+# LOCAL_PATH=/workspaces/another-site/public_html
+# LOCAL_WORKDIR=/workspaces/another-site
