@@ -14,7 +14,7 @@ import swe_hooks.bootstrap  # noqa: E402
 try:
     from swe_hooks.core.output import HookOutput, output_empty, output_status
     from swe_hooks.core.input import read_stdin_safe, get_input_field
-    from swe_hooks.core.state_manager import StateManager, STATE_ICONS
+    from swe_hooks.core.state_manager import StateManager, STATE_ICONS, is_forward_read_transition
     from swe_hooks.core.session import extract_session_id, get_project_root, find_working_memory_for_session
     from swe_hooks.core.config import append_transition_to_wm, write_state_file, resolve_installed_plugin, resolve_plugin_root
     from swe_hooks.core.stream import get_stream_path, append_event, get_sentinel_path
@@ -226,39 +226,61 @@ def main():
             output_status(f"📖 Read: {memory_name or 'unknown'} {_in_label}")
             return
 
-        # WF_* read = PURE READ. Reads NEVER advance the FSM (v4: read≠transition).
-        # Display the step being inspected and emit a continuation directive for
-        # the CURRENT state. Transitions happen only via explicit set_state / the
-        # prompt-intent hook — never as a side effect of reading a memory.
+        # WF_* read = FORWARD-GATED TRANSITION (restored pre-v4 flow, fixed).
+        # Reading the next workflow memory navigates the FSM forward — the
+        # natural "read your way through the workflow" behavior. The old bug was
+        # that ANY matrix-valid read advanced state, so reading-ahead/backward to
+        # INSPECT a memory jumped the FSM to the wrong place. Fix: a read advances
+        # ONLY on a forward move (is_forward_read_transition); inspecting,
+        # reading-ahead, or backward reads are logged as "ON STEP" but do NOT move
+        # the FSM. Transitions can also still be driven by the prompt-intent hook.
         state_mgr = StateManager(cwd, session_id=session_id)
 
         output = HookOutput(event_name="PostToolUse")
         icon = STATE_ICONS.get(bare_name, '📍')
         current = state_mgr.get_current_state()
+        version = _get_plugin_version()
+        ver_tag = f" (v{version})" if version else ""
 
-        # INIT-CHAIN COMPLETION (the ONE sanctioned read-driven transition).
-        # v4 removed WF_START; the WM + init sentinel used to be created when the
-        # session transitioned to WF_START during the init chain. The init chain
-        # now ends by reading wf/WF_CLASSIFY. Because reads no longer transition,
-        # nothing creates the sentinel within the first turn, so the pre-init gate
-        # stays locked and blocks every task read — a deadlock.
-        #
-        # Fix: when wf/WF_CLASSIFY is read while still at WF_INIT (init chain in
-        # progress) and the session is not yet initialized, bootstrap it here:
-        # create WM + sentinel and advance WF_INIT → WF_CLASSIFY. This is NOT a
-        # general read-transition — it is scoped to exactly WF_INIT→WF_CLASSIFY,
-        # the one transition the init chain requires, with no work semantics.
+        label = f"{icon} ON STEP: {bare_name}{ver_tag}"
+        labelled = False  # ensure exactly one "ON STEP" line is emitted
+
+        # INIT-CHAIN COMPLETION (special bootstrap). v4 removed WF_START; the WM +
+        # init sentinel used to be created on transition to WF_START during init.
+        # The init chain now ends by reading wf/WF_CLASSIFY. When wf/WF_CLASSIFY is
+        # read while still at WF_INIT and the session is not yet initialized,
+        # bootstrap it here: create WM + sentinel and advance WF_INIT→WF_CLASSIFY.
         if bare_name == 'WF_CLASSIFY' and current in ('WF_INIT', 'UNINITIALIZED'):
             sentinel = get_sentinel_path(session_id) if session_id else None
             if session_id and sentinel and not os.path.exists(sentinel):
                 _bootstrap_session_at_classify(cwd, session_id)
-                # Reflect the new state for the directive/label below.
                 current = 'WF_CLASSIFY'
-        version = _get_plugin_version()
-        ver_tag = f" (v{version})" if version else ""
+                output.add_message(label)
+                labelled = True
 
-        step_label = f"{icon} ON STEP: {bare_name}{ver_tag}" if bare_name == 'WF_INIT' else f"{icon} ON STEP: {bare_name}"
-        output.add_message(step_label)
+        # FORWARD READ TRANSITION — restored, gated read-driven advance.
+        if not labelled and bare_name != current:
+            should, _reason = is_forward_read_transition(current, bare_name)
+            if should:
+                success, msg = state_mgr.transition_to(bare_name)
+                output.add_message(label)
+                labelled = True
+                if success:
+                    append_event(get_stream_path(session_id), 'state',
+                                 from_s=current, to_s=bare_name, s=session_id)
+                    if state_mgr.wm_filepath:
+                        append_transition_to_wm(state_mgr.wm_filepath, current, bare_name)
+                    current = bare_name
+                    output.add_message(msg)
+                else:
+                    output.add_message(f"ℹ️ Note: {msg}")
+            else:
+                # Inspecting / reading-ahead — log the step, do NOT move the FSM.
+                output.add_message(f"{label} (inspecting — no transition)")
+                labelled = True
+
+        if not labelled:
+            output.add_message(label)
 
         directive = _get_continuation(current)
         if directive:

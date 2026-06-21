@@ -1,6 +1,6 @@
 {
   "name": "swe",
-  "version": "1.2.5",
+  "version": "1.2.6",
   "description": "State-machine workflow engine with Serena memory persistence, hook-driven event architecture, and optional swarm orchestration",
   "author": {
     "name": "EarthmanWeb",

@@ -96,6 +96,67 @@ def is_valid_transition(from_state: str, to_state: str) -> Tuple[bool, str]:
     )
 
 
+# Happy-path progression rank. A WF_* read advances state only when it moves
+# FORWARD (to an equal-or-higher rank) — so reading the next step navigates,
+# but reading-ahead/backward to INSPECT a memory does not jump the FSM. This is
+# the targeted fix for the old "accidentally moved to the wrong transition" bug
+# while restoring the natural read-your-way-forward flow.
+_FORWARD_RANK = {
+    "WF_INIT": 0,
+    "WF_INITIAL_SETUP": 0,
+    "WF_ONBOARD": 0,
+    "WF_CLASSIFY": 1,
+    "WF_CONTINUE": 1,
+    "WF_RESEARCH": 2,
+    "WF_ARCH_REVIEW": 3,
+    "WF_SWARM_ORCHESTRATE": 3,
+    "WF_EXECUTE": 4,
+    "WF_CHECKPOINT": 4,
+    "WF_DEBUG_TDD": 4,
+    "WF_VERIFY": 5,
+    "WF_DONE": 6,
+    # WF_CLARIFY is a return-to-caller gate — never a forward read target.
+    "WF_CLARIFY": -1,
+}
+
+
+def is_forward_read_transition(from_state: str, to_state: str) -> Tuple[bool, str]:
+    """Decide whether READING to_state's memory should advance the FSM.
+
+    A read advances state only when BOTH hold:
+      1. from_state → to_state is a valid matrix transition, AND
+      2. it is a FORWARD move (to_state rank >= from_state rank) and to_state
+         is not a return-only gate (WF_CLARIFY).
+
+    Reading a non-adjacent, backward, or gate memory (i.e. inspecting it, or
+    reading ahead during analysis) returns False — the read is logged as
+    "ON STEP" but the FSM is NOT moved. This restores the pre-v4 read-driven
+    flow without the accidental wrong-direction jumps.
+
+    Returns (should_transition, reason).
+    """
+    # Init bootstrap (WF_INIT → WF_CLASSIFY) is handled explicitly elsewhere.
+    if from_state in ("WF_INIT", "UNINITIALIZED", "SessionStart"):
+        return False, "init bootstrap handled separately"
+
+    # Never auto-advance INTO the clarify gate via a read.
+    if to_state == "WF_CLARIFY":
+        return False, "WF_CLARIFY is entered deliberately, not by reading"
+
+    valid, msg = is_valid_transition(from_state, to_state)
+    if not valid:
+        return False, msg
+
+    from_rank = _FORWARD_RANK.get(from_state, 0)
+    to_rank = _FORWARD_RANK.get(to_state, 0)
+    if to_rank < from_rank:
+        return False, (
+            f"read-ahead/back: {to_state} (rank {to_rank}) is behind "
+            f"{from_state} (rank {from_rank}); inspecting, not navigating"
+        )
+    return True, f"forward read transition {from_state} → {to_state}"
+
+
 # State icons for display (15 states - v3.0)
 STATE_ICONS = {
     "WF_INIT": "🎬",
