@@ -15,6 +15,8 @@ import json
 import shutil
 import subprocess
 import time
+import re
+import signal
 from datetime import datetime, timezone
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import swe_hooks.bootstrap  # noqa: E402
@@ -236,11 +238,88 @@ def _self_update_marketplace(plugin_root):
     return True, old_version, new_version
 
 
+def _reap_outdated_daemons():
+    """Kill SWE MCP daemons running from an OLDER plugin version than installed.
+
+    When a client updates in place, an old client and its daemons may stay alive
+    and keep writing the shared project .state file, racing the current-version
+    daemon and corrupting state (observed: v1.2.2 + v1.2.3 daemons fighting).
+    The write-side guard (_is_stale_daemon) stops corruption, but the orphans
+    still linger. This reaps them on startup so only the current version runs.
+
+    Identifies daemons by their command line:
+      .../cache/{marketplace}/{plugin}/{VERSION}/(scripts|hooks)/...
+    Kills any whose VERSION < installed version. Never kills equal/newer, never
+    kills non-swe processes, and never kills self. Best-effort and POSIX-only.
+
+    Returns the list of reaped PIDs (for logging).
+    """
+    reaped = []
+    try:
+        from swe_hooks.core.config import resolve_installed_plugin
+        _, installed = resolve_installed_plugin()
+        if not installed:
+            return reaped  # no manifest — cannot establish "outdated"
+
+        def vtuple(v):
+            try:
+                return tuple(int(p) for p in v.split('.'))
+            except (ValueError, AttributeError):
+                return (0,)
+
+        installed_t = vtuple(installed)
+        my_pid = os.getpid()
+
+        # List processes + command lines (POSIX ps). Best-effort.
+        out = subprocess.run(
+            ['ps', '-axww', '-o', 'pid=,command='],
+            capture_output=True, text=True, timeout=5
+        ).stdout
+
+        pat = re.compile(r'/cache/[^/]+/[^/]+/([0-9]+\.[0-9]+\.[0-9]+)/(?:scripts|hooks)/')
+        for line in out.splitlines():
+            line = line.strip()
+            if not line or 'swe' not in line:
+                continue
+            # Only target THIS plugin's daemons (serena/wm/wp-cli servers + patch).
+            if not any(tok in line for tok in (
+                'serena_memory_patch.py', 'wm_server.py',
+                'wp_cli_server.py', 'swe_hooks',
+            )):
+                continue
+            m = pat.search(line)
+            if not m:
+                continue
+            ver = m.group(1)
+            if vtuple(ver) >= installed_t:
+                continue  # current or newer — leave it
+            try:
+                pid = int(line.split(None, 1)[0])
+            except (ValueError, IndexError):
+                continue
+            if pid == my_pid:
+                continue
+            try:
+                os.kill(pid, signal.SIGTERM)
+                reaped.append(pid)
+            except (ProcessLookupError, PermissionError, OSError):
+                pass
+    except Exception:
+        pass  # Reaping is best-effort; never block session start.
+    return reaped
+
 
 def main():
     try:
         # Self-update FIRST — before anything reads from the plugin tree
         updated, old_ver, new_ver = _self_update()
+
+        # Reap any daemons left running from an OLDER plugin version. After an
+        # in-place update, an old client's daemons can linger and race the
+        # current daemon over the shared project .state file (state corruption /
+        # stuck WF_CLASSIFY). Kill outdated daemons so only the installed version
+        # owns the state. Best-effort; never blocks session start.
+        reaped_daemons = _reap_outdated_daemons()
 
         # Read input
         input_data = {}
@@ -340,6 +419,8 @@ The workflow will not block you while you decide."""
         if updated:
             plugin_version = new_ver or plugin_version
             update_line = f"\n🔄 Auto-updated: v{old_ver} → v{new_ver}"
+        if reaped_daemons:
+            update_line += f"\n🧹 Reaped {len(reaped_daemons)} outdated daemon(s): {', '.join(str(p) for p in reaped_daemons)}"
 
         context = f"""🚀 SERENA WORKFLOW ENGINE v{plugin_version} - Session {session_id}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━{update_line}
