@@ -104,6 +104,47 @@ def resolve_plugin_root() -> str:
     return os.environ.get('CLAUDE_PLUGIN_ROOT', '')
 
 
+def _own_plugin_version() -> Optional[str]:
+    """Version of the plugin THIS process is running from.
+
+    Derived from this file's path: .../cache/{mkt}/{plugin}/{VERSION}/hooks/...
+    Returns None for dev checkouts (no versioned cache segment) — callers then
+    skip the staleness guard (a dev checkout is never "stale").
+    """
+    path = os.path.abspath(__file__)
+    m = re.search(r'/cache/[^/]+/[^/]+/([0-9]+\.[0-9]+\.[0-9]+)/', path)
+    return m.group(1) if m else None
+
+
+def _version_tuple(v: str) -> Tuple[int, ...]:
+    try:
+        return tuple(int(p) for p in v.split('.'))
+    except (ValueError, AttributeError):
+        return (0,)
+
+
+def _is_stale_daemon() -> bool:
+    """True if THIS process runs an OLDER plugin version than the installed one.
+
+    When a new client/daemon is installed but an old client (and its daemons)
+    from a previous version is still alive, BOTH write the same project
+    `.state` file and race — corrupting it (observed: two daemons, v1.2.2 +
+    v1.2.3, fighting over the state file). State writes from the stale daemon
+    must be refused so only the current-version daemon owns the state.
+
+    Conservative: returns False whenever it cannot positively establish that
+    this process is older (dev checkout, missing manifest, equal versions) so a
+    legitimate writer is never blocked.
+    """
+    own = _own_plugin_version()
+    if not own:
+        return False  # dev checkout — never stale
+    _, installed = resolve_installed_plugin()
+    if not installed:
+        return False  # no manifest — can't prove staleness
+    return _version_tuple(own) < _version_tuple(installed)
+
+
 def get_paths(cwd: str = None) -> Dict[str, str]:
     """Get all relevant paths based on project root.
 
@@ -188,7 +229,15 @@ def write_state_file(session_id: str, new_state: str,
                      task: str = None,
                      features: list = None,
                      progress: list = None) -> bool:
-    """Atomic write to JSON state file. Merges with existing data."""
+    """Atomic write to JSON state file. Merges with existing data.
+
+    Refuses the write if this process is a STALE daemon (older plugin version
+    than the installed one). This prevents an orphaned old-version client's
+    daemons from clobbering the state file owned by the current-version daemon
+    — the dual-daemon race that corrupts session state.
+    """
+    if _is_stale_daemon():
+        return False
     state_dir = get_state_dir()
     os.makedirs(state_dir, exist_ok=True)
     path = get_state_file_path(session_id)

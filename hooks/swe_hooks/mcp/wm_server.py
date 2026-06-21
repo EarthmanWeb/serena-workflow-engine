@@ -194,9 +194,36 @@ def _sync_section_to_state_file(session_id: str, section: str, content: str):
 
     updated = False
     if section_lower in ('current_task', 'task_context'):
-        # Extract first meaningful line as task summary
-        state['task'] = content.split('\n')[0].strip().lstrip('#').strip()
-        updated = True
+        # Extract the first meaningful TASK line as the summary.
+        # The section's first line is often a metadata bullet
+        # ("- **Feature(s)**: ...", "- **Complexity**: ...") or a heading,
+        # NOT the task description. Taking content.split('\n')[0] blindly wrote
+        # those bullets into state['task'] (e.g. "- **Feature(s)**: FORMS ...").
+        # Prefer an explicit "**Task**:" line; else the first non-metadata,
+        # non-heading, non-empty line; else leave the existing task unchanged.
+        task_summary = None
+        for raw in content.split('\n'):
+            line = raw.strip()
+            if not line:
+                continue
+            # Explicit task field wins: "- **Task**: foo" / "**Task**: foo"
+            m = re.match(r'^[-*]?\s*\*\*Task\*\*:\s*(.+)$', line, re.IGNORECASE)
+            if m:
+                task_summary = m.group(1).strip()
+                break
+            # Skip headings and known metadata bullets.
+            if line.startswith('#'):
+                continue
+            if re.match(r'^[-*]\s*\*\*(Feature\(s\)|Features?|Complexity|'
+                        r'Affected Features?|Status|Priority)\*\*', line,
+                        re.IGNORECASE):
+                continue
+            # First genuine content line (strip a leading bullet marker).
+            task_summary = re.sub(r'^[-*]\s*', '', line).lstrip('#').strip()
+            break
+        if task_summary:
+            state['task'] = task_summary
+            updated = True
     elif section_lower in ('affected_features', 'feature(s)'):
         features = re.findall(r'\*\*(?:Primary|Secondary)\*\*:\s*(\w+)', content)
         if features:
