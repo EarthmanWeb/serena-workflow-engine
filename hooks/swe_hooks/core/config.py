@@ -47,6 +47,63 @@ def get_project_root() -> str:
     return _PROJECT_ROOT
 
 
+# Marketplace/plugin identity for installed_plugins.json lookups.
+_PLUGIN_INSTALL_KEY = 'swe@EarthmanWeb'
+
+
+def resolve_installed_plugin(plugin_key: str = _PLUGIN_INSTALL_KEY) -> Tuple[Optional[str], Optional[str]]:
+    """Resolve the AUTHORITATIVE installed plugin root + version.
+
+    The version/memories a hook or MCP server should serve is the one the
+    plugin is currently INSTALLED at (`~/.claude/plugins/installed_plugins.json`),
+    NOT the ${CLAUDE_PLUGIN_ROOT} a long-lived process was launched under. After
+    an in-place update, a still-running MCP server keeps its old launch-time
+    root; reading version/memories from that root reports the stale version and
+    serves stale `memories:ro`. Resolving from installed_plugins.json makes any
+    such process self-correct to the installed version without a restart.
+
+    Returns:
+        (install_path, version) for the plugin, or (None, None) if the manifest
+        is absent (e.g. a dev checkout — callers fall back to CLAUDE_PLUGIN_ROOT).
+    """
+    home = os.path.expanduser('~')
+    manifest = os.path.join(home, '.claude', 'plugins', 'installed_plugins.json')
+    try:
+        with open(manifest) as f:
+            data = json.load(f)
+    except (IOError, json.JSONDecodeError, ValueError):
+        return None, None
+
+    entries = (data.get('plugins') or {}).get(plugin_key) or []
+    # Prefer a 'user' scope entry; otherwise take the first valid one.
+    chosen = None
+    for e in entries:
+        if e.get('scope') == 'user' and e.get('installPath'):
+            chosen = e
+            break
+    if chosen is None:
+        for e in entries:
+            if e.get('installPath'):
+                chosen = e
+                break
+    if chosen is None:
+        return None, None
+    return chosen.get('installPath'), chosen.get('version')
+
+
+def resolve_plugin_root() -> str:
+    """Best plugin root: installed path (authoritative) else CLAUDE_PLUGIN_ROOT.
+
+    Used by version reporting and bundled-memory resolution so updates are
+    followed without a process restart. Falls back to the launch-time
+    CLAUDE_PLUGIN_ROOT for dev checkouts with no install manifest.
+    """
+    install_path, _ = resolve_installed_plugin()
+    if install_path and os.path.isdir(install_path):
+        return install_path
+    return os.environ.get('CLAUDE_PLUGIN_ROOT', '')
+
+
 def get_paths(cwd: str = None) -> Dict[str, str]:
     """Get all relevant paths based on project root.
 

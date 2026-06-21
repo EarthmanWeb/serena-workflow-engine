@@ -16,7 +16,7 @@ try:
     from swe_hooks.core.input import read_stdin_safe, get_input_field
     from swe_hooks.core.state_manager import StateManager, STATE_ICONS
     from swe_hooks.core.session import extract_session_id, get_project_root, find_working_memory_for_session
-    from swe_hooks.core.config import append_transition_to_wm, write_state_file
+    from swe_hooks.core.config import append_transition_to_wm, write_state_file, resolve_installed_plugin, resolve_plugin_root
     from swe_hooks.core.stream import get_stream_path, append_event
     from datetime import datetime
     import re
@@ -44,8 +44,25 @@ def create_feature_sentinel(session_id: str, gate_name: str) -> bool:
 
 
 def _get_plugin_version() -> str:
-    """Read plugin version from plugin.json."""
-    plugin_root = os.environ.get('CLAUDE_PLUGIN_ROOT', '')
+    """Report the AUTHORITATIVE installed plugin version.
+
+    Resolution order:
+    1. installed_plugins.json `version` (source of truth — follows updates even
+       if this process was launched under an older ${CLAUDE_PLUGIN_ROOT}).
+    2. plugin.json at the installed root (resolve_plugin_root()).
+    3. plugin.json under launch-time CLAUDE_PLUGIN_ROOT / derived path (dev).
+
+    Reading directly from the launch-time CLAUDE_PLUGIN_ROOT (the old behaviour)
+    reports a stale version after an in-place update, because a long-lived hook
+    process keeps its launch root. The installed manifest does not.
+    """
+    # 1. Authoritative version straight from the install manifest.
+    _, version = resolve_installed_plugin()
+    if version:
+        return version
+
+    # 2/3. Fall back to plugin.json at the installed root, else launch root.
+    plugin_root = resolve_plugin_root()
     if plugin_root:
         plugin_json = os.path.join(plugin_root, '.claude-plugin', 'plugin.json')
     else:
