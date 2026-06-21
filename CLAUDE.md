@@ -6,7 +6,7 @@
 mcp__plugin_swe_serena__read_memory(memory_name="wf/WF_INIT")
 ```
 
-**Then follow WF_INIT instructions completely (read WF_START, create Working Memory, classify task).**
+**Then follow WF_INIT instructions completely (read CLAUDE_OBLIGATIONS, then proceed to WF_CLASSIFY — Working Memory is created automatically on entry to WF_CLASSIFY).**
 
 ### When this applies:
 

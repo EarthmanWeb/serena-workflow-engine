@@ -55,7 +55,7 @@ Features define the scope, file paths, and architecture patterns the workflow us
 Every session follows a structured flow:
 
 ```
-WF_START -> WF_CLASSIFY -> WF_ARCH_REVIEW -> WF_EXECUTE -> WF_VERIFY -> WF_DONE
+WF_INIT -> WF_CLASSIFY -> WF_ARCH_REVIEW -> WF_EXECUTE -> WF_VERIFY -> WF_DONE
 ```
 
 - **WF_CLASSIFY** loads feature memories and routes by task type

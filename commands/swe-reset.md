@@ -5,7 +5,7 @@ description: Reset workflow state (requires confirmation)
 
 # /swe-reset
 
-Reset workflow to WF_START state. Clears all session state including sentinels,
+Reset workflow to WF_INIT state. Clears all session state including sentinels,
 decoupled state files, and working memory.
 
 ## Warning
