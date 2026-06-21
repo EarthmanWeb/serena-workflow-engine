@@ -36,7 +36,7 @@ DO NOT BE CONVERSATIONAL when performing tasks. Concise, functional language ONL
 
 ## ALWAYS Do
 
-- [ ] **Follow WF_INIT → CLAUDE_OBLIGATIONS → WF_START sequence** - No shortcuts (see WF_INIT)
+- [ ] **Follow WF_INIT → CLAUDE_OBLIGATIONS → WF_CLASSIFY sequence** - No shortcuts (see WF_INIT)
 - [ ] **"Let It Fail":** Remove and do not add defensive code, Allow Clear failures
 - [ ] Check MEMORY.md or INDEX_FEATURES when navigating features
 - [ ] **Use Serena symbolic tools for ALL code edits** — `replace_symbol_body`, `insert_before_symbol`, `insert_after_symbol` for modifications; `find_symbol`, `get_symbols_overview`, `search_for_pattern` for discovery. Only fall back to `Read`/`Edit` for non-code files or when symbols cannot be resolved

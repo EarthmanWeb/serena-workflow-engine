@@ -14,7 +14,7 @@ Check WM for `Feature Key(s)`. For each key, verify you have read `FEATURE_[KEY]
 | ----------------------------- | --------------------------- |
 | All feature memories loaded   | Continue below               |
 | Feature memories not loaded   | Read them now (see below)   |
-| WM has no Feature Key(s)      | Go to WF_START              |
+| WM has no Feature Key(s)      | Go to WF_CLASSIFY           |
 
 ```
 mcp__plugin_swe_serena__read_memory("index/INDEX_FEATURES")

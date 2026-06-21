@@ -6,8 +6,8 @@ workflow:
   aware: true
   callable_from:
     - WF_ONBOARD
-    - WF_START
-  default_return: WF_START
+    - WF_CLASSIFY
+  default_return: WF_CLASSIFY
   supports_standalone: true
   auto_transition: true
 args:
@@ -442,13 +442,13 @@ mcp__plugin_swe_serena__edit_memory(
 - **Feature Key**: [KEY]
 - **Mode**: [full|quick]
 - **Memories Created**: FEATURE_[KEY], [DOM__, SYS__ if applicable]
-- **Next Step Hint**: [WF_SWARM_ORCHESTRATE if DAA swarm was used, WF_START otherwise]
+- **Next Step Hint**: [WF_SWARM_ORCHESTRATE if DAA swarm was used, WF_CLASSIFY otherwise]
 ```
 
 **Routing after onboarding:**
 
 - If DAA swarm analysis was used → `WF_SWARM_ORCHESTRATE` (swarm context is already loaded)
-- If quick mode or manual → `WF_START` (normal entry)
+- If quick mode or manual → `WF_CLASSIFY` (normal entry)
 
 ---
 

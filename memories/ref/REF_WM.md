@@ -10,7 +10,7 @@
 
 | Stage           | When                    | What Happens                                                       |
 | --------------- | ----------------------- | ------------------------------------------------------------------ |
-| **Auto-Create** | WF_START transition     | Hook creates `WM_{session_id}.md`                                  |
+| **Auto-Create** | Entry into WF_CLASSIFY  | Prompt hook creates `WM_{session_id}.md` on first transition into WF_CLASSIFY |
 | **Load**        | Session resume          | Read file → verify session ID matches → echo to chat               |
 | **Update**      | After edits/transitions | Write changes → echo: `📋 Updated Working Memory: WM_{session_id}` |
 

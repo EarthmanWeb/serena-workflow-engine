@@ -34,6 +34,6 @@ Or with options:
 | Condition                           | Read Next              |
 | ----------------------------------- | ---------------------- |
 | Feature configured (DAA swarm used) | `WF_SWARM_ORCHESTRATE` |
-| Feature configured (quick/manual)   | `WF_START`             |
+| Feature configured (quick/manual)   | `WF_CLASSIFY`          |
 | Feature configured (task pending)   | `WF_CLASSIFY`          |
 | User cancelled                      | End conversation       |

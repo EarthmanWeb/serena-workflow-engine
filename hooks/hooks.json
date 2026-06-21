@@ -1,5 +1,5 @@
 {
-  "description": "SWE v3 - 15-state workflow with failure tracking, session lifecycle, and metadata injection",
+  "description": "SWE v4 - state-machine workflow (reads never transition; explicit set_state only) with failure tracking, session lifecycle, and metadata injection",
   "hooks": {
     "SessionStart": [
       {

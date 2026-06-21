@@ -50,7 +50,6 @@ _FORMERLY_ALLOWED_TOOLS = frozenset([
 # read_memory calls with any other memory_name will be BLOCKED pre-init
 INIT_ALLOWED_MEMORIES = frozenset([
     'wf/WF_INIT',
-    'wf/WF_START',
     'wf/WF_CLASSIFY',
     'wf/WF_RESEARCH',
     'wf/WF_RESEARCH_LITE',
@@ -402,7 +401,7 @@ def main():
 Pre-init, only these memories are allowed: {', '.join(sorted(INIT_ALLOWED_MEMORIES))}
 
 Your FIRST read_memory call MUST be: read_memory("wf/WF_INIT")
-Then follow the init chain: WF_INIT → CLAUDE_OBLIGATIONS → WF_START → WF_CLASSIFY
+Then follow the init chain: WF_INIT → CLAUDE_OBLIGATIONS → WF_CLASSIFY
 
 DO NOT read task-specific memories before initialization is complete."""
                         }
@@ -456,9 +455,9 @@ Only read_memory and list_memories (init-chain) are permitted.
 MANDATORY ACTION — Complete the full init chain:
    1. mcp__plugin_swe_serena__read_memory(memory_name="wf/WF_INIT")
    2. mcp__plugin_swe_serena__read_memory(memory_name="claude/CLAUDE_OBLIGATIONS")
-   3. mcp__plugin_swe_serena__read_memory(memory_name="wf/WF_START")
+   3. mcp__plugin_swe_serena__read_memory(memory_name="wf/WF_CLASSIFY")
 
-The sentinel that unlocks all tools is created when WF_START is read.
+The sentinel that unlocks all tools is created when the session enters WF_CLASSIFY.
 Do NOT use {tool_name} until the full chain is complete."""
                 }
             }
@@ -520,9 +519,9 @@ DO NOT RATIONALIZE. DO NOT NEGOTIATE. INITIALIZE.
 MANDATORY ACTION — Complete the full init chain:
    1. mcp__plugin_swe_serena__read_memory(memory_name="wf/WF_INIT")
    2. mcp__plugin_swe_serena__read_memory(memory_name="claude/CLAUDE_OBLIGATIONS")
-   3. mcp__plugin_swe_serena__read_memory(memory_name="wf/WF_START")
+   3. mcp__plugin_swe_serena__read_memory(memory_name="wf/WF_CLASSIFY")
 
-The sentinel that unlocks all tools is created when WF_START is read.
+The sentinel that unlocks all tools is created when the session enters WF_CLASSIFY.
 Do NOT stop after reading WF_INIT — you must complete all 3 steps.
 
 Diagnostic: {diagnostic}

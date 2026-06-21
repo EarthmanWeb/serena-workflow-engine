@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "version": "3.0.0",
-  "description": "Serena Workflow Engine - 15 State Machine with Simplified Planning Flow",
+  "version": "4.0.0",
+  "description": "Serena Workflow Engine v4 - read≠transition (reads never advance the FSM), no WF_START hop; init chain routes directly to WF_CLASSIFY",
 
   "complexityThresholds": {
     "simple": { "files": [1, 2], "layers": 1, "expectedTransitions": 7 },
@@ -18,7 +18,7 @@
       "planMode": "never",
       "allowEdit": false,
       "allowWrite": false,
-      "transitions": { "complete": "WF_START", "issues": "WF_CLARIFY" }
+      "transitions": { "complete": "WF_CLASSIFY", "issues": "WF_CLARIFY" }
     },
 
     "WF_ONBOARD": {
@@ -29,23 +29,7 @@
       "planMode": "never",
       "allowEdit": true,
       "allowWrite": true,
-      "transitions": { "complete": "WF_START", "swarm_needed": "WF_SWARM_ORCHESTRATE", "classify": "WF_CLASSIFY" }
-    },
-
-    "WF_START": {
-      "id": "WF_START",
-      "category": "entry",
-      "icon": "🚀",
-      "description": "Mandatory entry point - read context, determine path",
-      "planMode": "never",
-      "allowEdit": false,
-      "allowWrite": false,
-      "transitions": {
-        "new_task": "WF_CLASSIFY",
-        "continue_task": "WF_CONTINUE",
-        "research_only": "WF_RESEARCH",
-        "onboard_needed": "WF_ONBOARD"
-      }
+      "transitions": { "complete": "WF_CLASSIFY", "swarm_needed": "WF_SWARM_ORCHESTRATE", "classify": "WF_CLASSIFY" }
     },
 
     "WF_CLASSIFY": {
@@ -184,11 +168,12 @@
       "icon": "✔️",
       "description": "Verify implementation against requirements",
       "planMode": "never",
-      "allowEdit": false,
-      "allowWrite": false,
+      "allowEdit": true,
+      "allowWrite": true,
       "transitions": {
         "passed": "WF_DONE",
-        "failed": "WF_EXECUTE"
+        "failed": "WF_EXECUTE",
+        "re_scope": "WF_CLASSIFY"
       }
     },
 
@@ -201,14 +186,13 @@
       "allowEdit": false,
       "allowWrite": false,
       "terminal": true,
-      "transitions": { "new_task": "WF_CLASSIFY", "new_session": "WF_START" }
+      "transitions": { "new_task": "WF_CLASSIFY", "new_session": "WF_CLASSIFY" }
     }
   },
 
   "transitionMatrix": {
-    "SessionStart": ["WF_INITIAL_SETUP", "WF_START"],
-    "WF_INITIAL_SETUP": ["WF_START", "WF_CLARIFY"],
-    "WF_START": ["WF_CLASSIFY", "WF_CONTINUE", "WF_RESEARCH", "WF_ONBOARD"],
+    "SessionStart": ["WF_INITIAL_SETUP", "WF_CLASSIFY"],
+    "WF_INITIAL_SETUP": ["WF_CLASSIFY", "WF_CLARIFY"],
     "WF_CLASSIFY": ["WF_ARCH_REVIEW", "WF_EXECUTE", "WF_RESEARCH", "WF_DEBUG_TDD", "WF_CLARIFY"],
     "WF_CONTINUE": ["WF_ARCH_REVIEW", "WF_EXECUTE", "WF_CLARIFY", "WF_CLASSIFY"],
     "WF_RESEARCH": ["WF_CLASSIFY", "WF_DONE"],
@@ -219,8 +203,8 @@
     "WF_EXECUTE": ["WF_CHECKPOINT", "WF_VERIFY"],
     "WF_CHECKPOINT": ["WF_EXECUTE", "WF_VERIFY"],
     "WF_DEBUG_TDD": ["WF_EXECUTE", "WF_CLARIFY"],
-    "WF_VERIFY": ["WF_DONE", "WF_EXECUTE"],
-    "WF_DONE": ["WF_CLASSIFY", "WF_START", "WF_INIT"],
-    "WF_ONBOARD": ["WF_START", "WF_SWARM_ORCHESTRATE", "WF_CLASSIFY"]
+    "WF_VERIFY": ["WF_DONE", "WF_EXECUTE", "WF_CLASSIFY"],
+    "WF_DONE": ["WF_CLASSIFY", "WF_INIT"],
+    "WF_ONBOARD": ["WF_SWARM_ORCHESTRATE", "WF_CLASSIFY"]
   }
 }

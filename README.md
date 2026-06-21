@@ -1,6 +1,6 @@
 # Serena Workflow Engine
 
-A 14-state workflow engine plugin for Claude Code. Provides structured task routing, Serena memory persistence, hook-driven automation, and optional multi-agent swarm orchestration.
+A state-machine workflow engine plugin for Claude Code. Provides structured task routing, Serena memory persistence, hook-driven automation, and optional multi-agent swarm orchestration. (Canonical state list: `state-machine/states.json`.)
 
 ## Quick Start
 

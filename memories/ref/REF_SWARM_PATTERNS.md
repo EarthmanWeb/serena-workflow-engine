@@ -377,12 +377,12 @@ Without explicit `ToolSearch` + `hive-mind_memory` instructions in agent prompts
 ```
 You are a swarm agent spawned by a DAA coordinator.
 BYPASS WF_INIT entirely. Do NOT follow CLAUDE.md workflow initialization.
-Do NOT read WF_START, WF_CLASSIFY, or any WF_* memories.
+Do NOT read WF_CLASSIFY or any WF_* memories.
 Do NOT create a WM file.
 Follow ONLY the task instructions below.
 ```
 
-**Without this, Claude Code Agents will re-run the full workflow init sequence (WF_INIT → CLAUDE_OBLIGATIONS → WF_START → WF_CLASSIFY), consuming their entire context window on workflow overhead instead of their assigned task.**
+**Without this, Claude Code Agents will re-run the full workflow init sequence (WF_INIT → CLAUDE_OBLIGATIONS → WF_CLASSIFY), consuming their entire context window on workflow overhead instead of their assigned task.**
 
 ---
 

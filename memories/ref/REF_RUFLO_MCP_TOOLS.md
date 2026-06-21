@@ -171,4 +171,4 @@ mcp__ruflo__daa_knowledge_share({ sourceAgentId: "daa-r1", targetAgentIds: ["daa
 
 **Root cause:** No mandatory execution path gate forced the coordinator to use `agent_execute` on spawned agents. The coordinator defaulted to the Claude Code `Agent` tool out of habit.
 
-**Fix applied:** Added EXECUTION PATH GATE to WF_SWARM_ORCHESTRATE, WF_SWARM_RUV, and FEATURE_SWARM. Added SWARM AGENT BYPASS gate to WF_INIT and WF_START.
+**Fix applied:** Added EXECUTION PATH GATE to WF_SWARM_ORCHESTRATE, WF_SWARM_RUV, and FEATURE_SWARM. Added SWARM AGENT BYPASS gate to WF_INIT and WF_CLASSIFY.

@@ -160,13 +160,29 @@ Also update if needed:
 
 ---
 
+## Fixing Violations In Place
+
+WF_VERIFY is edit-allowed. When verification finds a violation, **fix it in place** — do NOT bounce to WF_EXECUTE for a small correction. Make the edit, re-run the relevant check, and continue. The forced state bounce that previously made verify read-only is removed in v4.
+
+Only leave WF_VERIFY when the fix is large enough to warrant re-planning (see below).
+
+## Re-Scope Check Before Looping Back
+
+If a fix exceeds the scope of a minor correction, re-classify rather than silently expanding:
+
+- **Minor in-place fix** (≤5 files, existing functionality) → fix here in WF_VERIFY, no transition.
+- **Fix grew large** (now >5 files, adds a module, or crosses 3+ layers) → route to **WF_CLASSIFY** so the Architecture Review Necessity Check (Step 3b) re-evaluates and sends it to WF_ARCH_REVIEW if warranted. Do NOT jump straight to a major rewrite from verify.
+- A larger fix that is clearly still simple implementation work (not new design) may go to **WF_EXECUTE**.
+
 ## Routing
 
 | Condition                               | Next Step                                    |
 | --------------------------------------- | -------------------------------------------- |
-| Violations found                                     | `WF_EXECUTE`                      |
+| Minor violation — fixable in place (≤5 files, existing functionality) | Fix in WF_VERIFY (no transition) |
+| Fix grew large (>5 files / new module / 3+ layers) — needs re-planning | `WF_CLASSIFY` (re-runs Step 3b) |
+| Larger fix, still plain implementation (no new design) | `WF_EXECUTE`                      |
 | Tests missing AND no browser verification possible   | `WF_EXECUTE`                      |
-| Browser verification failed (visual defects found)   | `WF_EXECUTE`                      |
+| Browser verification failed (visual defects found)   | Fix in WF_VERIFY, or `WF_EXECUTE` if larger |
 | WM not updated                                       | Invoke `/swe-wm-update --from WF_VERIFY` |
 | All clean, tests/browser verification pass, WM updated | `WF_DONE`                                  |
 

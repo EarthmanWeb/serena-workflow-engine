@@ -5,9 +5,9 @@ description: Initialize workflow for new empty projects. Creates core memories a
 workflow:
   aware: true
   callable_from:
-    - WF_START
+    - WF_CLASSIFY
     - WF_INITIAL_SETUP
-  default_return: WF_START
+  default_return: WF_CLASSIFY
   supports_standalone: true
   auto_transition: true
 ---
@@ -261,7 +261,7 @@ If user skips feature setup, enable minimal mode:
 ```json
 {
   "mode": "minimal",
-  "allowed_states": ["WF_START", "WF_RESEARCH", "WF_CLARIFY"],
+  "allowed_states": ["WF_CLASSIFY", "WF_RESEARCH", "WF_CLARIFY"],
   "blocked_states": ["WF_EXECUTE", "WF_CHECKPOINT"],
   "message": "Feature onboarding required for code changes"
 }
@@ -278,7 +278,7 @@ If user skips feature setup, enable minimal mode:
 - **Language**: [detected]
 - **Framework**: [detected or none]
 - **Memories Created**: MEMORY.md, FEEDBACK_RESPONSE_FORMAT, FEEDBACK_READ_DOCS_MEANS_LIST, REF_MCP_BROWSER_DEVTOOLS, INDEX_FEATURES, ARCH_INDEX
-- **Next Step Hint**: WF_START or /swe-feature-onboard
+- **Next Step Hint**: WF_CLASSIFY or /swe-feature-onboard
 ```
 
 ## Exit

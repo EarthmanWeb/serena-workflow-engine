@@ -2,19 +2,30 @@
 
 ## Purpose
 
-Documents the 21-state workflow FSM and transition rules.
+Documents the 13-state workflow FSM (13 state nodes in states.json, plus the WF_INIT entry pseudo-state) and transition rules.
+
+> **Reads do NOT cause transitions.** Reading a `WF_*` memory only displays/logs the
+> step — it never advances the FSM. Transitions are **explicit only** (via `set_state`:
+> the dedicated tool or the prompt-intent hook).
+
+## State Set (v4)
+
+WF_INIT (pseudo-state) · WF_INITIAL_SETUP · WF_ONBOARD · WF_CLASSIFY · WF_CONTINUE ·
+WF_RESEARCH · WF_RESEARCH_LITE · WF_ARCH_REVIEW · WF_SWARM_ORCHESTRATE · WF_CLARIFY ·
+WF_EXECUTE · WF_CHECKPOINT · WF_DEBUG_TDD · WF_VERIFY · WF_DONE
 
 ## State Categories
 
 ### Entry States
 
-- **WF_START** - Mandatory entry, reads context
-- **WF_CLASSIFY** - Routes by complexity (simple/medium/large)
+- **WF_INIT** - Init pseudo-state; chain ends by routing to WF_CLASSIFY
+- **WF_CLASSIFY** - Post-init entry; routes by complexity (simple/medium/large/operational)
 - **WF_CONTINUE** - Resume from WORKING_MEMORY
 
 ### Analysis States
 
 - **WF_RESEARCH** - Read-only exploration
+- **WF_RESEARCH_LITE** - Lightweight read-only exploration
 
 ### Planning States (Plan Mode Required)
 
@@ -59,18 +70,21 @@ Swarm assessment happens at WF_ARCH_REVIEW after feature context is loaded.
 | WF_EXECUTE       | ✓    | ✓     |
 | WF_CHECKPOINT    | ✓    | ✓     |
 | WF_DEBUG_TDD     | ✓    | ✓     |
-| WF_UPDATE_MEMORY | ✓    | ✓     |
+| WF_VERIFY        | ✓    | ✓     |
 | WF_ONBOARD       | ✓    | ✓     |
 | Others           | ✗    | ✗     |
 
 ## Critical Paths
 
 ```
-Happy Path: START → CLASSIFY → DETECT_REQ → LOAD_FEATURE → ARCH_REVIEW → ASK_PERMISSION → EXECUTE → VERIFY → DONE → CLEANUP
+Happy Path: WF_INIT → WF_CLASSIFY → WF_ARCH_REVIEW → WF_EXECUTE → WF_VERIFY → WF_DONE
 
-Debug Path: CLASSIFY → DEBUG_TDD → EXECUTE → VERIFY → DONE
+Debug Path: WF_CLASSIFY → WF_DEBUG_TDD → WF_EXECUTE → WF_VERIFY → WF_DONE
 
-Large Task: CLASSIFY → PLAN_ARCHITECTURE → SWARM_ORCHESTRATE → EXECUTE → VERIFY → DONE
+Large Task: WF_CLASSIFY → WF_ARCH_REVIEW → WF_SWARM_ORCHESTRATE → WF_EXECUTE → WF_VERIFY → WF_DONE
 
-Onboard → Swarm: START → ONBOARD (DAA analysis) → SWARM_ORCHESTRATE → EXECUTE → VERIFY → DONE
+Onboard → Swarm: WF_INIT → WF_ONBOARD (DAA analysis) → WF_SWARM_ORCHESTRATE → WF_EXECUTE → WF_VERIFY → WF_DONE
 ```
+
+**Transitions are explicit only.** Reading a `WF_*` memory does not move the FSM —
+only `set_state` (dedicated tool / prompt-intent hook) advances the state.

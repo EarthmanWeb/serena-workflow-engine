@@ -6,10 +6,9 @@ workflow:
   aware: true
   callable_from:
     - WF_ONBOARD
-    - WF_START
     - WF_CLASSIFY
     - WF_EXECUTE
-  default_return: WF_START
+  default_return: WF_CLASSIFY
   supports_standalone: true
 ---
 
@@ -198,7 +197,7 @@ Report a table of each site and its verification result.
 - **Status**: success | needs_clarification
 - **Sites Configured**: [names]
 - **Conf**: .serena/wp-cli.conf
-- **Next Step Hint**: WF_START
+- **Next Step Hint**: WF_CLASSIFY
 ```
 
 ---

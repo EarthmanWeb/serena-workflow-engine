@@ -15,7 +15,7 @@
 
 | Layer         | Purpose                        | Directory                               | Pattern               |
 | ------------- | ------------------------------ | --------------------------------------- | --------------------- |
-| State Machine | 21-state workflow engine       | `state-machine/`                        | FSM with transitions  |
+| State Machine | Workflow FSM (states in states.json) | `state-machine/`                  | FSM with transitions  |
 | Core Modules  | Shared Python utilities        | `hooks/swe_hooks/core/`                 | Modular imports       |
 | MCP Server    | WM update tools (swe-wm)       | `hooks/swe_hooks/mcp/`                  | Stdio JSON-RPC 2.0   |
 | Hooks         | Event handlers for Claude Code | `hooks/{session,prompt,pre,post,stop}/` | Python scripts        |
@@ -27,13 +27,13 @@
 
 ### Data Flow
 
-`User Request → Hook (SessionStart) → WF_START → State Machine → Hooks (Pre/Post) → Memory Persistence`
+`User Request → Hook (SessionStart) → WF_INIT → WF_CLASSIFY → State Machine → Hooks (Pre/Post) → Memory Persistence`
 
 ### State Machine Flow
 
 ```
-SessionStart → WF_INITIAL_SETUP (first time) OR WF_START
-WF_START → WF_CLASSIFY → WF_ARCH_REVIEW → WF_EXECUTE
+SessionStart → WF_INITIAL_SETUP (first time) OR WF_INIT
+WF_INIT → WF_CLASSIFY → WF_ARCH_REVIEW → WF_EXECUTE
                                         → WF_SWARM_ORCHESTRATE → WF_EXECUTE
          → WF_EXECUTE ↔ WF_CHECKPOINT → WF_VERIFY → WF_DONE → WF_CLEANUP
 ```
@@ -55,13 +55,13 @@ WF_START → WF_CLASSIFY → WF_ARCH_REVIEW → WF_EXECUTE
 
 ## Core Components
 
-### States (15 in states.json)
+### States (14 in states.json)
 
 | Category   | States                                                   |
 | ---------- | -------------------------------------------------------- |
 | Setup      | WF_INITIAL_SETUP, WF_ONBOARD                             |
-| Entry      | WF_START, WF_CLASSIFY, WF_CONTINUE                       |
-| Analysis   | WF_RESEARCH                                              |
+| Entry      | WF_CLASSIFY, WF_CONTINUE                                 |
+| Analysis   | WF_RESEARCH, WF_RESEARCH_LITE                            |
 | Planning   | WF_ARCH_REVIEW, WF_SWARM_ORCHESTRATE                     |
 | Gates      | WF_CLARIFY                                               |
 | Execution  | WF_EXECUTE, WF_CHECKPOINT, WF_DEBUG_TDD |
@@ -187,7 +187,7 @@ Memories are organized in subdirectories:
 
 | Directory           | Contents                                                     |
 | ------------------- | ------------------------------------------------------------ |
-| `memories/wf/`      | 21 workflow state instructions (WF_*.md)                     |
+| `memories/wf/`      | Workflow state instructions (WF_*.md)                        |
 | `memories/ref/`     | Reference docs (FEATURE_DEV_STANDARDS, REF_SWARM_PATTERNS, etc.) |
 | `memories/claude/`  | Claude behavior docs (CLAUDE.md, CLAUDE_OBLIGATIONS.md)      |
 | `memories/arch/`    | Architecture documentation (ARCH_SWE.md)                     |
@@ -237,7 +237,7 @@ read. All feature gates use **session-scoped sentinel files** for O(1) checks.
 
 | Signal Type         | States         | Impact                    |
 | ------------------- | -------------- | ------------------------- |
-| trajectory_init     | WF_START       | baseline                  |
+| trajectory_init     | WF_CLASSIFY    | baseline                  |
 | routing_decision    | WF_CLASSIFY    | neutral                   |
 | clarify_visit       | WF_CLARIFY     | penalty (-0.1)            |
 | arch_review         | WF_ARCH_REVIEW | bonus (+0.1)              |

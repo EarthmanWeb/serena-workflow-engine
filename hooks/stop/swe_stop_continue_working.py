@@ -302,7 +302,7 @@ def main():
             sys.exit(0)
             return
 
-        # --- Case 3: Other states (WF_START, WF_CLASSIFY, etc.) ---
+        # --- Case 3: Other states (WF_CLASSIFY, etc.) ---
         # In non-incomplete states, allow stops so the user can respond.
         # Only block if it's a pure workflow-navigation pause (not a real question).
         if stop_reason == 'end_turn':
