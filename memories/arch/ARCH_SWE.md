@@ -19,7 +19,7 @@ Every WF_* memory ends with a "MANDATORY NEXT STEP" section. Skipping transition
 Each state begins with a step report line that must be output immediately:
 
 ```
-> **🚀 On step WF_START**
+> **🚀 On step WF_CLASSIFY**
 ```
 
 ### 4. Session Persistence
@@ -31,7 +31,7 @@ WM provides session continuity across conversation turns and enables WF_CONTINUE
 ```
 ┌─────────────────────────────────────────────────────────┐
 │                    ENTRY LAYER                          │
-│  WF_START → WF_CLASSIFY → routing decision              │
+│  WF_INIT → WF_CLASSIFY → routing decision               │
 └─────────────────────────────────────────────────────────┘
                             │
         ┌───────────────────┼───────────────────┐
@@ -143,8 +143,7 @@ When modifying the workflow system:
 
 | Component       | Depends On                             |
 | --------------- | -------------------------------------- |
-| WF_START        | CLAUDE_OBLIGATIONS, INDEX_FEATURES, WM |
-| WF_CLASSIFY     | MEMORY.md, FEATURE_*, REF_SWARM_PATTERNS |
+| WF_CLASSIFY     | CLAUDE_OBLIGATIONS, INDEX_FEATURES, WM, MEMORY.md, FEATURE_*, REF_SWARM_PATTERNS |
 | WF_CLASSIFY     | (also) DOM_*, SYS_*, INDEX_*           |
 | WF_ARCH_REVIEW  | ARCH_INDEX, ARCH__, REF__              |
 | WF_VERIFY       | CLAUDE_OBLIGATIONS, ARCH_INDEX         |

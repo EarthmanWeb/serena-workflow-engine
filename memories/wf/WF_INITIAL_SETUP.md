@@ -32,7 +32,7 @@ First-time plugin setup - install MCPs, configure environment.
 
 | Condition | Next State |
 | --------- | ---------- |
-| complete  | WF_START   |
+| complete  | WF_CLASSIFY |
 | issues    | WF_CLARIFY |
 
 ## RLVR Signal
@@ -43,5 +43,5 @@ First-time plugin setup - install MCPs, configure environment.
 
 | Condition          | Read Next  |
 | ------------------ | ---------- |
-| Setup complete     | `WF_START`   |
+| Setup complete     | `WF_CLASSIFY` |
 | Issues encountered | `WF_CLARIFY` |

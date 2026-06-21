@@ -43,14 +43,14 @@ def main():
         for pattern in SWARM_KEYWORDS:
             if re.search(pattern, prompt, re.IGNORECASE):
                 output = HookOutput(event_name="UserPromptSubmit")
-                output.add_message("🐝 SWARM HINT: This task involves swarm orchestration. Complete WF_INIT → WF_START → WF_CLASSIFY first. In WF_CLASSIFY, you MUST read FEATURE_SWARM which loads WF_SWARM_ORCHESTRATE, REF_SWARM_PATTERNS, CLAUDE_FLOW, and REF_AGENTS.")
+                output.add_message("🐝 SWARM HINT: This task involves swarm orchestration. Complete WF_INIT → WF_CLASSIFY first. In WF_CLASSIFY, you MUST read FEATURE_SWARM which loads WF_SWARM_ORCHESTRATE, REF_SWARM_PATTERNS, CLAUDE_FLOW, and REF_AGENTS.")
                 output.output_and_exit()
 
         # Check parallel task patterns
         for pattern in PARALLEL_TASK_PATTERNS:
             if re.search(pattern, prompt, re.IGNORECASE):
                 output = HookOutput(event_name="UserPromptSubmit")
-                output.add_message("🐝 PARALLEL HINT: This task may benefit from swarm orchestration. Complete WF_INIT → WF_START → WF_CLASSIFY first. In WF_CLASSIFY, consider reading FEATURE_SWARM for multi-agent coordination.")
+                output.add_message("🐝 PARALLEL HINT: This task may benefit from swarm orchestration. Complete WF_INIT → WF_CLASSIFY first. In WF_CLASSIFY, consider reading FEATURE_SWARM for multi-agent coordination.")
                 output.output_and_exit()
 
         output_empty()

@@ -99,7 +99,6 @@ def is_valid_transition(from_state: str, to_state: str) -> Tuple[bool, str]:
 # State icons for display (15 states - v3.0)
 STATE_ICONS = {
     "WF_INIT": "🎬",
-    "WF_START": "🚀",
     "WF_ONBOARD": "📚",
     "WF_CLASSIFY": "🏷️",
     "WF_RESEARCH": "🔍",

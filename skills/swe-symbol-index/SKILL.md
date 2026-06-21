@@ -5,11 +5,10 @@ description: Generate a tabular symbol index of all linked docs for a feature, i
 workflow:
   aware: true
   callable_from:
-    - WF_START
     - WF_CLASSIFY
     - WF_EXECUTE
     - WF_CONTINUE
-  default_return: WF_START
+  default_return: WF_CLASSIFY
   supports_standalone: true
   auto_transition: true
 args:
@@ -225,7 +224,7 @@ Output to user:
 - **Feature Key**: [KEY]
 - **Memories Indexed**: [count]
 - **Symbols Found**: [total count]
-- **Next Step Hint**: WF_START
+- **Next Step Hint**: WF_CLASSIFY
 ```
 
 ---

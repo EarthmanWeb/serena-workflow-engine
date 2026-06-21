@@ -13,7 +13,7 @@ Check if you are a spawned agent before initializing. Your initial prompt contai
 - Explicit task-only instructions without a user conversation
 
 If spawned agent:
-- Skip this file, WF_START, WF_CLASSIFY, and all workflow steps
+- Skip this file, WF_CLASSIFY, and all workflow steps
 - Do not create a WM file or read CLAUDE_OBLIGATIONS
 - Execute only the task in your initial prompt
 - You may read Serena memories and use any tool immediately
@@ -49,24 +49,19 @@ The FIRST tool call of any session MUST be `read_memory("wf/WF_INIT")`. If your 
 mcp__plugin_swe_serena__read_memory("claude/CLAUDE_OBLIGATIONS")
 ```
 
-2. Read workflow start:
-```
-mcp__plugin_swe_serena__read_memory("wf/WF_START")
-```
-
-Then follow WF_START instructions completely. Do not respond to the user before completing these reads.
+Then proceed to WF_CLASSIFY (the first post-init workflow state). Do not respond to the user before completing the obligations read.
 
 ---
 
 ## Continuing a Previous Task
 
-**After completing the init chain** (WF_INIT → CLAUDE_OBLIGATIONS → WF_START), if WF_START routes to WF_CONTINUE, re-research the knowledge base at that step:
+**After completing the init chain** (WF_INIT → CLAUDE_OBLIGATIONS → WF_CLASSIFY), if WF_CLASSIFY routes to WF_CONTINUE, re-research the knowledge base at that step:
 
 1. `list_memories(topic="dom")` — load any DOM_* memories relevant to the task
 2. `list_memories(topic="ref")` — load any REF_* memories relevant to the task
 3. `list_memories(topic="dev")` — load any DEV_* memories relevant to the task
 
-Do NOT skip the init chain to get here. Complete WF_INIT → WF_START first, then WF_START will route to WF_CONTINUE where these steps run.
+Do NOT skip the init chain to get here. Complete WF_INIT → CLAUDE_OBLIGATIONS → WF_CLASSIFY first, then WF_CLASSIFY will route to WF_CONTINUE where these steps run.
 
 ---
 
@@ -118,4 +113,4 @@ After reading any WF_* memory, output the step report line before any other outp
 
 ---
 
-Proceed to WF_START.
+Proceed to WF_CLASSIFY.

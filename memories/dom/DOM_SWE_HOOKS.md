@@ -81,7 +81,7 @@ hooks/
 | Hook                            | Event                          | Purpose                                     |
 | ------------------------------- | ------------------------------ | ------------------------------------------- |
 | `swe_pre_tool_init_gate.py`     | PreToolUse                     | Block ALL tools until WF_INIT chain complete |
-| `swe_pre_edit_validate.py`      | PreToolUse (Edit/Write/Serena) | Block edits in planning states, staleness at 10 edits |
+| `swe_pre_edit_validate.py`      | PreToolUse (Edit/Write/Serena) | Block edits in planning states (WF_VERIFY now edit-allowed), staleness at 10 edits |
 | `swe_pre_bash_test_gate.py`     | PreToolUse (Bash)              | Validate test commands against WF_DEBUG_TDD |
 | `swe_pre_swarm_feature_gate.py` | PreToolUse (ruflo swarm)       | Feature gate: FEATURE_SWARM                 |
 
@@ -89,12 +89,17 @@ hooks/
 
 | Hook                          | Event                           | Purpose                            |
 | ----------------------------- | ------------------------------- | ---------------------------------- |
-| `swe_post_read_state.py`      | PostToolUse (read_memory)       | State transitions, plan mode       |
+| `swe_post_read_state.py`      | PostToolUse (read_memory)       | Pure read/display: logs "ON STEP" + continuation for CURRENT state — NO transition |
 | `swe_post_edit_checkpoint.py` | PostToolUse (Edit/Write/Serena) | Edit counting, checkpoint at 10 edits |
 | `swe_post_write_continue.py`  | PostToolUse (write_memory)      | Post-write continuation            |
 | `swe_post_todo_wm_sync.py`    | PostToolUse (TodoWrite)         | WM sync reminder on todo changes   |
 | `swe_post_memory_index.py`    | PostToolUse (write_memory)      | Enforce MEMORY.md index update     |
 | `swe_post_tool_failure.py`    | PostToolUseFailure              | Flailing detection, failure logging |
+
+> **Reads do NOT transition.** Reading a `WF_*` memory never advances the FSM.
+> `swe_post_read_state.py` only logs "ON STEP" and emits a continuation for the
+> CURRENT state. Transitions happen ONLY via explicit `set_state` — the dedicated
+> tool or the prompt-intent hook (`swe_user_prompt_workflow.py`).
 
 ### Stop Hooks (`stop/`)
 
@@ -111,7 +116,7 @@ intent:
 | ---------------- | -------------------------------------------------------------------- | ------------------------------------- |
 | **continuation** | "yes", "okay, do X", "any other issues?", "let me know if", status checks | Stay in current state, brief reminder |
 | **addition**     | "also", "remove/change/update the", "while you're at it"            | Stay in state, incorporate addition   |
-| **new_task**     | "help me build", "create", "fix", "implement", action verbs at start | Transition to WF_START                |
+| **new_task**     | "help me build", "create", "fix", "implement", action verbs at start | Transition to WF_CLASSIFY              |
 | **unknown**      | Doesn't match patterns AND message >120 chars in non-active state    | Provide full workflow instructions    |
 
 **Pattern Design:**
@@ -126,20 +131,21 @@ intent:
 **State-Aware Responses:**
 
 - In WF_INIT → MANDATORY instruction to read WF_INIT (blocking gate)
-- In WF_START + continuation → MANDATORY instruction to read WF_START
+- In WF_CLASSIFY + continuation → MANDATORY instruction to read WF_CLASSIFY
 - In active states + continuation → Brief "Continue with workflow" message
-- New task detected → Transition to WF_START regardless of current state
+- New task detected → Transition to WF_CLASSIFY regardless of current state
+- On first transition into WF_CLASSIFY with no WM → creates WM + sentinel here
 - Valid WM but missing sentinel → Recreates sentinel before routing (prevents init gate deadlock)
 - Same-session new task (WF_DONE) → Includes previous feature keys for fast-path to WF_ARCH_REVIEW
 
 ## Init Gate (swe_pre_tool_init_gate.py)
 
-Blocks ALL tool calls until the full init chain is complete (sentinel created at WF_START):
+Blocks ALL tool calls until the full init chain is complete (sentinel created on entry to WF_CLASSIFY):
 
 - Ensures workflow instructions are read before any work begins
 - **Allowed pre-init:** read_memory (wf/* and init-chain), write_memory, edit_memory, list_memories, swe_wm tools, ToolSearch, Serena project setup tools
 - **Blocked pre-init:** Bash, Grep, Glob, Edit, Write (non-WM), find_symbol, get_symbols_overview, and all other tools
-- Sentinel created at WF_START transition unlocks all tools for the session
+- Sentinel created on entry to WF_CLASSIFY unlocks all tools for the session
 
 ### Sentinel Recovery (Self-Healing)
 
@@ -259,7 +265,7 @@ state_mgr = StateManager(cwd)
 # Or specify a specific WM file
 state_mgr = StateManager(cwd, wm_filename="WM_20260120_my_task")
 
-state_mgr.get_current_state()  # "WF_START" - read from WM
+state_mgr.get_current_state()  # "WF_CLASSIFY" - read from WM
 state_mgr.transition_to("WF_EXECUTE")  # Updates WM file
 state_mgr.get_working_memory()  # Returns WM filename
 state_mgr.increment_edits()  # In-memory only (session-local)

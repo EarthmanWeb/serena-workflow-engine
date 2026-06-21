@@ -315,7 +315,7 @@ The workflow will not block you while you decide."""
             print(json.dumps(output))
             sys.exit(0)
 
-        # DO NOT auto-create WM here - it should only be created during WF_START transition
+        # DO NOT auto-create WM here - it should only be created on entry into WF_CLASSIFY
         # This ensures the init_gate can block tools until WF_INIT is read
         # WM creation happens in WF_INIT workflow instructions
 

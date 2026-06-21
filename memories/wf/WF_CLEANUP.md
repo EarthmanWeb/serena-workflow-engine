@@ -30,4 +30,4 @@ mv .serena/swe/wm/WM_*.md .serena/archive-memories/
 rm -f .ruflo/workflow-state.json
 ```
 
-Terminal state. Ready for next task (new WF_START).
+Terminal state. Ready for next task (new WF_CLASSIFY).

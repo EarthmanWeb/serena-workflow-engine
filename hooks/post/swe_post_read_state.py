@@ -68,7 +68,6 @@ def _get_continuation(current_state: str) -> str:
     Only fires for states where stalls have been observed.
     """
     directives = {
-        "WF_START": "Load INDEX_FEATURES → identify features → update WM → route to WF_CLASSIFY",
         "WF_CLASSIFY": "Load ALL FEATURE_[KEY] + supporting DOM_*/SYS_*/SPEC_* memories → update WM → route to next step",
         "WF_ARCH_REVIEW": "Complete architecture review → present plan → route to WF_EXECUTE",
         "WF_EXECUTE": "Continue implementation → checkpoint at 3+ edits → WF_VERIFY when done",
@@ -87,7 +86,7 @@ def main():
         tool_name = get_input_field(input_data, 'tool_name', default='')
         memory_name = get_input_field(input_data, 'tool_input', 'memory_name', default='')
         tool_result = get_input_field(input_data, 'tool_result', default='')
-        # Bare name without directory prefix (e.g. "wf/WF_START" -> "WF_START")
+        # Bare name without directory prefix (e.g. "wf/WF_CLASSIFY" -> "WF_CLASSIFY")
         bare_name = memory_name.rsplit('/', 1)[-1] if memory_name else ''
 
         # Build input echo prefix for all output paths
@@ -143,7 +142,10 @@ def main():
             output_status(f"📖 Read: {memory_name or 'unknown'} {_in_label}")
             return
 
-        # Create state manager with session isolation
+        # WF_* read = PURE READ. Reads NEVER advance the FSM (v4: read≠transition).
+        # Display the step being inspected and emit a continuation directive for
+        # the CURRENT state. Transitions happen only via explicit set_state / the
+        # prompt-intent hook — never as a side effect of reading a memory.
         state_mgr = StateManager(cwd, session_id=session_id)
 
         output = HookOutput(event_name="PostToolUse")
@@ -152,86 +154,13 @@ def main():
         version = _get_plugin_version()
         ver_tag = f" (v{version})" if version else ""
 
-        # Only transition if state is different (compare bare names)
-        if current != bare_name:
-            # Create WM file when transitioning TO WF_START (end of WF_INIT)
-            if bare_name == 'WF_START' and not state_mgr.wm_filepath:
-                project_root = get_project_root()
-                wm_filename = f"WM_{session_id}.md"
-                wm_filepath = os.path.join(project_root, ".serena", "memories", wm_filename)
+        step_label = f"{icon} ON STEP: {bare_name}{ver_tag}" if bare_name == 'WF_INIT' else f"{icon} ON STEP: {bare_name}"
+        output.add_message(step_label)
 
-                wm_content = f"""# Working Memory: Session {session_id}
-
-## Session
-- **ID**: {session_id}
-- **Task**: (awaiting classification)
-- **Started**: {datetime.now().strftime('%Y-%m-%d %H:%M')}
-
-## Workflow Context
-**Current State**: WF_START
-**Previous State**: WF_INIT
-**Session ID**: {session_id}
-
-## Task Context
-- **Feature(s)**: (to be determined)
-- **Complexity**: (to be determined)
-
-## Progress Tracking
-### Pending
-- [ ] Classify task
-
-## Requirements
-(to be determined from user request)
-
-## Implementation Notes
-(none yet)
-"""
-                os.makedirs(os.path.dirname(wm_filepath), exist_ok=True)
-                with open(wm_filepath, 'w', encoding='utf-8') as f:
-                    f.write(wm_content)
-
-                # Write initial decoupled state file
-                write_state_file(session_id, 'WF_START', prev_state='WF_INIT')
-
-                # Update state manager with new WM
-                state_mgr.set_working_memory(wm_filename.replace('.md', ''))
-                output.add_message(f"✅ Working Memory created: {wm_filename}")
-
-                # Append session start event to stream
-                stream_path = get_stream_path(session_id)
-                append_event(stream_path, 'session_start', s=session_id)
-
-                # Create init sentinel — unlocks the pre-init gate for this session
-                from swe_hooks.core.stream import get_sentinel_path
-                sentinel = get_sentinel_path(session_id)
-                try:
-                    sentinel_data = {
-                        "session_id": session_id,
-                        "wm_file": wm_filename.replace('.md', ''),
-                        "validated_at": int(time.time()),
-                    }
-                    with open(sentinel, 'w') as sf:
-                        json.dump(sentinel_data, sf, separators=(',', ':'))
-                except IOError:
-                    pass
-
-            success, msg = state_mgr.transition_to(bare_name)
-            if success:
-                step_label = f"{icon} ON STEP: {bare_name}{ver_tag}" if bare_name == 'WF_INIT' else f"{icon} ON STEP: {bare_name}"
-                output.add_message(step_label)
-                output.add_message(msg)
-                # Append state transition event to stream
-                stream_path = get_stream_path(session_id)
-                append_event(stream_path, 'state', from_s=current, to_s=bare_name, s=session_id)
-                # Auto-log transition to WM Progress section
-                if state_mgr.wm_filepath:
-                    append_transition_to_wm(state_mgr.wm_filepath, current, bare_name)
-            else:
-                # Informational note about invalid transition (non-blocking)
-                output.add_message(f"ℹ️ Note: {msg}")
-        else:
-            step_label = f"{icon} ON STEP: {bare_name}{ver_tag}" if bare_name == 'WF_INIT' else f"{icon} ON STEP: {bare_name}"
-            output.add_message(step_label)
+        directive = _get_continuation(current)
+        if directive:
+            output.add_message("")
+            output.add_message(directive)
 
         output.output_and_exit()
 

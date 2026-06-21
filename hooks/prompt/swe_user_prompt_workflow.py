@@ -13,6 +13,7 @@ import os
 import sys
 import json
 import re
+import time
 from datetime import datetime
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import swe_hooks.bootstrap  # noqa: E402
@@ -21,13 +22,81 @@ try:
     from swe_hooks.core.config import (
         load_setup_complete,
         get_working_memory_filename, read_working_memory_state,
-        read_state_file,
+        read_state_file, write_state_file,
     )
-    from swe_hooks.core.session import extract_session_id, find_working_memory_for_session
+    from swe_hooks.core.session import extract_session_id, find_working_memory_for_session, get_project_root
     from swe_hooks.core.state_manager import StateManager
-    from swe_hooks.core.stream import get_stream_path, get_event_count
+    from swe_hooks.core.stream import (
+        get_stream_path, get_event_count, get_sentinel_path, append_event,
+    )
 except ImportError as e:
     swe_hooks.bootstrap.import_error_exit(e, "UserPromptSubmit")
+
+
+def create_wm_and_sentinel(cwd, session_id):
+    """Create the Working Memory markdown, state file, init sentinel, and
+    session_start stream event when a session first enters WF_CLASSIFY.
+
+    Ported from the block that previously lived in swe_post_read_state.py
+    (where it ran on transition to the old post-init entry state, now removed).
+    WF_CLASSIFY is the new post-init entry state in v4.
+    """
+    project_root = get_project_root()
+    wm_filename = f"WM_{session_id}.md"
+    wm_filepath = os.path.join(project_root, ".serena", "memories", wm_filename)
+
+    wm_content = f"""# Working Memory: Session {session_id}
+
+## Session
+- **ID**: {session_id}
+- **Task**: (awaiting classification)
+- **Started**: {datetime.now().strftime('%Y-%m-%d %H:%M')}
+
+## Workflow Context
+**Current State**: WF_CLASSIFY
+**Previous State**: WF_INIT
+**Session ID**: {session_id}
+
+## Task Context
+- **Feature(s)**: (to be determined)
+- **Complexity**: (to be determined)
+
+## Progress Tracking
+### Pending
+- [ ] Classify task
+
+## Requirements
+(to be determined from user request)
+
+## Implementation Notes
+(none yet)
+"""
+    os.makedirs(os.path.dirname(wm_filepath), exist_ok=True)
+    with open(wm_filepath, 'w', encoding='utf-8') as f:
+        f.write(wm_content)
+
+    # Write initial decoupled state file
+    write_state_file(session_id, 'WF_CLASSIFY', prev_state='WF_INIT')
+
+    # Append session start event to stream
+    stream_path = get_stream_path(session_id)
+    append_event(stream_path, 'session_start', s=session_id)
+
+    # Create init sentinel — unlocks the pre-init gate for this session
+    sentinel = get_sentinel_path(session_id)
+    try:
+        os.makedirs(os.path.dirname(sentinel), exist_ok=True)
+        sentinel_data = {
+            "session_id": session_id,
+            "wm_file": wm_filename.replace('.md', ''),
+            "validated_at": int(time.time()),
+        }
+        with open(sentinel, 'w') as sf:
+            json.dump(sentinel_data, sf, separators=(',', ':'))
+    except IOError:
+        pass
+
+    return wm_filename.replace('.md', '')
 
 
 # Patterns that indicate a continuation of the current task
@@ -279,15 +348,18 @@ If your next output contains ANY text instead of a tool call, you have failed.
                 if prompt_intent == 'unknown':
                     prompt_intent = 'same_session_new_task'  # Special case
             else:
-                # Truly new session or no working memory - go to WF_START
-                state_mgr.transition_to('WF_START')
-                current_state = 'WF_START'
+                # Truly new session or no working memory - go to WF_CLASSIFY
+                state_mgr.transition_to('WF_CLASSIFY')
+                current_state = 'WF_CLASSIFY'
+                # No WM exists for this session yet — create it now.
+                if not wm_file:
+                    wm_file = create_wm_and_sentinel(cwd, session_id)
                 prompt_intent = 'new_task'
         
         # Build context based on prompt intent and state
         if prompt_intent == 'continuation':
             # User is continuing - stay in current state, provide brief reminder
-            if current_state == 'WF_START':
+            if current_state == 'WF_CLASSIFY':
                 # Haven't progressed - need to classify
                 # Get stream event count for observability
                 stream_info = ""
@@ -299,8 +371,8 @@ If your next output contains ANY text instead of a tool call, you have failed.
                 context = f"""📋 WORKFLOW STATE: {current_state}
 Working Memory: {wm_file or 'None'}{stream_info}
 
-MANDATORY: Before responding, read and follow the WF_START workflow.
-Use: mcp__plugin_swe_serena__read_memory(memory_name="wf/WF_START")
+MANDATORY: Before responding, read and follow the WF_CLASSIFY workflow.
+Use: mcp__plugin_swe_serena__read_memory(memory_name="wf/WF_CLASSIFY")
 """
             else:
                 # In active state - continue workflow
@@ -373,10 +445,12 @@ Or fast-path: mcp__plugin_swe_serena__read_memory(memory_name="wf/WF_ARCH_REVIEW
 """
 
         elif prompt_intent == 'new_task':
-            # New task - transition to WF_START
-            if current_state not in ['WF_START', 'WF_INIT']:
-                state_mgr.transition_to('WF_START')
-                current_state = 'WF_START'
+            # New task - transition to WF_CLASSIFY
+            if current_state not in ['WF_CLASSIFY', 'WF_INIT']:
+                state_mgr.transition_to('WF_CLASSIFY')
+                current_state = 'WF_CLASSIFY'
+                if not wm_file:
+                    wm_file = create_wm_and_sentinel(cwd, session_id)
 
             # Get stream event count for observability
             stream_info = ""
@@ -401,13 +475,12 @@ Use: mcp__plugin_swe_serena__read_memory(memory_name="wf/{current_state}")
                 event_count = get_event_count(stream_path)
                 if event_count > 0:
                     stream_info = f"\nStream Events: {event_count}"
-            if current_state == 'WF_START':
+            if current_state == 'WF_CLASSIFY':
                 context = f"""❓ INTENT UNCLEAR - WORKFLOW STATE: {current_state}
 Working Memory: {wm_file or 'None'}{stream_info}
 
-MANDATORY: Before responding, read and follow WF_START to initialize.
-Then proceed to WF_CLASSIFY for task classification.
-Use: mcp__plugin_swe_serena__read_memory(memory_name="wf/{current_state}")
+MANDATORY: Classify this task using WF_CLASSIFY.
+Use: mcp__plugin_swe_serena__read_memory(memory_name="wf/WF_CLASSIFY")
 """
             else:
                 # Transition to WF_CLASSIFY for classification

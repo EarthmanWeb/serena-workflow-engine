@@ -76,7 +76,6 @@ Each workflow state includes a reporting line with a distinct icon:
 
 | Step                  | Report                         |
 | --------------------- | ------------------------------ |
-| WF_START              | **On step WF_START**           |
 | WF_CLASSIFY           | **On step WF_CLASSIFY**        |
 | WF_UPDATE_MEMORY      | **On step WF_UPDATE_MEMORY**   |
 | WF_CLARIFY            | **On step WF_CLARIFY**         |
@@ -140,7 +139,7 @@ The only file Claude reads from disk at conversation start. Must be tiny:
 
 ## Entry Point
 
-Read `WF_START` memory. Follow the workflow.
+Read `WF_INIT` memory. Follow the workflow.
 
 ## Quick Reference
 
@@ -160,12 +159,12 @@ Small memory files that define:
 - What to read/check
 - Which state(s) to go to next
 
-Example `WF_START`:
+Example `WF_CLASSIFY`:
 
 ```markdown
-# WF_START - Entry Point
+# WF_CLASSIFY - Post-Init Entry
 
-**Report: "On step WF_START"**
+**Report: "On step WF_CLASSIFY"**
 
 ## Execute These Steps
 
@@ -174,7 +173,7 @@ Example `WF_START`:
 3. **Classify task type:**
    - Continue previous -> `WF_CONTINUE`
    - Research only -> `WF_RESEARCH`
-   - Code change -> `WF_CLASSIFY`
+   - Code change -> `WF_ARCH_REVIEW`
 
 ## Next State
 
@@ -266,7 +265,7 @@ Key verification points that can't be skipped:
 
 ### 4. Loop Back on Violations
 
-`WF_VERIFY` checks for violations and loops back to `WF_START` if found. This forces Claude to fix issues rather than ignore them.
+`WF_VERIFY` checks for violations and loops back to `WF_CLASSIFY` if found. This forces Claude to fix issues rather than ignore them.
 
 ### 5. Requirement Detection
 

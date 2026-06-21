@@ -7,7 +7,6 @@ workflow:
   callable_from:
     - WF_CLASSIFY
     - WF_CONTINUE
-    - WF_START
   default_return: WF_CLASSIFY
   supports_standalone: true
   auto_transition: true

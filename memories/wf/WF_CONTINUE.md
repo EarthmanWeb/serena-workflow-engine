@@ -6,7 +6,7 @@
 
 ## Step 1: Verify Working Memory
 
-WM should already exist (created at WF_START). If missing, go back and create it per `REF_WM`.
+WM should already exist (created when the session entered WF_CLASSIFY). If missing, go back and create it per `REF_WM`.
 
 Echo to chat: `Working Memory: WM_<timestamp>`
 

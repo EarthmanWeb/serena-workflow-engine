@@ -1,7 +1,7 @@
 # Serena Workflow Engine - Project Overview
 
 ## Purpose
-A 14-state workflow engine plugin for Claude Code that integrates with Serena memory persistence, hook-driven event architecture, and optional swarm orchestration. It manages the software engineering lifecycle through structured states (INIT, RESEARCH, EXECUTE, VERIFY, DONE, etc.) with automatic transitions driven by hooks.
+A state-machine workflow engine plugin for Claude Code that integrates with Serena memory persistence, hook-driven event architecture, and optional swarm orchestration. It manages the software engineering lifecycle through structured states (INIT, CLASSIFY, ARCH_REVIEW, EXECUTE, VERIFY, DONE, etc.). Transitions are explicit (via set_state / the prompt-intent hook) — reading a WF_* memory does NOT advance the FSM. The authoritative state list lives in `state-machine/states.json` (enumerated in DOM_SWE_STATE_MACHINE).
 
 ## Tech Stack
 - **Runtime:** Claude Code CLI plugin system

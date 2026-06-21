@@ -5,7 +5,6 @@ description: Comprehensive Working Memory update with per-step checklists using 
 workflow:
   aware: true
   callable_from:
-    - WF_START
     - WF_CLASSIFY
     - WF_RESEARCH
     - WF_CONTINUE
@@ -71,22 +70,16 @@ Note the current state and section contents for your update decisions.
 
 **Find the checklist matching your `--from` argument below. Complete ALL items.**
 
-### WF_START
+### WF_CLASSIFY
 
 - [ ] Feature(s) identified from INDEX_FEATURES
 - [ ] Task description captured
-- [ ] Update `Current Task` section with task + context
-- [ ] Update `Feature(s)` section
-- [ ] Update `Progress` with initial items
-
-### WF_CLASSIFY
-
-- [ ] Features identified from INDEX_FEATURES
 - [ ] FEATURE_[KEY] loaded for each feature
 - [ ] Supporting memories loaded (DOM_*, SYS_*, REF_*, ARCH_*, INDEX_*)
 - [ ] Requirements validated against domain memories (or "none detected")
 - [ ] Task type classified (simple / medium / large / operational)
-- [ ] Update `Affected Features` with Primary / Secondary
+- [ ] Update `Current Task` section with task + context
+- [ ] Update `Feature(s)` / `Affected Features` with Primary / Secondary
 - [ ] Update `Files` with key file paths from feature memories
 - [ ] Update `Progress` with classification and feature loading steps completed
 

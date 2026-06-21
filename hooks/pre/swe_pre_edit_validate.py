@@ -20,7 +20,8 @@ except ImportError as e:
     swe_hooks.bootstrap.import_error_exit(e, "PreToolUse")
 
 # States where edits are allowed
-EDIT_ALLOWED = {'WF_EXECUTE', 'WF_DEBUG_TDD', 'WF_CHECKPOINT', 'WF_INITIAL_SETUP', 'WF_ONBOARD'}
+# WF_VERIFY may edit: verification must fix violations in place.
+EDIT_ALLOWED = {'WF_EXECUTE', 'WF_DEBUG_TDD', 'WF_CHECKPOINT', 'WF_INITIAL_SETUP', 'WF_ONBOARD', 'WF_VERIFY'}
 
 # States where edits should show a warning
 WARN_STATES = {'WF_ARCH_REVIEW', 'WF_RESEARCH'}

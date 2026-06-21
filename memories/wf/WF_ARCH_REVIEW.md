@@ -6,14 +6,22 @@
 
 ## Purpose
 
-Single planning gate for all code changes: design, architecture compliance, parallel execution assessment, and user approval.
+Single planning gate for **major** code changes: design, architecture compliance, parallel execution assessment, and the single question + consent gate.
+
+## When This State Is Entered
+
+WF_ARCH_REVIEW is NOT entered for every code change. WF_CLASSIFY Step 3b (Architecture Review Necessity Check) routes here only when the task is a **new feature, a major module addition, touches >5 files, or crosses 3+ layers**. Minor patches to existing functionality (≤5 files, no open design questions) skip this state and go straight to WF_EXECUTE with `arch_review_skipped: true`.
+
+If you arrived here for something that is actually a trivial one-file patch, that is a mis-route — note it and proceed; do not pad a small change with ceremony.
 
 ---
 
 ## SPEC Fast-Path
 
-If a `SPEC_*` memory is already loaded (check WM), skip steps 1-4 and reference the SPEC by name. Proceed to step 5 (Parallel Execution Assessment) and then Approval.
+If a `SPEC_*` memory is already loaded (check WM), skip steps 1-4 and reference the SPEC by name. Proceed to step 5 (Parallel Execution Assessment) and then the Single Question + Consent Gate.
 If no SPEC loaded, follow steps 1-4 below.
+
+> Note: steps 1, 2, 2b, and 2c describe the heavy memory load + compliance-checklist derivation. This load is DEFERRED from WF_CLASSIFY and now runs AFTER the questions are answered — see "Heavy Memory Load (After Questions Answered)" in the Single Question + Consent Gate section. Use steps 1-2c there for the procedure, scoped to the chosen approach.
 
 ## Gherkin Spec Gate
 
@@ -161,50 +169,40 @@ If thresholds not met, proceed as single-agent implementation.
 
 ---
 
-## Approval
+## Single Question + Consent Gate
+
+This is the ONE question gate in the workflow. There is NO separate "May I proceed?" approval step — answering the questions IS consent.
 
 ### Template Check (For New Files)
 
 Before proposing new files, check existing patterns in similar files, read relevant SYS_*/REF_* memory for the file type, and follow established feature conventions from FEATURE_[KEY].
 
-### Present Plan
+### Consent-Skip Check (Initial Prompt Blanket Consent)
 
-Present your plan including:
+Check whether the INITIAL user prompt already gave blanket consent — phrases like "get it done", "continue to completion", "don't stop till finished", "run to completion", "don't ask me questions", "no questions". (This corresponds to the `auto_approve` / `no_questions` flags noted at WF_CLASSIFY.)
 
-- Files to modify/create table
-- Key architectural constraints applied
-- Data flow description
-- Test coverage plan
-- Parallel execution recommendation (if applicable)
+- **If blanket consent was given:** SKIP the final validate-or-continue question. If "no questions" was requested, also derive the most logical choices for any design/approach questions yourself and proceed on that initial-prompt consent — do NOT call `AskUserQuestion`. Go directly to `WF_EXECUTE` (or `WF_SWARM_ORCHESTRATE` if parallel agents planned).
+- **Otherwise:** assemble and ask the single question call below.
 
-### Auto-Approve Bypass Check
+### Assemble & Ask ONE Question Call
 
-Check WM for `auto_approve: true` (set at WF_CLASSIFY step 2b).
-
-If `auto_approve: true`: the plan has been presented above. Skip the `AskUserQuestion` gate and go directly to `WF_EXECUTE` (or `WF_SWARM_ORCHESTRATE` if parallel agents planned).
-
-If `auto_approve` is not set or false: continue to the approval gate below.
-
-### Get Approval
+Gather every design/approach/blocker question this task raises into a SINGLE `AskUserQuestion` call. The FINAL question in that call MUST be exactly the validate-or-continue question shown below.
 
 ```javascript
 AskUserQuestion({
   questions: [
+    // ...any design / approach / blocker questions for this task, each with options...
     {
-      question: 'I plan to make the following changes. May I proceed?',
-      header: 'Approval',
+      question: 'Would you like me to validate the final plan with you, or shall I continue through completion?',
+      header: 'Plan',
       options: [
         {
-          label: 'Yes, proceed',
-          description: 'Approve the proposed changes and continue to implementation',
+          label: 'Validate the plan with me first',
+          description: 'Present the assembled plan and wait for explicit go-ahead before implementing',
         },
         {
-          label: "No, let's discuss",
-          description: 'Stop and clarify requirements before making changes',
-        },
-        {
-          label: 'Modify approach',
-          description: 'I want to suggest a different approach',
+          label: 'Continue through to completion',
+          description: 'Proceed straight through implementation without a separate plan review',
         },
       ],
       multiSelect: false,
@@ -213,26 +211,39 @@ AskUserQuestion({
 });
 ```
 
-### Handle User Response
+Answering this call IS consent. There is no second approval prompt.
 
-| User Selection      | Action                                                          |
-| ------------------- | --------------------------------------------------------------- |
-| "Yes, proceed"      | Read `WF_EXECUTE` (or `WF_SWARM_ORCHESTRATE` if parallel planned) |
-| "No, let's discuss" | Read `WF_CLARIFY`                                               |
-| "Modify approach"   | Re-run `WF_ARCH_REVIEW` with modified design                    |
-| Custom text (Other) | Parse feedback, go to `WF_CLARIFY`                              |
+### Heavy Memory Load (After Questions Answered)
+
+Now that the approach is chosen, run the heavy memory load DEFERRED from WF_CLASSIFY — scoped to the chosen approach's files:
+
+1. `read_memory("feature/FEATURE_DEV_STANDARDS")` and the relevant `DEV_*` / `DOM_*` / `SYS_*` memories for the languages/layers the chosen approach touches (steps 2 / 2b above).
+2. Derive the `## Compliance Checklist` in WM (step 2c) from those memories.
+
+This load is scoped to the chosen approach — do not sweep memories for approaches that were not selected.
+
+### Handle Final-Question Response
+
+| Selection                          | Action                                                                                                          |
+| ---------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| "Validate the plan with me first"  | Present the assembled plan (files table, constraints, data flow, test plan, parallel rec). Get explicit go-ahead, then read `WF_EXECUTE` (or `WF_SWARM_ORCHESTRATE` if parallel planned). |
+| "Continue through to completion"   | Read `WF_EXECUTE` directly (or `WF_SWARM_ORCHESTRATE` if parallel planned).                                     |
+| Consent-skip (blanket consent)     | Read `WF_EXECUTE` directly (or `WF_SWARM_ORCHESTRATE` if parallel planned).                                     |
+
+A non-design blocker that surfaces here may still use `WF_CLARIFY` (the reusable ask-user subroutine for non-design blockers only). Design/approach questions are never routed there — they belong in the single question call above.
 
 ---
 
 ## Routing
 
-| Condition                             | Next Step              |
-| ------------------------------------- | ---------------------- |
-| Auto-approve bypass (simple)          | `WF_EXECUTE`           |
-| Auto-approve bypass (parallel needed) | `WF_SWARM_ORCHESTRATE` |
-| User approves (simple implementation) | `WF_EXECUTE`           |
-| User approves (parallel needed)       | `WF_SWARM_ORCHESTRATE` |
-| Needs redesign / user modifies        | `WF_ARCH_REVIEW`       |
-| User declines / needs clarification   | `WF_CLARIFY`           |
+| Condition                                       | Next Step              |
+| ----------------------------------------------- | ---------------------- |
+| Consent-skip (blanket consent, simple)          | `WF_EXECUTE`           |
+| Consent-skip (blanket consent, parallel needed) | `WF_SWARM_ORCHESTRATE` |
+| "Continue through to completion" (simple)       | `WF_EXECUTE`           |
+| "Continue through to completion" (parallel)     | `WF_SWARM_ORCHESTRATE` |
+| "Validate the plan" → go-ahead (simple)         | `WF_EXECUTE`           |
+| "Validate the plan" → go-ahead (parallel)       | `WF_SWARM_ORCHESTRATE` |
+| Non-design blocker                              | `WF_CLARIFY`           |
 
 Update WM via `/swe-wm-update --from WF_ARCH_REVIEW` before transitioning.
