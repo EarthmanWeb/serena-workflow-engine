@@ -17,7 +17,7 @@ try:
     from swe_hooks.core.state_manager import StateManager, STATE_ICONS
     from swe_hooks.core.session import extract_session_id, get_project_root, find_working_memory_for_session
     from swe_hooks.core.config import append_transition_to_wm, write_state_file, resolve_installed_plugin, resolve_plugin_root
-    from swe_hooks.core.stream import get_stream_path, append_event
+    from swe_hooks.core.stream import get_stream_path, append_event, get_sentinel_path
     from datetime import datetime
     import re
     import time
@@ -96,6 +96,73 @@ def _get_continuation(current_state: str) -> str:
     return f"⏩ CONTINUE ({current_state}): {d}" if d else ""
 
 
+def _bootstrap_session_at_classify(cwd, session_id):
+    """Create WM + state file + init sentinel when the init chain reaches
+    WF_CLASSIFY. Restores the bootstrap that WF_START used to perform (v3),
+    now bound to the v4 post-init entry state. Idempotent: callers guard on
+    sentinel absence. Mirrors create_wm_and_sentinel() in the prompt hook.
+    """
+    project_root = get_project_root()
+    wm_filename = f"WM_{session_id}.md"
+    wm_filepath = os.path.join(project_root, ".serena", "memories", wm_filename)
+
+    wm_content = f"""# Working Memory: Session {session_id}
+
+## Session
+- **ID**: {session_id}
+- **Task**: (awaiting classification)
+- **Started**: {datetime.now().strftime('%Y-%m-%d %H:%M')}
+
+## Workflow Context
+**Current State**: WF_CLASSIFY
+**Previous State**: WF_INIT
+**Session ID**: {session_id}
+
+## Task Context
+- **Feature(s)**: (to be determined)
+- **Complexity**: (to be determined)
+
+## Progress Tracking
+### Pending
+- [ ] Classify task
+
+## Requirements
+(to be determined from user request)
+
+## Implementation Notes
+(none yet)
+"""
+    try:
+        os.makedirs(os.path.dirname(wm_filepath), exist_ok=True)
+        with open(wm_filepath, 'w', encoding='utf-8') as f:
+            f.write(wm_content)
+    except IOError:
+        pass
+
+    # Decoupled state file — advance WF_INIT → WF_CLASSIFY.
+    write_state_file(session_id, 'WF_CLASSIFY', prev_state='WF_INIT')
+
+    # Session start stream event.
+    try:
+        append_event(get_stream_path(session_id), 'session_start', s=session_id)
+    except Exception:
+        pass
+
+    # Init sentinel — unlocks the pre-init gate for this session.
+    sentinel = get_sentinel_path(session_id)
+    try:
+        os.makedirs(os.path.dirname(sentinel), exist_ok=True)
+        sentinel_data = {
+            "session_id": session_id,
+            "wm_file": wm_filename.replace('.md', ''),
+            "validated_at": int(time.time()),
+        }
+        with open(sentinel, 'w') as sf:
+            json.dump(sentinel_data, sf, separators=(',', ':'))
+    except IOError:
+        pass
+
+
 def main():
     try:
         input_data = read_stdin_safe(timeout_seconds=2.0)
@@ -168,6 +235,25 @@ def main():
         output = HookOutput(event_name="PostToolUse")
         icon = STATE_ICONS.get(bare_name, '📍')
         current = state_mgr.get_current_state()
+
+        # INIT-CHAIN COMPLETION (the ONE sanctioned read-driven transition).
+        # v4 removed WF_START; the WM + init sentinel used to be created when the
+        # session transitioned to WF_START during the init chain. The init chain
+        # now ends by reading wf/WF_CLASSIFY. Because reads no longer transition,
+        # nothing creates the sentinel within the first turn, so the pre-init gate
+        # stays locked and blocks every task read — a deadlock.
+        #
+        # Fix: when wf/WF_CLASSIFY is read while still at WF_INIT (init chain in
+        # progress) and the session is not yet initialized, bootstrap it here:
+        # create WM + sentinel and advance WF_INIT → WF_CLASSIFY. This is NOT a
+        # general read-transition — it is scoped to exactly WF_INIT→WF_CLASSIFY,
+        # the one transition the init chain requires, with no work semantics.
+        if bare_name == 'WF_CLASSIFY' and current in ('WF_INIT', 'UNINITIALIZED'):
+            sentinel = get_sentinel_path(session_id) if session_id else None
+            if session_id and sentinel and not os.path.exists(sentinel):
+                _bootstrap_session_at_classify(cwd, session_id)
+                # Reflect the new state for the directive/label below.
+                current = 'WF_CLASSIFY'
         version = _get_plugin_version()
         ver_tag = f" (v{version})" if version else ""
 
