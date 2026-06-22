@@ -33,13 +33,18 @@ except ImportError as e:
     swe_hooks.bootstrap.import_error_exit(e, "UserPromptSubmit")
 
 
-def create_wm_and_sentinel(cwd, session_id):
+def create_wm_and_sentinel(cwd, session_id, initial_state='WF_CLASSIFY',
+                           prev_state='WF_INIT', task='(awaiting classification)'):
     """Create the Working Memory markdown, state file, init sentinel, and
     session_start stream event when a session first enters WF_CLASSIFY.
 
     Ported from the block that previously lived in swe_post_read_state.py
     (where it ran on transition to the old post-init entry state, now removed).
     WF_CLASSIFY is the new post-init entry state in v4.
+
+    `initial_state`/`prev_state`/`task` are parameterized so the fast-track
+    path can create the WM directly at WF_EXECUTE. Defaults preserve the
+    standard WF_CLASSIFY entry for all existing callers.
     """
     project_root = get_project_root()
     wm_filename = f"WM_{session_id}.md"
@@ -49,12 +54,12 @@ def create_wm_and_sentinel(cwd, session_id):
 
 ## Session
 - **ID**: {session_id}
-- **Task**: (awaiting classification)
+- **Task**: {task}
 - **Started**: {datetime.now().strftime('%Y-%m-%d %H:%M')}
 
 ## Workflow Context
-**Current State**: WF_CLASSIFY
-**Previous State**: WF_INIT
+**Current State**: {initial_state}
+**Previous State**: {prev_state}
 **Session ID**: {session_id}
 
 ## Task Context
@@ -76,7 +81,7 @@ def create_wm_and_sentinel(cwd, session_id):
         f.write(wm_content)
 
     # Write initial decoupled state file
-    write_state_file(session_id, 'WF_CLASSIFY', prev_state='WF_INIT')
+    write_state_file(session_id, initial_state, prev_state=prev_state)
 
     # Append session start event to stream
     stream_path = get_stream_path(session_id)
@@ -144,6 +149,34 @@ NEW_TASK_PATTERNS = [
     r'^(create|build|implement|add|fix|debug|review|analyze|refactor)',
     r'^(onboard|write|develop|make|design|setup|configure|install)',
 ]
+
+
+# A direct slash-command invocation. The harness wraps command runs in a
+# <command-name>/foo</command-name> marker; bare prompts that the user types as
+# "/foo ..." also count. Either way the tool/command fully encodes intent — no
+# classification is needed, so we fast-track straight to WF_EXECUTE.
+COMMAND_MARKER_RE = re.compile(r'<command-name>\s*(/?[^<\s]+)', re.IGNORECASE)
+SLASH_COMMAND_RE = re.compile(r'^/[a-zA-Z0-9][\w:-]*')
+
+
+def detect_slash_command(prompt: str):
+    """Return the invoked command token (e.g. '/gherkin-dev') for a direct
+    slash-command prompt, else None.
+
+    Recognizes both the harness <command-name> marker and a bare prompt that
+    starts with '/<token>'.
+    """
+    if not prompt:
+        return None
+    marker = COMMAND_MARKER_RE.search(prompt)
+    if marker:
+        token = marker.group(1)
+        return token if token.startswith('/') else '/' + token
+    stripped = prompt.lstrip()
+    m = SLASH_COMMAND_RE.match(stripped)
+    if m:
+        return m.group(0)
+    return None
 
 
 def analyze_prompt(prompt: str, current_state: str) -> str:
@@ -242,6 +275,39 @@ def main():
         # Extract session ID from transcript_path for session isolation
         transcript_path = input_data.get('transcript_path', '')
         session_id = extract_session_id(transcript_path)
+
+        # ═══ FAST TRACK: direct slash-command invocation ═══
+        # A slash command fully encodes intent — there is nothing to classify.
+        # Create the WM + sentinel directly at WF_EXECUTE so the init gate opens
+        # immediately and the command/skill runs with full abilities. The only
+        # behavioral constraint we still carry is CLAUDE_OBLIGATIONS.
+        # Applies on ANY slash command, fresh or mid-session (state is forced
+        # to WF_EXECUTE; an existing WM is overwritten for this session).
+        command = detect_slash_command(prompt)
+        if command and session_id:
+            create_wm_and_sentinel(
+                cwd, session_id,
+                initial_state='WF_EXECUTE',
+                prev_state='WF_FASTTRACK',
+                task=f'Direct command: {command}',
+            )
+            context = f"""⚡ FAST TRACK — direct command: {command}
+Working Memory: WM_{session_id} (state: WF_EXECUTE)
+
+This is a direct slash-command/skill invocation. The command encodes all intent —
+NO classification, NO WF_INIT chain, NO WF_CLASSIFY. Fast-tracked to WF_EXECUTE.
+
+1. Read behavioral constraints once: mcp__plugin_swe_serena__read_memory(memory_name="claude/CLAUDE_OBLIGATIONS")
+2. Then execute {command} exactly as invoked, with all the abilities that command provides.
+"""
+            output = {
+                "hookSpecificOutput": {
+                    "hookEventName": "UserPromptSubmit",
+                    "additionalContext": context
+                }
+            }
+            print(json.dumps(output))
+            sys.exit(0)
 
         # Get current state — JSON state file is authoritative, WM is display artifact
         wm_file = None
