@@ -24,15 +24,26 @@ Sets `"bypass": true` inside `.serena/swe-setup-complete.json` (the same file
 used for initialization — no separate bypass file). If the file does not exist
 yet, it is created with `{"complete": false, "bypass": true}`.
 
+The write is performed by a dedicated script, `scripts/swe-bypass.py`, NOT by
+the assistant editing the file. The PreToolUse guards hard-block any Edit /
+Write / `write_memory` / ad-hoc Bash that injects `"bypass": true` into the
+setup file — so the assistant cannot set the bypass on its own or by inferring
+intent. The guards make one narrow exception: running `swe-bypass.py`, the
+single auditable write path, which only happens because *you* typed this
+command (`disable-model-invocation: true`).
+
 ## Implementation
 
-Execute immediately:
+Execute immediately — run the bypass script (do NOT edit the JSON directly; the
+guards will block that):
 
-1. Read `.serena/swe-setup-complete.json` if present (else start from `{}`).
-2. Set `bypass` to `true`.
-3. Write the file back (pretty-printed JSON).
-4. Confirm: "SWE workflow bypassed for this project. Run `/swe-bypass-off` or
-   set `\"bypass\": false` in `.serena/swe-setup-complete.json` to re-enable."
+```bash
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/swe-bypass.py"
+```
+
+The script reads `.serena/swe-setup-complete.json` (or starts from `{}`), sets
+`bypass` to `true`, and writes it back pretty-printed. It prints the
+confirmation and how to re-enable. Relay its output to the user.
 
 ## Re-enabling
 

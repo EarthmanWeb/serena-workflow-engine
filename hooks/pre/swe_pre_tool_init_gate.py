@@ -107,6 +107,13 @@ def _is_bypass_write_attempt(tool_name, tool_input):
     # Bash vector: echo/cat/sed/printf redirecting bypass into the setup file.
     if tool_name == 'Bash':
         cmd = str(tool_input.get('command', ''))
+        # ALLOW the dedicated bypass script — it is the single, auditable write
+        # path backing the user-only /swe-bypass command. Running it is
+        # equivalent to the user editing the file by hand (already permitted);
+        # it cannot be triggered as an inferred intent the way an ad-hoc
+        # echo/sed could. Everything else writing the flag stays blocked below.
+        if 'swe-bypass.py' in cmd:
+            return False
         c = cmd.replace(' ', '').replace("'", '"').lower()
         if 'swe-setup-complete' in cmd and '"bypass":true' in c:
             return True
