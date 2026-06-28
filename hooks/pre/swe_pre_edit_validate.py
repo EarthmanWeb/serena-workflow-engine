@@ -16,6 +16,7 @@ try:
     from swe_hooks.core.input import read_stdin_safe, get_input_field
     from swe_hooks.core.state_manager import StateManager
     from swe_hooks.core.session import extract_session_id
+    from swe_hooks.core.config import get_project_root, resolve_setup_state
 except ImportError as e:
     swe_hooks.bootstrap.import_error_exit(e, "PreToolUse")
 
@@ -71,6 +72,18 @@ def main():
             )
             output.output_and_exit()
             return
+
+        # Project-level bypass: if "bypass": true in swe-setup-complete.json,
+        # skip the state-based edit gate entirely — same as the init gate does.
+        # Runs AFTER the hard-guard above so a bypassed project still cannot have
+        # the assistant flip the flag further. SessionStart announces the bypass.
+        try:
+            project_root = get_project_root()
+            if resolve_setup_state(project_root).get('bypassed'):
+                output_status("✓ Edit allowed (bypassed)", event="PreToolUse")
+                return
+        except Exception:
+            pass  # bypass check is best-effort; fall through to state gate
 
         # Extract session ID for session isolation
         transcript_path = get_input_field(input_data, 'transcript_path', default='')
