@@ -843,16 +843,21 @@ def main():
         print("SWE bypassed for this project. Remove .serena/swe-bypass.json to re-enable.")
         sys.exit(0)
 
+    # Canonical setup-flag location. Bootstrap ALWAYS writes here (.serena/),
+    # never the legacy .claude/ path — see the write at the end of this function.
+    setup_file = os.path.join(project_root, '.serena', 'swe-setup-complete.json')
+
     # Guard: Check if already fully initialized (complete=true is the ONLY early exit)
     # Check canonical (.serena/) first, then legacy (.claude/) — projects set up
-    # under <=v1.0.x layout have the flag in .claude/.
-    for setup_file in (
-        os.path.join(project_root, '.serena', 'swe-setup-complete.json'),
+    # under <=v1.0.x layout have the flag in .claude/. Use a dedicated loop var so
+    # the canonical write target (setup_file) is not clobbered by this read scan.
+    for existing_setup in (
+        setup_file,
         os.path.join(project_root, '.claude', 'swe-setup-complete.json'),
     ):
-        if os.path.exists(setup_file):
+        if os.path.exists(existing_setup):
             try:
-                with open(setup_file) as f:
+                with open(existing_setup) as f:
                     setup_data = json.load(f)
                 if setup_data.get('complete'):
                     print("Already fully initialized. Nothing to do.")
