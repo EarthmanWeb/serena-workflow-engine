@@ -26,10 +26,16 @@ except ImportError as e:
 # Consecutive same-tool failures before injecting a warning
 FLAIL_THRESHOLD = 2
 
-# Authoritative signatures for Serena edit tools whose param names are commonly
-# guessed wrong (e.g. `pattern`/`repl` instead of `needle`/`mode`). When one of
-# these fails with a pydantic "Field required" / validation error, we inject the
-# correct call signature on the FIRST failure — no need to wait for flailing.
+# Prefix identifying Serena MCP tools. ANY tool under this prefix that fails with
+# a parameter-schema error gets the correction — no per-tool list to maintain, so
+# edit_memory, write_memory, replace_content, and any future Serena tool are all
+# covered automatically.
+SERENA_TOOL_PREFIX = 'mcp__plugin_swe_serena__'
+
+# Optional curated signatures — used ONLY as enrichment when the failing tool
+# happens to be listed. The generic catch above does the real work; these just
+# add precise param names for the most commonly-misused tools. Missing from this
+# map ≠ no correction — an unlisted Serena tool still gets the generic guidance.
 SERENA_EDIT_SIGNATURES = {
     'mcp__plugin_swe_serena__replace_content': (
         "replace_content(relative_path, needle, repl, mode) — ALL FOUR required.\n"
@@ -38,6 +44,18 @@ SERENA_EDIT_SIGNATURES = {
         "  • repl:          the replacement string (regex backrefs: $!1, $!2, …)\n"
         "  • mode:          \"literal\" or \"regex\"  (REQUIRED — no default)\n"
         "  • allow_multiple_occurrences: optional bool, default false"
+    ),
+    'mcp__plugin_swe_serena__edit_memory': (
+        "edit_memory(memory_name, needle, repl, mode) — needle/repl/mode all "
+        "required (NOT `pattern`). Same needle/repl/mode contract as "
+        "replace_content, but targets a memory by `memory_name` instead of a "
+        "file path. To overwrite a whole memory instead, use "
+        "write_memory(memory_name, content)."
+    ),
+    'mcp__plugin_swe_serena__write_memory': (
+        "write_memory(memory_name, content) — writes/overwrites the FULL memory "
+        "body. No needle/repl/mode. Use this (not edit_memory) when rewriting a "
+        "memory wholesale."
     ),
     'mcp__plugin_swe_serena__replace_symbol_body': (
         "replace_symbol_body(name_path, relative_path, body) — all three required.\n"
@@ -65,23 +83,33 @@ _SCHEMA_ERROR_MARKERS = (
 
 
 def schema_correction(tool_name: str, tool_error: str) -> str:
-    """Return a signature-correction string if this is a Serena edit-tool schema
-    failure, else empty string.
+    """Return a signature-correction string for ANY Serena tool that fails with a
+    parameter-schema error, else empty string.
+
+    Generic by design: keys off the Serena tool-name PREFIX + schema-error
+    markers, NOT a hardcoded tool list — so edit_memory, write_memory,
+    replace_content, and every future Serena tool are covered automatically.
+    A curated exact signature (SERENA_EDIT_SIGNATURES) is appended when available.
 
     Fires on the FIRST failure (before the flailing threshold) so the assistant
     re-calls with the right params immediately instead of guessing again.
     """
-    sig = SERENA_EDIT_SIGNATURES.get(tool_name)
-    if not sig:
+    if not tool_name.startswith(SERENA_TOOL_PREFIX):
         return ''
     err = str(tool_error).lower()
     if not any(marker in err for marker in _SCHEMA_ERROR_MARKERS):
         return ''
+
+    sig = SERENA_EDIT_SIGNATURES.get(tool_name)
+    if sig:
+        detail = f"Correct signature:\n\n{sig}\n\n"
+    else:
+        detail = ""
     return (
-        f"🔧 WRONG PARAMS for {tool_name}. Correct signature:\n\n{sig}\n\n"
-        f"Re-call now with these EXACT param names. Do not guess — if still "
-        f"unsure, fetch the live schema: "
-        f"ToolSearch(\"select:{tool_name}\")."
+        f"🔧 WRONG PARAMS for {tool_name} (schema validation failed).\n{detail}"
+        f"Do NOT guess param names — fetch the authoritative schema and re-call:\n"
+        f"  ToolSearch(\"select:{tool_name}\")\n"
+        f"Then call {tool_name} with the EXACT params from that schema."
     )
 
 

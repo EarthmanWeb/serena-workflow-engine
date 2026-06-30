@@ -89,14 +89,18 @@ Use Serena tools directly:
 
 ## Serena Edit Tool Signatures (use the EXACT param names)
 
-> **⚠️ MANDATORY — fetch the live schema before your FIRST Serena edit call this session.**
-> Before the first `replace_content` / `replace_symbol_body` / `insert_*` call, fetch the authoritative schema so you use the real param names:
+> **⚠️ MANDATORY — fetch the live schema before your FIRST Serena write/edit call this session.**
+> This applies to EVERY `mcp__plugin_swe_serena__*` tool that takes params — file edits (`replace_content`, `replace_symbol_body`, `insert_*`) AND memory tools (`edit_memory`, `write_memory`). They are deferred, so their schemas are NOT loaded until you fetch them — the #1 cause of guessing wrong params (e.g. `pattern` instead of `needle`, or omitting `mode`). Fetch the real schema first:
 >
 > ```
-> ToolSearch("select:mcp__plugin_swe_serena__replace_content")
+> ToolSearch("select:mcp__plugin_swe_serena__replace_content")   # or edit_memory, write_memory, …
 > ```
 >
-> (Serena edit tools are deferred — their schemas are NOT loaded until you fetch them, which is itself a common cause of guessing wrong params.) The reference below is a convenience cache; the fetched schema is the source of truth. If they ever disagree, trust the fetched schema and report the drift.
+> Key distinctions that trip people up:
+> - `edit_memory(memory_name, needle, repl, mode)` — same needle/repl/mode contract as `replace_content`, but targets a memory by name.
+> - `write_memory(memory_name, content)` — overwrites the WHOLE memory; no needle/repl/mode. Use this when rewriting a memory wholesale.
+>
+> The reference below is a convenience cache; the fetched schema is the source of truth. If they ever disagree, trust the fetched schema and report the drift. (A post-failure hook also auto-injects the correct signature for ANY Serena tool that fails a schema check — but fetch first so you don't waste the call.)
 
 Do not guess parameter names. Calling an edit tool with the wrong params (e.g. `pattern`/`repl` instead of `needle`/`mode`) fails validation and wastes a turn. The correct signatures:
 
