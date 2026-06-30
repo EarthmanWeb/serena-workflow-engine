@@ -22,6 +22,29 @@ Having a feature key in WM is not the same as having loaded the FEATURE_[KEY] me
 
 ---
 
+## ⛔ No Task Work in This State
+
+WF_CLASSIFY is for **classification and routing ONLY**. It is not an execution state. The edit gate (`swe_pre_edit_validate.py`) will BLOCK every Edit/Write/Serena-edit call while you are here — so doing task work now is wasted effort that you will have to redo after transitioning.
+
+**Allowed in WF_CLASSIFY** (classification inputs only):
+
+- `read_memory` for INDEX_FEATURES and the single primary `FEATURE_[KEY]` (Step 4)
+- Reading the user's request and any context already in WM
+- Lightweight `list_memories` / `Glob` strictly to detect specs (Steps 2d) or which feature is targeted
+
+**NOT allowed in WF_CLASSIFY — defer ALL of this to WF_EXECUTE (or WF_ARCH_REVIEW):**
+
+- ❌ Reading the **target source/doc file** you intend to change ("let me just look at the file first")
+- ❌ `find_symbol` / `get_symbols_overview` / `search_for_pattern` to scope the *edit*
+- ❌ Planning the exact change, drafting the diff, or deciding `needle`/`repl` values
+- ❌ Any `Edit`, `Write`, `replace_content`, `replace_symbol_body`, or other edit tool — these are **hard-blocked** here
+
+> Reading the file you're about to edit is task work, not classification. You do NOT need the file's contents to classify the task type or count the files touched — the user's request and the primary FEATURE memory are enough. Classify, route, transition, THEN open the file in WF_EXECUTE.
+
+If you catch yourself opening the target file or reaching for an edit tool: stop, finish routing, and transition first.
+
+---
+
 ## Steps
 
 ### 1. Clarity Check

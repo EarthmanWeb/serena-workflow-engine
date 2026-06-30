@@ -87,6 +87,51 @@ Use Serena tools directly:
 
 ---
 
+## Serena Edit Tool Signatures (use the EXACT param names)
+
+Do not guess parameter names. Calling an edit tool with the wrong params (e.g. `pattern`/`repl` instead of `needle`/`mode`) fails validation and wastes a turn. The correct signatures:
+
+### `replace_content` — text/regex replacement (preferred for non-symbol edits, e.g. Markdown, config, prose)
+
+| Param | Required | Notes |
+| ----- | -------- | ----- |
+| `relative_path` | ✅ | Path to the file |
+| `needle` | ✅ | The string OR regex to search for (NOT `pattern`) |
+| `repl` | ✅ | The replacement string (regex backrefs: `$!1`, `$!2`, …) |
+| `mode` | ✅ | `"literal"` or `"regex"` — REQUIRED, no default |
+| `allow_multiple_occurrences` | ❌ | Default `false`; set `true` to replace every match |
+
+```
+mcp__plugin_swe_serena__replace_content(
+    relative_path="memories/wf/WF_X.md",
+    needle="old text or regex",
+    repl="new text",
+    mode="literal",          # or "regex"
+)
+```
+
+> Common error: `2 validation errors … needle Field required … mode Field required`. That means you passed `pattern`/`repl` only. Re-call with `needle` + `repl` + `mode`. In `regex` mode, `needle` uses Python `re` syntax with DOTALL + MULTILINE; prefer `beginning.*?end` wildcards over quoting long spans.
+
+### `replace_symbol_body` — replace a whole symbol body (functions, classes, methods)
+
+| Param | Required | Notes |
+| ----- | -------- | ----- |
+| `name_path` | ✅ | Symbol path, e.g. `ClassName/method_name` |
+| `relative_path` | ✅ | File containing the symbol |
+| `body` | ✅ | The new symbol body (verbatim, correctly indented) |
+
+### `insert_before_symbol` / `insert_after_symbol`
+
+| Param | Required | Notes |
+| ----- | -------- | ----- |
+| `name_path` | ✅ | Anchor symbol |
+| `relative_path` | ✅ | File |
+| `body` | ✅ | Content to insert |
+
+**Tool choice:** code symbols → `replace_symbol_body` / `insert_*`; Markdown/config/prose or sub-symbol text → `replace_content` (or `Edit`). Only fall back to `Edit`/`Read` when symbols cannot be resolved (per CLAUDE_OBLIGATIONS).
+
+---
+
 ## Parallel Execution
 
 For tasks with independent subtasks, use Claude Code Agent tool:

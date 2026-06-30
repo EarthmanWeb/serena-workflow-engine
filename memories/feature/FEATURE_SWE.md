@@ -6,8 +6,9 @@
 - **Type:** plugin
 - **Language:** Python/Bash/JSON/Markdown
 - **Framework:** Claude Code Plugins
-- **Root Path:** `.claude/plugins/serena-workflow-engine`
-- **Last Updated:** 2026-05-06
+- **Root Path (SOURCE — edit here):** repo root. This repo IS the plugin source; `hooks/`, `memories/`, `skills/`, `commands/`, `state-machine/`, `scripts/`, `agents/` sit directly under the working-directory root. All Serena/Glob/Grep searches for plugin source must target the repo root, NOT `.claude/plugins/...`.
+- **Installed cache (DO NOT EDIT):** `.claude/plugins/serena-workflow-engine/` is the installed copy. Never write there — see the [Plugin Source Location] feedback memory.
+- **Last Updated:** 2026-06-30
 
 ## Architecture
 

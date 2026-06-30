@@ -42,6 +42,7 @@
       "allowWrite": false,
       "transitions": {
         "code_changes": "WF_ARCH_REVIEW",
+        "minor_patch": "WF_EXECUTE",
         "operational": "WF_EXECUTE",
         "research_needed": "WF_RESEARCH",
         "debug_needed": "WF_DEBUG_TDD",

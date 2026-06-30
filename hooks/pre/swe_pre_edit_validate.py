@@ -54,6 +54,33 @@ def _is_bypass_write_attempt(input_data):
     return '"bypass":true' in normalized
 
 
+def _block_message(current):
+    """Build the edit-block message, tailored to the blocking state.
+
+    WF_CLASSIFY is the common case: the assistant tried to edit the target file
+    before routing. The message explains WHY (classification-only state) and what
+    to do (finish routing, then transition) so it self-corrects instead of
+    retrying the same blocked edit.
+    """
+    if current == 'WF_CLASSIFY':
+        return (
+            "🛑 Edit blocked in WF_CLASSIFY — this is a classification/routing "
+            "state, not an execution state. No edits happen here.\n"
+            "You do NOT need to open or edit the target file to classify the task. "
+            "Finish routing first:\n"
+            "  1. Classify task type + count files touched (Step 3 / 3b)\n"
+            "  2. Load the primary FEATURE_[KEY] (Step 4)\n"
+            "  3. Transition: minor patch (≤5 files) → WF_EXECUTE; "
+            "new feature / >5 files → WF_ARCH_REVIEW\n"
+            "Then make the edit in WF_EXECUTE."
+        )
+    return (
+        f"🛑 Edit blocked in state {current}. Edits are only allowed in "
+        f"WF_EXECUTE / WF_DEBUG_TDD / WF_CHECKPOINT / WF_VERIFY. "
+        f"Transition to WF_EXECUTE first."
+    )
+
+
 def main():
     try:
         input_data = read_stdin_safe(timeout_seconds=2.0)
@@ -107,7 +134,7 @@ def main():
 
         # BLOCK: editing not allowed in this state
         output = HookOutput(event_name="PreToolUse")
-        output.block(f"🛑 Edit blocked in state {current}. Move to WF_EXECUTE first.")
+        output.block(_block_message(current))
         output.output_and_exit()
 
     except Exception as e:
