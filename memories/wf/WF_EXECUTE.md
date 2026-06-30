@@ -89,6 +89,15 @@ Use Serena tools directly:
 
 ## Serena Edit Tool Signatures (use the EXACT param names)
 
+> **⚠️ MANDATORY — fetch the live schema before your FIRST Serena edit call this session.**
+> Before the first `replace_content` / `replace_symbol_body` / `insert_*` call, fetch the authoritative schema so you use the real param names:
+>
+> ```
+> ToolSearch("select:mcp__plugin_swe_serena__replace_content")
+> ```
+>
+> (Serena edit tools are deferred — their schemas are NOT loaded until you fetch them, which is itself a common cause of guessing wrong params.) The reference below is a convenience cache; the fetched schema is the source of truth. If they ever disagree, trust the fetched schema and report the drift.
+
 Do not guess parameter names. Calling an edit tool with the wrong params (e.g. `pattern`/`repl` instead of `needle`/`mode`) fails validation and wastes a turn. The correct signatures:
 
 ### `replace_content` — text/regex replacement (preferred for non-symbol edits, e.g. Markdown, config, prose)
