@@ -4,8 +4,8 @@
 After a new memory is created via write_memory, checks if the memory name
 appears in MEMORY.md. If not, reminds the agent to add an index entry.
 
-Skips WM_* (session files), wf/* (workflow states), and claude/* (obligations)
-since these are not indexed in MEMORY.md.
+Skips WM_* (session files), wf/* (workflow states), claude/* (obligations),
+and spec/* | SPEC_* (specifications) since these are not indexed in MEMORY.md.
 """
 
 import os
@@ -21,8 +21,11 @@ try:
 except ImportError as e:
     swe_hooks.bootstrap.import_error_exit(e, "PostToolUse")
 
-# Memory prefixes that are never indexed in MEMORY.md
-SKIP_PREFIXES = ("WM_", "wf/", "claude/")
+# Memory prefixes that are never indexed in MEMORY.md.
+# spec/ and SPEC_ cover specification memories under both addressing styles
+# (topic path "spec/SPEC_FOO" and bare basename "SPEC_FOO") — specs are tracked
+# via list_memories(topic="spec"), not the MEMORY.md index.
+SKIP_PREFIXES = ("WM_", "wf/", "claude/", "spec/", "SPEC_")
 
 
 def find_memory_md(cwd):
