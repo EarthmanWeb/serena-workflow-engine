@@ -54,6 +54,24 @@ def _is_bypass_write_attempt(input_data):
     return '"bypass":true' in normalized
 
 
+def _is_raw_memory_write(input_data):
+    """True if a raw Edit/Write targets a Serena memory file.
+
+    Memory files under .serena/memory/ and .serena/memories/ must be edited
+    via Serena's write_memory/edit_memory tools (which keep frontmatter,
+    indexing hooks, and sync behavior intact) — never via raw Edit/Write.
+    Exception: session Working Memory (WM_*.md), which the harness/daemon
+    writes with the Write tool by design.
+    """
+    if input_data.get('tool_name', '') not in ('Edit', 'Write'):
+        return False
+    file_path = str((input_data.get('tool_input') or {}).get('file_path', ''))
+    norm = file_path.replace('\\', '/')
+    if '/.serena/memory/' not in norm and '/.serena/memories/' not in norm:
+        return False
+    return not os.path.basename(norm).startswith('WM_')
+
+
 def _block_message(current):
     """Build the edit-block message, tailored to the blocking state.
 
@@ -111,6 +129,22 @@ def main():
                 return
         except Exception:
             pass  # bypass check is best-effort; fall through to state gate
+
+        # Raw Edit/Write on Serena memory files: always denied (state-independent).
+        # Memories are edited via write_memory/edit_memory; WM_* files are exempt.
+        if _is_raw_memory_write(input_data):
+            output = HookOutput(event_name="PreToolUse")
+            output.block(
+                "🛑 BLOCKED: raw Edit/Write on a Serena memory file.\n"
+                "Files under .serena/memory(ies)/ must be modified via Serena's "
+                "memory tools:\n"
+                "  - mcp__plugin_swe_serena__edit_memory(memory_name, needle, repl, mode)\n"
+                "  - mcp__plugin_swe_serena__write_memory(memory_name, content)  # full rewrite\n"
+                "Address the memory by its logical name (e.g. \"feature/FEATURE_X\"), "
+                "not its file path."
+            )
+            output.output_and_exit()
+            return
 
         # Extract session ID for session isolation
         transcript_path = get_input_field(input_data, 'transcript_path', default='')

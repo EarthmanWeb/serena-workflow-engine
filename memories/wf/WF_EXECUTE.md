@@ -4,6 +4,13 @@
 
 ---
 
+## Tool Routing & Verify-Before-Assert
+
+- **Sanctioned tool first.** If a configured MCP tool covers the operation (e.g. `wp_cli` for WordPress/DB, `swe-wm` for Working Memory, Serena memory tools for `.serena` memories), use it — never a hand-rolled Bash equivalent (`docker exec ... wp`, raw `mysql`, `Write` into memory dirs). If the sanctioned tool errors, FIX its configuration (e.g. re-run `/swe-wp-cli-setup`) — a broken sanctioned path is a blocker to repair, not a license to work around it. Known workaround patterns are hard-denied by the Bash policy gate.
+- **Verify before assert.** Any factual claim about backend or environment state (DB contents, existing environments, container state, remote data) must be preceded by a verification call (`wp_cli`, `terminus`, `docker`, `sps_log`/QM) in the same turn. If you cannot verify, label the statement "unverified" or ask.
+
+---
+
 ## Feature Memory Verification
 
 Before starting work, confirm feature memories are loaded.

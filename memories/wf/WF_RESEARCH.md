@@ -4,6 +4,12 @@
 
 ---
 
+## Verify Before Assert
+
+Research findings ARE factual claims. Any statement about backend or environment state (DB contents, existing environments, container state, remote data) must be preceded by a verification call (`wp_cli`, `terminus`, `docker`, logs) in the same turn. If you cannot verify, label the finding "unverified" — never present plausible inference as fact.
+
+---
+
 ## For Questions/Exploration Without Code Changes
 
 ### Step 1: Check Knowledge Base First
