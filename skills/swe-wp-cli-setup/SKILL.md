@@ -55,7 +55,10 @@ PROD_GUARD=true
 LOCAL_CONTAINER=<slug>-devcontainer-1
 LOCAL_PATH=/workspaces/<workspace>/public_html
 LOCAL_WORKDIR=/workspaces/<workspace>
-REMOTE_SSH=user@host:port/path   # optional; omit for local-only
+# Production transport (optional; omit all for local-only). One of:
+REMOTE_SSH=user@host:port/path   # WP-CLI over SSH, OR
+TERMINUS_SITE=<pantheon-site>    # Pantheon over Terminus (takes precedence)
+TERMINUS_ENV=dev                 # default env for TERMINUS_SITE; per-call `env` overrides
 ```
 
 `NAME` is the site's **top-level folder name** — the string the LLM passes as
@@ -130,12 +133,22 @@ the conf (do not leave it to runtime resolution):
 > `public_html` + `wp-cli.yml`), NOT by taking the first `/workspaces/*` entry —
 > a container may mount more than one repo.
 
-### 3.3 Remote SSH (`REMOTE_SSH`) — optional
+### 3.3 Production transport (`REMOTE_SSH` or `TERMINUS_SITE`) — optional
 
-If `.devcontainer/.env` defines remote details (`SSH_USER`, `SSH_HOST`,
-`SSH_PORT`, `REMOTE_WP_PATH`), assemble the WP-CLI `--ssh` string:
-`[user@]host[:port][path]`. If absent, **omit** `REMOTE_SSH` — the site is
-local-only and `target="production"` will fail loudly (correct).
+A site's `target="production"` transport is chosen by which key the conf holds
+(`TERMINUS_SITE` takes precedence over `REMOTE_SSH`). Configure whichever the
+site uses; omit both for local-only (`target="production"` then fails loudly).
+
+- **WP-CLI over SSH** — if `.devcontainer/.env` defines remote details
+  (`SSH_USER`, `SSH_HOST`, `SSH_PORT`, `REMOTE_WP_PATH`), assemble the `--ssh`
+  string `[user@]host[:port][path]` into `REMOTE_SSH`.
+- **Pantheon over Terminus** — if the site deploys to Pantheon, set
+  `TERMINUS_SITE=<pantheon-site-machine-name>` and `TERMINUS_ENV=<default env>`
+  (e.g. `dev`). The tool runs `terminus remote:wp <SITE>.<ENV> -- <cmd>` on the
+  HOST (Terminus must be installed and authenticated on the host, not in the
+  container). The per-call `env` arg overrides `TERMINUS_ENV`. Look for the
+  Pantheon site name in project docs / test config (e.g. `env-config.json`) —
+  do not guess it.
 
 ---
 

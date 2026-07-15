@@ -2,8 +2,9 @@
 """WP-CLI MCP Server.
 
 Lightweight stdio MCP server (JSON-RPC 2.0, newline-delimited) exposing a single
-`wp_cli` tool that runs WP-CLI commands against a local Docker container or a
-remote host (over WP-CLI's --ssh), for any WordPress project.
+`wp_cli` tool that runs WP-CLI commands against a local Docker container, a
+remote host (over WP-CLI's --ssh), or a Pantheon/Terminus environment (over
+`terminus remote:wp`, run on the host), for any WordPress project.
 
 Stdlib only — no external dependencies. Mirrors the transport of wm_server.py.
 
@@ -60,13 +61,17 @@ TOOL_DEFINITIONS = [
         "name": "wp_cli",
         "description": (
             "Run a WP-CLI command against a configured WordPress site's local Docker "
-            "container (default) or its remote production host (over SSH). Configuration "
-            "is read from <project-root>/.serena/wp-cli.conf, which may define one or "
-            "MANY sites. Pass the WP-CLI command WITHOUT a leading 'wp' "
+            "container (default) or its remote production environment. Configuration is "
+            "read from <project-root>/.serena/wp-cli.conf, which may define one or MANY "
+            "sites. Pass the WP-CLI command WITHOUT a leading 'wp' "
             "(e.g. args='plugin list --status=active'). "
             "When the conf defines multiple sites, pass 'site' = the site's top-level "
             "folder name (e.g. 'convenely-pleasurehuntfestival-com'); omit it to use the "
             "configured DEFAULT_SITE or the sole site. "
+            "The production TRANSPORT is chosen by the site's conf: TERMINUS_SITE routes "
+            "over `terminus remote:wp` (run on the host, Pantheon/Terminus); otherwise "
+            "REMOTE_SSH routes over WP-CLI --ssh. For Terminus sites the environment is "
+            "TERMINUS_ENV (conf default) unless overridden per-call with the 'env' arg. "
             "On production, destructive commands (db reset/import, post/user delete, "
             "search-replace without --dry-run, plugin/theme delete, etc.) are blocked "
             "unless confirm=true and the guard is enabled."
@@ -85,8 +90,12 @@ TOOL_DEFINITIONS = [
                 "target": {
                     "type": "string",
                     "enum": ["local", "production"],
-                    "description": "Where to run. 'local' = Docker container (default). 'production' = remote host over WP-CLI --ssh.",
+                    "description": "Where to run. 'local' = Docker container (default). 'production' = remote environment; transport (Terminus vs WP-CLI --ssh) is chosen by the site's conf.",
                     "default": "local",
+                },
+                "env": {
+                    "type": "string",
+                    "description": "Terminus environment override (e.g. 'dev', 'test', 'live') for target='production' on a Terminus site. Omit to use the site's TERMINUS_ENV default. Ignored for SSH and local targets.",
                 },
                 "confirm": {
                     "type": "boolean",
@@ -271,15 +280,42 @@ def is_destructive(arg_tokens: List[str]) -> bool:
     return False
 
 
-def build_command(block: Dict[str, str], site_name: str, target: str, arg_tokens: List[str]) -> List[str]:
-    """Build the full docker exec argv for the requested target.
+def uses_terminus(block: Dict[str, str]) -> bool:
+    """Production transport for this site is Terminus iff TERMINUS_SITE is set."""
+    return bool(block.get("TERMINUS_SITE", "").strip())
 
-    local:      docker exec [-w WORKDIR] CONTAINER wp --path=PATH <args> --allow-root
-    production: docker exec CONTAINER wp --ssh=REMOTE_SSH <args> --allow-root
+
+def build_command(
+    block: Dict[str, str],
+    site_name: str,
+    target: str,
+    arg_tokens: List[str],
+    env: Optional[str] = None,
+) -> List[str]:
+    """Build the full argv for the requested target.
+
+    local:               docker exec [-w WORKDIR] CONTAINER wp --path=PATH <args> --allow-root
+    production (ssh):     docker exec CONTAINER wp --ssh=REMOTE_SSH <args> --allow-root
+    production (terminus): terminus remote:wp TERMINUS_SITE.<env> -- <args>
+
+    Terminus runs on the HOST (not via docker exec) and takes no --path/--allow-root.
+    The production transport is chosen by the site's conf: TERMINUS_SITE → Terminus,
+    else REMOTE_SSH → WP-CLI --ssh.
     """
-    container = require(block, "LOCAL_CONTAINER", site_name)
+    if target == "production" and uses_terminus(block):
+        terminus_site = require(block, "TERMINUS_SITE", site_name)
+        resolved_env = (env or block.get("TERMINUS_ENV", "")).strip()
+        if not resolved_env:
+            raise ConfigError(
+                f"No Terminus environment for [site:{site_name}]. Set TERMINUS_ENV in "
+                f"{CONF_RELATIVE_PATH} or pass env=<dev|test|live|...>."
+            )
+        cmd: List[str] = ["terminus", "remote:wp", f"{terminus_site}.{resolved_env}", "--"]
+        cmd += arg_tokens
+        return cmd
 
-    cmd: List[str] = ["docker", "exec"]
+    container = require(block, "LOCAL_CONTAINER", site_name)
+    cmd = ["docker", "exec"]
 
     if target == "production":
         remote_ssh = require(block, "REMOTE_SSH", site_name)
@@ -302,7 +338,7 @@ def build_command(block: Dict[str, str], site_name: str, target: str, arg_tokens
 # Tool implementation
 # ──────────────────────────────────────────────────────────────────
 
-def tool_wp_cli(args: str, site: Optional[str] = None, target: str = "local", confirm: bool = False) -> dict:
+def tool_wp_cli(args: str, site: Optional[str] = None, target: str = "local", env: Optional[str] = None, confirm: bool = False) -> dict:
     if target not in ("local", "production"):
         raise ValueError(f"Invalid target '{target}'. Use 'local' or 'production'.")
 
@@ -333,7 +369,7 @@ def tool_wp_cli(args: str, site: Optional[str] = None, target: str = "local", co
                 "target": target,
             }
 
-    full_cmd = build_command(block, resolved_name, target, arg_tokens)
+    full_cmd = build_command(block, resolved_name, target, arg_tokens, env)
 
     proc = subprocess.run(
         full_cmd,
@@ -344,6 +380,7 @@ def tool_wp_cli(args: str, site: Optional[str] = None, target: str = "local", co
     return {
         "site": resolved_name,
         "target": target,
+        "transport": "terminus" if (target == "production" and uses_terminus(block)) else ("ssh" if target == "production" else "local"),
         "command": " ".join(shlex.quote(c) for c in full_cmd),
         "exit_code": proc.returncode,
         "stdout": proc.stdout,

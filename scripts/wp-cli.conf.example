@@ -29,9 +29,20 @@ LOCAL_CONTAINER=my-site-devcontainer-1
 LOCAL_PATH=/workspaces/my-site/public_html
 # Optional working dir inside the container (so WP-CLI finds wp-cli.yml).
 LOCAL_WORKDIR=/workspaces/my-site
-# Optional remote production target. WP-CLI --ssh string: [user@]host[:port][path]
-# Omit for local-only sites — `target="production"` then fails loudly.
+# ── Optional remote production target ───────────────────────────────
+# The production TRANSPORT is chosen by which of these keys is present.
+# Omit both for local-only sites — `target="production"` then fails loudly.
+#
+# Transport A — WP-CLI over SSH. --ssh string: [user@]host[:port][path]
 REMOTE_SSH=user@host.example.com:18765/home/user/www/example.com/public_html
+#
+# Transport B — Pantheon over Terminus (`terminus remote:wp SITE.ENV -- ...`,
+# run on the HOST). If TERMINUS_SITE is set it takes precedence over REMOTE_SSH.
+# TERMINUS_SITE = the Pantheon site machine name.
+# TERMINUS_ENV  = default environment (dev|test|live|multidev); the wp_cli tool's
+#                 `env` arg overrides it per-call.
+# TERMINUS_SITE=my-pantheon-site
+# TERMINUS_ENV=dev
 
 # ── Additional sites (multi-repo workspaces) ────────────────────────
 # Add one [site:NAME] block per site. Example:
