@@ -23,4 +23,10 @@ if ! command -v uvx >/dev/null 2>&1; then
   exit 127
 fi
 
-exec uvx --from "$PACKAGE_SPEC" mcp-wp-cli-terminus
+# --refresh re-resolves the package on each start so a newly published release is
+# picked up without a manual `uv cache clean`. Set WP_CLI_MCP_NO_REFRESH=1 to skip
+# it (faster start, but may serve a cached older version until the cache expires).
+REFRESH="--refresh"
+[ -n "$WP_CLI_MCP_NO_REFRESH" ] && REFRESH=""
+
+exec uvx $REFRESH --from "$PACKAGE_SPEC" mcp-wp-cli-terminus
