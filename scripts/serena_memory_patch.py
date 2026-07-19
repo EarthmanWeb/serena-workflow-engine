@@ -16,14 +16,17 @@ Writes to new memories auto-resolve to the correct prefix directory.
 
 import sys
 
-from serena.project import MemoriesManager
+# Upstream (oraios) moved memory management out of serena.project.MemoriesManager
+# into serena.memories.memory_manager.MemoryManager, and renamed the existing-file
+# lookup _find_memory -> _find_existing_memory. Import the current class and method.
+from serena.memories.memory_manager import MemoryManager
 
-_original_find_memory = MemoriesManager._find_memory
-_original_get_memory_file_path = MemoriesManager.get_memory_file_path
-_original_load_memory = MemoriesManager.load_memory
-_original_save_memory = MemoriesManager.save_memory
-_original_delete_memory = MemoriesManager.delete_memory
-_original_move_memory = MemoriesManager.move_memory
+_original_find_memory = MemoryManager._find_existing_memory
+_original_get_memory_file_path = MemoryManager.get_memory_file_path
+_original_load_memory = MemoryManager.load_memory
+_original_save_memory = MemoryManager.save_memory
+_original_delete_memory = MemoryManager.delete_memory
+_original_move_memory = MemoryManager.move_memory
 
 
 # Prefixes whose files live flat in .serena/memories/ (not in swe/ subfolders)
@@ -101,7 +104,7 @@ def _patched_find_memory(self, name):
 
 def _patched_get_memory_file_path(self, name):
     # If memory already exists somewhere, update in-place
-    existing = self._find_memory(name)
+    existing = self._find_existing_memory(name)
     if existing is not None:
         return existing
 
@@ -160,12 +163,12 @@ def _patched_move_memory(self, old_name, new_name, is_tool_context=False):
     return _original_move_memory(self, normalized_old, normalized_new, is_tool_context)
 
 
-MemoriesManager._find_memory = _patched_find_memory
-MemoriesManager.get_memory_file_path = _patched_get_memory_file_path
-MemoriesManager.load_memory = _patched_load_memory
-MemoriesManager.save_memory = _patched_save_memory
-MemoriesManager.delete_memory = _patched_delete_memory
-MemoriesManager.move_memory = _patched_move_memory
+MemoryManager._find_existing_memory = _patched_find_memory
+MemoryManager.get_memory_file_path = _patched_get_memory_file_path
+MemoryManager.load_memory = _patched_load_memory
+MemoryManager.save_memory = _patched_save_memory
+MemoryManager.delete_memory = _patched_delete_memory
+MemoryManager.move_memory = _patched_move_memory
 
 # Delegate to Serena CLI with start-mcp-server prepended
 sys.argv = ["serena", "start-mcp-server"] + sys.argv[1:]
