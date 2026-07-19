@@ -2,6 +2,30 @@
 
 ---
 
+## Finding memories (quick reference)
+
+Consult memories before grepping the filesystem. To find one:
+- `list_memories(topic="<prefix>")` — list a directory prefix, e.g. `ref`, `feature` (prefix filter, not a keyword).
+- `search_memories_by_name(query)` — find a memory by a keyword in its name (fuzzy fallback).
+- `search_memories_by_front_matter(query)` — find a memory by what it is about (its front-matter description/type).
+- `read_memory(name)` — read one you have the name for.
+
+When you create a memory (`write_memory`), start it with the standard front-matter block so it stays
+discoverable, then the body:
+
+```
+---
+name: <short title>
+description: <one sentence: what this memory is about>
+metadata:
+  type: <derived from the directory prefix — ref→reference, feedback→feedback, feature→feature, dom→domain, project→project, …>
+---
+```
+
+Run `/swe-memory-frontmatter` to audit/backfill front-matter across existing memories.
+
+---
+
 ## Spawned Agent Bypass
 
 Check if you are a spawned agent before initializing. Your initial prompt contains any of:

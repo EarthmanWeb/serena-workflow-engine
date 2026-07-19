@@ -12,8 +12,14 @@ Also corrects wrong prefixes:
 The prefix is derived from the first segment before '_', lowercased.
 Falls back to flat file lookup if prefix directory doesn't contain the file.
 Writes to new memories auto-resolve to the correct prefix directory.
+
+Also guarantees standard YAML front matter on save (structure + directory-derived
+metadata.type), so memories stay discoverable via search_memories_by_front_matter. The
+LLM still authors name/description (WriteMemoryTool docstring + WF_INIT); this makes the
+block and its type a hard guarantee. WM_/wf/claude/lite memories are exempt.
 """
 
+import re
 import sys
 
 # Upstream (oraios) moved memory management out of serena.project.MemoriesManager
@@ -32,6 +38,28 @@ _original_move_memory = MemoryManager.move_memory
 # Prefixes whose files live flat in .serena/memories/ (not in swe/ subfolders)
 _MEMORIES_DIR_PREFIXES = frozenset(["wm", "lite"])
 
+# Directory prefix -> front-matter metadata.type. Mirrors the mapping documented in the
+# /swe-memory-frontmatter skill. A prefix not listed here uses itself as the type.
+_PREFIX_TO_TYPE = {
+    "ref": "reference",
+    "feedback": "feedback",
+    "project": "project",
+    "feature": "feature",
+    "dom": "domain",
+    "sys": "system",
+    "arch": "architecture",
+    "spec": "spec",
+    "report": "report",
+    "research": "research",
+    "content": "content",
+    "wf": "workflow",
+}
+
+# Memories that must NOT be auto-front-mattered on save: ephemeral working memory and the
+# read-only workflow/obligation memories (WM_* live flat; wf/ and claude/ are read-only).
+_NO_FRONTMATTER_PREFIXES = frozenset(["wm", "lite", "wf", "claude"])
+
+
 def _derive_prefix(name):
     """Derive the directory prefix from a memory name convention.
 
@@ -44,6 +72,58 @@ def _derive_prefix(name):
     if "_" not in base or base.startswith("_"):
         return None
     return base.split("_")[0].lower()
+
+
+def _derive_type(name):
+    """Map a memory name's directory prefix to its front-matter metadata.type."""
+    prefix = _derive_prefix(name)
+    if prefix is None:
+        return None
+    return _PREFIX_TO_TYPE.get(prefix, prefix)
+
+
+def _ensure_front_matter(name, content):
+    """Guarantee ``content`` starts with a standard front-matter block.
+
+    Belt-and-suspenders half of the front-matter policy: the LLM is instructed (WriteMemoryTool
+    docstring + WF_INIT) to author ``name``/``description``; this makes the *structure* and the
+    directory-derived ``metadata.type`` a hard guarantee regardless.
+
+    - No front matter -> inject a block (name from the H1/base name, a placeholder description the
+      author/backfill skill can improve, and the derived type).
+    - Existing front matter -> leave the author's name/description untouched, but ensure a
+      ``metadata:``/``type`` reflecting the directory is present (add it if missing). Never rewrites
+      an author-provided description.
+
+    Returns the (possibly unchanged) content.
+    """
+    mtype = _derive_type(name)
+    if mtype is None:
+        return content  # can't classify (e.g. MEMORY) — leave as-is
+
+    if content.startswith("---"):
+        # Existing block: only guarantee a type is present; do not touch name/description.
+        head, sep, _body = content.partition("\n---")
+        if not sep:
+            return content  # malformed/unterminated — don't risk mangling it
+        if re.search(r"(?m)^\s*type\s*:", head):
+            return content  # some type already declared (flat or nested) — respect it
+        # No type anywhere in the block: append a nested metadata.type before the closing fence.
+        return f"{head}\nmetadata:\n  type: {mtype}\n---{content[len(head) + len(sep):]}"
+
+    # No front matter at all: derive a name and inject a full block above the existing content.
+    base = name.replace(".md", "").split("/")[-1]
+    h1 = re.match(r"\s*#\s+(.+)", content)
+    derived_name = h1.group(1).strip() if h1 else base
+    block = (
+        "---\n"
+        f"name: {derived_name}\n"
+        "description: TODO — one sentence describing what this memory is about.\n"
+        "metadata:\n"
+        f"  type: {mtype}\n"
+        "---\n\n"
+    )
+    return block + content
 
 
 def _normalize_name(name):
@@ -141,8 +221,11 @@ def _patched_load_memory(self, name):
 
 
 def _patched_save_memory(self, name, content, is_tool_context=False):
-    """Normalize name before writing."""
+    """Normalize name before writing, and guarantee standard front matter on the content."""
     normalized = _normalize_name(name)
+    prefix = _derive_prefix(normalized)
+    if prefix not in _NO_FRONTMATTER_PREFIXES:
+        content = _ensure_front_matter(normalized, content)
     return _original_save_memory(self, normalized, content, is_tool_context)
 
 
