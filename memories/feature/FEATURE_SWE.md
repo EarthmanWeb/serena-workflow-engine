@@ -307,11 +307,13 @@ are NOT triggers; only the explicit command works.
 1. User says "yes" → `swe-bootstrap.py` runs inline (via UserPromptSubmit hook)
 2. Bootstrap creates: `.serena/`, `.serena/swe/`, `.serena/memories/`, `.serena/.gitignore`, `project.yml`, `memory-paths.conf`, `CLAUDE_PREFIX.md` injection, rendered template memories (with `{{placeholders}}` filled from detected project info), `swe-setup-complete.json` with `bootstrapped: true`
 3. Init gate is **unblocked** (gate checks `complete` field; bootstrapped-but-not-complete passes through)
-4. User runs `/swe-init` which launches the init agent (9 tasks):
+4. User runs `/swe-init` which launches the init agent (11 tasks):
    - Detect environment + resolve plugin root
+   - **Auto-memory symlink (FIRST)** — redirect Claude Code auto-memory into `.serena/memory/` before any memory is written, so init-time memories land in the right place
    - Run bootstrap (if not already done)
    - Verify MCP servers (Serena, swe-wm)
-   - Serena onboarding
+   - Serena onboarding (+ migrate default memories into SWE templates)
+   - Relocate & link the `memory_maintenance` memory into `ref/REF_MEMORY_MAINTENANCE`
    - Verify and install language servers
    - Verify SWE plugin is enabled
    - Review CLAUDE.md for conflicts
@@ -338,23 +340,24 @@ New Project → No setup file
 
 ### .gitignore Additions (via bootstrap)
 
-**`.serena/.gitignore`** (auto-created inside `.serena/`):
+**`.serena/.gitignore`** (auto-created inside `.serena/`, only if absent). Default set (paths relative to `.serena/`):
 ```
-streams/
-memories/WM_*.md
-memories/LITE_MODE_*.md
-swe-state/
-swe-bypass.json
-swe-setup-complete.json
+/cache
+/streams
+/memories
+/swe-setup-complete
 ```
+`/memories` blanket-ignores the plural session-WM dir (`.serena/memories/`, holds `WM_*.md`); committed typed feature memories live in the **singular** `.serena/memory/` and are NOT matched. Source: `ensure_serena_gitignore()` in `scripts/swe-bootstrap.py`.
 
-**Project root `.gitignore`** (appended):
+**Project root `.gitignore`** (appended by `update_gitignore()`, guarded by the `!.serena/memory/` marker):
 ```
 .serena/swe-bypass.json
 .serena/swe-setup-complete.json
 .serena/swe-state/
-!.serena/swe/
-!.serena/swe/**/*.md
+
+# Override global .serena/* ignore — un-ignore project memories
+!.serena/memory/
+!.serena/memory/**/*.md
 !.serena/memories/
 !.serena/memories/**/*.md
 .serena/memories/WM_*.md

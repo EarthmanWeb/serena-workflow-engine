@@ -732,24 +732,9 @@ def ensure_serena_gitignore(project_root):
         return False
 
     content = """/cache
-
-# Stream data (ephemeral, session-specific)
-streams/
-
-# Working memory files (session-specific, ephemeral)
-memories/WM_*.md
-memories/LITE_MODE_*.md
-
-# SWE runtime state
-swe-state/
-swe-bypass.json
-swe-setup-complete.json
-
-# Keep everything else (feature memories, specs, etc.)
-!memory/
-!memory/**/*.md
-!memories/
-!/memory-paths.conf
+/streams
+/memories
+/swe-setup-complete
 """
     with open(gitignore_path, 'w') as f:
         f.write(content)

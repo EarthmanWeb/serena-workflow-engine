@@ -49,6 +49,20 @@ mcp__plugin_swe_serena__write_memory("MEMORY_NAME", "content")
 mcp__plugin_swe_serena__edit_memory("MEMORY_NAME", "old", "new", "literal")
 ```
 
+### 3b. Keep MEMORY.md a Terse Index
+
+`MEMORY.md` is an INDEX loaded into context every session — keep it lean (aim for
+**< 200 lines**). When a new memory needs an index entry:
+
+- Add exactly **one line**: `- [Title](path) — short hook` (**≤ 200 chars**).
+- Put the detail in the linked topic file, NOT in MEMORY.md. Never paste a summary.
+- Group entries under a few category headers — do **not** add a `##` section per memory.
+- Do **not** index `spec/`, `report/`, `research/`, or `project/` memories — those are
+  browsed with `list_memories(topic="…")`, never listed in MEMORY.md.
+
+The `write_memory` PostToolUse hook warns when MEMORY.md exceeds its size budget, an
+entry is over-long, or a non-indexed category leaked in. Trim on the warning.
+
 ### 4. Confirm to User
 
 "Updated [MEMORY_NAME] with: [brief description]"

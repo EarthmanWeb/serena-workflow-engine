@@ -26,7 +26,7 @@ First resolve SWE_PLUGIN_ROOT by checking these paths in order (use the first th
 2. ~/.claude/plugins/marketplaces/EarthmanWeb (marketplace install)
 3. Latest version dir in ~/.claude/plugins/cache/EarthmanWeb/swe/ (cache)
 
-Then read $SWE_PLUGIN_ROOT/agents/swe-init-agent.md and execute ALL tasks (1-10), then run all 7 verifications.
+Then read $SWE_PLUGIN_ROOT/agents/swe-init-agent.md and execute ALL tasks (1-11), then run all 7 verifications.
 
 Only create swe-setup-complete.json after ALL verifications pass.
 Output the completion summary at the end.`

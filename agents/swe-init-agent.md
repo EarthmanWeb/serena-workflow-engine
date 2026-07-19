@@ -15,14 +15,16 @@ Autonomous agent for initializing the SWE plugin. Completes all setup tasks and 
 ## Capabilities
 
 1. **Environment Detection** - Check project state, git, resolve plugin root
-2. **Prerequisite Check** - Run bootstrap if project not yet bootstrapped
-3. **MCP Verification** - Test Serena and swe-wm MCP servers respond
-4. **Serena Onboarding** - Run one-time Serena setup + migrate default memories into SWE templates
-5. **LSP Verification** - Verify and install language servers
-6. **Plugin Verification** - Verify SWE plugin is enabled
-7. **CLAUDE.md Review** - Remove conflicting workflow commands
-8. **VSCode Extension** - Install Serena Log Viewer
-9. **Finalization** - Mark setup complete
+2. **Auto-Memory Symlink** - Redirect Claude Code auto-memory into `.serena/memory/` **first**, so every memory written during the rest of init lands in the right place
+3. **Prerequisite Check** - Run bootstrap if project not yet bootstrapped
+4. **MCP Verification** - Test Serena and swe-wm MCP servers respond
+5. **Serena Onboarding** - Run one-time Serena setup + migrate default memories into SWE templates
+6. **Memory Maintenance** - Relocate Serena's `memory_maintenance` memory into the typed `ref/` folder + link it from MEMORY.md
+7. **LSP Verification** - Verify and install language servers
+8. **Plugin Verification** - Verify SWE plugin is enabled
+9. **CLAUDE.md Review** - Remove conflicting workflow commands
+10. **VSCode Extension** - Install Serena Log Viewer
+11. **Finalization** - Mark setup complete
 
 ## Agent Spawn
 
@@ -36,7 +38,9 @@ Task({
 
 ## TASKS
 
-Execute ALL tasks (1-10) in order, then run verifications.
+Execute ALL tasks (1-11) in order, then run verifications.
+
+> **Ordering note:** The auto-memory symlink (Task 2) runs **before** bootstrap and Serena onboarding. This is deliberate — once the symlink is in place, every memory written during the rest of init (bootstrap templates, Serena onboarding defaults, `memory_maintenance`, anything Claude Code auto-writes) lands in the project's `.serena/memory/` instead of the orphaned real auto-memory directory. Do not reorder it later in the sequence.
 
 ### Task 1: Detect Environment and Resolve Plugin Root
 
@@ -82,7 +86,25 @@ echo "Version: $(jq -r '.version' "$SWE_PLUGIN_ROOT/.claude-plugin/plugin.json")
 
 **IMPORTANT:** Use `$SWE_PLUGIN_ROOT` in ALL subsequent tasks instead of hardcoded paths. Store it for the session.
 
-### Task 2: Check Prerequisites and Bootstrap
+### Task 2: Auto-Memory Symlink (FIRST — before any memory is written)
+
+Run `/swe-symlink-memory` **now**, before bootstrap or onboarding. Establishing the symlink first guarantees that every memory written during the remaining init tasks lands in the project's `.serena/memory/` — not in the orphaned real auto-memory directory. If this ran last (as it used to), memories created by bootstrap templates and Serena onboarding would be written to the un-symlinked directory and lost.
+
+`/swe-symlink-memory` is self-contained and safe to run this early:
+
+- Step 2 does `mkdir -p "$SERENA_MEMORY_DIR"`, so the target exists even before bootstrap creates it.
+- Step 3 migrates and reorganizes any pre-existing flat auto-memory files into typed subdirectories:
+  - `feedback_*.md` → `feedback/FEEDBACK_*.md`
+  - `user_*.md` → `user/USER_*.md`
+  - `project_*.md` → `project/PROJECT_*.md`
+  - `reference_*.md` → `ref/REF_*.md`
+  - `SPEC_*.md` → `spec/SPEC_*.md`
+- Step 4 creates the symlink `~/.claude/projects/<encoded>/memory` → `.serena/memory/`.
+- Step 5 appends `./.serena/memory` to `memory-paths.conf` if present; if `memory-paths.conf` does not exist yet (bootstrap creates it in Task 3), it prints a non-fatal warning — that is expected at this stage and bootstrap will create the file next.
+
+See [commands/swe-symlink-memory.md](../commands/swe-symlink-memory.md) for full steps.
+
+### Task 3: Check Prerequisites and Bootstrap
 
 **Requires `$SWE_PLUGIN_ROOT` from Task 1.** Check if the project has been bootstrapped. If not, run the bootstrap script.
 
@@ -135,7 +157,7 @@ If any `{{variable}}` placeholders remain, they couldn't be auto-detected. Fill 
 3. Replace the placeholder with the actual value
 4. Report which values were filled manually vs auto-detected
 
-### Task 3: Verify MCP Servers
+### Task 4: Verify MCP Servers
 
 Test that the SWE plugin's MCP servers respond:
 
@@ -144,9 +166,9 @@ Test that the SWE plugin's MCP servers respond:
 
 If any fail, report which ones and stop — these are required for the plugin to function.
 
-**WordPress projects only — wp-cli MCP config:** If the project is a WordPress project with a `.devcontainer/` directory, the bootstrap (Task 2) auto-creates `.serena/wp-cli.conf`. Confirm it exists and that `LOCAL_CONTAINER`/`LOCAL_PATH` point at the real container/path (run `docker ps` to confirm the container name). If `REMOTE_SSH` was left as a placeholder (`user@host.example.com`), note that the user must fill in real production SSH details before `target="production"` works. The `wp-cli` MCP server itself is optional — a missing/placeholder config does not block init.
+**WordPress projects only — wp-cli MCP config:** If the project is a WordPress project with a `.devcontainer/` directory, the bootstrap (Task 3) auto-creates `.serena/wp-cli.conf`. Confirm it exists and that `LOCAL_CONTAINER`/`LOCAL_PATH` point at the real container/path (run `docker ps` to confirm the container name). If `REMOTE_SSH` was left as a placeholder (`user@host.example.com`), note that the user must fill in real production SSH details before `target="production"` works. The `wp-cli` MCP server itself is optional — a missing/placeholder config does not block init.
 
-### Task 4: Serena Onboarding
+### Task 5: Serena Onboarding
 
 ```javascript
 const status = await mcp__plugin_swe_serena__check_onboarding_performed();
@@ -155,9 +177,9 @@ if (!status.performed) {
 }
 ```
 
-### Task 4b: Migrate Serena Default Memories Into SWE Templates
+### Task 5b: Migrate Serena Default Memories Into SWE Templates
 
-Serena's onboarding (Task 4) creates four memories in its own naming convention:
+Serena's onboarding (Task 5) creates four memories in its own naming convention:
 - `project/project_overview`
 - `style/style_conventions`
 - `suggested/suggested_commands`
@@ -219,7 +241,76 @@ done
 
 **Note:** Uses `rmdir` (not `rm -rf`) so only truly empty folders are removed. If a folder has other files, it's left intact.
 
-### Task 5: Verify and Install Language Servers
+### Task 6: Copy the Memory Maintenance Memory Into the Local Memory System
+
+Serena ships a built-in **memory-maintenance** guide (`memory_maintenance`) describing the discovery model, memory style, add/update threshold, and maintenance actions. It is NOT reliably materialized as a project-local file: `ensure_memory_maintenance_memory()` returns `global/memory_maintenance` **without creating a project copy** when a global copy exists, and even when it does seed a project copy, that copy is flat and un-indexed. This task **copies the guide's content into this project's local memory system** as a typed `ref/REF_MEMORY_MAINTENANCE` memory and **links it from MEMORY.md** — so it is committed with the repo and discoverable, regardless of Serena's global/project precedence.
+
+Never overwrite an existing copy: if `.serena/memory/ref/REF_MEMORY_MAINTENANCE.md` already exists, skip the write (Steps 1–2) but STILL ensure the MEMORY.md link (Step 3).
+
+**Step 1: Obtain the memory-maintenance content.**
+
+Prefer the shipped Serena resource so the copy is deterministic. Fall back to whatever Serena seeded during onboarding (Task 5) if the resource path is not resolvable:
+
+```bash
+# Serena package resource (canonical source of the guide)
+RES="$(python3 -c "import serena, os; print(os.path.join(os.path.dirname(serena.__file__), 'resources', 'memory_maintenance.md'))" 2>/dev/null)"
+if [ -n "$RES" ] && [ -f "$RES" ]; then
+  echo "Source: shipped resource $RES"
+  cat "$RES"
+else
+  # Fallback: the copy Serena's onboarding (Task 5) may have seeded into the project memory dir
+  echo "Resource not resolvable — falling back to project-seeded memory_maintenance (if any)"
+  cat .serena/memory/memory_maintenance.md 2>/dev/null || echo "(none found — read the 'memory_maintenance' Serena memory instead)"
+fi
+```
+
+If neither source yields content, read Serena's memory directly and use that text:
+
+```javascript
+const maint = await mcp__plugin_swe_serena__read_memory({ memory_name: "memory_maintenance" });
+```
+
+**Step 2: Write it into the local memory system as `ref/REF_MEMORY_MAINTENANCE` (sanctioned tool).**
+
+Use the Serena memory tool — NOT a raw file move — so the memory is registered in the project's memory system. Prepend the standard SWE front-matter, then the guide content from Step 1 (strip any Serena front-matter it already carried so there is exactly one block):
+
+```javascript
+await mcp__plugin_swe_serena__write_memory({
+  memory_name: "ref/REF_MEMORY_MAINTENANCE",
+  content: `---
+name: Memory Maintenance
+description: How memories should be created and maintained in this project — discovery model, style, add/update threshold, maintenance actions
+metadata:
+  type: reference
+---
+
+<contents of the memory_maintenance guide from Step 1, verbatim>`
+});
+```
+
+If Serena's onboarding seeded a flat `memory_maintenance` memory into `.serena/memory/memory_maintenance.md`, delete it after the typed copy is written so it isn't duplicated:
+
+```bash
+[ -f ".serena/memory/ref/REF_MEMORY_MAINTENANCE.md" ] && rm -f ".serena/memory/memory_maintenance.md"
+```
+
+**Step 3: Ensure a MEMORY.md index link (required — not optional).**
+
+MEMORY.md MUST link to the memory. Add a one-line entry under the `## Memory Types` (or equivalent) section of `.serena/memory/MEMORY.md`, only if `REF_MEMORY_MAINTENANCE` is not already linked:
+
+```
+- [Memory Maintenance](ref/REF_MEMORY_MAINTENANCE.md) — how memories are created & maintained (discovery model, style, add/update threshold, maintenance actions)
+```
+
+Verify the link is present before finishing this task:
+
+```bash
+grep -q 'REF_MEMORY_MAINTENANCE' .serena/memory/MEMORY.md \
+  && echo "✅ MEMORY.md links REF_MEMORY_MAINTENANCE" \
+  || echo "❌ MEMORY.md missing REF_MEMORY_MAINTENANCE link — add it"
+```
+
+### Task 7: Verify and Install Language Servers
 
 **Check which LSP servers are available for languages configured in project.yml.**
 
@@ -307,7 +398,7 @@ Install missing LSP servers automatically. If any fail to install, log the failu
 
 **Note:** Uses `zsh` (not bash) for macOS compatibility. macOS ships bash 3.x which lacks associative arrays.
 
-### Task 6: Verify SWE Plugin is Enabled
+### Task 8: Verify SWE Plugin is Enabled
 
 **SWE hooks load directly from the plugin folder — no copying needed.**
 
@@ -337,7 +428,7 @@ else
 fi
 ```
 
-### Task 7: Review CLAUDE.md for Conflicting Workflow Commands
+### Task 9: Review CLAUDE.md for Conflicting Workflow Commands
 
 **Check CLAUDE.md for any workflow/session start instructions that conflict with SWE.**
 
@@ -364,7 +455,7 @@ fi
 
 If conflicts found, edit CLAUDE.md to remove the conflicting sections. SWE's SessionStart hook handles all workflow initialization.
 
-### Task 8: Install Serena Log Viewer VSCode Extension
+### Task 10: Install Serena Log Viewer VSCode Extension
 
 **Install the VSCode extension that surfaces Serena logs in the Output panel.**
 
@@ -396,26 +487,7 @@ fi
 
 This creates a symlink from `~/.vscode/extensions/serena-log-viewer` to the extension source in the plugin directory. The extension tails `~/.serena/logs/<date>/mcp_*.txt` and displays them in the VSCode Output panel under "SWE: Serena Logs".
 
-### Task 9: Auto-Memory Symlink
-
-Run `/swe-symlink-memory` to set up the auto-memory symlink. This command handles:
-
-- **Migrating and reorganizing** existing auto-memory files into `.serena/memory/` with proper subdirectory structure:
-  - `feedback_*.md` → `feedback/FEEDBACK_*.md`
-  - `user_*.md` → `user/USER_*.md`
-  - `project_*.md` → `project/PROJECT_*.md`
-  - `reference_*.md` → `ref/REF_*.md`
-  - `SPEC_*.md` → `spec/SPEC_*.md`
-- **Merging MEMORY.md** index entries (appends unique entries with updated paths, never overwrites)
-- Creating the symlink from `~/.claude/projects/<encoded>/memory` to `.serena/memory/`
-- Updating `memory-paths.conf`
-- Adding CLAUDE.md directives
-
-**Note:** The bootstrap script (`swe-bootstrap.py` Task 2) also runs migration before copying templates, so files are reorganized even if this task runs later.
-
-See [commands/swe-symlink-memory.md](../commands/swe-symlink-memory.md) for full steps.
-
-### Task 10: Finalize Setup
+### Task 11: Finalize Setup
 
 Mark setup as complete. Only run after all previous tasks pass.
 

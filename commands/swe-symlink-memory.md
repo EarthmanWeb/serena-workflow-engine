@@ -9,7 +9,7 @@ Replace Claude Code's auto-memory directory with a symlink pointing to the proje
 
 ## When to Run
 
-- During `/swe-init` (included as Task 10)
+- During `/swe-init` (Task 2 — runs FIRST, before bootstrap and onboarding, so memories written during init land in `.serena/memory/`)
 - Standalone after cloning a repo that already uses SWE
 - When setting up a new machine for an existing SWE project
 
