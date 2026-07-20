@@ -25,7 +25,8 @@ try:
     from swe_hooks.core.config import (
         load_setup_complete, resolve_setup_state, BYPASS_NOTICE,
         get_most_recent_working_memory, get_working_memory_filename,
-        read_working_memory_state, get_paths
+        read_working_memory_state, get_paths,
+        resolve_installed_plugin, resolve_plugin_root,
     )
     from swe_hooks.core.state_manager import StateManager
 except ImportError as e:
@@ -398,27 +399,58 @@ The workflow will not block you while you decide."""
         # This ensures the init_gate can block tools until WF_INIT is read
         # WM creation happens in WF_INIT workflow instructions
 
-        # Read plugin version from plugin.json
-        plugin_version = "unknown"
-        plugin_root = os.environ.get('CLAUDE_PLUGIN_ROOT', '')
-        if plugin_root:
-            plugin_json = os.path.join(plugin_root, '.claude-plugin', 'plugin.json')
-        else:
-            # Derive from this file's location: session/ -> hooks/ -> plugin root
-            plugin_json = os.path.join(
-                os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-                '.claude-plugin', 'plugin.json'
-            )
+        # Resolve the AUTHORITATIVE version this session is actually running:
+        # installed_plugins.json is the source of truth (follows in-place updates,
+        # unlike the launch-time CLAUDE_PLUGIN_ROOT). This is the version whose
+        # hooks/memories the session loads — so it is what the banner must show.
+        def _read_plugin_json_version(root):
+            if not root:
+                return ""
+            pj = os.path.join(root, '.claude-plugin', 'plugin.json')
+            try:
+                with open(pj) as f:
+                    return json.load(f).get('version', '')
+            except (IOError, json.JSONDecodeError):
+                return ""
+
+        # 1. Running/installed version (authoritative).
+        _, installed_version = resolve_installed_plugin()
+        if not installed_version:
+            # Dev checkout / no manifest — fall back to plugin.json at the
+            # resolved root, else this file's derived root.
+            installed_version = _read_plugin_json_version(resolve_plugin_root()) or \
+                _read_plugin_json_version(os.path.dirname(os.path.dirname(
+                    os.path.dirname(os.path.abspath(__file__)))))
+        plugin_version = installed_version or "unknown"
+
+        # 2. Available version from the marketplace clone (what the NEXT session
+        # would auto-update to). If newer than what is running, surface it so the
+        # divergence is never silent — the "am I on the latest?" question.
+        available_version = ""
         try:
-            with open(plugin_json) as f:
-                plugin_version = json.load(f).get('version', 'unknown')
-        except (IOError, json.JSONDecodeError):
+            plugins_dir = os.path.join(os.path.expanduser('~'), '.claude', 'plugins')
+            mp_clone = os.path.join(plugins_dir, 'marketplaces', 'EarthmanWeb')
+            available_version = _read_plugin_json_version(mp_clone)
+        except Exception:
             pass
+
+        def _vtuple(v):
+            try:
+                return tuple(int(p) for p in str(v).split('.'))
+            except (ValueError, AttributeError):
+                return (0,)
 
         update_line = ""
         if updated:
             plugin_version = new_ver or plugin_version
-            update_line = f"\n🔄 Auto-updated: v{old_ver} → v{new_ver}"
+            update_line += f"\n🔄 Auto-updated: v{old_ver} → v{new_ver}"
+        # Confirm the running version came from the authoritative manifest.
+        update_line += f"\n✅ Running installed v{plugin_version}"
+        # Flag a newer available version (only when NOT just auto-updated to it).
+        if available_version and available_version != plugin_version and \
+                _vtuple(available_version) > _vtuple(plugin_version):
+            update_line += (f"\n⬆️  Update available: v{available_version} "
+                            f"(restart session to load)")
         if reaped_daemons:
             update_line += f"\n🧹 Reaped {len(reaped_daemons)} outdated daemon(s): {', '.join(str(p) for p in reaped_daemons)}"
 

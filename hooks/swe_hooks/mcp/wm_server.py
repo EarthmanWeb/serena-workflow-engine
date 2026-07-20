@@ -357,12 +357,14 @@ def tool_swe_wm_update_section(
     # Persist key fields to JSON state file (authoritative)
     _sync_section_to_state_file(session_id, section, content)
 
+    action = "appended" if append else "replaced"
     return {
         "success": True,
         "session_id": session_id,
         "section": section,
-        "action": "appended" if append else "replaced",
+        "action": action,
         "wm_filepath": wm_filepath,
+        "summary": f"✅ WM[{session_id}] {section} {action}",
     }
 
 
@@ -407,6 +409,7 @@ def tool_swe_wm_update_status(status: str, session_id: str = None) -> dict:
         "old_status": old_status,
         "new_status": status,
         "wm_filepath": wm_filepath,
+        "summary": f"✅ WM[{session_id}] status {old_status or '—'} → {status}",
     }
 
 
@@ -493,7 +496,14 @@ def handle_tools_call(params: dict) -> dict:
         }
     try:
         result = tool_fn(**arguments)
-        return {"content": [{"type": "text", "text": json.dumps(result, indent=2)}]}
+        # Prefer a one-line human-readable summary when the tool provides one
+        # (mutating tools do). Read/list tools return structured data with no
+        # summary — those still emit full JSON. Errors keep JSON too, for detail.
+        if isinstance(result, dict) and result.get("summary") and not result.get("error"):
+            text = result["summary"]
+        else:
+            text = json.dumps(result, indent=2)
+        return {"content": [{"type": "text", "text": text}]}
     except Exception as e:
         return {
             "content": [{"type": "text", "text": f"Error: {e}"}],
