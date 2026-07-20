@@ -430,7 +430,14 @@ Current State: WF_INIT
 
 ═══════════════════════════════════════════════════════════════════════════════
 STEP 1: Read WF_INIT workflow instructions
+   The Serena MCP tools may be DEFERRED in this session (listed by name, schema
+   NOT loaded). Calling read_memory before its schema is loaded fails with
+   "No such tool available". So your FIRST action loads the schema, THEN reads:
+   → ToolSearch(query="select:mcp__plugin_swe_serena__read_memory,mcp__plugin_swe_serena__list_memories")
    → mcp__plugin_swe_serena__read_memory(memory_name="wf/WF_INIT")
+   ALWAYS use the fully-qualified name mcp__plugin_swe_serena__read_memory —
+   NEVER the bare read_memory (that is the unresolved-name error above).
+   (If the tool is already loaded, ToolSearch is a harmless no-op — still safe.)
 
 STEP 2: Follow WF_INIT to classify and execute user's task
 ═══════════════════════════════════════════════════════════════════════════════

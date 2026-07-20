@@ -459,6 +459,11 @@ DO NOT read task-specific memories before initialization is complete."""
 This tool is NOT allowed before initialization.
 Only read_memory and list_memories (init-chain) are permitted.
 
+NOTE: The Serena MCP tools may be DEFERRED (schema not loaded). If so, calling
+read_memory fails with "No such tool available". Load the schema FIRST, then
+read — and ALWAYS use the fully-qualified name, never the bare read_memory:
+   ToolSearch(query="select:mcp__plugin_swe_serena__read_memory,mcp__plugin_swe_serena__list_memories")
+
 MANDATORY ACTION — Complete the full init chain:
    1. mcp__plugin_swe_serena__read_memory(memory_name="wf/WF_INIT")
    2. mcp__plugin_swe_serena__read_memory(memory_name="claude/CLAUDE_OBLIGATIONS")
@@ -522,6 +527,11 @@ You must complete the WF_INIT workflow before using other tools.
 - "But I already know what to do" → NO. Initialize first.
 - "But it's just a simple edit" → NO. Initialize first.
 DO NOT RATIONALIZE. DO NOT NEGOTIATE. INITIALIZE.
+
+NOTE: The Serena MCP tools may be DEFERRED (schema not loaded). If so, calling
+read_memory fails with "No such tool available". Load the schema FIRST, then
+read — and ALWAYS use the fully-qualified name, never the bare read_memory:
+   ToolSearch(query="select:mcp__plugin_swe_serena__read_memory,mcp__plugin_swe_serena__list_memories")
 
 MANDATORY ACTION — Complete the full init chain:
    1. mcp__plugin_swe_serena__read_memory(memory_name="wf/WF_INIT")

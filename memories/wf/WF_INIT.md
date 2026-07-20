@@ -66,7 +66,7 @@ If you make any tool call that searches code, edits files, or does task work bef
 
 **Every session starts here. No exceptions.** This includes meta-work, simple questions, continuing previous conversations, and any other interaction.
 
-The FIRST tool call of any session MUST be `read_memory("wf/WF_INIT")`. If your first tool call is anything else (Bash, Read, Grep, Agent, an MCP tool), you have already violated this. Do not "explain" the skip — just run the init chain. The PreToolUse gate is the backstop, but it can be misconfigured or absent in a given project; enforcement is YOUR obligation regardless of whether a hook stops you.
+The FIRST tool call of any session MUST be `mcp__plugin_swe_serena__read_memory(memory_name="wf/WF_INIT")` — ALWAYS the fully-qualified name, NEVER the bare `read_memory`. The Serena MCP tools may be DEFERRED (schema not loaded); if so, a bare call — or any call before its schema is fetched — fails with "No such tool available". Load the schema first, then read: `ToolSearch("select:mcp__plugin_swe_serena__read_memory,mcp__plugin_swe_serena__list_memories")`. If your first tool call is anything else (Bash, Read, Grep, Agent, another MCP tool), you have already violated this. Do not "explain" the skip — just run the init chain. The PreToolUse gate is the backstop, but it can be misconfigured or absent in a given project; enforcement is YOUR obligation regardless of whether a hook stops you.
 
 1. Read obligations:
 ```

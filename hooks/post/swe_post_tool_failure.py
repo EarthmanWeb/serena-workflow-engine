@@ -81,6 +81,61 @@ _SCHEMA_ERROR_MARKERS = (
     'extra fields not permitted',
 )
 
+# Bare (unqualified) Serena tool names the assistant sometimes calls by dropping
+# the mcp__plugin_swe_serena__ prefix. In a deferred-tools session the schema is
+# not loaded, so a bare call fails at NAME RESOLUTION with "No such tool
+# available: <name>" — before any parameter check. We map the bare name back to
+# its fully-qualified form so the correction can name the exact tool to load.
+_BARE_SERENA_NAMES = frozenset([
+    'read_memory', 'list_memories', 'write_memory', 'edit_memory',
+    'delete_memory', 'search_memories_by_name', 'search_memories_by_front_matter',
+    'get_symbols_overview', 'find_symbol', 'find_referencing_symbols',
+    'search_for_pattern', 'replace_content', 'replace_symbol_body',
+    'insert_after_symbol', 'insert_before_symbol', 'initial_instructions',
+])
+
+# Substrings that mark an unresolved-tool-name failure (deferred tool not loaded).
+_UNRESOLVED_NAME_MARKERS = (
+    'no such tool available',
+    'no such tool',
+    'tool not found',
+    'is not available',
+)
+
+
+def unresolved_serena_correction(tool_name: str, tool_error: str) -> str:
+    """Return a correction when a BARE (unqualified) Serena tool name failed to
+    resolve because its deferred schema was never loaded, else empty string.
+
+    This is the exact trap behind the "No such tool available: read_memory"
+    class of first-move errors: the assistant calls `read_memory` instead of
+    `mcp__plugin_swe_serena__read_memory`, and in a deferred-tools session the
+    bare name resolves to nothing. We tell it to ToolSearch the fully-qualified
+    tool first, then re-call by that name.
+
+    NOTE: whether this fires depends on the harness delivering a tool-failure
+    event for an unresolved name — some harnesses reject the call before any
+    PostToolUse hook runs. It is a best-effort safety net; the durable fix is the
+    instruction strings (SessionStart / workflow-gate / init-gate) that mandate
+    ToolSearch-first and the fully-qualified name.
+    """
+    bare = str(tool_name).strip()
+    err = str(tool_error).lower()
+    # Only act on a bare Serena name AND an unresolved-name style error. A bare
+    # name that is already fully-qualified (has the prefix) is not our case.
+    if bare not in _BARE_SERENA_NAMES:
+        return ''
+    if not any(marker in err for marker in _UNRESOLVED_NAME_MARKERS):
+        return ''
+    fq = f"{SERENA_TOOL_PREFIX}{bare}"
+    return (
+        f"🔧 UNRESOLVED TOOL: `{bare}` is not callable — you used the BARE name.\n"
+        f"The Serena MCP tools are DEFERRED (schema not loaded) and MUST be "
+        f"called by their FULLY-QUALIFIED name. Load the schema, then re-call:\n"
+        f"  ToolSearch(\"select:{fq}\")\n"
+        f"Then call {fq}(...) — NEVER the bare {bare}."
+    )
+
 
 def schema_correction(tool_name: str, tool_error: str) -> str:
     """Return a signature-correction string for ANY Serena tool that fails with a
@@ -162,6 +217,15 @@ def main():
         error_summary = str(tool_error)[:200] if tool_error else ''
         append_event(stream_path, 'tool_failure',
                      name=tool_name, s=session_id, err=error_summary)
+
+        # Bare/unqualified Serena name that failed to resolve (deferred schema not
+        # loaded): tell the assistant to ToolSearch the fully-qualified tool and
+        # re-call by that name. Checked BEFORE schema_correction — an unresolved
+        # name is a name-resolution failure, not a parameter-schema failure.
+        name_fix = unresolved_serena_correction(tool_name, tool_error)
+        if name_fix:
+            output_message(name_fix, "PostToolUse")
+            return
 
         # First-failure signature correction for Serena edit tools: if the call
         # failed because of wrong/missing params, inject the correct signature

@@ -374,10 +374,18 @@ NO classification, NO WF_INIT chain, NO WF_CLASSIFY. Fast-tracked to WF_EXECUTE.
 <blocking-instruction priority="CRITICAL">
 STOP. Your next action MUST be a tool call. Not text. A tool call.
 
-Call this tool NOW:
-mcp__plugin_swe_serena__read_memory(memory_name="wf/WF_INIT")
+The Serena MCP tools may be DEFERRED in this session (listed by name, schema
+NOT loaded). Calling read_memory before its schema is loaded fails with
+"No such tool available". So load the schema FIRST, then read WF_INIT:
 
-- Do NOT output any text before calling this tool
+  1. ToolSearch(query="select:mcp__plugin_swe_serena__read_memory,mcp__plugin_swe_serena__list_memories")
+  2. mcp__plugin_swe_serena__read_memory(memory_name="wf/WF_INIT")
+
+ALWAYS use the fully-qualified name mcp__plugin_swe_serena__read_memory — NEVER
+the bare read_memory. (If the tool is already loaded, ToolSearch is a harmless
+no-op — still safe to call first.)
+
+- Do NOT output any text before these tool calls
 - Do NOT explain what you're doing
 - Do NOT acknowledge the user's message first
 - Do NOT skip this because the user asked something specific
