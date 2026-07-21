@@ -17,6 +17,7 @@ Autonomous agent for initializing the SWE plugin. Completes all setup tasks and 
 1. **Environment Detection** - Check project state, git, resolve plugin root
 2. **Auto-Memory Symlink** - Redirect Claude Code auto-memory into `.serena/memory/` **first**, so every memory written during the rest of init lands in the right place
 3. **Prerequisite Check** - Run bootstrap if project not yet bootstrapped
+3.5. **Serena Reconnect Gate** - After bootstrap writes `memory-paths.conf`, STOP and have the user reconnect Serena so it reads the new memory path before any memory is written (two-pass flow)
 4. **MCP Verification** - Test Serena and swe-wm MCP servers respond
 5. **Serena Onboarding** - Run one-time Serena setup + migrate default memories into SWE templates
 6. **Memory Maintenance** - Relocate Serena's `memory_maintenance` memory into the typed `ref/` folder + link it from MEMORY.md
@@ -38,7 +39,7 @@ Task({
 
 ## TASKS
 
-Execute ALL tasks (1-11) in order, then run verifications.
+Execute the tasks in order, then run verifications. **This is a two-pass flow gated at Task 3.5:** Pass 1 runs Tasks 1–3 and STOPS at the Task 3.5 reconnect gate; Pass 2 (after the user reconnects Serena and re-runs `/swe-init`) skips Tasks 2–3.5 and runs Tasks 4–11. See Task 3.5 for the gate and resume-detection details.
 
 > **Ordering note:** The auto-memory symlink (Task 2) runs **before** bootstrap and Serena onboarding. This is deliberate — once the symlink is in place, every memory written during the rest of init (bootstrap templates, Serena onboarding defaults, `memory_maintenance`, anything Claude Code auto-writes) lands in the project's `.serena/memory/` instead of the orphaned real auto-memory directory. Do not reorder it later in the sequence.
 
@@ -143,6 +144,8 @@ Bootstrap handles:
 
 **If bootstrap fails**, report the error and stop.
 
+> `memory-paths.conf` is written with the single authoritative path `./.serena/memory` (the typed-memory tree the auto-memory symlink targets). It does **not** list `./.serena/memories` — that is the gitignored session-WM directory, not a Serena memory source. After this file is written, Serena must reconnect before any memory is written (see **Task 3.5**).
+
 **After bootstrap succeeds**, verify templates were filled out (not left with raw `{{placeholders}}`):
 
 ```bash
@@ -156,6 +159,22 @@ If any `{{variable}}` placeholders remain, they couldn't be auto-detected. Fill 
 2. Determine the correct value from the project context
 3. Replace the placeholder with the actual value
 4. Report which values were filled manually vs auto-detected
+
+### Task 3.5: Reconnect Serena MCP (MANDATORY GATE — end the turn here)
+
+**Why this gate exists:** The Serena MCP server reads `.serena/memory-paths.conf` **once, at connection time**. When this session started, that file did not exist yet — bootstrap (Task 3) creates it. So the Serena server that is currently connected is still resolving memories against its **default single path**, NOT the `./.serena/memory` path just written to `memory-paths.conf`. If init continues now, every memory operation in Tasks 5, 5b, and 6 (onboarding defaults, template migrations, `memory_maintenance`) resolves against the wrong tree — the split-brain where writes land in one directory while reads see another.
+
+**A subagent cannot reconnect the parent session's MCP servers, and this cannot be automated from within the run.** The reconnect is a user action. Therefore:
+
+1. **STOP init here.** Do NOT proceed to Task 4. Do NOT write any memory yet.
+2. Report to the user that bootstrap is complete and `memory-paths.conf` now contains `./.serena/memory`, but Serena must reconnect to pick it up.
+3. Instruct the user to reconnect the Serena MCP server:
+   - Run `/mcp` → select the `serena` server → **Reconnect** (or restart the session).
+4. Tell the user to **resume init by re-running `/swe-init`** once Serena has reconnected. This is safe and idempotent: bootstrap guards on `bootstrapped: true` (Task 3) and skips straight to this point, so the resume picks up at Task 4 with Serena now reading the correct memory paths.
+
+**End the turn here.** Everything below (Task 4 onward) runs on the *resume* invocation, after the reconnect.
+
+> Resume detection: if `swe-setup-complete.json` shows `bootstrapped: true` and `complete: false`, you are on the resume pass — Serena has been reconnected. Skip Tasks 2–3.5 and continue from Task 4. **Before writing any memory on resume, re-verify the Task 2 auto-memory symlink is intact** (it may have failed silently on Pass 1) — re-run `/swe-symlink-memory` if the symlink at `~/.claude/projects/<encoded>/memory` does not resolve to `$(pwd)/.serena/memory`. This is idempotent and guarantees resume-pass memory writes still land in the project tree.
 
 ### Task 4: Verify MCP Servers
 

@@ -1,0 +1,18 @@
+{
+  "mcpServers": {
+    "browser-devtools": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "-p",
+        "@ironbee-ai/devtools",
+        "ironbee-browser-devtools-mcp"
+      ],
+      "env": {
+        "BROWSER_HEADLESS_ENABLE": "false",
+        "TELEMETRY_ENABLE": "false"
+      }
+    }
+  }
+}

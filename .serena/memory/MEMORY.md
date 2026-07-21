@@ -1,20 +1,33 @@
+---
+name: Memory Index
+description: Root index of project memories for serena-workflow-engine
+metadata:
+  type: index
+---
+
 ## Critical Rules
 - [Plugin Source Location](feedback/FEEDBACK_PLUGIN_SOURCE_LOCATION.md) — this repo IS the plugin source; NEVER write to ~/.claude/plugins/cache/
 - [Bypass & Setup Location](feedback/FEEDBACK_BYPASS_AND_SETUP_LOCATION.md) — init gate detects setup in .serena AND legacy .claude; project bypass is user-only (/swe-bypass), un-settable by LLM
-- [v4 FSM Redesign](feedback/FEEDBACK_V4_FSM_REDESIGN.md) — reads of WF_* memories do NOT transition state (explicit set_state only); WF_START removed (init → WF_CLASSIFY); WF_VERIFY edit-allowed; arch review is complexity-gated
+- [v4 FSM Redesign](feedback/FEEDBACK_V4_FSM_REDESIGN.md) — WF_* reads never transition state (explicit set_state only); WF_START removed; arch review is complexity-gated
 
 ## Response & Style
 - [Response Format](feedback/FEEDBACK_RESPONSE_FORMAT.md) — no conversational language, use functional/direct phrasing only
 - [Read docs = list memories](feedback/FEEDBACK_READ_DOCS_MEANS_LIST.md) — "read the docs" means check MEMORY.md and use Serena to list_memories, not external docs
 
-## Browser Session Isolation
+## Development
+- [Development Standards](feature/FEATURE_DEV_STANDARDS.md) — project overview, per-language conventions, build/format/git commands
+- [Test Suite](feature/FEATURE_TESTS.md) — verification approach + task-completion checklist
+
+## Reference
 - [MCP Browser DevTools](ref/REF_MCP_BROWSER_DEVTOOLS.md) — scenarios-first rule, storageState reuse for parallel agents, tool reference
+- [Memory Maintenance](ref/REF_MEMORY_MAINTENANCE.md) — how memories are created & maintained (discovery model, style, threshold, actions)
 
 ## Features
 - [Feature Index](index/INDEX_FEATURES.md) — Feature registry with relationships and types
 
 ## Architecture
 - [Architecture Index](arch/ARCH_INDEX.md) — Architecture overview
+- [Init memory-paths & Serena reconnect](dom/DOM_SWE_INIT_MEMORY_PATHS.md) — conf writes only ./.serena/memory (singular); Serena must reconnect after bootstrap or memories split-brain
 
 ## Workflow Routing (v4)
 

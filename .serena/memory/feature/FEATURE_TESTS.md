@@ -1,3 +1,10 @@
+---
+name: Test Suite
+description: Test suite and task-completion checklist for serena-workflow-engine
+metadata:
+  type: feature
+---
+
 # FEATURE_TESTS - Test Suite (Template)
 
 ## Feature Overview
@@ -18,6 +25,22 @@
 # TODO: Customize these per project
 # TODO: Add test commands
 ```
+
+**Note:** There is no formal automated test suite in this repo. Verification relies on:
+- dprint for formatting validation (`npm run fmt:check`)
+- Python syntax checking for hook scripts (`python3 -c "import py_compile; py_compile.compile('path/to/script.py')"`)
+- Manual testing through the Claude Code plugin system
+
+## Task Completion Checklist
+
+When a task is completed, run these steps:
+
+1. **Format code**: `npm run fmt` (formats markdown and JSON via dprint)
+2. **Format check**: `npm run fmt:check` (verify no formatting issues)
+3. **Version bump** (if releasing): `bash scripts/bump-version.sh`
+4. **Git commit**: Stage and commit changes with a descriptive message
+5. **Test hooks**: If hook scripts were modified, verify Python syntax with
+   `python3 -c "import py_compile; py_compile.compile('path/to/script.py')"`
 
 ### Test Gate
 

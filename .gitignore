@@ -16,17 +16,8 @@ __init__.*
 .serena/swe-bypass.json
 .serena/swe-setup-complete.json
 .serena/swe-state/
-
-# Override global .serena/* ignore — un-ignore swe memories
-!.serena/swe/
-!.serena/swe/**/*.md
-!.serena/memories/
-!.serena/memories/**/*.md
-.serena/memories/WM_*.md
-# SWE workflow engine
-.serena/swe-bypass.json
-.serena/swe-setup-complete.json
-.serena/swe-state/
+.serena/streams/
+.serena/cache/
 
 # Override global .serena/* ignore — un-ignore project memories
 !.serena/memory/

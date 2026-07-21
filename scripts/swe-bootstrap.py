@@ -422,7 +422,7 @@ def ensure_memory_paths_conf(project_root, extra_paths=None):
         extra_paths: Optional list of additional paths (e.g. ['./docs:ro'])
     """
     conf_path = os.path.join(project_root, '.serena', 'memory-paths.conf')
-    required_lines = ['./.serena/memory', './.serena/memories']
+    required_lines = ['./.serena/memory']
 
     if os.path.exists(conf_path):
         with open(conf_path) as f:
@@ -726,18 +726,37 @@ def inject_claude_prefix(project_root):
 
 
 def ensure_serena_gitignore(project_root):
-    """Create .serena/.gitignore for runtime file exclusions."""
+    """Create or top-up .serena/.gitignore with runtime file exclusions.
+
+    Creates the file if absent. If it already exists (e.g. an older bootstrap
+    wrote a shorter set), append any missing entries rather than skipping —
+    so re-running the bootstrap upgrades a stale file in place.
+    """
     gitignore_path = os.path.join(project_root, '.serena', '.gitignore')
+    entries = [
+        '/cache',
+        '/streams',
+        '/memories',
+        '/swe-setup-complete.json',
+        '/swe-state',
+        '/project.local.yml',
+    ]
+
+    existing_lines = []
     if os.path.exists(gitignore_path):
+        with open(gitignore_path) as f:
+            existing_lines = [ln.strip() for ln in f.read().splitlines()]
+
+    missing = [e for e in entries if e not in existing_lines]
+    if not missing:
         return False
 
-    content = """/cache
-/streams
-/memories
-/swe-setup-complete
-"""
-    with open(gitignore_path, 'w') as f:
-        f.write(content)
+    with open(gitignore_path, 'a') as f:
+        # Ensure we start on a fresh line if the file exists and lacks a trailing newline.
+        if existing_lines and existing_lines[-1] != '':
+            f.write('\n')
+        for entry in missing:
+            f.write(f'{entry}\n')
     return True
 
 
@@ -748,6 +767,8 @@ def update_gitignore(project_root):
         '.serena/swe-bypass.json',
         '.serena/swe-setup-complete.json',
         '.serena/swe-state/',
+        '.serena/streams/',
+        '.serena/cache/',
         '',
         '# Override global .serena/* ignore — un-ignore project memories',
         '!.serena/memory/',
