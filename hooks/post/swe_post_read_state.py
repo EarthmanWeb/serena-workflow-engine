@@ -29,7 +29,7 @@ def create_feature_sentinel(session_id: str, gate_name: str) -> bool:
     """Create a sentinel file for a feature gate.
 
     Pattern: .serena/streams/.{gate_name}_feature_{session_id}
-    Used by: FEATURE_TESTS (test gate), FEATURE_SWARM (swarm gate).
+    Used by: FEATURE_TESTS (test gate).
     """
     if not session_id:
         return False
@@ -180,6 +180,13 @@ def main():
         transcript_path = get_input_field(input_data, 'transcript_path', default='')
         session_id = extract_session_id(transcript_path)
 
+        # Consulting documentation (any list_memories / read_memory) resets the
+        # wide-search streak tracked by swe_post_search_docs_hint.py. Best-effort.
+        try:
+            append_event(get_stream_path(session_id), 'docread', s=session_id)
+        except Exception:
+            pass
+
         # Handle list_memories calls (no memory_name) — inject continuation
         if 'list_memories' in tool_name:
             state_mgr = StateManager(cwd, session_id=session_id)
@@ -199,16 +206,6 @@ def main():
             create_feature_sentinel(session_id, 'test')
             output_status(f"📖 Read: {memory_name} {_in_label}")
             return
-
-        # Handle FEATURE_SWARM read - create sentinel for swarm gate + emit directive
-        if bare_name == 'FEATURE_SWARM':
-            create_feature_sentinel(session_id, 'swarm')
-
-            output = HookOutput(event_name="PostToolUse")
-            output.add_message(f"📖 Read: {memory_name} {_in_label}")
-            output.add_message("")
-            output.add_message("🐝 SWARM DETECTED - You MUST use ruv-swarm or hive-mind swarm orchestration. Go to WF_SWARM_ORCHESTRATE after completing WF_CLASSIFY feature loading.")
-            output.output_and_exit()
 
         # Non-WF_* memories: log read + inject continuation directive
         if not bare_name or not bare_name.startswith('WF_'):

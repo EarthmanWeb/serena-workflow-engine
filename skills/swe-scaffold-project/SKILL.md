@@ -152,7 +152,6 @@ The bootstrap script (`swe-bootstrap.py`) auto-detects project name, primary lan
 4. **ref/REF_MCP_BROWSER_DEVTOOLS.md** — Browser DevTools MCP reference with scenarios-first rule, session isolation
 5. **FEATURE_TESTS.md** — Test configuration with detected framework and commands
 6. **FEATURE_DEV_STANDARDS.md** — Development standards index with primary language
-7. **FEATURE_AGENTS.md** — Agent registry with project name
 
 **Additionally, create these non-template memories:**
 
@@ -223,14 +222,12 @@ Your project needs at least one feature to enable code changes.
 - **[B]** Quick setup with /swe-onboard-quick
 - **[C]** Skip - add features later (research-only mode)
 
-### Stage 5: Optional Swarm Analysis
-
-If swarm MCP available:
+### Stage 5: Optional Parallel-Subagent Analysis
 
 ```
-AI-powered codebase analysis available.
+AI-powered codebase analysis available (parallel subagents via the Agent tool).
 
-[A] Full DAA analysis (creates DOM_*, SYS_*, detailed INDEX_*)
+[A] Full analysis (10 parallel subagents; creates DOM_*, SYS_*, detailed INDEX_*)
 [B] Quick scan (basic structure)
 [C] Skip
 ```

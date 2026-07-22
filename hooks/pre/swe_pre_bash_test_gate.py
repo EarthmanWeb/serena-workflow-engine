@@ -11,7 +11,7 @@
 
 2. Test gate: detects Playwright test commands and blocks if FEATURE_TESTS
    hasn't been loaded. Uses session-scoped sentinel file (created by
-   swe_post_read_state.py). Same pattern as swe_pre_swarm_feature_gate.py.
+   swe_post_read_state.py). Same pattern as the other feature gates.
 """
 
 import os

@@ -1,6 +1,6 @@
 # Serena Workflow Engine
 
-A state-machine workflow engine plugin for Claude Code. Provides structured task routing, Serena memory persistence, hook-driven automation, and optional multi-agent swarm orchestration. (Canonical state list: `state-machine/states.json`.)
+A state-machine workflow engine plugin for Claude Code. Provides structured task routing, Serena memory persistence, hook-driven automation, and native subagent parallelization (Claude Code's built-in `Agent` tool + workflows). (Canonical state list: `state-machine/states.json`.)
 
 ## Quick Start
 
@@ -63,7 +63,7 @@ WF_INIT -> WF_CLASSIFY -> WF_ARCH_REVIEW -> WF_EXECUTE -> WF_VERIFY -> WF_DONE
 - **WF_EXECUTE** does the work with automatic checkpoints every 3 edits
 - **WF_VERIFY** validates against architecture and compliance rules
 
-Side paths: `WF_RESEARCH` (read-only exploration), `WF_CONTINUE` (resume previous work), `WF_SWARM_ORCHESTRATE` (multi-agent tasks), `WF_DEBUG_TDD` (test-driven debugging).
+Side paths: `WF_RESEARCH` (read-only exploration), `WF_CONTINUE` (resume previous work), `WF_DEBUG_TDD` (test-driven debugging). Parallel subagent work runs inside `WF_EXECUTE`.
 
 ## Memory Architecture
 
@@ -115,7 +115,6 @@ Templates rendered to `.serena/memory/`:
 - `MEMORY.md` -- memory index with default entries
 - `FEATURE_TESTS.md` -- test config with detected framework
 - `FEATURE_DEV_STANDARDS.md` -- dev standards index
-- `FEATURE_AGENTS.md` -- agent registry
 - `feedback/FEEDBACK_RESPONSE_FORMAT.md` -- response style
 - `ref/REF_MCP_BROWSER_DEVTOOLS.md` -- browser DevTools reference
 
@@ -154,8 +153,6 @@ After migration, the symlink ensures all future auto-memory writes go to `.seren
 | `/swe-workflow-verify` | Verify against requirements |
 | `/swe-workflow-arch-review` | Architecture compliance review |
 | `/swe-workflow-debug-tdd` | Test-driven debugging |
-| `/swe-swarm-orchestrate` | Multi-agent swarm coordination |
-| `/swe-swarm-analyze` | DAA-powered codebase analysis |
 | `/swe-symbol-index` | Generate symbol index for feature docs |
 
 ## Alternative Setup

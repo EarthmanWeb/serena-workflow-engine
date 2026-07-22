@@ -52,7 +52,6 @@ hooks/
 | Hook | Event | Purpose |
 | ---- | ----- | ------- |
 | `swe_user_prompt_workflow.py` | UserPromptSubmit | WF_INIT gate, intent analysis, state transitions |
-| `swe_user_prompt_swarm.py` | UserPromptSubmit | Detect swarm keywords in prompts |
 
 ### Pre-Tool (`pre/`) — gatekeepers
 
@@ -61,20 +60,50 @@ hooks/
 | `swe_pre_tool_init_gate.py` | PreToolUse | Block ALL tools until WF_INIT chain complete |
 | `swe_pre_edit_validate.py` | PreToolUse (Edit/Write/Serena) | Block edits in planning states (WF_VERIFY is edit-allowed); flag staleness at 10 edits |
 | `swe_pre_bash_test_gate.py` | PreToolUse (Bash) | Validate test commands against WF_DEBUG_TDD |
-| `swe_pre_swarm_feature_gate.py` | PreToolUse (ruflo swarm) | Feature gate: FEATURE_SWARM |
 
 ### Post-Tool (`post/`) — observers/learners
 
 | Hook | Event | Purpose |
 | ---- | ----- | ------- |
-| `swe_post_read_state.py` | PostToolUse (read_memory) | Pure read/display: log "ON STEP" + continuation for CURRENT state — NO transition |
-| `swe_post_edit_checkpoint.py` | PostToolUse (Edit/Write/Serena) | Edit counting, checkpoint at 10 edits |
+| `swe_post_read_state.py` | PostToolUse (read_memory/list_memories) | Pure read/display: log "ON STEP" + continuation for CURRENT state — NO transition. Also appends a `docread` event that resets the wide-search streak |
+| `swe_post_edit_checkpoint.py` | PostToolUse (Edit/Write/Serena) | Edit counting, checkpoint at 10 edits (`CHECKPOINT_THRESHOLD`) |
+| `swe_post_search_docs_hint.py` | PostToolUse (Grep/Glob/search_for_pattern) | Counts CONSECUTIVE wide searches; at 3 in a row (`SEARCH_HINT_THRESHOLD`) reminds to check memories/docs first. `docread`/`state`/`checkpoint` events reset the streak |
 | `swe_post_write_continue.py` | PostToolUse (write_memory) | Post-write continuation |
 | `swe_post_todo_wm_sync.py` | PostToolUse (TodoWrite) | WM sync reminder on todo changes |
 | `swe_post_memory_index.py` | PostToolUse (write_memory) | Enforce MEMORY.md index update |
+| `swe_post_memory_style.py` | PostToolUse (write_memory/edit_memory) | Enforce terse-imperative memory style (REF_MEMORY_STYLE) |
 | `swe_post_tool_failure.py` | PostToolUseFailure | Flailing detection, failure logging |
 
 > **Reads do NOT transition.** Reading a `WF_*` memory NEVER advances the FSM. `swe_post_read_state.py` only logs "ON STEP" and emits a continuation for the CURRENT state. Transition ONLY via explicit `set_state` — the dedicated tool or the prompt-intent hook (`swe_user_prompt_workflow.py`).
+
+## Sentinel Pattern (stream-counted nudges)
+
+Sentinels are non-blocking PostToolUse nudges driven by the append-only JSONL stream (`core/stream.py`). Each fires when a threshold count of same-type events accumulates since a resetting marker. They NEVER block (PostToolUse cannot deny) and always exit 0.
+
+| Sentinel | Counts | Threshold | Reset markers | Reminder |
+| -------- | ------ | --------- | ------------- | -------- |
+| Edit checkpoint (`swe_post_edit_checkpoint.py`) | `edit` events | 10 (`CHECKPOINT_THRESHOLD`) | `state`, `checkpoint` | Update Working Memory progress |
+| Docs-first search (`swe_post_search_docs_hint.py`) | `search` events | 3 (`SEARCH_HINT_THRESHOLD`) | `state`, `checkpoint`, `docread` | Check memories/docs before grepping again |
+
+### Mechanism (shared)
+
+1. On the matched tool, append a typed event: `append_event(stream, '<type>', …)`.
+2. Count since the last resetting marker: `count_events_since_last(stream, marker_types=(…), count_type='<type>')` (thin wrappers `count_edits_since_checkpoint` / `count_searches_since_docread`).
+3. At threshold, emit a `HookOutput` message; under threshold, emit a concise `output_status`.
+
+### Docs-first search sentinel specifics
+
+- Matches `Grep`, `Glob`, `mcp__*serena__search_for_pattern` (registered in `hooks.json`).
+- "In a row" = consecutive: any doc read resets the streak. `swe_post_read_state.py` appends a `docread` event on EVERY `read_memory` / `list_memories`, so consulting a memory clears the counter — the reminder fires only when the agent greps repeatedly WITHOUT checking docs.
+- Unrelated tools (edits, bash, file reads) do NOT reset the streak; only `docread` / `state` / `checkpoint` do. This is the "any doc read resets" semantics — the nudge is specifically about searching instead of reading documentation.
+
+### Adding a New Sentinel
+
+1. Create `hooks/post/swe_post_{name}.py` — append the event, count since markers, nudge at threshold. Model on `swe_post_edit_checkpoint.py`. Always exit 0.
+2. If a new reset marker is needed, append that event type from the appropriate hook (e.g. `docread` from `swe_post_read_state.py`).
+3. Add a thin counter wrapper in `core/stream.py` if the marker set is reused.
+4. Register the PostToolUse matcher in `hooks/hooks.json` with `${CLAUDE_PLUGIN_ROOT}` + a short timeout.
+5. Document the sentinel in the table above and in `FEATURE_SWE`.
 
 ### Stop (`stop/`)
 

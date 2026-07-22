@@ -140,7 +140,7 @@ For tasks with independent subtasks, use the Claude Code Agent tool:
 ```javascript
 Agent({ description: "Task A", run_in_background: true, model: "sonnet",
   isolation: "worktree",
-  prompt: "You are a swarm agent. BYPASS WF_INIT. [task]..." })
+  prompt: "You are a subagent. BYPASS WF_INIT. [task]..." })
 ```
 
 - Launch ALL agents in ONE message for parallel execution.

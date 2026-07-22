@@ -25,7 +25,7 @@ metadata:
 | Skills        | User-invocable workflows       | `skills/`                               | YAML frontmatter + MD |
 | Commands      | CLI shortcuts                  | `commands/`                             | Markdown              |
 | Memories      | Workflow documentation         | `memories/`                             | Organized subdirs     |
-| Agents        | Swarm agent definitions        | `agents/`                               | Markdown              |
+| Agents        | Subagent definitions           | `agents/`                               | Markdown              |
 | Scripts       | Build/deployment tools         | `scripts/`                              | Shell scripts         |
 
 ### Data Flow
@@ -37,7 +37,6 @@ metadata:
 ```
 SessionStart → WF_INITIAL_SETUP (first time) OR WF_INIT
 WF_INIT → WF_CLASSIFY → WF_ARCH_REVIEW → WF_EXECUTE
-                                        → WF_SWARM_ORCHESTRATE → WF_EXECUTE
          → WF_EXECUTE ↔ WF_CHECKPOINT → WF_VERIFY → WF_DONE → WF_CLEANUP
 ```
 
@@ -56,14 +55,14 @@ WF_INIT → WF_CLASSIFY → WF_ARCH_REVIEW → WF_EXECUTE
 | `.mcp.json`  | MCP server configuration |
 | `.gitignore` | Git ignore patterns      |
 
-## States (14 in states.json)
+## States (12 in states.json)
 
 | Category   | States                                                   |
 | ---------- | -------------------------------------------------------- |
 | Setup      | WF_INITIAL_SETUP, WF_ONBOARD                             |
 | Entry      | WF_CLASSIFY, WF_CONTINUE                                 |
 | Analysis   | WF_RESEARCH, WF_RESEARCH_LITE                            |
-| Planning   | WF_ARCH_REVIEW, WF_SWARM_ORCHESTRATE                     |
+| Planning   | WF_ARCH_REVIEW                                           |
 | Gates      | WF_CLARIFY                                               |
 | Execution  | WF_EXECUTE, WF_CHECKPOINT, WF_DEBUG_TDD                  |
 | Completion | WF_VERIFY, WF_DONE                                       |
@@ -109,7 +108,6 @@ WF_INIT → WF_CLASSIFY → WF_ARCH_REVIEW → WF_EXECUTE
 | Hook                          | Trigger          | Purpose                         |
 | ----------------------------- | ---------------- | ------------------------------- |
 | `swe_user_prompt_workflow.py` | UserPromptSubmit | Intent analysis, state transitions, sentinel recovery |
-| `swe_user_prompt_swarm.py`    | UserPromptSubmit | Detect swarm keywords           |
 
 ### Pre-Tool Hooks (`hooks/pre/`)
 
@@ -118,17 +116,18 @@ WF_INIT → WF_CLASSIFY → WF_ARCH_REVIEW → WF_EXECUTE
 | `swe_pre_tool_init_gate.py`     | PreToolUse                     | Block ALL tools until WF_INIT read |
 | `swe_pre_edit_validate.py`      | PreToolUse (Edit/Write/Serena) | Validate edit permissions          |
 | `swe_pre_bash_test_gate.py`     | PreToolUse (Bash)              | Feature gate: FEATURE_TESTS        |
-| `swe_pre_swarm_feature_gate.py` | PreToolUse (ruflo swarm)       | Feature gate: FEATURE_SWARM        |
 
 ### Post-Tool Hooks (`hooks/post/`)
 
 | Hook                                  | Trigger                         | Purpose                          |
 | ------------------------------------- | ------------------------------- | -------------------------------- |
-| `swe_post_read_state.py`              | PostToolUse (read_memory)       | State transitions, plan mode     |
+| `swe_post_read_state.py`              | PostToolUse (read_memory/list_memories) | State transitions, plan mode; appends `docread` (resets search streak) |
 | `swe_post_edit_checkpoint.py`         | PostToolUse (Edit/Write/Serena) | Track edits, checkpoint at 10 edits |
+| `swe_post_search_docs_hint.py`        | PostToolUse (Grep/Glob/search_for_pattern) | Docs-first sentinel: 3 consecutive wide searches → check memories first |
 | `swe_post_todo_wm_sync.py`            | PostToolUse (TodoWrite)         | WM sync reminder on todo changes |
 | `swe_post_write_continue.py`          | PostToolUse (Write)             | Post-write continuation          |
 | `swe_post_memory_index.py`            | PostToolUse (write_memory)      | Enforce MEMORY.md index update   |
+| `swe_post_memory_style.py`            | PostToolUse (write_memory/edit_memory) | Enforce terse-imperative memory style |
 | `swe_post_tool_failure.py`            | PostToolUseFailure              | Flailing detection, failure logging |
 
 ### Stop Hooks (`hooks/stop/`)
@@ -137,34 +136,38 @@ WF_INIT → WF_CLASSIFY → WF_ARCH_REVIEW → WF_EXECUTE
 | --------------------------------- | ------- | ----------------------------------------- |
 | `swe_stop_continue_working.py`    | Stop    | Block unnecessary stops, continue-working |
 
-## Skills (10 total)
+## Skills (14 total)
 
 | Skill                      | Purpose                                             |
 | -------------------------- | --------------------------------------------------- |
 | `swe-feature-onboard`      | Onboard new feature to workflow                     |
 | `swe-feature-update`       | Update feature memory files                         |
+| `swe-gherkin-spec`         | Author Gherkin BDD specs                            |
+| `swe-gherkin-dev`          | TDD implementation from Gherkin specs               |
+| `swe-memory-audit`         | Audit memories against the terse-imperative style   |
+| `swe-memory-frontmatter`   | Audit/backfill memory YAML front-matter             |
 | `swe-scaffold-project`     | Initialize new project                              |
 | `swe-symbol-index`         | Generate symbol index table for feature linked docs |
 | `swe-wm-update`            | Update Working Memory sections                      |
-| `swe-swarm-orchestrate`    | Multi-agent swarm coordination                      |
-| `swe-swarm-analyze`        | DAA-powered codebase analysis                       |
-| `swe-workflow-debug-tdd`   | Test-driven debugging                               |
-| `swe-workflow-verify`      | Verify implementation                               |
 | `swe-workflow-research`    | Code exploration/research                           |
 | `swe-workflow-arch-review` | Architecture compliance review                      |
+| `swe-workflow-debug-tdd`   | Test-driven debugging                               |
+| `swe-workflow-verify`      | Verify implementation                               |
+| `swe-wp-cli-setup`         | Configure the WP-CLI MCP server                     |
 
-## Commands (7 total)
+## Commands (9 total)
 
-| Command         | Purpose                    |
-| --------------- | -------------------------- |
-| `/swe-init`     | Initialize SWE for project |
-| `/swe-status`   | Show workflow state        |
-| `/swe-reset`    | Reset workflow state       |
-| `/swe-goto`     | Force transition to state  |
-| `/swe-bypass`   | Disable SWE for project — USER-ONLY (`disable-model-invocation: true`) |
-| `/swe-memory`   | Manage session WM          |
-| `/swe-scaffold-project` | Scaffold new project (skill) |
-| `/swe-cleanup`  | Archive completed memories |
+| Command                  | Purpose                    |
+| ------------------------ | -------------------------- |
+| `/swe-init`              | Initialize SWE for project |
+| `/swe-status`            | Show workflow state        |
+| `/swe-reset`             | Reset workflow state       |
+| `/swe-goto`              | Force transition to state  |
+| `/swe-bypass`            | Disable SWE for project — USER-ONLY (`disable-model-invocation: true`) |
+| `/swe-cleanup`           | Archive completed memories |
+| `/swe-symlink-memory`    | Set up auto-memory symlink |
+| `/swe-memory-frontmatter`| Audit/backfill memory front-matter |
+| `/swe-wp-cli-setup`      | Configure the WP-CLI MCP server |
 
 ### CLI Tools (non-skill)
 
@@ -183,7 +186,7 @@ WF_INIT → WF_CLASSIFY → WF_ARCH_REVIEW → WF_EXECUTE
 | Directory           | Contents                                                     |
 | ------------------- | ------------------------------------------------------------ |
 | `memories/wf/`      | Workflow state instructions (WF_*.md)                        |
-| `memories/ref/`     | Reference docs (FEATURE_DEV_STANDARDS, REF_SWARM_PATTERNS, etc.) |
+| `memories/ref/`     | Reference docs (FEATURE_DEV_STANDARDS, REF_MEMORY_STYLE, etc.) |
 | `memories/claude/`  | Claude behavior docs (CLAUDE.md, CLAUDE_OBLIGATIONS.md)      |
 | `memories/arch/`    | Architecture documentation (ARCH_SWE.md)                     |
 | `memories/dom/`     | Domain documentation (DOM_SWE_HOOKS.md)                      |
@@ -206,7 +209,6 @@ Feature gates block specific tools until the relevant FEATURE_* memory is read. 
 | Gate Name | Pre-Hook                        | Blocks                 | Sentinel                   | Feature Memory |
 | --------- | ------------------------------- | ---------------------- | -------------------------- | -------------- |
 | `test`    | `swe_pre_bash_test_gate.py`     | `npx playwright test`  | `.test_feature_{session}`  | FEATURE_TESTS  |
-| `swarm`   | `swe_pre_swarm_feature_gate.py` | `ruflo swarm_init`     | `.swarm_feature_{session}` | FEATURE_SWARM  |
 
 ### Adding a New Gate
 
@@ -219,7 +221,7 @@ Feature gates block specific tools until the relevant FEATURE_* memory is read. 
 
 | Mode        | States                                                                   |
 | ----------- | ------------------------------------------------------------------------ |
-| Always      | WF_ARCH_REVIEW, WF_SWARM_ORCHESTRATE                                     |
+| Always      | WF_ARCH_REVIEW                                                           |
 | Never       | WF_DEBUG_TDD, WF_CHECKPOINT, WF_VERIFY, WF_DONE, WF_RESEARCH, WF_EXECUTE |
 | Conditional | WF_CLASSIFY (complexity >= medium)                                       |
 

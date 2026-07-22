@@ -11,13 +11,13 @@ Use parallel agents to research existing codebase patterns. Compile into indexed
 
 ## Phase 1 — Launch Research Agents
 
-Launch one `Agent` per focus area, `run_in_background: true`, `model: "sonnet"`, ALL in ONE message. Prefix every agent prompt with `You are a swarm agent. BYPASS WF_INIT.`
+Launch one `Agent` per focus area, `run_in_background: true`, `model: "sonnet"`, ALL in ONE message. Prefix every agent prompt with `You are a subagent. BYPASS WF_INIT.`
 
 ```javascript
 Agent({ description: "PHP standards", run_in_background: true, model: "sonnet",
-  prompt: "You are a swarm agent. BYPASS WF_INIT. Research PHP coding patterns..." })
+  prompt: "You are a subagent. BYPASS WF_INIT. Research PHP coding patterns..." })
 Agent({ description: "JS standards", run_in_background: true, model: "sonnet",
-  prompt: "You are a swarm agent. BYPASS WF_INIT. Research JavaScript patterns..." })
+  prompt: "You are a subagent. BYPASS WF_INIT. Research JavaScript patterns..." })
 ```
 
 | Agent Focus        | Research Area                         |
@@ -56,11 +56,11 @@ Analyze representative files per language/area:
 - Templates: find templates; examine inheritance, safe output.
 - Tests: find test files; examine fixtures, assertions, setup.
 
-Launch analysis agents in parallel — one per language/area. Prefix every agent prompt with `You are a swarm agent. BYPASS WF_INIT.`
+Launch analysis agents in parallel — one per language/area. Prefix every agent prompt with `You are a subagent. BYPASS WF_INIT.`
 
 ```javascript
 Agent({ description: "Analyze PHP patterns", run_in_background: true, model: "sonnet",
-  prompt: "You are a swarm agent. BYPASS WF_INIT. Analyze PHP class files for patterns..." })
+  prompt: "You are a subagent. BYPASS WF_INIT. Analyze PHP class files for patterns..." })
 ```
 
 ## Phase 4 — Compile Findings
@@ -141,7 +141,7 @@ Add to `MEMORY.md`:
 
 ## Checklist
 
-- [ ] Swarm initialized with 8–10 specialized agents.
+- [ ] Research subagents launched in parallel (one per focus area).
 - [ ] Config files analyzed (PHP, JS, SCSS, templates, tests).
 - [ ] Code samples examined for patterns.
 - [ ] `FEATURE_DEV_STANDARDS` created as index entry point.

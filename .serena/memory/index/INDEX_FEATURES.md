@@ -13,5 +13,5 @@ Registry of all features. Load `mem:feature/FEATURE_[KEY]` for the primary featu
 
 | Key   | Name                              | Type              | Language                    | Status |
 |-------|-----------------------------------|-------------------|-----------------------------|--------|
-| SWARM | Multi-Agent Swarm Orchestration   | Workflow Routing  | Markdown/Config             | Active |
+| SUBAGENTS | Native Subagents & Workflows  | Workflow Routing  | Markdown/Config             | Active |
 | SWE   | Serena Workflow Engine            | Plugin            | Python/Bash/JSON/Markdown   | Active |

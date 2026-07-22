@@ -9,7 +9,6 @@ workflow:
     - WF_RESEARCH
     - WF_CONTINUE
     - WF_ARCH_REVIEW
-    - WF_SWARM_ORCHESTRATE
     - WF_EXECUTE
     - WF_CHECKPOINT
     - WF_VERIFY
@@ -103,18 +102,10 @@ Note the current state and section contents for your update decisions.
 - [ ] Design documented with explicit file paths
 - [ ] Update `Files` with files to modify/create
 - [ ] Layer compliance verified (pass / fail per criterion)
-- [ ] Swarm assessment completed (needed / not needed)
+- [ ] Parallel-subagent assessment completed (needed / not needed)
 - [ ] User approval status noted
 - [ ] Update `Progress` with review results
 - [ ] Update `Notes` with design decisions
-
-### WF_SWARM_ORCHESTRATE
-
-- [ ] Swarm configuration documented
-- [ ] Agent assignments noted
-- [ ] Topology selected
-- [ ] Update `Progress` with orchestration steps
-- [ ] Update `Notes` with swarm config
 
 ### WF_EXECUTE
 

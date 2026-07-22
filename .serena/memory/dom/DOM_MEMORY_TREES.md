@@ -11,7 +11,7 @@ This repo (serena-workflow-engine) holds two separate, opposite-purpose memory s
 
 ## 1. `memories/` — PLUGIN SOURCE (ships to every installed repo)
 
-- Canonical source of the plugin's behavior: `wf/WF_*`, `claude/CLAUDE_OBLIGATIONS`, `dom/*`, `arch/*`, `feature/FEATURE_SWE` + `FEATURE_SWARM`, `ref/*`, `claude/RUFLO`.
+- Canonical source of the plugin's behavior: `wf/WF_*`, `claude/CLAUDE_OBLIGATIONS`, `dom/*`, `arch/*`, `feature/FEATURE_SWE` + `FEATURE_SUBAGENTS`, `ref/*`.
 - `memories/templates/*` = seed files bootstrap copies into a NEW project's `.serena/memory/` at `/swe-init` (`copy_template_memories` walks `memories/templates/` and copies every `.md`).
 - Edit as plain files with Read/Write/Edit — this is the plugin repo, NOT a Serena memory store.
 - Blast radius: GLOBAL — a change here changes plugin behavior in ALL repos.

@@ -92,3 +92,17 @@ def get_event_count(stream_path: str) -> int:
 def count_edits_since_checkpoint(stream_path: str) -> int:
     """Count edit events since last checkpoint."""
     return count_events_since_last(stream_path, count_type='edit')
+
+
+def count_searches_since_docread(stream_path: str) -> int:
+    """Count consecutive search events since the last doc read / state change.
+
+    A 'docread' event (appended when the agent reads a memory or lists
+    memories) or a 'state' / 'checkpoint' event breaks the streak, so this
+    counts only wide-reaching searches run WITHOUT consulting documentation.
+    """
+    return count_events_since_last(
+        stream_path,
+        marker_types=('state', 'checkpoint', 'docread'),
+        count_type='search',
+    )

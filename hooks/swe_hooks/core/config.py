@@ -558,7 +558,7 @@ def load_workflow_state(cwd: str, wm_filename: str = None) -> Optional[Dict[str,
         "previous_state": None,
         "working_memory_file": os.path.basename(filepath).replace('.md', '') if filepath else None,
         "edits_since_checkpoint": 0,
-        "is_swarm_agent": False,
+        "is_subagent": False,
         "plan_mode": False,
     }
 
@@ -767,7 +767,7 @@ def create_initial_state(session_id: str = None) -> Dict[str, Any]:
         "current_state": "UNINITIALIZED",
         "previous_state": None,
         "edits_since_checkpoint": 0,
-        "is_swarm_agent": False,
+        "is_subagent": False,
         "plan_mode": False,
         "working_memory_file": None,
     }

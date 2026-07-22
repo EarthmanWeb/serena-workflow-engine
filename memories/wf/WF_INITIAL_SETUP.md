@@ -24,7 +24,7 @@ metadata:
 Run in order:
 
 1. `detect_missing_mcps` — check for required MCP servers.
-2. `install_mcp_servers` — install missing servers (serena, ruflo).
+2. `install_mcp_servers` — install missing servers (serena).
 3. `prompt_restart` — request Claude Code restart when MCPs installed.
 4. `verify_installation` — confirm MCPs are accessible.
 5. `run_serena_onboard` — execute Serena project onboarding.

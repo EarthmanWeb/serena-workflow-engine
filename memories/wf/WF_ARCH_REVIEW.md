@@ -156,9 +156,7 @@ If the task affects **6+ files OR 3+ layers**, consider parallel agents:
 - Use `model: "sonnet"` for implementation, `"haiku"` for read-only.
 - Note `parallel_agents: true` in WM.
 
-For cognitive-only coordination (consensus, reasoning without file access): route to `WF_SWARM_ORCHESTRATE` for Ruflo setup (niche use case).
-
-If thresholds not met, proceed as single-agent implementation.
+Parallel subagents launch during `WF_EXECUTE` — there is no separate orchestration state. If thresholds not met, proceed as single-agent implementation.
 
 ## Single Question + Consent Gate
 
@@ -172,7 +170,7 @@ Before proposing new files: check existing patterns in similar files, read relev
 
 Check whether the INITIAL user prompt gave blanket consent — phrases like "get it done", "continue to completion", "don't stop till finished", "run to completion", "don't ask me questions", "no questions" (the `auto_approve` / `no_questions` flags noted at WF_CLASSIFY).
 
-- If blanket consent given: SKIP the final validate-or-continue question. If "no questions" was requested, ALSO derive the most logical choices for any design/approach questions yourself and proceed on that consent — do NOT call `AskUserQuestion`. Go directly to `WF_EXECUTE` (or `WF_SWARM_ORCHESTRATE` if parallel agents planned).
+- If blanket consent given: SKIP the final validate-or-continue question. If "no questions" was requested, ALSO derive the most logical choices for any design/approach questions yourself and proceed on that consent — do NOT call `AskUserQuestion`. Go directly to `WF_EXECUTE` (parallel subagents, if planned, launch there).
 - Otherwise: assemble and ask the single question call below.
 
 ### Assemble & Ask ONE Question Call
@@ -217,22 +215,21 @@ Scope this load to the chosen approach. Do NOT sweep memories for approaches tha
 
 | Selection                         | Action                                                                                                                                                                                   |
 | --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| "Validate the plan with me first" | Present the assembled plan (files table, constraints, data flow, test plan, parallel rec). Get explicit go-ahead, then read `WF_EXECUTE` (or `WF_SWARM_ORCHESTRATE` if parallel planned). |
-| "Continue through to completion"  | Read `WF_EXECUTE` directly (or `WF_SWARM_ORCHESTRATE` if parallel planned).                                                                                                               |
-| Consent-skip (blanket consent)    | Read `WF_EXECUTE` directly (or `WF_SWARM_ORCHESTRATE` if parallel planned).                                                                                                               |
+| "Validate the plan with me first" | Present the assembled plan (files table, constraints, data flow, test plan, parallel rec). Get explicit go-ahead, then read `WF_EXECUTE` (parallel subagents launch there). |
+| "Continue through to completion"  | Read `WF_EXECUTE` directly (parallel subagents launch there).                                                                                                               |
+| Consent-skip (blanket consent)    | Read `WF_EXECUTE` directly (parallel subagents launch there).                                                                                                               |
 
 A non-design blocker surfacing here may use `WF_CLARIFY` (reusable ask-user subroutine for non-design blockers only). Design/approach questions are NEVER routed there — they belong in the single question call above.
 
 ## Routing
 
-| Condition                                       | Next Step              |
-| ----------------------------------------------- | ---------------------- |
-| Consent-skip (blanket consent, simple)          | `WF_EXECUTE`           |
-| Consent-skip (blanket consent, parallel needed) | `WF_SWARM_ORCHESTRATE` |
-| "Continue through to completion" (simple)       | `WF_EXECUTE`           |
-| "Continue through to completion" (parallel)     | `WF_SWARM_ORCHESTRATE` |
-| "Validate the plan" → go-ahead (simple)         | `WF_EXECUTE`           |
-| "Validate the plan" → go-ahead (parallel)       | `WF_SWARM_ORCHESTRATE` |
-| Non-design blocker                              | `WF_CLARIFY`           |
+| Condition                                       | Next Step    |
+| ----------------------------------------------- | ------------ |
+| Consent-skip (blanket consent)                  | `WF_EXECUTE` |
+| "Continue through to completion"                | `WF_EXECUTE` |
+| "Validate the plan" → go-ahead                  | `WF_EXECUTE` |
+| Non-design blocker                              | `WF_CLARIFY` |
+
+Parallel subagent work runs inside `WF_EXECUTE` (note `parallel_agents: true` in WM); there is no separate orchestration state.
 
 Update WM via `/swe-wm-update --from WF_ARCH_REVIEW` before transitioning.

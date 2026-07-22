@@ -37,7 +37,7 @@ except ImportError as e:
 # Workflow states where active work is in progress — should block stopping
 INCOMPLETE_STATES = {
     'WF_EXECUTE', 'WF_DEBUG_TDD', 'WF_ARCH_REVIEW',
-    'WF_CHECKPOINT', 'WF_SWARM_ORCHESTRATE'
+    'WF_CHECKPOINT'
 }
 
 # Workflow states where stopping is fine (completion states + uninitialized)

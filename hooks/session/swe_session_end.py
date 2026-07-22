@@ -5,7 +5,7 @@ Inspired by IronBee's session-end pattern.
 
 Responsibilities:
   1. Record session_end event with duration and final state
-  2. Clean up sentinel files (.init_, .swarm_feature_, .test_feature_)
+  2. Clean up sentinel files (.init_, .test_feature_)
   3. Mark WM as ABANDONED if session didn't reach WF_DONE
 """
 
@@ -49,7 +49,6 @@ def cleanup_sentinels(stream_dir: str, session_id: str):
     """Remove all sentinel files for this session."""
     patterns = [
         f'.init_{session_id}',
-        f'.swarm_feature_{session_id}',
         f'.test_feature_{session_id}',
     ]
     for pattern in patterns:

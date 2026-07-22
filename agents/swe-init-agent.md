@@ -159,7 +159,7 @@ Bootstrap handles:
 - Directory creation (`.serena/`, `.serena/memory/`, `.serena/swe-state/`)
 - Language detection → `project.yml`
 - `memory-paths.conf` creation/update
-- Template rendering and installation (`MEMORY.md`, `FEEDBACK_RESPONSE_FORMAT.md`, `FEEDBACK_READ_DOCS_MEANS_LIST.md`, `REF_MCP_BROWSER_DEVTOOLS.md`, `FEATURE_TESTS.md`, `FEATURE_DEV_STANDARDS.md`, `FEATURE_AGENTS.md`) — placeholders like `{{project_name}}`, `{{primary_language}}`, `{{test_framework}}` are auto-filled from detected project info
+- Template rendering and installation (`MEMORY.md`, `FEEDBACK_RESPONSE_FORMAT.md`, `FEEDBACK_READ_DOCS_MEANS_LIST.md`, `REF_MCP_BROWSER_DEVTOOLS.md`, `FEATURE_TESTS.md`, `FEATURE_DEV_STANDARDS.md`) — placeholders like `{{project_name}}`, `{{primary_language}}`, `{{test_framework}}` are auto-filled from detected project info
 - `.gitignore` updates
 - `.mcp.json` creation/merge (adds `browser-devtools` MCP server via `@ironbee-ai/devtools`)
 - `swe-setup-complete.json` creation with `bootstrapped: true`
@@ -605,7 +605,7 @@ After all tasks, verify these 7 conditions:
 4. **Template Memories Rendered**: Template files exist in `.serena/memory/` with placeholders filled
    ```bash
    # Check files exist
-   ls .serena/memory/MEMORY.md .serena/memory/feedback/FEEDBACK_RESPONSE_FORMAT.md .serena/memory/feedback/FEEDBACK_READ_DOCS_MEANS_LIST.md .serena/memory/ref/REF_MCP_BROWSER_DEVTOOLS.md .serena/memory/feature/FEATURE_TESTS.md .serena/memory/feature/FEATURE_DEV_STANDARDS.md .serena/memory/feature/FEATURE_AGENTS.md
+   ls .serena/memory/MEMORY.md .serena/memory/feedback/FEEDBACK_RESPONSE_FORMAT.md .serena/memory/feedback/FEEDBACK_READ_DOCS_MEANS_LIST.md .serena/memory/ref/REF_MCP_BROWSER_DEVTOOLS.md .serena/memory/feature/FEATURE_TESTS.md .serena/memory/feature/FEATURE_DEV_STANDARDS.md
    # Check no unfilled placeholders remain
    UNFILLED=$(grep -rl '{{' .serena/memory/MEMORY.md .serena/memory/feature/FEATURE_*.md 2>/dev/null)
    if [ -n "$UNFILLED" ]; then

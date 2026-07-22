@@ -23,7 +23,7 @@ The workflow system is a finite state machine over Serena memories. Each `WF_*` 
 | Entry      | `WF_INIT` → `WF_CLASSIFY` → routing decision                       |
 | Research   | `WF_RESEARCH`                                                       |
 | Code tasks | routed via `WF_CLASSIFY`                                            |
-| Review     | `WF_ARCH_REVIEW` (design + compliance + swarm assess); swarm needed → `WF_SWARM_ORCHESTRATE` |
+| Review     | `WF_ARCH_REVIEW` (design + compliance + parallel-subagent assessment) |
 | Gate       | `WF_ARCH_REVIEW` (includes approval) ←→ `WF_CLARIFY`               |
 | Execution  | `WF_EXECUTE` ←→ `WF_CHECKPOINT` ←→ `WF_DEBUG_TDD`                  |
 | Completion | `WF_VERIFY` → `WF_DONE`                                            |
@@ -37,12 +37,12 @@ The workflow system is a finite state machine over Serena memories. Each `WF_*` 
 - Calling state reads return status and routes accordingly.
 - Refs: `REF_SKILL_PROTOCOLS`, `SPEC_WORKFLOW_SKILLS`.
 
-### Swarm Integration
+### Subagent Integration
 
-- `WF_SWARM_ORCHESTRATE` spawns specialized agents (researcher, coder, analyst).
-- Each agent follows workflow or receives direct instructions.
-- Aggregate results back to main workflow.
-- Refs: `REF_SWARM_PATTERNS`, `RUFLO`.
+- Parallel work uses Claude Code's built-in `Agent` tool (subagents), launched inside `WF_EXECUTE`.
+- Each subagent runs in its own context window; use `isolation: "worktree"` when subagents edit overlapping files.
+- Aggregate results back to the main workflow.
+- Refs: `FEATURE_SUBAGENTS`.
 
 ### Memory Integration
 
@@ -95,7 +95,7 @@ When modifying the workflow system:
 
 | Component        | Depends On                                                                       |
 | ---------------- | -------------------------------------------------------------------------------- |
-| `WF_CLASSIFY`    | `CLAUDE_OBLIGATIONS`, `INDEX_FEATURES`, WM, `MEMORY.md`, `FEATURE_*`, `REF_SWARM_PATTERNS` |
+| `WF_CLASSIFY`    | `CLAUDE_OBLIGATIONS`, `INDEX_FEATURES`, WM, `MEMORY.md`, `FEATURE_*` |
 | `WF_CLASSIFY`    | (also) `DOM_*`, `SYS_*`, `INDEX_*`                                                |
 | `WF_ARCH_REVIEW` | `ARCH_INDEX`, `ARCH__`, `REF__`                                                   |
 | `WF_VERIFY`      | `CLAUDE_OBLIGATIONS`, `ARCH_INDEX`                                                |

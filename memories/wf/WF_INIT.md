@@ -33,7 +33,7 @@ Run `/swe-memory-frontmatter` to audit/backfill front-matter across existing mem
 
 Check for spawned-agent status BEFORE initializing. You are a spawned agent when your initial prompt contains any of:
 
-- `"You are a swarm agent"`
+- `"You are a subagent"`
 - `"BYPASS WF_INIT"`
 - `"You are the [role] agent"`
 - `"Do NOT follow CLAUDE.md workflow"`

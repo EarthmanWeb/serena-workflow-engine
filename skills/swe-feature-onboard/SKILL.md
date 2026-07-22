@@ -14,7 +14,7 @@ args:
   - name: key
     description: Feature key (optional, will prompt if not provided)
   - name: quick
-    description: Skip swarm analysis, minimal memory creation
+    description: Skip parallel-subagent analysis, minimal memory creation
     type: boolean
     default: false
 ---
@@ -48,7 +48,7 @@ Interactive wizard for registering features in the workflow system.
 | Aspect          | Quick Mode                  | Full Mode              |
 | --------------- | --------------------------- | ---------------------- |
 | Time            | ~30 sec                     | 2-5 min                |
-| Swarm analysis  | No                          | Optional (10 agents)   |
+| Parallel subagents | No                       | Optional (10 subagents)|
 | DOM_* memories  | No                          | Yes (if domains found) |
 | SYS_* memories  | No                          | Yes (if systems found) |
 | Layer detection | Basic                       | Detailed               |
@@ -170,8 +170,8 @@ AskUserQuestion({
       header: "Analysis",
       options: [
         {
-          label: "Full DAA Swarm (Recommended)",
-          description: "10 agents analyze in parallel, creates DOM_*/SYS_* memories (2-5 min)"
+          label: "Parallel Subagents (Recommended)",
+          description: "10 subagents analyze in parallel via the Agent tool, creates DOM_*/SYS_* memories (2-5 min)"
         },
         {
           label: "Quick Scan",
@@ -188,36 +188,43 @@ AskUserQuestion({
 })
 ```
 
-### If "Full DAA Swarm" selected:
+### If "Parallel Subagents" selected:
 
-**⚠️ MANDATORY: Load swarm coordination context first:**
-
-```javascript
-mcp__plugin_swe_serena__read_memory("feature/FEATURE_SWARM")
-```
-
-This loads swarm patterns, agent definitions, and coordination protocols needed for DAA orchestration. Without it, swarm agents lack the project's coordination standards.
+**Load the subagent guidance first:**
 
 ```javascript
-mcp__ruv-swarm__daa_init({ enableLearning: true })
-
-mcp__ruv-swarm__task_orchestrate({
-  task: "Analyze feature architecture",
-  agents: [
-    "config-analyzer",    // Parse config files
-    "architecture-mapper", // Detect layers
-    "pattern-detector",   // Find conventions
-    "domain-extractor",   // Extract domains
-    "system-finder",      // Identify systems
-    "test-analyzer",      // Test patterns
-    "import-tracer",      // Dependency graph
-    "convention-learner", // Style detection
-    "file-indexer",       // File inventory
-    "synthesizer"         // Compile results
-  ],
-  context: { featureKey: "[KEY]", rootPath: "[PATH]" }
-})
+mcp__plugin_swe_serena__read_memory("feature/FEATURE_SUBAGENTS")
 ```
+
+This loads subagent types, model selection, and parallel-launch patterns.
+
+Launch 10 read-only analysis subagents in ONE message via the `Agent` tool (`run_in_background: true`, `model: "haiku"` for read-only scans). Each covers one focus area; a final synthesis pass compiles their results into DOM_*/SYS_* memories. Prefix every prompt with `You are a subagent. BYPASS WF_INIT. Do NOT read CLAUDE.md workflow.`
+
+```javascript
+// Launch ALL in ONE message for parallel execution.
+Agent({ description: "config-analyzer", run_in_background: true, model: "haiku",
+  prompt: "You are a subagent. BYPASS WF_INIT. Parse config files for [KEY] at [PATH]..." })
+Agent({ description: "architecture-mapper", run_in_background: true, model: "haiku",
+  prompt: "You are a subagent. BYPASS WF_INIT. Detect architectural layers for [KEY]..." })
+Agent({ description: "pattern-detector", run_in_background: true, model: "haiku",
+  prompt: "You are a subagent. BYPASS WF_INIT. Find coding conventions for [KEY]..." })
+Agent({ description: "domain-extractor", run_in_background: true, model: "haiku",
+  prompt: "You are a subagent. BYPASS WF_INIT. Extract domain concepts for [KEY]..." })
+Agent({ description: "system-finder", run_in_background: true, model: "haiku",
+  prompt: "You are a subagent. BYPASS WF_INIT. Identify systems/integrations for [KEY]..." })
+Agent({ description: "test-analyzer", run_in_background: true, model: "haiku",
+  prompt: "You are a subagent. BYPASS WF_INIT. Analyze test patterns for [KEY]..." })
+Agent({ description: "import-tracer", run_in_background: true, model: "haiku",
+  prompt: "You are a subagent. BYPASS WF_INIT. Trace the dependency graph for [KEY]..." })
+Agent({ description: "convention-learner", run_in_background: true, model: "haiku",
+  prompt: "You are a subagent. BYPASS WF_INIT. Detect style/naming conventions for [KEY]..." })
+Agent({ description: "file-indexer", run_in_background: true, model: "haiku",
+  prompt: "You are a subagent. BYPASS WF_INIT. Inventory files for [KEY] at [PATH]..." })
+Agent({ description: "synthesizer", run_in_background: true, model: "sonnet",
+  prompt: "You are a subagent. BYPASS WF_INIT. Compile the analysis results for [KEY] into DOM_*/SYS_* memory drafts..." })
+```
+
+Collect results from the background task notifications, then synthesize into memories.
 
 ---
 
@@ -442,13 +449,12 @@ mcp__plugin_swe_serena__edit_memory(
 - **Feature Key**: [KEY]
 - **Mode**: [full|quick]
 - **Memories Created**: FEATURE_[KEY], [DOM__, SYS__ if applicable]
-- **Next Step Hint**: [WF_SWARM_ORCHESTRATE if DAA swarm was used, WF_CLASSIFY otherwise]
+- **Next Step Hint**: WF_CLASSIFY
 ```
 
 **Routing after onboarding:**
 
-- If DAA swarm analysis was used → `WF_SWARM_ORCHESTRATE` (swarm context is already loaded)
-- If quick mode or manual → `WF_CLASSIFY` (normal entry)
+- Always → `WF_CLASSIFY` (normal entry). Parallel subagent work, if any, runs later inside `WF_EXECUTE`.
 
 ---
 
@@ -462,7 +468,7 @@ mcp__plugin_swe_serena__edit_memory(
 
 ## Troubleshooting
 
-### Swarm MCP unavailable
+### Subagents unavailable
 
 Fall back to quick mode or manual configuration.
 

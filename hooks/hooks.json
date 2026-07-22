@@ -19,11 +19,6 @@
             "type": "command",
             "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/prompt/swe_user_prompt_workflow.py",
             "timeout": 10
-          },
-          {
-            "type": "command",
-            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/prompt/swe_user_prompt_swarm.py",
-            "timeout": 10
           }
         ]
       }
@@ -45,16 +40,6 @@
           {
             "type": "command",
             "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/pre/swe_pre_edit_validate.py",
-            "timeout": 10
-          }
-        ]
-      },
-      {
-        "matcher": "mcp__ruv-swarm__swarm_init",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/pre/swe_pre_swarm_feature_gate.py",
             "timeout": 10
           }
         ]
@@ -127,6 +112,16 @@
           {
             "type": "command",
             "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/post/swe_post_todo_wm_sync.py",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Grep|Glob|mcp__plugin_swe_serena__search_for_pattern|mcp__serena__search_for_pattern",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/post/swe_post_search_docs_hint.py",
             "timeout": 5
           }
         ]

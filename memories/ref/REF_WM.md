@@ -90,7 +90,7 @@ Session: <SESSION_ID>
 | `Feature Key(s)`              | Active feature(s) from `INDEX_FEATURES`                    |
 | `Session ID`                  | 8-char unique ID                                           |
 | `Return Step`                 | Where to return after completion                           |
-| `Invocation Mode`             | `workflow` \| `standalone` \| `swarm_agent`                |
+| `Invocation Mode`             | `workflow` \| `standalone` \| `subagent`                   |
 | `Task Iteration`              | Counter for tasks in same session (starts at 1)            |
 | `Edit Count Since Checkpoint` | Edits since last WM update (reset on new task)             |
 

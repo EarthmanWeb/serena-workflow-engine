@@ -89,7 +89,7 @@ When a user instruction contradicts a memory:
 - Use the Claude Code `Agent` tool for parallel tasks. Launch multiple in ONE message.
 - Use `run_in_background: true` for concurrent execution.
 - Use `isolation: "worktree"` when agents edit overlapping files.
-- Use Ruflo MCP tools ONLY for cognitive-only tasks (reasoning, consensus). See `feature/FEATURE_SWARM`.
+- See `feature/FEATURE_SUBAGENTS` for subagent types, model selection, and patterns.
 
 ## Quality Standards
 

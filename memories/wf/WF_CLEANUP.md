@@ -27,7 +27,6 @@ Terminal state. Archive completed work.
 
 ```bash
 mv .serena/swe/wm/WM_*.md .serena/archive-memories/
-rm -f .ruflo/workflow-state.json
 ```
 
 ## Exit

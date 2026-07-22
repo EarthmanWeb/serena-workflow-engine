@@ -109,7 +109,6 @@ _FORWARD_RANK = {
     "WF_CONTINUE": 1,
     "WF_RESEARCH": 2,
     "WF_ARCH_REVIEW": 3,
-    "WF_SWARM_ORCHESTRATE": 3,
     "WF_EXECUTE": 4,
     "WF_CHECKPOINT": 4,
     "WF_DEBUG_TDD": 4,
@@ -170,7 +169,6 @@ STATE_ICONS = {
     "WF_VERIFY": "✅",
     "WF_DEBUG_TDD": "🐛",
     "WF_CONTINUE": "➡️",
-    "WF_SWARM_ORCHESTRATE": "🐝",
     "WF_DONE": "🎉",
     "WF_INITIAL_SETUP": "⚙️",
 }

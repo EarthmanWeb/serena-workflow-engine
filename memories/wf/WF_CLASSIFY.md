@@ -99,8 +99,7 @@ Scan locations:
 | Debugging (test-driven) | Failing tests, behavior differs between environments, test-driven debugging | `WF_DEBUG_TDD` |
 | Operational (no code changes, execution only) | Run shell/WP-CLI, HTTP requests, check DB state, run test suites, verify deployments — needs feature context, modifies no source. Skip arch review | `WF_EXECUTE` (after Step 4) |
 | Code change | Bug fix, feature addition, refactor, doc update — modifies source | `WF_ARCH_REVIEW` or `WF_EXECUTE` per Step 3b (after Step 4) |
-| Parallel agents (6+ files OR 3+ architectural layers) | Reads/edits at scale with independent concurrent subtasks. Note `parallel_agents: true`; use `Agent` tool with `run_in_background: true` and optionally `isolation: "worktree"` for edit conflicts | `WF_ARCH_REVIEW` |
-| Ruflo swarm (cognitive-only, consensus, no file access) | Niche: reasoning, spec writing, arch evaluation, consensus WITHOUT file access. Most tasks use parallel agents instead. Note `swarm_candidate: true`; `read_memory("feature/FEATURE_SWARM")` | `WF_ARCH_REVIEW` (swarm routing confirmed there) |
+| Parallel subagents (6+ files OR 3+ architectural layers) | Reads/edits at scale with independent concurrent subtasks. Note `parallel_agents: true`; use `Agent` tool with `run_in_background: true` and optionally `isolation: "worktree"` for edit conflicts | `WF_ARCH_REVIEW` |
 
 ### 3b. Architecture Review Necessity Check (Code Changes Only)
 
@@ -109,7 +108,7 @@ REQUIRES `WF_ARCH_REVIEW` if ANY is true:
 - New feature (net-new functionality, not a change to existing behavior)
 - Major module addition to an existing feature (new class/subsystem/integration surface)
 - Touches MORE than 5 files
-- Touches 3+ architectural layers, OR `parallel_agents` / `swarm_candidate` was noted
+- Touches 3+ architectural layers, OR `parallel_agents` was noted
 - `gherkin_spec_needed: true` noted at Step 2d
 
 MAY SKIP `WF_ARCH_REVIEW` → route directly to `WF_EXECUTE` ONLY if ALL hold:
