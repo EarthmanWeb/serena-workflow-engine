@@ -1,6 +1,6 @@
 {
   "name": "serena-workflow-engine",
-  "version": "1.2.22",
+  "version": "1.2.23",
   "private": true,
   "scripts": {
     "fmt": "dprint fmt --config ./dprint.json",
