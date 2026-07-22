@@ -1,90 +1,44 @@
 ---
 name: Test Suite
-description: Test suite and task-completion checklist for serena-workflow-engine
+description: Verification approach for this repo (no formal test suite) + task-completion checklist + test-gate mechanics.
 metadata:
   type: feature
 ---
 
-# FEATURE_TESTS - Test Suite (Template)
+# FEATURE_TESTS — Test Suite
 
-## Feature Overview
+| Property | Value |
+| --- | --- |
+| Key | TESTS |
+| Type | infrastructure |
+| Language | Python |
+| Formal test suite | None |
 
-| Property      | Value                  |
-| ------------- | ---------------------- |
-| **Name**      | Test Suite             |
-| **Key**       | TESTS                  |
-| **Type**      | infrastructure         |
-| **Language**  | python   |
-| **Framework** | unknown     |
+## Verification (no automated suite exists)
 
-## Running Tests
+Run from project root:
 
-**ALWAYS use project scripts. All commands run from the project root.**
+- Format: `npm run fmt` (dprint: markdown + JSON)
+- Format check: `npm run fmt:check`
+- Hook syntax: `python3 -c "import py_compile; py_compile.compile('<path>.py')"` for every modified hook script.
+- Manual: exercise the change through the Claude Code plugin system.
 
-```bash
-# TODO: Customize these per project
-# TODO: Add test commands
-```
+## Task-Completion Checklist
 
-**Note:** There is no formal automated test suite in this repo. Verification relies on:
-- dprint for formatting validation (`npm run fmt:check`)
-- Python syntax checking for hook scripts (`python3 -c "import py_compile; py_compile.compile('path/to/script.py')"`)
-- Manual testing through the Claude Code plugin system
+Run in order when a task is done:
 
-## Task Completion Checklist
+1. `npm run fmt` — format markdown + JSON.
+2. `npm run fmt:check` — confirm zero formatting issues.
+3. If releasing: `bash scripts/bump-version.sh`.
+4. If hooks modified: `py_compile` every changed script (command above).
+5. Commit staged changes with a descriptive message.
 
-When a task is completed, run these steps:
+## Test Gate
 
-1. **Format code**: `npm run fmt` (formats markdown and JSON via dprint)
-2. **Format check**: `npm run fmt:check` (verify no formatting issues)
-3. **Version bump** (if releasing): `bash scripts/bump-version.sh`
-4. **Git commit**: Stage and commit changes with a descriptive message
-5. **Test hooks**: If hook scripts were modified, verify Python syntax with
-   `python3 -c "import py_compile; py_compile.compile('path/to/script.py')"`
+`swe_pre_bash_test_gate.py` BLOCKS direct test-runner Bash commands until this memory is read in the current session.
 
-### Test Gate
-
-The test gate hook (`swe_pre_bash_test_gate.py`) **blocks** direct test runner
-commands until this memory has been read in the current session.
-
-**How it works:**
-
-1. `swe_pre_bash_test_gate.py` intercepts Bash commands matching test patterns
-2. Checks for sentinel file: `.serena/streams/.test_feature_{session_id}`
-3. If missing -> **blocks** with instruction to read FEATURE_TESTS
-4. When FEATURE_TESTS is read, `swe_post_read_state.py` calls
-   `create_feature_sentinel(session_id, 'test')` which creates the sentinel
-5. Subsequent test commands pass instantly (file existence check)
-
-## Per-Project Customization
-
-When adapting this template for a project:
-
-1. **Replace remaining placeholders** with actual values
-2. **Add test scripts table** -- list all test scripts from your package manager
-3. **Add fixtures section** -- document available fixtures and their APIs
-4. **Add test categories** -- list spec files with descriptions
-5. **Add config details** -- document runner config (timeouts, workers, etc.)
-6. **Add auth setup** -- document how authentication storage state works (if applicable)
-7. **Remove this section** after customization
-
-## Scope Definition
-
-### Primary Directories
-
-| Directory           | Purpose                        |
-| ------------------- | ------------------------------ |
-| `tests/`    | Root of the test suite         |
-
-## Test Runner Config
-
-| Setting      | Value                  |
-| ------------ | ---------------------- |
-| **Framework**| `unknown`   |
-| **Root**     | `tests/`        |
-
-## Test Suites
-
-| Suite   | File   | Focus   |
-| ------- | ------ | ------- |
-| _TODO: Add test suites_ | | |
+1. The hook intercepts Bash commands matching test patterns.
+2. It checks for sentinel `.serena/streams/.test_feature_{session_id}`.
+3. Sentinel missing → BLOCK with instruction to read FEATURE_TESTS.
+4. Reading FEATURE_TESTS → `swe_post_read_state.py` calls `create_feature_sentinel(session_id, 'test')`.
+5. Sentinel present → test commands pass (existence check).

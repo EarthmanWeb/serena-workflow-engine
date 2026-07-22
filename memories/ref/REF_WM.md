@@ -1,54 +1,31 @@
+---
+name: REF_WM
+description: Working Memory (WM) file spec — naming, lifecycle, update rules, template, and Stop-hook fields.
+metadata:
+  type: reference
+---
+
 # REF_WM
 
 ## Naming
 
-`WM_<SESSION_ID>.md`
-
-- **Session ID**: 8-char from transcript_path UUID (e.g., `3fe6b3c5`)
+- Filename: `WM_<SESSION_ID>.md`. NEVER add a suffix. NEVER rename.
+- `SESSION_ID`: 8-char prefix from the `transcript_path` UUID (e.g. `3fe6b3c5`).
 
 ## Lifecycle
 
-| Stage           | When                    | What Happens                                                       |
-| --------------- | ----------------------- | ------------------------------------------------------------------ |
-| **Auto-Create** | Entry into WF_CLASSIFY  | Prompt hook creates `WM_{session_id}.md` on first transition into WF_CLASSIFY |
-| **Load**        | Session resume          | Read file → verify session ID matches → echo to chat               |
-| **Update**      | After edits/transitions | Write changes → echo: `📋 Updated Working Memory: WM_{session_id}` |
+| Stage       | When                    | Action                                                                          |
+| ----------- | ----------------------- | ------------------------------------------------------------------------------- |
+| Auto-Create | Entry into WF_CLASSIFY  | Prompt hook creates `WM_{session_id}.md` on the first transition into WF_CLASSIFY |
+| Load        | Session resume          | Read file → verify session ID matches → echo to chat                            |
+| Update      | After edits/transitions | Write changes → echo `📋 Updated Working Memory: WM_{session_id}`                |
 
-**The WM filename is always `WM_{session_id}` — no suffix, no renaming.**
+- Update WM after EVERY: memory edit, file edit, workflow transition, state change.
 
-**Update is MANDATORY after:** memory edits, file edits, workflow transitions, state changes.
+## Anti-Patterns
 
----
-
-## ⛔ ANTI-PATTERNS
-
-### ❌ Manual WM Updates (edit_memory / write_memory)
-
-**DO NOT manually update WM with `edit_memory` or `write_memory`.**
-
-```python
-# ❌ WRONG: Manual edits
-edit_memory("WM_...", "Task: old", "Task: new", "literal")
-write_memory("WM_...", "...full content...")
-```
-
-**Why it's wrong:** Manual updates bypass step-specific checklists and risk clobbering daemon-managed fields.
-
----
-
-## ✅ CORRECT: Use /swe-wm-update Skill
-
-**Always invoke the skill to update WM:**
-
-```
-/swe-wm-update --from WF_CLASSIFY
-```
-
-The skill provides step-specific checklists ensuring no fields are missed and handles daemon coordination correctly.
-
-**ONE SKILL CALL = CORRECT**
-
----
+- NEVER update WM manually with `edit_memory` or `write_memory`. Manual updates bypass step-specific checklists and clobber daemon-managed fields.
+- ALWAYS update WM via the `/swe-wm-update` skill. It supplies step-specific checklists (no missed fields) and coordinates the daemon. Invoke as `/swe-wm-update --from WF_<STATE>`. One skill call = correct.
 
 ## Template
 
@@ -104,29 +81,25 @@ Session: <SESSION_ID>
 - Files Modified: [list]
 ```
 
----
-
-## Workflow Context (REQUIRED for Stop Hook)
+## Workflow Context Fields (REQUIRED for Stop Hook)
 
 | Field                         | Purpose                                                    |
 | ----------------------------- | ---------------------------------------------------------- |
-| `Calling Step`                | Which WF_* invoked current action                          |
-| `Current State`               | **CRITICAL** - Active state (used by stop hook)            |
-| `Feature Key(s)`              | Active feature(s) from INDEX_FEATURES                      |
+| `Calling Step`                | Which WF_* invoked the current action                      |
+| `Current State`               | CRITICAL — active state, read by the stop hook             |
+| `Feature Key(s)`              | Active feature(s) from `INDEX_FEATURES`                    |
 | `Session ID`                  | 8-char unique ID                                           |
 | `Return Step`                 | Where to return after completion                           |
 | `Invocation Mode`             | `workflow` \| `standalone` \| `swarm_agent`                |
 | `Task Iteration`              | Counter for tasks in same session (starts at 1)            |
-| `Edit Count Since Checkpoint` | Edits since last working memory update (reset on new task) |
+| `Edit Count Since Checkpoint` | Edits since last WM update (reset on new task)             |
 
-**Stop Hook Behavior:**
+## Stop Hook Behavior
 
-| State                                     | Behavior                   |
-| ----------------------------------------- | -------------------------- |
-| `WF_DONE`, `WF_CLEANUP`                   | Clean exit                 |
+| State                                     | Behavior                    |
+| ----------------------------------------- | --------------------------- |
+| `WF_DONE`, `WF_CLEANUP`                   | Clean exit                  |
 | `WF_EXECUTE`, `WF_DEBUG_TDD`, `WF_VERIFY` | ⚠️ Warning: incomplete work |
-
----
 
 ## Skill Return Section (Optional)
 
@@ -140,15 +113,13 @@ Session: <SESSION_ID>
 - **Next Step Hint**: WF_CLASSIFY
 ```
 
-**Status codes:** `success`, `success_with_findings`, `needs_clarification`, `blocked`, `escalate_complexity`
-
----
+- Status codes: `success`, `success_with_findings`, `needs_clarification`, `blocked`, `escalate_complexity`.
 
 ## Rules
 
-1. One file per conversation
-2. Echo ID on every operation
-3. Verify session ID on load
-4. Update after significant actions
-5. **NEVER do single-field state edits**
-6. **WM filename is always `WM_{session_id}` — never add suffixes or rename**
+- One WM file per conversation.
+- Echo the session ID on every WM operation.
+- Verify session ID on load.
+- Update WM after significant actions.
+- NEVER do single-field state edits.
+- WM filename is always `WM_{session_id}` — NEVER add suffixes or rename.

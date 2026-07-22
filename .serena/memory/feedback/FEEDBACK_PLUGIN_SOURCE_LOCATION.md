@@ -1,20 +1,22 @@
 ---
-name: FEEDBACK_PLUGIN_SOURCE_LOCATION
-description: This repo IS the SWE plugin source - never write to the plugin cache
-type: feedback
+name: Plugin Source Location
+description: This repo IS the SWE plugin source — write plugin edits here, NEVER to the plugin cache.
+metadata:
+  type: feedback
 ---
 
-**NEVER write to the plugin cache directory** (`~/.claude/plugins/cache/EarthmanWeb/swe/*/`).
+# Plugin Source Location
 
-This repository (`/Users/webdev/LocalSites/projects/serena-workflow-engine`) IS the source code for the SWE plugin. The cache is a copy — changes there are ephemeral and will be overwritten on next plugin update.
+NEVER write to the plugin cache (`~/.claude/plugins/cache/EarthmanWeb/swe/*/`). It is a copy — cache edits are ephemeral, overwritten on next plugin update, invisible to git.
 
-**Why:** User correction — changes were written to the cache instead of the repo, making them non-persistent and invisible to git.
+This repo (`serena-workflow-engine`) IS the plugin source. Write ALL plugin edits here.
+
+**Why:** User correction — edits went to the cache, became non-persistent and git-invisible.
 
 **How to apply:**
-- All hook scripts live at `<repo-root>/hooks/{session,prompt,pre,post,stop}/*.py`
-- Core modules at `<repo-root>/hooks/swe_hooks/core/*.py`
-- Hook config at `<repo-root>/hooks/hooks.json`
-- Plugin config at `<repo-root>/.claude-plugin/plugin.json`
-- The cache path `~/.claude/plugins/cache/EarthmanWeb/swe/*` is READ-ONLY for reference
-- When editing plugin files, write to the REPO, not the cache
-- Use Bash+Python for writes (Claude Code's .claude/ protection doesn't apply here since this isn't inside .claude/)
+- Hook scripts: `<repo>/hooks/{session,prompt,pre,post,stop}/*.py`
+- Core modules: `<repo>/hooks/swe_hooks/core/*.py`
+- Hook config: `<repo>/hooks/hooks.json`
+- Plugin config: `<repo>/.claude-plugin/plugin.json`
+- Treat `~/.claude/plugins/cache/EarthmanWeb/swe/*` as READ-ONLY reference.
+- This repo is NOT inside `.claude/`, so Claude Code's `.claude/` write-protection does not apply — edit normally.

@@ -1,7 +1,8 @@
 ---
 name: REF_MCP_BROWSER_DEVTOOLS
 description: Browser DevTools MCP — tool reference, scenario automation, session isolation for parallel agents, debugging workflows
-type: reference
+metadata:
+  type: reference
 ---
 
 # REF_MCP_BROWSER_DEVTOOLS - Browser DevTools MCP Reference

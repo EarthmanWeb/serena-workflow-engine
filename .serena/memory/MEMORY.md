@@ -19,6 +19,7 @@ metadata:
 - [Test Suite](feature/FEATURE_TESTS.md) — verification approach + task-completion checklist
 
 ## Reference
+- [Memory Style Standard](ref/REF_MEMORY_STYLE.md) — MANDATORY terse-imperative machine-readable style for ALL memories; enforced by swe_post_memory_style.py hook + /swe-memory-audit
 - [MCP Browser DevTools](ref/REF_MCP_BROWSER_DEVTOOLS.md) — scenarios-first rule, storageState reuse for parallel agents, tool reference
 - [Memory Maintenance](ref/REF_MEMORY_MAINTENANCE.md) — how memories are created & maintained (discovery model, style, threshold, actions)
 

@@ -1,32 +1,30 @@
-# WF_UPDATE_MEMORY - Update Memory
+---
+name: WF_UPDATE_MEMORY
+description: Workflow step to update or create a non-code memory (DOM_/SYS_/REF_/INDEX_/WM_) and route back.
+metadata:
+  type: workflow
+---
+
+# WF_UPDATE_MEMORY — Update Memory
 
 > **On step WF_UPDATE_MEMORY**
 
----
+## Use When
 
-## When To Use
-
-- Adding/updating domain requirements (`DOM_*`)
-- Updating system or reference documentation (`SYS_*`, `REF_*`)
-- Creating/updating index files (`INDEX_*`)
-- Updating `WM_*` with task progress
-- Capturing architectural decisions after WF_ARCH_REVIEW
+- Add or update domain requirements (`DOM_*`).
+- Update system or reference docs (`SYS_*`, `REF_*`).
+- Create or update index files (`INDEX_*`).
+- Update `WM_*` with task progress.
+- Capture architectural decisions after `WF_ARCH_REVIEW`.
 
 ## Before Updating
 
-Always read the target memory before modifying it:
+- ALWAYS `read_memory("[memory_name]")` before modifying — prevents data loss; forces targeted edits over blind overwrites.
+- Find the correct name via `list_memories()` or `INDEX_FEATURES`.
 
-```
-read_memory("[memory_name]")
-```
+## Steps
 
-This prevents data loss and ensures targeted edits rather than blind overwrites.
-
-Use `list_memories()` or `INDEX_FEATURES` to find the correct memory name.
-
-## Execute These Steps
-
-### 1. Identify Target Memory
+### 1. Identify target memory
 
 | Type      | Naming         | Purpose                                       |
 | --------- | -------------- | --------------------------------------------- |
@@ -36,38 +34,30 @@ Use `list_memories()` or `INDEX_FEATURES` to find the correct memory name.
 | Index     | `INDEX_[TYPE]` | File/symbol indexes                           |
 | Working   | `WM_*`         | Session task state                            |
 
-### 2. For WM Updates
+### 2. WM updates
 
-Invoke `/swe-wm-update --from {calling_step}` — provides the complete checklist and template. The skill handles reading, validating, and writing WM comprehensively.
+- Invoke `/swe-wm-update --from {calling_step}`. The skill reads, validates, and writes WM with the full checklist and template. Do NOT hand-write WM.
 
-### 3. For Non-WM Memory Updates
+### 3. Non-WM memory updates
 
 Use Serena tools directly:
 
-```python
-mcp__plugin_swe_serena__write_memory("MEMORY_NAME", "content")
-mcp__plugin_swe_serena__edit_memory("MEMORY_NAME", "old", "new", "literal")
-```
+- `mcp__plugin_swe_serena__write_memory("MEMORY_NAME", "content")`
+- `mcp__plugin_swe_serena__edit_memory("MEMORY_NAME", "old", "new", "literal")`
 
-### 3b. Keep MEMORY.md a Terse Index
+### 3b. Keep MEMORY.md a terse index
 
-`MEMORY.md` is an INDEX loaded into context every session — keep it lean (aim for
-**< 200 lines**). When a new memory needs an index entry:
+`MEMORY.md` loads into context every session. Keep it lean (aim **< 200 lines**). When a new memory needs an index entry:
 
 - Add exactly **one line**: `- [Title](path) — short hook` (**≤ 200 chars**).
-- Put the detail in the linked topic file, NOT in MEMORY.md. Never paste a summary.
-- Group entries under a few category headers — do **not** add a `##` section per memory.
-- Do **not** index `spec/`, `report/`, `research/`, or `project/` memories — those are
-  browsed with `list_memories(topic="…")`, never listed in MEMORY.md.
+- Put detail in the linked topic file, NOT in MEMORY.md. NEVER paste a summary.
+- Group entries under category headers (≤6). Do NOT add a `##` section per memory.
+- Do NOT index `spec/`, `report/`, `research/`, or `project/` memories — browse those with `list_memories(topic="…")`.
+- The `write_memory` PostToolUse hook warns when MEMORY.md exceeds its size budget, an entry is over-long, or a non-indexed category leaked in. Trim on the warning.
 
-The `write_memory` PostToolUse hook warns when MEMORY.md exceeds its size budget, an
-entry is over-long, or a non-indexed category leaked in. Trim on the warning.
+### 4. Confirm to user
 
-### 4. Confirm to User
-
-"Updated [MEMORY_NAME] with: [brief description]"
-
----
+- Report: `Updated [MEMORY_NAME] with: [brief description]`.
 
 ## Routing
 
@@ -76,4 +66,4 @@ entry is over-long, or a non-indexed category leaked in. Trim on the warning.
 | Domain memory updated | `WF_CLASSIFY`                    |
 | WM updated            | Return to previous workflow step |
 
-Update WM via `/swe-wm-update` before transitioning.
+- Update WM via `/swe-wm-update` before transitioning.

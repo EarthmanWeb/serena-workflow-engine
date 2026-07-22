@@ -1,34 +1,34 @@
-# WF_ARCH_REVIEW - Design, Compliance Review & Approval
+---
+name: WF_ARCH_REVIEW
+description: Single planning gate for major code changes — design, architecture compliance, parallel-execution assessment, single-question consent gate.
+metadata:
+  type: workflow
+---
+
+# WF_ARCH_REVIEW — Design, Compliance Review & Approval
 
 > **On step WF_ARCH_REVIEW**
 
----
+Single planning gate for **major** code changes: design, architecture compliance, parallel-execution assessment, single question + consent gate.
 
-## Purpose
+## Entry Conditions
 
-Single planning gate for **major** code changes: design, architecture compliance, parallel execution assessment, and the single question + consent gate.
-
-## When This State Is Entered
-
-WF_ARCH_REVIEW is NOT entered for every code change. WF_CLASSIFY Step 3b (Architecture Review Necessity Check) routes here only when the task is a **new feature, a major module addition, touches >5 files, or crosses 3+ layers**. Minor patches to existing functionality (≤5 files, no open design questions) skip this state and go straight to WF_EXECUTE with `arch_review_skipped: true`.
-
-If you arrived here for something that is actually a trivial one-file patch, that is a mis-route — note it and proceed; do not pad a small change with ceremony.
-
----
+- Enter ONLY when WF_CLASSIFY Step 3b routed here: task is a **new feature**, a **major module addition**, touches **>5 files**, or crosses **3+ layers**.
+- Minor patches (≤5 files, no open design questions) NEVER enter here — they go straight to `WF_EXECUTE` with `arch_review_skipped: true`.
+- If you arrived here for a trivial one-file patch, this is a mis-route: note it and proceed. Do NOT pad a small change with ceremony.
 
 ## SPEC Fast-Path
 
-If a `SPEC_*` memory is already loaded (check WM), skip steps 1-4 and reference the SPEC by name. Proceed to step 5 (Parallel Execution Assessment) and then the Single Question + Consent Gate.
-If no SPEC loaded, follow steps 1-4 below.
-
-> Note: steps 1, 2, 2b, and 2c describe the heavy memory load + compliance-checklist derivation. This load is DEFERRED from WF_CLASSIFY and now runs AFTER the questions are answered — see "Heavy Memory Load (After Questions Answered)" in the Single Question + Consent Gate section. Use steps 1-2c there for the procedure, scoped to the chosen approach.
+- If a `SPEC_*` memory is loaded (check WM), SKIP steps 1-4 and reference the SPEC by name. Go to step 5 (Parallel Execution Assessment), then the Single Question + Consent Gate.
+- If no SPEC loaded, follow steps 1-4.
+- Steps 1, 2, 2b, 2c (heavy memory load + compliance-checklist derivation) are DEFERRED from WF_CLASSIFY and run AFTER questions are answered — see "Heavy Memory Load (After Questions Answered)". Use steps 1-2c there, scoped to the chosen approach.
 
 ## Gherkin Spec Gate
 
 If WM contains `gherkin_spec_needed: true` (set at WF_CLASSIFY step 2d):
 
-1. **Check for existing specs:** `Glob(pattern="tests/specs/**/*.feature")`
-2. **If no specs exist for this feature**, prompt:
+1. Check for existing specs: `Glob(pattern="tests/specs/**/*.feature")`.
+2. If no specs exist for this feature, prompt:
 
 ```
 > This feature has no Gherkin BDD specs. Writing specs before implementation ensures
@@ -39,21 +39,19 @@ If WM contains `gherkin_spec_needed: true` (set at WF_CLASSIFY step 2d):
 > - [B] Skip specs and proceed to implementation
 ```
 
-3. **If user chooses [A]:** Invoke `/swe-gherkin-spec` with the feature key. On return, the SPEC_* memory will be loaded and the SPEC Fast-Path applies.
-4. **If user chooses [B]:** Clear `gherkin_spec_needed` from WM and continue to Step 1.
+3. On [A]: invoke `/swe-gherkin-spec` with the feature key. On return, the `SPEC_*` memory is loaded and SPEC Fast-Path applies.
+4. On [B]: clear `gherkin_spec_needed` from WM and continue to Step 1.
 
----
-
-## Execute These Steps
+## Steps
 
 ### 1. Get Feature Architecture
 
 If not already loaded at WF_CLASSIFY (check WM):
 
 ```
-mcp__plugin_swe_serena__read_memory("index/INDEX_FEATURES")   # Get active feature
-mcp__plugin_swe_serena__read_memory("feature/FEATURE_[KEY]")    # Get feature config with layers
-mcp__plugin_swe_serena__read_memory("arch/ARCH_INDEX")          # Architecture overview (if exists)
+mcp__plugin_swe_serena__read_memory("index/INDEX_FEATURES")   # active feature
+mcp__plugin_swe_serena__read_memory("feature/FEATURE_[KEY]")  # feature config with layers
+mcp__plugin_swe_serena__read_memory("arch/ARCH_INDEX")        # architecture overview (if exists)
 ```
 
 ### 2. Read Layer Documentation
@@ -61,37 +59,38 @@ mcp__plugin_swe_serena__read_memory("arch/ARCH_INDEX")          # Architecture o
 For each layer in the design, read its rules:
 
 ```
-mcp__plugin_swe_serena__read_memory("sys/SYS_[SYSTEM]")     # System documentation (feature-specific)
-mcp__plugin_swe_serena__read_memory("ref/REF_[TOPIC]")      # Reference patterns (codebase-shared)
-mcp__plugin_swe_serena__read_memory("dom/DOM_[DOMAIN]")     # Domain-specific context (feature-specific)
+mcp__plugin_swe_serena__read_memory("sys/SYS_[SYSTEM]")   # system docs (feature-specific)
+mcp__plugin_swe_serena__read_memory("ref/REF_[TOPIC]")    # reference patterns (codebase-shared)
+mcp__plugin_swe_serena__read_memory("dom/DOM_[DOMAIN]")   # domain context (feature-specific)
 ```
 
 ### 2b. Load Development Standards
 
-Read the standards index, then read each relevant standard for languages/layers this task touches.
+Read the standards index, then read each standard for the languages/layers this task touches.
 
 ```
-mcp__plugin_swe_serena__read_memory("feature/FEATURE_DEV_STANDARDS")  # Index of all DEV_* standards
+mcp__plugin_swe_serena__read_memory("feature/FEATURE_DEV_STANDARDS")  # index of all DEV_* standards
 ```
 
-| Task involves...       | Read                 |
-| ---------------------- | -------------------- |
-| PHP classes/functions  | `dev/DEV_PHP`        |
-| JavaScript/jQuery      | `dev/DEV_JAVASCRIPT` |
-| SCSS/CSS               | `dev/DEV_SCSS`       |
-| Blade/templates        | `dev/DEV_BLADEONE`   |
-| Tests                  | `dev/DEV_TESTS`      |
-| Cross-language patterns| `dev/DEV_PATTERNS`   |
+| Task involves...        | Read                 |
+| ----------------------- | -------------------- |
+| PHP classes/functions   | `dev/DEV_PHP`        |
+| JavaScript/jQuery       | `dev/DEV_JAVASCRIPT` |
+| SCSS/CSS                | `dev/DEV_SCSS`       |
+| Blade/templates         | `dev/DEV_BLADEONE`   |
+| Tests                   | `dev/DEV_TESTS`      |
+| Cross-language patterns | `dev/DEV_PATTERNS`   |
 
-If a `DEV_*` memory doesn't exist for a language, skip it but note the gap.
+If a `DEV_*` memory does not exist for a language, skip it and note the gap.
 
 ### 2c. Derive Project Compliance Checklist
 
-From the DEV_*, DOM_*, SYS_*, and FEATURE_[KEY] memories loaded above, extract the concrete rules that apply to this task. Write them as a checklist in WM under `## Compliance Checklist`.
+- Extract the concrete rules that apply to this task from the loaded `DEV_*`, `DOM_*`, `SYS_*`, `FEATURE_[KEY]` memories.
+- Write them as a checklist in WM under `## Compliance Checklist`.
+- Scan each loaded memory for rules relevant to the files you'll touch: naming conventions, boilerplate, security patterns, registration contracts, integration points, required interfaces, testing commands, file patterns.
+- This checklist is verified at `WF_VERIFY`.
 
-Scan each loaded memory for rules relevant to the files you'll touch: naming conventions, boilerplate, security patterns, registration contracts, integration points, required interfaces, testing commands, and file patterns.
-
-**Example output (written to WM):**
+Example output (written to WM):
 
 ```markdown
 ## Compliance Checklist
@@ -105,17 +104,15 @@ Scan each loaded memory for rules relevant to the files you'll touch: naming con
 - [ ] Nonce verification in any AJAX handler (DEV_PHP)
 ```
 
-This checklist is verified at WF_VERIFY.
-
 ### 3. Design With Explicit File Paths
 
 Define which files/components are affected:
 
-- Files to modify (with what changes)
-- Files to create (with justification and naming convention source from DEV_*)
-- Data flow between components
-- Integration points (registration/wiring for new components)
-- Test coverage plan
+- Files to modify (with what changes).
+- Files to create (with justification and naming-convention source from `DEV_*`).
+- Data flow between components.
+- Integration points (registration/wiring for new components).
+- Test coverage plan.
 
 ### 4. Architecture Compliance Check
 
@@ -123,70 +120,64 @@ Answer the generic layer questions:
 
 - [ ] Which layer OWNS this logic?
 - [ ] Am I putting logic in the correct layer?
-- [ ] Am I following the project's documented data flow pattern?
+- [ ] Am I following the project's documented data-flow pattern?
 
-Verify the compliance checklist (from Step 2c) is consistent with the design.
+Verify the compliance checklist (Step 2c) is consistent with the design.
 
-## STOP CONDITIONS
+## STOP Conditions
 
-If any of these apply, revise the design:
+Revise the design when any apply. Read `REF_*` memories for correct patterns.
 
 ### General Layer Violations
 
-- Business logic in presentation layer (views/templates should only display data)
-- Presentation layer calling data layer directly (should go through business logic)
-- Data access layer containing business rules (should be in service/business layer)
-- Cross-cutting concerns scattered instead of centralized
+- Business logic in presentation layer (views/templates only display data).
+- Presentation layer calling data layer directly (must go through business logic).
+- Data-access layer containing business rules (must be in service/business layer).
+- Cross-cutting concerns scattered instead of centralized.
 
 ### Presentation Layer
 
-- View contains complex logic beyond simple conditionals
-- View has data transformations that belong in business layer
-- View imports services/functions directly instead of using provided context
+- View contains complex logic beyond simple conditionals.
+- View has data transformations that belong in business layer.
+- View imports services/functions directly instead of using provided context.
 
 ### Project-Specific Violations
 
-- Any item in the compliance checklist (Step 2c) that the design would violate
-- New files that don't follow naming conventions from DEV_* memories
-- Missing integration points (registration, enqueuing, discovery)
-
-Read REF_* memories for correct patterns.
-
----
+- Any compliance-checklist item (Step 2c) the design would violate.
+- New files that do not follow naming conventions from `DEV_*` memories.
+- Missing integration points (registration, enqueuing, discovery).
 
 ### 5. Parallel Execution Assessment
 
-If the task affects 6+ files OR 3+ layers, consider parallel agents:
-- Use Claude Code `Agent` tool with `run_in_background: true`
-- Use `isolation: "worktree"` when agents may edit overlapping files
-- Use `model: "sonnet"` for implementation, `"haiku"` for read-only
-- Note `parallel_agents: true` in WM
+If the task affects **6+ files OR 3+ layers**, consider parallel agents:
 
-For cognitive-only coordination (consensus, reasoning without file access):
-- Route to WF_SWARM_ORCHESTRATE for Ruflo setup (niche use case)
+- Use Claude Code `Agent` tool with `run_in_background: true`.
+- Use `isolation: "worktree"` when agents may edit overlapping files.
+- Use `model: "sonnet"` for implementation, `"haiku"` for read-only.
+- Note `parallel_agents: true` in WM.
+
+For cognitive-only coordination (consensus, reasoning without file access): route to `WF_SWARM_ORCHESTRATE` for Ruflo setup (niche use case).
 
 If thresholds not met, proceed as single-agent implementation.
-
----
 
 ## Single Question + Consent Gate
 
 This is the ONE question gate in the workflow. There is NO separate "May I proceed?" approval step — answering the questions IS consent.
 
-### Template Check (For New Files)
+### Template Check (New Files)
 
-Before proposing new files, check existing patterns in similar files, read relevant SYS_*/REF_* memory for the file type, and follow established feature conventions from FEATURE_[KEY].
+Before proposing new files: check existing patterns in similar files, read relevant `SYS_*`/`REF_*` memory for the file type, follow established feature conventions from `FEATURE_[KEY]`.
 
-### Consent-Skip Check (Initial Prompt Blanket Consent)
+### Consent-Skip Check (Initial-Prompt Blanket Consent)
 
-Check whether the INITIAL user prompt already gave blanket consent — phrases like "get it done", "continue to completion", "don't stop till finished", "run to completion", "don't ask me questions", "no questions". (This corresponds to the `auto_approve` / `no_questions` flags noted at WF_CLASSIFY.)
+Check whether the INITIAL user prompt gave blanket consent — phrases like "get it done", "continue to completion", "don't stop till finished", "run to completion", "don't ask me questions", "no questions" (the `auto_approve` / `no_questions` flags noted at WF_CLASSIFY).
 
-- **If blanket consent was given:** SKIP the final validate-or-continue question. If "no questions" was requested, also derive the most logical choices for any design/approach questions yourself and proceed on that initial-prompt consent — do NOT call `AskUserQuestion`. Go directly to `WF_EXECUTE` (or `WF_SWARM_ORCHESTRATE` if parallel agents planned).
-- **Otherwise:** assemble and ask the single question call below.
+- If blanket consent given: SKIP the final validate-or-continue question. If "no questions" was requested, ALSO derive the most logical choices for any design/approach questions yourself and proceed on that consent — do NOT call `AskUserQuestion`. Go directly to `WF_EXECUTE` (or `WF_SWARM_ORCHESTRATE` if parallel agents planned).
+- Otherwise: assemble and ask the single question call below.
 
 ### Assemble & Ask ONE Question Call
 
-Gather every design/approach/blocker question this task raises into a SINGLE `AskUserQuestion` call. The FINAL question in that call MUST be exactly the validate-or-continue question shown below.
+Gather every design/approach/blocker question this task raises into a SINGLE `AskUserQuestion` call. The FINAL question in that call MUST be exactly the validate-or-continue question below.
 
 ```javascript
 AskUserQuestion({
@@ -215,24 +206,22 @@ Answering this call IS consent. There is no second approval prompt.
 
 ### Heavy Memory Load (After Questions Answered)
 
-Now that the approach is chosen, run the heavy memory load DEFERRED from WF_CLASSIFY — scoped to the chosen approach's files:
+Run the heavy memory load DEFERRED from WF_CLASSIFY — scoped to the chosen approach's files:
 
-1. `read_memory("feature/FEATURE_DEV_STANDARDS")` and the relevant `DEV_*` / `DOM_*` / `SYS_*` memories for the languages/layers the chosen approach touches (steps 2 / 2b above).
+1. `read_memory("feature/FEATURE_DEV_STANDARDS")` and the relevant `DEV_*` / `DOM_*` / `SYS_*` memories for the languages/layers the chosen approach touches (steps 2 / 2b).
 2. Derive the `## Compliance Checklist` in WM (step 2c) from those memories.
 
-This load is scoped to the chosen approach — do not sweep memories for approaches that were not selected.
+Scope this load to the chosen approach. Do NOT sweep memories for approaches that were not selected.
 
 ### Handle Final-Question Response
 
-| Selection                          | Action                                                                                                          |
-| ---------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| "Validate the plan with me first"  | Present the assembled plan (files table, constraints, data flow, test plan, parallel rec). Get explicit go-ahead, then read `WF_EXECUTE` (or `WF_SWARM_ORCHESTRATE` if parallel planned). |
-| "Continue through to completion"   | Read `WF_EXECUTE` directly (or `WF_SWARM_ORCHESTRATE` if parallel planned).                                     |
-| Consent-skip (blanket consent)     | Read `WF_EXECUTE` directly (or `WF_SWARM_ORCHESTRATE` if parallel planned).                                     |
+| Selection                         | Action                                                                                                                                                                                   |
+| --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| "Validate the plan with me first" | Present the assembled plan (files table, constraints, data flow, test plan, parallel rec). Get explicit go-ahead, then read `WF_EXECUTE` (or `WF_SWARM_ORCHESTRATE` if parallel planned). |
+| "Continue through to completion"  | Read `WF_EXECUTE` directly (or `WF_SWARM_ORCHESTRATE` if parallel planned).                                                                                                               |
+| Consent-skip (blanket consent)    | Read `WF_EXECUTE` directly (or `WF_SWARM_ORCHESTRATE` if parallel planned).                                                                                                               |
 
-A non-design blocker that surfaces here may still use `WF_CLARIFY` (the reusable ask-user subroutine for non-design blockers only). Design/approach questions are never routed there — they belong in the single question call above.
-
----
+A non-design blocker surfacing here may use `WF_CLARIFY` (reusable ask-user subroutine for non-design blockers only). Design/approach questions are NEVER routed there — they belong in the single question call above.
 
 ## Routing
 

@@ -1,21 +1,23 @@
-# REF_DEV_STANDARDS_ONBOARD - Development Standards Discovery
+---
+name: REF_DEV_STANDARDS_ONBOARD
+description: Procedure for discovering, documenting, and indexing development standards in any codebase via parallel research agents.
+metadata:
+  type: reference
+---
 
-**Generic guide for discovering and documenting development standards in any codebase.**
+# REF_DEV_STANDARDS_ONBOARD — Development Standards Discovery
 
-## Overview
+Use parallel agents to research existing codebase patterns. Compile into indexed, navigable memories. Execute Phase 1 → Phase 5 in order.
 
-This workflow uses parallel agents to research existing codebase patterns and compile them into indexed, navigable documentation.
+## Phase 1 — Launch Research Agents
 
-## Phase 1: Launch Research Agents
-
-Launch specialized research agents in parallel using Claude Code's `Agent` tool — all in ONE message:
+Launch one `Agent` per focus area, `run_in_background: true`, `model: "sonnet"`, ALL in ONE message. Prefix every agent prompt with `You are a swarm agent. BYPASS WF_INIT.`
 
 ```javascript
 Agent({ description: "PHP standards", run_in_background: true, model: "sonnet",
   prompt: "You are a swarm agent. BYPASS WF_INIT. Research PHP coding patterns..." })
 Agent({ description: "JS standards", run_in_background: true, model: "sonnet",
   prompt: "You are a swarm agent. BYPASS WF_INIT. Research JavaScript patterns..." })
-// ... launch one agent per focus area
 ```
 
 | Agent Focus        | Research Area                         |
@@ -31,50 +33,50 @@ Agent({ description: "JS standards", run_in_background: true, model: "sonnet",
 | class-structure    | OOP patterns, inheritance             |
 | hooks-filters      | Framework integration patterns        |
 
-## Phase 2: Analyze Configuration Files
+## Phase 2 — Analyze Configuration Files
 
-Research these config sources (adapt to project):
+Research these config sources. Adapt file list to project.
 
 | Config Type         | Common Files                                         |
 | ------------------- | ---------------------------------------------------- |
-| PHP linting         | `ruleset.xml`, `phpcs.xml`, `.php-cs-fixer.php`      |
+| PHP linting         | `ruleset.xml`, `phpcs.xml`, `.php-cs-fixer.php`       |
 | JS linting          | `biome.json`, `.eslintrc`, `prettier.config.js`      |
 | SCSS formatting     | `.prettierrc`, `stylelint.config.js`                 |
 | Template formatting | `.bladeformatterrc.json`, `.twigcs.yml`              |
 | Package config      | `composer.json`, `package.json`                      |
 | Build config        | `gulpfile.js`, `webpack.config.js`, `vite.config.js` |
 
-## Phase 3: Sample Code Analysis
+## Phase 3 — Sample Code Analysis
 
-For each language/area, analyze representative files:
+Analyze representative files per language/area:
 
-1. **PHP**: Find class files, examine naming, indentation, docblocks
-2. **JavaScript**: Find module files, examine patterns (IIFE, ES6, etc.)
-3. **SCSS**: Find stylesheets, examine variables, nesting, naming
-4. **Templates**: Find templates, examine inheritance, safe output
-5. **Tests**: Find test files, examine fixtures, assertions, setup
+- PHP: find class files; examine naming, indentation, docblocks.
+- JavaScript: find module files; examine patterns (IIFE, ES6).
+- SCSS: find stylesheets; examine variables, nesting, naming.
+- Templates: find templates; examine inheritance, safe output.
+- Tests: find test files; examine fixtures, assertions, setup.
 
-Launch analysis agents in parallel — one per language/area:
+Launch analysis agents in parallel — one per language/area. Prefix every agent prompt with `You are a swarm agent. BYPASS WF_INIT.`
 
 ```javascript
 Agent({ description: "Analyze PHP patterns", run_in_background: true, model: "sonnet",
   prompt: "You are a swarm agent. BYPASS WF_INIT. Analyze PHP class files for patterns..." })
 ```
 
-## Phase 4: Compile Findings
+## Phase 4 — Compile Findings
 
-### Create Index Entry Point
+### Index Entry Point
 
-Create `FEATURE_DEV_STANDARDS` as short index (~50 lines):
+Create `FEATURE_DEV_STANDARDS` as a short index (~50 lines) containing:
 
-- Quick reference table linking to subsections
-- Universal standards (indentation, line endings, encoding)
-- Lint command reference
-- Pre-commit checklist
+- Quick-reference table linking to subsections.
+- Universal standards (indentation, line endings, encoding).
+- Lint command reference.
+- Pre-commit checklist.
 
-### Create Subsection Memories
+### Subsection Memories
 
-Split detailed standards into ~100-120 line files:
+Split detailed standards into ~100–120 line files:
 
 | Memory                  | Content                                       |
 | ----------------------- | --------------------------------------------- |
@@ -88,7 +90,7 @@ Split detailed standards into ~100-120 line files:
 
 ### Standard Memory Format
 
-Each DEV_* memory should include:
+Each `DEV_*` memory MUST include:
 
 ```markdown
 # DEV_[AREA] - [Area] Standards
@@ -121,9 +123,7 @@ Each DEV_* memory should include:
 \`\`\`
 ```
 
-## Phase 5: Integration
-
-### Update Navigation Index
+## Phase 5 — Integration
 
 Add to `MEMORY.md`:
 
@@ -141,13 +141,13 @@ Add to `MEMORY.md`:
 
 ## Checklist
 
-- [ ] Swarm initialized with 8-10 specialized agents
-- [ ] Config files analyzed (PHP, JS, SCSS, templates, tests)
-- [ ] Code samples examined for patterns
-- [ ] `FEATURE_DEV_STANDARDS` created as index entry point
-- [ ] Individual `DEV_*` memories created (~100-120 lines each)
-- [ ] `MEMORY.md` updated with Development Standards section
-- [ ] WM updated with completion status
+- [ ] Swarm initialized with 8–10 specialized agents.
+- [ ] Config files analyzed (PHP, JS, SCSS, templates, tests).
+- [ ] Code samples examined for patterns.
+- [ ] `FEATURE_DEV_STANDARDS` created as index entry point.
+- [ ] Individual `DEV_*` memories created (~100–120 lines each).
+- [ ] `MEMORY.md` updated with Development Standards section.
+- [ ] WM updated with completion status.
 
 ## Output Structure
 

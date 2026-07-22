@@ -31,15 +31,37 @@ Autonomous agent for initializing the SWE plugin. Completes all setup tasks and 
 
 ```javascript
 Task({
-  subagent_type: "general-purpose",
+  subagent_type: "swe:swe-init-agent",
   description: "SWE plugin initialization",
   prompt: `[See TASKS section below]`,
 });
 ```
 
+## MANDATORY Agent Constraints (memory-write discipline)
+
+These constraints exist because a prior general-purpose init run wrote its Task 5b/6 deliverables to the scratchpad instead of Serena memory, leaving orphaned files and a half-initialized project. Obey them exactly:
+
+- **ALL memory deliverables MUST be written via the Serena memory MCP tools** (`mcp__plugin_swe_serena__write_memory` / `edit_memory`). NEVER write a memory to the scratchpad, `/tmp`, or any path outside `.serena/memory/` — a memory that is not in the Serena store does not exist to the plugin.
+- **NEVER use `Write`/`Edit` to create memory content.** The pre-edit gate hard-blocks raw writes to `.serena/memor*`; use the Serena memory tools.
+- **Every task that produces a deliverable ends by verifying that deliverable exists in the Serena store** (`list_memories` / `read_memory`), not on disk elsewhere.
+- Two memory trees exist — write ONLY to `./.serena/memory` (singular, the typed tree). NEVER write to `./.serena/memories` (plural, gitignored session WM). See `mem:dom/DOM_SWE_INIT_MEMORY_PATHS`.
+
 ## TASKS
 
 Execute the tasks in order, then run verifications. **This is a two-pass flow gated at Task 3.5:** Pass 1 runs Tasks 1–3 and STOPS at the Task 3.5 reconnect gate; Pass 2 (after the user reconnects Serena and re-runs `/swe-init`) skips Tasks 2–3.5 and runs Tasks 4–11. See Task 3.5 for the gate and resume-detection details.
+
+> **Resumability invariant (every task MUST be idempotent).** Init has no per-task
+> checkpoint array — resume safety comes from each task being individually
+> idempotent, so a re-run after an interruption skips already-done work instead of
+> duplicating or clobbering it. Before writing anything, each task MUST check
+> whether its output already exists and skip if so: bootstrap guards on
+> `bootstrapped: true` and never overwrites existing memories; Task 2 verifies the
+> symlink already resolves correctly; Task 5b lists actual memories and migrates
+> only what is present; Task 6 skips if `ref/REF_MEMORY_MAINTENANCE` exists; Task 8
+> checks the enabled flag; Task 10 checks the extension symlink. If you add a task,
+> make it idempotent the same way. Finalization (Task 11) is gated on all 7
+> verifications passing, so a resumed run that completes the missing work finalizes
+> cleanly.
 
 > **Ordering note:** The auto-memory symlink (Task 2) runs **before** bootstrap and Serena onboarding. This is deliberate — once the symlink is in place, every memory written during the rest of init (bootstrap templates, Serena onboarding defaults, `memory_maintenance`, anything Claude Code auto-writes) lands in the project's `.serena/memory/` instead of the orphaned real auto-memory directory. Do not reorder it later in the sequence.
 
@@ -198,27 +220,36 @@ if (!status.performed) {
 
 ### Task 5b: Migrate Serena Default Memories Into SWE Templates
 
-Serena's onboarding (Task 5) creates four memories in its own naming convention:
-- `project/project_overview`
-- `style/style_conventions`
-- `suggested/suggested_commands`
-- `task/task_completion`
+Serena's onboarding (Task 5) creates project-knowledge memories (tech stack, conventions, commands, verification steps). Their names and layout VARY:
+- **Subfolder layout** (Serena defaults on a fresh project): `project/project_overview`, `style/style_conventions`, `suggested/suggested_commands`, `task/task_completion`.
+- **Flat layout** (a project that already had Serena memories before SWE): `project_overview.md`, `conventions.md`, `tech_stack.md`, `suggested_commands.md`, `task_completion.md`, `serena_repository_structure.md`, etc. — flat files at `.serena/memory/` root.
 
-These contain valuable project-specific knowledge discovered during onboarding (tech stack, conventions, commands, verification steps). However, our SWE bootstrap templates already provide the structural framework for this information. This step migrates the discovered content into our templates, then removes the Serena defaults.
+Our SWE bootstrap templates provide the structural framework. This step migrates the discovered content into our templates, then removes the Serena defaults.
 
-**Step 1: Read all four Serena default memories** (skip any that don't exist):
+**MANDATORY — discover actual memory names first (do NOT assume the subfolder layout).** The prior failure was keying on `project/project_overview` when the project's memories were flat, so migration silently no-op'd and legacy defaults were left behind.
+
+**Step 1: List actual memories, then read every migration candidate that exists.**
 
 ```javascript
-const defaults = [
-  'project/project_overview',
-  'style/style_conventions',
-  'suggested/suggested_commands',
-  'task/task_completion'
+const listed = await mcp__plugin_swe_serena__list_memories();
+// Candidate names cover BOTH layouts. Match case-insensitively by basename.
+const CANDIDATES = [
+  'project/project_overview', 'project_overview',
+  'style/style_conventions', 'style_conventions', 'conventions', 'tech_stack',
+  'suggested/suggested_commands', 'suggested_commands',
+  'task/task_completion', 'task_completion',
+  'serena_repository_structure', 'core', 'memory_maintenance'
 ];
-for (const name of defaults) {
+const present = listed.memories.filter(m =>
+  CANDIDATES.some(c => m.toLowerCase() === c.toLowerCase()
+                    || m.toLowerCase().endsWith('/' + c.toLowerCase()))
+);
+for (const name of present) {
   await mcp__plugin_swe_serena__read_memory({ memory_name: name });
 }
 ```
+
+If `present` is empty, there is nothing to migrate — skip to Step 3's cleanup (which is also a no-op) and continue. Do NOT fabricate content.
 
 **Step 2: Merge discovered knowledge into SWE templates.**
 
@@ -233,32 +264,37 @@ Read each SWE template memory, then update it with the content from the Serena d
 
 Use `mcp__plugin_swe_serena__edit_memory` to update each target memory. Preserve all existing template structure — add new sections, don't overwrite existing ones.
 
-**Step 3: Delete the Serena default memories and their empty folders.**
+**Step 3: Delete ONLY the memories actually migrated in Step 2, then remove empty folders.**
+
+Delete exactly the `present` names read in Step 1 (whichever layout they were in) — NEVER a hardcoded subfolder list:
 
 ```javascript
-const toDelete = [
-  'project/project_overview',
-  'style/style_conventions',
-  'suggested/suggested_commands',
-  'task/task_completion'
-];
-for (const name of toDelete) {
+for (const name of present) {
   await mcp__plugin_swe_serena__delete_memory({ memory_name: name });
 }
 ```
 
-Then remove the now-empty topic folders from the Serena memories directory:
+Then remove any now-empty topic folders under the typed memory tree (`.serena/memory`, singular):
 
 ```bash
-SERENA_MEMORIES_DIR=".serena/memories"
+SERENA_MEMORY_DIR=".serena/memory"
 for dir in project style suggested task; do
-  if [ -d "$SERENA_MEMORIES_DIR/$dir" ]; then
-    rmdir "$SERENA_MEMORIES_DIR/$dir" 2>/dev/null && echo "Removed empty folder: $SERENA_MEMORIES_DIR/$dir" || echo "Folder not empty, skipping: $SERENA_MEMORIES_DIR/$dir"
+  if [ -d "$SERENA_MEMORY_DIR/$dir" ]; then
+    rmdir "$SERENA_MEMORY_DIR/$dir" 2>/dev/null \
+      && echo "Removed empty folder: $SERENA_MEMORY_DIR/$dir" \
+      || echo "Folder not empty, keeping: $SERENA_MEMORY_DIR/$dir"
   fi
 done
 ```
 
-**Note:** Uses `rmdir` (not `rm -rf`) so only truly empty folders are removed. If a folder has other files, it's left intact.
+**Verify migration completed — no legacy default left behind:**
+
+```bash
+LEFTOVER=$(ls .serena/memory/*.md 2>/dev/null | grep -iE '(project_overview|conventions|tech_stack|suggested_commands|task_completion|serena_repository_structure)\.md$' || true)
+[ -n "$LEFTOVER" ] && echo "⚠️ Legacy flat memories NOT migrated: $LEFTOVER — migrate their content then delete them" || echo "✅ No legacy flat memories remain"
+```
+
+**Note:** Uses `rmdir` (not `rm -rf`) — only truly empty folders are removed.
 
 ### Task 6: Copy the Memory Maintenance Memory Into the Local Memory System
 
@@ -506,9 +542,33 @@ fi
 
 This creates a symlink from `~/.vscode/extensions/serena-log-viewer` to the extension source in the plugin directory. The extension tails `~/.serena/logs/<date>/mcp_*.txt` and displays them in the VSCode Output panel under "SWE: Serena Logs".
 
-### Task 11: Finalize Setup
+### Task 11: Finalize Setup (verify-then-finalize GATE)
 
-Mark setup as complete. Only run after all previous tasks pass.
+**NEVER write `complete: true` unconditionally.** The prior failure wrote `complete: false` and stalled, but the inverse risk is worse: marking complete while a task silently failed. Finalize ONLY after ALL 7 verifications (see VERIFICATION section) pass.
+
+**Step 1: Run all 7 verifications and collect a pass/fail per check.** Map each check to the task that produces it:
+
+| # | Verification | Owning task to resume on failure |
+| - | --- | --- |
+| 1 | MCP servers (serena, swe-wm) respond | Task 4 |
+| 2 | SWE plugin enabled | Task 8 |
+| 3 | Plugin hooks.json present | Task 8 |
+| 4 | Template memories rendered, no `{{placeholders}}` | Task 3 |
+| 5 | Serena onboarding complete | Task 5 |
+| 6 | Log Viewer extension installed | Task 10 |
+| 7 | Auto-memory symlink correct | Task 2 |
+
+**Step 2a: If ANY verification fails**, do NOT finalize. Report exactly which checks failed and the owning task to resume, then STOP:
+
+```bash
+echo "❌ Init NOT complete — the following verifications failed:"
+echo "   - [check N]: resume Task M"
+echo "Setup file left at complete:false. Re-run /swe-init after fixing, or fix the owning task now."
+```
+
+Leave `swe-setup-complete.json` at `complete: false` (do not touch it). The resume pass will re-verify.
+
+**Step 2b: If ALL 7 pass**, write the completion flag with the verified task list:
 
 ```bash
 PLUGIN_VERSION=$(jq -r '.version' "$SWE_PLUGIN_ROOT/.claude-plugin/plugin.json")
@@ -516,13 +576,15 @@ PLUGIN_VERSION=$(jq -r '.version' "$SWE_PLUGIN_ROOT/.claude-plugin/plugin.json")
 cat > .serena/swe-setup-complete.json << EOF
 {
   "complete": true,
+  "bootstrapped": true,
   "timestamp": "$(date -Iseconds)",
   "version": "${PLUGIN_VERSION}",
-  "verified": true
+  "verified": true,
+  "verifications_passed": 7
 }
 EOF
 
-echo "✅ Setup complete (version $PLUGIN_VERSION)"
+echo "✅ Setup complete (version $PLUGIN_VERSION) — 7/7 verifications passed"
 ```
 
 ## VERIFICATION

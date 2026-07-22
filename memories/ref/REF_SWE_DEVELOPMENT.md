@@ -1,21 +1,24 @@
-# REF_SWE_DEVELOPMENT - Plugin Development Standards
+---
+name: REF_SWE_DEVELOPMENT
+description: Development standards for the Serena Workflow Engine plugin — dual-location sync, hook synchronization, plugin-file edit method, pre-commit checklist.
+metadata:
+  type: reference
+---
 
-## Purpose
-
-Standards for developing and maintaining the Serena Workflow Engine plugin.
+# REF_SWE_DEVELOPMENT — Plugin Development Standards
 
 ## Dual-Location Architecture
 
-SWE operates with files in TWO locations:
+SWE files live in TWO locations. Route every change by type.
 
-| Location           | Path                                      | Purpose                      |
-| ------------------ | ----------------------------------------- | ---------------------------- |
-| **Plugin Folder**  | `.claude/plugins/serena-workflow-engine/` | Generic/portable code        |
-| **Local Memories** | `.serena/swe/wm/`                         | Project-specific adaptations |
+| Location       | Path                                      | Holds                        |
+| -------------- | ----------------------------------------- | ---------------------------- |
+| Plugin Folder  | `.claude/plugins/serena-workflow-engine/` | Generic/portable code        |
+| Local Memories | `.serena/swe/wm/`                         | Project-specific adaptations |
 
 ## Change Classification
 
-### Generic Changes → Update BOTH Locations
+### Generic changes → update BOTH locations
 
 | Change Type        | Plugin File              | Local Memory | Action                             |
 | ------------------ | ------------------------ | ------------ | ---------------------------------- |
@@ -24,7 +27,7 @@ SWE operates with files in TWO locations:
 | Hook behavior      | `hooks/*.py`             | N/A          | Edit plugin only                   |
 | New skill/command  | `skills/` or `commands/` | N/A          | Plugin only                        |
 
-### Project-Specific Changes → Local Only
+### Project-specific changes → local ONLY
 
 | Change Type        | Where                  |
 | ------------------ | ---------------------- |
@@ -33,53 +36,48 @@ SWE operates with files in TWO locations:
 | Project REF_* docs | `.serena/swe/wm/` only |
 | FEATURE_* configs  | `.serena/swe/wm/` only |
 
-## Hook Sync Requirements (CRITICAL)
+## Hook Sync — MUST keep THREE files synchronized
 
-When modifying hooks, THREE files must stay synchronized:
+When modifying a hook, update all three:
 
-1. **Hook Script:** `.claude/plugins/serena-workflow-engine/hooks/*.py`
-2. **hooks.json:** `.claude/plugins/serena-workflow-engine/hooks/hooks.json`
-   - Uses `${CLAUDE_PLUGIN_ROOT}` paths
-3. **settings.json:** `.claude/settings.json`
-   - Uses literal paths: `.claude/plugins/serena-workflow-engine/hooks/*.py`
+1. Hook script: `.claude/plugins/serena-workflow-engine/hooks/*.py`
+2. `.claude/plugins/serena-workflow-engine/hooks/hooks.json` — uses `${CLAUDE_PLUGIN_ROOT}` paths
+3. `.claude/settings.json` — uses literal paths `.claude/plugins/serena-workflow-engine/hooks/*.py`
 
-### Path Translation Table
+### Path Translation
 
 | hooks.json                            | settings.json                                          |
 | ------------------------------------- | ------------------------------------------------------ |
 | `${CLAUDE_PLUGIN_ROOT}/hooks/file.py` | `.claude/plugins/serena-workflow-engine/hooks/file.py` |
 
-### Verification
+### Verify hooks match (ignoring path syntax)
 
 ```bash
-# Verify hooks match (ignoring path syntax)
 diff <(jq -S '.hooks' .claude/plugins/serena-workflow-engine/hooks/hooks.json) \
      <(jq -S '.hooks' .claude/settings.json | \
        sed 's|\.claude/plugins/serena-workflow-engine|\${CLAUDE_PLUGIN_ROOT}|g')
 ```
 
-## Adding New Workflow State
+## Adding a New Workflow State
 
-1. Create instruction: `memories/WF_NEWSTATE.md`
-2. Update `states.json` with state definition
-3. Copy to local memories: `cp ... .serena/swe/wm/WF_NEWSTATE.md`
-4. Document in DOM_SWE_STATE_MACHINE
+1. Create `memories/WF_NEWSTATE.md`.
+2. Update `states.json` with the state definition.
+3. Copy to local memories: `cp ... .serena/swe/wm/WF_NEWSTATE.md`.
+4. Document in `DOM_SWE_STATE_MACHINE`.
 
-## Adding New Hook
+## Adding a New Hook
 
-1. Create script: `hooks/new_hook.py`
-2. Update `hooks/hooks.json` (with `${CLAUDE_PLUGIN_ROOT}`)
-3. Update `.claude/settings.json` (with literal path)
-4. Document in DOM_SWE_HOOKS
-5. Test: `python3 hooks/new_hook.py < /dev/null`
+1. Create `hooks/new_hook.py`.
+2. Update `hooks/hooks.json` with `${CLAUDE_PLUGIN_ROOT}`.
+3. Update `.claude/settings.json` with the literal path.
+4. Document in `DOM_SWE_HOOKS`.
+5. Test: `python3 hooks/new_hook.py < /dev/null`.
 
-## ⚠️ Editing Plugin Files (.claude/ Directory)
+## Editing Plugin Files (.claude/ Directory)
 
-Claude Code bypassPermissions has a **hardcoded protection** for .claude/ writes.
-Edit and Write tools always prompt — allow rules are ignored. Confirmed bug
-(anthropics/claude-code#38806, #37765, #37157).
+Claude Code bypassPermissions has a hardcoded protection for `.claude/` writes: Edit and Write tools ALWAYS prompt and allow rules are ignored (confirmed bug anthropics/claude-code#38806, #37765, #37157). Do NOT use Edit/Write on `.claude/` files.
 
-**Use Bash with Python for all plugin file edits:**
+Use Bash + Python for ALL plugin file edits:
 
 ```bash
 python3 -c "
@@ -92,23 +90,21 @@ with open(path, 'w') as f:
 "
 ```
 
-For new files, use `cat > path << 'EOF' ... EOF` via Bash.
-
-`Read` tool works fine — only writes are affected.
-
-See `REF_CLAUDE_PLUGIN_EDITS` for full details.
+- New files: use `cat > path << 'EOF' ... EOF` via Bash.
+- `Read` tool works fine — only writes are affected.
+- See `REF_CLAUDE_PLUGIN_EDITS` for full details.
 
 ## Pre-Commit Checklist
 
-- [ ] Generic changes synced to BOTH locations
-- [ ] Project-specific changes in local memories ONLY
-- [ ] Hook changes synced across all three files
-- [ ] states.json updated if new states added
-- [ ] Documentation updated (DOM_SWE_*, README)
-- [ ] Tests pass: `jq . state-machine/states.json`
+- [ ] Generic changes synced to BOTH locations.
+- [ ] Project-specific changes in local memories ONLY.
+- [ ] Hook changes synced across all three files.
+- [ ] `states.json` updated if new states added.
+- [ ] Documentation updated (`DOM_SWE_*`, README).
+- [ ] Tests pass: `jq . state-machine/states.json`.
 
-## Related Docs
+## Related
 
-- `DOM_SWE_DEVELOPMENT` - Project-specific development docs
-- `DOM_SWE_HOOKS` - Hook architecture details
-- `DOM_SWE_STATE_MACHINE` - State transition logic
+- `DOM_SWE_DEVELOPMENT` — project-specific development docs
+- `DOM_SWE_HOOKS` — hook architecture details
+- `DOM_SWE_STATE_MACHINE` — state transition logic

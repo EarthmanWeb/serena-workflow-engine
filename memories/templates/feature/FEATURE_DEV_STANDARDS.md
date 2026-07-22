@@ -1,3 +1,10 @@
+---
+name: Development Standards
+description: Project overview, per-language conventions, and build/format/git commands. Index of DEV_* standards.
+metadata:
+  type: feature
+---
+
 # FEATURE_DEV_STANDARDS - Development Standards Index
 
 ## Project: serena-workflow-engine

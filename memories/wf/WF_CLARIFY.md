@@ -1,23 +1,30 @@
-# WF_CLARIFY - Ask User
+---
+name: WF_CLARIFY
+description: Workflow state — ask the user to resolve unclear requests, conflicts, declined changes, or approach choices via AskUserQuestion, then route back.
+metadata:
+  type: workflow
+---
+
+# WF_CLARIFY — Ask User
 
 > **On step WF_CLARIFY**
 
----
+## When To Enter
 
-## When To Use
+Enter WF_CLARIFY when ANY holds:
+- Request is unclear.
+- Requirement conflicts with documented behavior.
+- User declined proposed changes.
+- Must choose between approaches.
 
-- Request is unclear
-- Requirement conflicts with documented behavior
-- User declined proposed changes
-- Need to choose between approaches
+## Before Asking
 
-## Before Asking the User
+- When the clarification involves domain behavior, read the relevant `DOM_*` memory first.
+- Reference the specific `DOM_*` memory by name in the question so the user can verify.
 
-If the clarification involves domain behavior:
-- Read the relevant DOM_* memory to understand documented behavior
-- Reference the specific DOM_* doc in the question so the user can verify
+## Ask With AskUserQuestion
 
-## Ask User with AskUserQuestion Tool
+Use the `AskUserQuestion` tool. Pick the matching scenario.
 
 ### Conflict Resolution
 
@@ -75,23 +82,23 @@ AskUserQuestion({
 });
 ```
 
-## AskUserQuestion Tool Reference
+## AskUserQuestion Parameters
 
-| Parameter     | Description                                         |
+| Parameter     | Rule                                                |
 | ------------- | --------------------------------------------------- |
 | `questions`   | Array of 1-4 questions                              |
 | `question`    | Full question text to display                       |
-| `header`      | Short label (max 12 chars)                          |
-| `options`     | Array of 2-4 choices with `label` and `description` |
-| `multiSelect` | If `true`, allows multiple selections               |
+| `header`      | Short label, max 12 chars                           |
+| `options`     | Array of 2-4 choices, each with `label` and `description` |
+| `multiSelect` | `true` allows multiple selections                   |
 
 Users can always select "Other" for custom text input.
 
 ## After User Responds
 
-1. Note where you came from
-2. After user responds via AskUserQuestion, read that WF_* memory
-3. Report the new step to user
+1. Note the state you came from.
+2. Read the WF_* memory for the state you route back to.
+3. Report the new step to the user.
 
 ## Routing
 
@@ -100,4 +107,4 @@ Users can always select "Other" for custom text input.
 | CLASSIFY      | `WF_CLASSIFY`     |
 | ARCH_REVIEW   | `WF_ARCH_REVIEW`  |
 
-Update WM via /swe-wm-update before transitioning.
+Update WM via `/swe-wm-update` before transitioning.

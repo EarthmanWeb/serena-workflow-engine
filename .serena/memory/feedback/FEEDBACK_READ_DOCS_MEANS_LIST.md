@@ -1,11 +1,14 @@
 ---
-name: Read docs means list memories
-description: When user says "read the docs", run list_memories to find relevant Serena memories
-type: feedback
+name: "Read docs" = list memories
+description: When the user says "read/check the docs", list Serena memories and read the relevant ones — not external docs.
+metadata:
+  type: feedback
 ---
 
-When the user says "read the docs" or "read docs", they mean: run `list_memories` to discover relevant Serena memories for the topic, then read the ones that apply.
+# "Read the docs" = list memories
 
-**Why:** The user has extensive documentation stored in Serena memories. "Docs" = Serena memories, not external documentation or READMEs.
+When the user says "read the docs" / "check the docs", they mean: call `list_memories`, then read the relevant Serena memories. NOT external documentation or READMEs.
 
-**How to apply:** Any time the user says "read the docs" or "check the docs", immediately call `mcp__plugin_swe_serena__list_memories()` and read the relevant ones before proceeding.
+**Why:** The user's documentation is stored in Serena memories. "Docs" = Serena memories here.
+
+**How to apply:** On any "read the docs" / "check the docs", immediately call `mcp__plugin_swe_serena__list_memories()` and read the applicable memories before proceeding.

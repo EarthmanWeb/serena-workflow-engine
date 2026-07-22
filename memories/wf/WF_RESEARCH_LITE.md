@@ -1,14 +1,15 @@
-# WF_RESEARCH_LITE - Minimal Research Path
-
-Use only when user explicitly requests lite/quick research.
-
 ---
+name: WF_RESEARCH_LITE
+description: Minimal research path for simple lookup/exploration tasks; target < 2,500 tokens, no WM required.
+metadata:
+  type: workflow
+---
+
+# WF_RESEARCH_LITE — Minimal Research Path
 
 > **On step WF_RESEARCH_LITE**
 
-## Purpose
-
-Lightweight workflow for simple lookup/research tasks with minimal overhead.
+Enter ONLY when the user explicitly requests lite/quick research. Route anything larger to `WF_CLASSIFY`.
 
 ## Qualifying Tasks
 
@@ -17,42 +18,39 @@ Lightweight workflow for simple lookup/research tasks with minimal overhead.
 - "What files contain Z"
 - "How does X work" (exploration only)
 
-## Execute (3 Steps)
+## Execute — 3 Steps
 
 ### 1. Quick Context Check
 
-Optional: check `list_memories()` for `DOM_*/REF_*` memories that may already answer the question before searching code.
-
-```
-# Only if feature location unknown:
-mcp__plugin_swe_serena__read_memory("index/INDEX_FEATURES")  # Skip if you know the feature
-```
+- Check `list_memories()` for `DOM_*`/`REF_*` memories that answer the question before searching code.
+- Read `index/INDEX_FEATURES` ONLY when the feature location is unknown. Skip when you know the feature.
 
 ### 2. Search & Find
 
-Use targeted tools in this order:
+Use tools in this order; start narrow, expand ONLY if needed:
 
-1. `Glob` - Find files by pattern first
-2. `get_symbols_overview` - Understand file structure
-3. `find_symbol` - Get specific code (`include_body=true` only when needed)
-4. `Grep` - Content search as fallback
+1. `Glob` — find files by pattern first
+2. `get_symbols_overview` — understand file structure
+3. `find_symbol` — get specific code; set `include_body=true` ONLY when needed
+4. `Grep` — content search fallback
 
-Start narrow, expand only if needed. Use `head_limit` on searches. Zero context lines unless essential.
+- Set `head_limit` on searches.
+- Zero context lines unless essential.
 
 ### 3. Report & Exit
 
-- Provide findings directly
-- No WM required for simple lookups
+- Report findings directly.
+- Do NOT create WM for simple lookups.
 
-## Token Budget Target
+## Token Budget
 
-**< 2,500 tokens total** for simple lookups
+- Target < 2,500 tokens total.
 
 ## Routing
 
-| Condition              | Next Step      |
-| ---------------------- | -------------- |
-| Task expands scope     | `WF_CLASSIFY`  |
-| Lookup complete        | Done           |
+| Condition          | Next Step     |
+| ------------------ | ------------- |
+| Task expands scope | `WF_CLASSIFY` |
+| Lookup complete    | Done          |
 
-Update WM via /swe-wm-update before transitioning.
+Update WM via `/swe-wm-update` before transitioning.

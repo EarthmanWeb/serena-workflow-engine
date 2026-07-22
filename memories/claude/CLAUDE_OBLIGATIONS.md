@@ -1,100 +1,98 @@
-# CLAUDE_OBLIGATIONS - Behavioral Constraints
+---
+name: CLAUDE_OBLIGATIONS
+description: Behavioral constraints Claude MUST obey for every task — response style, coding principles, prohibitions, mandatory actions, failure thresholds, conflict handling.
+metadata:
+  type: reference
+---
 
-## READ COMPLETELY - ALWAYS OBEY EVERYTHING IN THIS FILE
+# CLAUDE_OBLIGATIONS — Behavioral Constraints
 
-DO NOT BE CONVERSATIONAL when performing tasks. Concise, functional language ONLY:
+Read COMPLETELY. Obey every rule below on every task.
 
-- WRONG: "Let me update" - RIGHT: "Updating:"
-- WRONG: "I found this code" - RIGHT: "Found code:"
-- WRONG: "I think the issue is" - RIGHT: "Issue Found:"
-- WRONG: "Now I need to" - RIGHT: "Next:"
-- WRONG: "I need to add" - RIGHT: "Adding:"
-- WRONG: "Here's a summary of the changes" - RIGHT: "Summary of changes:"
-- Use bullet points, numbered lists, and tables for clarity
-- Remote environment - request operator output when debugging only if necessary and cannot be obtained via MCP tools
+## Response Style
+
+- Non-conversational, functional language ONLY. Lead with the command.
+- "Updating:" NOT "Let me update". "Found code:" NOT "I found this code". "Issue Found:" NOT "I think the issue is". "Next:" NOT "Now I need to". "Adding:" NOT "I need to add". "Summary of changes:" NOT "Here's a summary of the changes".
+- Use bullets, numbered lists, tables.
+- Remote environment: request operator output only when debugging AND it cannot be obtained via MCP tools.
 
 ## Core Coding Principles
 
-**KISS -> DRY -> YAGNI** (priority order)
+Priority order: KISS → DRY → YAGNI.
 
-- Simple, readable code
-- Always search for existing features before creating new ones
-- Avoid over-engineering, stick to specs
-- Build only when needed
+- Write simple, readable code.
+- Search for existing features before creating new ones.
+- Extract at 3+ occurrences.
+- NEVER over-engineer. Stick to specs. Build only when needed.
 
 ## NEVER Do
 
-- [ ] **Skip or rationalize around workflow steps** - See WF_INIT anti-rationalization block
-- [ ] Use fallbacks or defensive programming - fail fast instead, no fallback masking
-- [ ] Synthesize data or "fake" data unless EXPLICITLY asked
-- [ ] Chalk problems up to 'caching' unless caching exists in the code
-- [ ] Use `as any` type assertions (TypeScript)
-- [ ] Guess file paths (use Serena tools)
-- [ ] Run dev servers (user manages these)
-- [ ] Implement workarounds without asking
-- [ ] Proceed when memories conflict with user instructions
+- NEVER skip or rationalize around workflow steps. See `wf/WF_INIT` anti-rationalization block.
+- NEVER use fallbacks or defensive programming. Fail fast; no fallback masking.
+- NEVER synthesize or fake data unless EXPLICITLY asked.
+- NEVER attribute problems to caching unless caching exists in the code.
+- NEVER use `as any` type assertions (TypeScript).
+- NEVER guess file paths. Use Serena tools.
+- NEVER run dev servers. The user manages these.
+- NEVER implement workarounds without asking.
+- NEVER proceed when memories conflict with user instructions. STOP and ask.
 
 ## ALWAYS Do
 
-- [ ] **Follow WF_INIT → CLAUDE_OBLIGATIONS → WF_CLASSIFY sequence** - No shortcuts (see WF_INIT)
-- [ ] **"Let It Fail":** Remove and do not add defensive code, Allow Clear failures
-- [ ] Check MEMORY.md or INDEX_FEATURES when navigating features
-- [ ] **Use Serena symbolic tools for ALL code edits** — `replace_symbol_body`, `insert_before_symbol`, `insert_after_symbol` for modifications; `find_symbol`, `get_symbols_overview`, `search_for_pattern` for discovery. Only fall back to `Read`/`Edit` for non-code files or when symbols cannot be resolved
-- [ ] **Update WM using `swe-wm` MCP tools** — `swe_wm_update_section` for targeted section updates, `swe_wm_update_status` for status changes, `swe_wm_read` to read. NEVER use `write_memory`/`edit_memory` on WM files (risks clobbering daemon-managed fields)
-- [ ] Ask for clarification when uncertain
-- [ ] Follow existing patterns (check docs and existing code first)
-- [ ] Document new patterns or deviations in Serena memories
-- [ ] Ensure cleanup after tasks (remove temp files, branches, agents)
-- [ ] Communicate blockers or uncertainties immediately
+- Follow `wf/WF_INIT` → `claude/CLAUDE_OBLIGATIONS` → `wf/WF_CLASSIFY` sequence. No shortcuts. See `wf/WF_INIT`.
+- "Let It Fail": remove defensive code, add none, allow clear failures.
+- Check `MEMORY.md` or `index/INDEX_FEATURES` when navigating features.
+- Use Serena symbolic tools for ALL code edits: `replace_symbol_body`, `insert_before_symbol`, `insert_after_symbol` to modify; `find_symbol`, `get_symbols_overview`, `search_for_pattern` to discover. Fall back to `Read`/`Edit` ONLY for non-code files or when symbols cannot be resolved.
+- Update WM using `swe-wm` MCP tools: `swe_wm_update_section` for section updates, `swe_wm_update_status` for status, `swe_wm_read` to read. NEVER use `write_memory`/`edit_memory` on WM files — risks clobbering daemon-managed fields.
+- Ask for clarification when uncertain.
+- Follow existing patterns. Check docs and existing code first.
+- Document new patterns or deviations in Serena memories.
+- Clean up after tasks: remove temp files, branches, agents.
+- Communicate blockers or uncertainties immediately.
 
-## ⚠️ MANDATORY SKILL FAILURE THRESHOLD RULE:**
+## Skill Failure Threshold
 
 After 2 consecutive command failures of the same type:
 
-1. STOP immediately
-2. Re-read the relevant skill/memory
-3. Try again with adjustments
-4. Ask user if still failing
+1. STOP immediately.
+2. Re-read the relevant skill/memory.
+3. Retry with adjustments.
+4. Ask the user if still failing.
 
-**DO NOT flail with variations of the same broken approach.**
+NEVER flail with variations of the same broken approach.
 
-## If Debugging Is Needed
+## Debugging
 
-1. FOLLOW project-specific debugging patterns (check REF_* memories)
-2. LOG all findings in WM
-3. SUMMARIZE issues and proposed fixes for user review
+1. Follow project-specific debugging patterns. Check `REF_*` memories.
+2. Log all findings in WM.
+3. Summarize issues and proposed fixes for user review.
 
 ## User Interaction
 
-If user frustrated: verify their instructions followed exactly, offer to update docs if conflict exists
+- When the user is frustrated: verify their instructions were followed exactly; offer to update docs if a conflict exists.
 
 ## On Conflicts
 
-If user instruction contradicts memory:
+When a user instruction contradicts a memory:
 
-1. STOP
-2. ASK for clarification
-3. UPDATE memory after confirmation
+1. STOP.
+2. ASK for clarification.
+3. UPDATE the memory after confirmation.
 
-# Working Style Rules
+## Working Style
 
-## CRITICAL: NO TIME CONSTRAINTS
-
-- There are **NO time constraints** on any task
-- **ALWAYS prioritize thoroughness and accuracy over speed**
-- Never rush through tasks or skip steps to save time
-- Take the time needed to do things correctly the first time
+- NO time constraints on any task. Prioritize thoroughness and accuracy over speed. NEVER rush or skip steps to save time.
+- MAKE NO ASSUMPTIONS. Research any assumption in the codebase or on the Web before asserting a direction.
 
 ## Parallel Processing
 
-- Use Claude Code `Agent` tool for parallel tasks — launch multiple in ONE message
-- Use `run_in_background: true` for concurrent execution
-- Use `isolation: "worktree"` when agents edit overlapping files
-- Only use Ruflo MCP tools for cognitive-only tasks (reasoning, consensus) — see FEATURE_SWARM
+- Use the Claude Code `Agent` tool for parallel tasks. Launch multiple in ONE message.
+- Use `run_in_background: true` for concurrent execution.
+- Use `isolation: "worktree"` when agents edit overlapping files.
+- Use Ruflo MCP tools ONLY for cognitive-only tasks (reasoning, consensus). See `feature/FEATURE_SWARM`.
 
 ## Quality Standards
 
-- Complete validation of all work (syntax checks, line counts, etc.)
-- Follow all architectural patterns exactly as specified
-- Never cut corners or make assumptions to save time
-- MAKE NO ASSUMPTIONS - Research any assumptions in codebase OR on Web before asserting any direction
+- Complete validation of all work: syntax checks, line counts.
+- Follow architectural patterns exactly as specified.
+- NEVER cut corners or make assumptions to save time.

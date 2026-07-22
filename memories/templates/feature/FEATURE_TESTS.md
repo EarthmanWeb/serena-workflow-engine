@@ -1,3 +1,10 @@
+---
+name: Test Suite
+description: Test runner, verification approach, and task-completion checklist for this project.
+metadata:
+  type: feature
+---
+
 # FEATURE_TESTS - Test Suite (Template)
 
 ## Feature Overview

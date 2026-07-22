@@ -1,7 +1,8 @@
 ---
 name: Read docs means list memories
 description: When user says "read the docs", run list_memories to find relevant Serena memories
-type: feedback
+metadata:
+  type: feedback
 ---
 
 When the user says "read the docs" or "read docs", they mean: run `list_memories` to discover relevant Serena memories for the topic, then read the ones that apply.

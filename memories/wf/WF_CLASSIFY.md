@@ -1,176 +1,130 @@
-# WF_CLASSIFY - Classify, Detect Requirements, Load Features & Route
+---
+name: WF_CLASSIFY
+description: Classify the task, detect requirements, load the primary feature memory, and route. First workflow state after init. Classification and routing only — no task work.
+metadata:
+  type: workflow
+---
+
+# WF_CLASSIFY — Classify, Detect Requirements, Load Primary Feature, Route
 
 > **On step WF_CLASSIFY**
 
----
+## Entry & Non-Skippable
 
-## First Post-Init Entry State
+- WF_CLASSIFY is the FIRST workflow state after init (`WF_INIT` → `CLAUDE_OBLIGATIONS` → `WF_CLASSIFY`).
+- The hook creates the WM file and init sentinel automatically on transition into WF_CLASSIFY. Do NOT create them.
+- ALL tasks pass through WF_CLASSIFY. NEVER skip it — it loads feature memories, detects requirements, and routes.
+- A feature key in WM is NOT a loaded `FEATURE_[KEY]` memory. Features load HERE (Step 4).
 
-WF_CLASSIFY is the first workflow state entered after init (WF_INIT → CLAUDE_OBLIGATIONS → WF_CLASSIFY). The WM file and the init sentinel are created automatically by the hook when the session transitions into WF_CLASSIFY — the agent does NOT create them.
+Valid paths to WF_EXECUTE:
 
----
+- Major code change: `WF_CLASSIFY` → `WF_ARCH_REVIEW` → `WF_EXECUTE`
+- Minor code change (Step 3b): `WF_CLASSIFY` → `WF_EXECUTE` (arch review skipped)
+- Operational task: `WF_CLASSIFY` → `WF_EXECUTE`
 
-## This Step Cannot Be Skipped
+## ⛔ NO Task Work in This State
 
-All tasks go through WF_CLASSIFY — it loads feature memories, detects requirements, and routes correctly. Valid paths to WF_EXECUTE:
+WF_CLASSIFY is classification and routing ONLY. The edit gate (`swe_pre_edit_validate.py`) HARD-BLOCKS every Edit/Write/Serena-edit call here. Task work now is wasted — you redo it after transition.
 
-- Major code changes: WF_CLASSIFY → WF_ARCH_REVIEW → WF_EXECUTE
-- Minor code changes (see Step 3b): WF_CLASSIFY → WF_EXECUTE (arch review skipped)
-- Operational tasks only: WF_CLASSIFY → WF_EXECUTE
+Allowed (classification inputs only):
 
-Having a feature key in WM is not the same as having loaded the FEATURE_[KEY] memory. Features are loaded HERE, in Step 4.
+- `read_memory` for `INDEX_FEATURES` and the single primary `FEATURE_[KEY]` (Step 4)
+- Read the user request and existing WM context
+- Lightweight `list_memories` / `Glob` STRICTLY to detect specs (Step 2d) or the targeted feature
 
----
+NEVER here — defer ALL to WF_EXECUTE or WF_ARCH_REVIEW:
 
-## ⛔ No Task Work in This State
+- Do NOT read the target source/doc file you intend to change
+- Do NOT run `find_symbol` / `get_symbols_overview` / `search_for_pattern` to scope the edit
+- Do NOT plan the exact change, draft the diff, or decide `needle`/`repl` values
+- Do NOT call `Edit`, `Write`, `replace_content`, `replace_symbol_body`, or any edit tool — HARD-BLOCKED here
 
-WF_CLASSIFY is for **classification and routing ONLY**. It is not an execution state. The edit gate (`swe_pre_edit_validate.py`) will BLOCK every Edit/Write/Serena-edit call while you are here — so doing task work now is wasted effort that you will have to redo after transitioning.
-
-**Allowed in WF_CLASSIFY** (classification inputs only):
-
-- `read_memory` for INDEX_FEATURES and the single primary `FEATURE_[KEY]` (Step 4)
-- Reading the user's request and any context already in WM
-- Lightweight `list_memories` / `Glob` strictly to detect specs (Steps 2d) or which feature is targeted
-
-**NOT allowed in WF_CLASSIFY — defer ALL of this to WF_EXECUTE (or WF_ARCH_REVIEW):**
-
-- ❌ Reading the **target source/doc file** you intend to change ("let me just look at the file first")
-- ❌ `find_symbol` / `get_symbols_overview` / `search_for_pattern` to scope the *edit*
-- ❌ Planning the exact change, drafting the diff, or deciding `needle`/`repl` values
-- ❌ Any `Edit`, `Write`, `replace_content`, `replace_symbol_body`, or other edit tool — these are **hard-blocked** here
-
-> Reading the file you're about to edit is task work, not classification. You do NOT need the file's contents to classify the task type or count the files touched — the user's request and the primary FEATURE memory are enough. Classify, route, transition, THEN open the file in WF_EXECUTE.
-
-If you catch yourself opening the target file or reaching for an edit tool: stop, finish routing, and transition first.
-
----
+> Reading the file you are about to edit is task work, not classification. You do NOT need file contents to classify task type or count files touched — the user request and the primary FEATURE memory suffice. If you catch yourself opening the target file or reaching for an edit tool: STOP, finish routing, transition first.
 
 ## Steps
 
 ### 1. Clarity Check
 
-Only a HARD blocker that prevents classification at all routes to WF_CLARIFY here — e.g. the request cannot be classified because you cannot tell which of two features it targets. Approach/design ambiguity and approach-style conflicts are NOT resolved here; they are deferred to the single question gate at WF_ARCH_REVIEW.
-
-- Cannot classify at all (hard blocker) → go to WF_CLARIFY
-- Otherwise → continue (defer any approach/design clarification to WF_ARCH_REVIEW)
+- Cannot classify AT ALL (hard blocker, e.g. cannot tell which of two features is targeted) → `WF_CLARIFY`
+- Otherwise → continue. NEVER resolve approach/design ambiguity or approach conflicts here — defer to the single question gate at `WF_ARCH_REVIEW`.
 
 ### 2. Detect Requirements
 
-Scan user message for behavioral/UX requirements ("should", "must", "needs to", corrections to current behavior, UX preferences). If found, note them in WM for validation at Step 5. If none, continue.
+Scan the user message for behavioral/UX requirements ("should", "must", "needs to", corrections to current behavior, UX preferences). If found, note in WM for Step 5. If none, continue.
 
 ### 2b. Auto-Approve Detection
 
-Scan for **explicit** intent to skip the WF_ARCH_REVIEW approval gate. Only these narrow phrases qualify:
+Detect EXPLICIT intent to skip the WF_ARCH_REVIEW approval gate. ONLY these phrases qualify:
+
 - "skip approval" / "skip the approval gate"
 - "don't ask for approval" / "don't stop for approval"
 - "auto-approve" / "auto approve"
 
-Ambiguous phrases like "just do it", "continue through to completion", "run unattended", or "go ahead" do **NOT** qualify — these express urgency or agreement with a specific action, not blanket approval-gate bypass.
+"just do it", "continue through to completion", "run unattended", "go ahead" do NOT qualify — urgency/agreement, not blanket bypass.
 
-- **If explicit opt-out detected:** Note `auto_approve: true` in WM. The plan is still presented at WF_ARCH_REVIEW but the approval gate is skipped.
-- **If not detected (default):** Normal flow — approval required at WF_ARCH_REVIEW.
+- Explicit opt-out detected → note `auto_approve: true` in WM. Plan is still presented at WF_ARCH_REVIEW; approval gate is skipped.
+- Not detected (default) → approval required at WF_ARCH_REVIEW.
 
 ### 2c. Command & Skill Identification
 
-Before planning manual implementation, check if an existing command or skill handles this task.
+Before planning manual implementation, check for an existing command or skill that handles the task.
 
-**Scan locations:**
+Scan locations:
 
-1. **System-reminder skills list** (already in context) — match user intent against skill descriptions
-2. **Project-level commands** — `.claude/commands/*.md`, `.claude/skills/*/SKILL.md`, `~/.claude/commands/*.md`, `~/.claude/skills/*/SKILL.md`
-3. **Plugin commands** — from installed plugin `commands/` directories
+1. System-reminder skills list (already in context) — match intent against skill descriptions
+2. Project/user commands — `.claude/commands/*.md`, `.claude/skills/*/SKILL.md`, `~/.claude/commands/*.md`, `~/.claude/skills/*/SKILL.md`
+3. Plugin commands — installed plugin `commands/` directories
 
-**Matching:** Use fuzzy intent matching. Respect `disable-model-invocation` (user-only skills).
-
-**If match found:** Note `matched_skill: plugin:skill-name` or `matched_command: /command-name` in WM, then invoke it. Commands/skills may handle routing themselves.
-
-**If no match:** Continue to Step 3.
+- Use fuzzy intent matching. Respect `disable-model-invocation` (user-only skills).
+- Match found → note `matched_skill: plugin:skill-name` or `matched_command: /command-name` in WM, then invoke it. Commands/skills may handle routing themselves.
+- No match → continue to Step 3.
 
 ### 2d. Gherkin Spec Detection
 
-Check if the task involves new feature development or feature additions that should have Gherkin specs:
-
-1. **Explicit Gherkin request** — user asks to write specs, create `.feature` files, or do BDD/TDD from specs
+1. Explicit Gherkin request (user asks to write specs, create `.feature` files, or do BDD/TDD from specs):
    - Note `gherkin_spec: true` in WM
-   - Route directly to `/swe-gherkin-spec` (spec authoring) or `/swe-gherkin-dev` (TDD from existing spec)
-
-2. **New feature development** — user describes new functionality to build
-   - Check if SPEC_* memories exist for the affected feature: `list_memories(topic="spec")`
-   - If no specs exist: note `gherkin_spec_needed: true` in WM (enforced at WF_ARCH_REVIEW)
-
-3. **Feature addition** — user adds behavior to an existing feature that has Gherkin specs
-   - Check for existing `.feature` files: `Glob(pattern="tests/specs/*[feature-key]*.feature")`
-   - If specs exist for this feature: note `gherkin_spec_update: true` in WM (enforced at WF_VERIFY)
+   - Route to `/swe-gherkin-spec` (authoring) or `/swe-gherkin-dev` (TDD from existing spec)
+2. New feature development (user describes new functionality to build):
+   - Check SPEC_* memories for the feature: `list_memories(topic="spec")`
+   - No specs exist → note `gherkin_spec_needed: true` in WM (enforced at WF_ARCH_REVIEW)
+3. Feature addition to an existing feature with Gherkin specs:
+   - Check `.feature` files: `Glob(pattern="tests/specs/*[feature-key]*.feature")`
+   - Specs exist → note `gherkin_spec_update: true` in WM (enforced at WF_VERIFY)
 
 ### 3. Task Type Assessment
 
-#### Research (no code changes, exploration only)
+| Task type | Signals | Route |
+|-----------|---------|-------|
+| Research (no code changes, exploration only) | How code works, exploring patterns, finding files/symbols | `WF_RESEARCH` |
+| Debugging (test-driven) | Failing tests, behavior differs between environments, test-driven debugging | `WF_DEBUG_TDD` |
+| Operational (no code changes, execution only) | Run shell/WP-CLI, HTTP requests, check DB state, run test suites, verify deployments — needs feature context, modifies no source. Skip arch review | `WF_EXECUTE` (after Step 4) |
+| Code change | Bug fix, feature addition, refactor, doc update — modifies source | `WF_ARCH_REVIEW` or `WF_EXECUTE` per Step 3b (after Step 4) |
+| Parallel agents (6+ files OR 3+ architectural layers) | Reads/edits at scale with independent concurrent subtasks. Note `parallel_agents: true`; use `Agent` tool with `run_in_background: true` and optionally `isolation: "worktree"` for edit conflicts | `WF_ARCH_REVIEW` |
+| Ruflo swarm (cognitive-only, consensus, no file access) | Niche: reasoning, spec writing, arch evaluation, consensus WITHOUT file access. Most tasks use parallel agents instead. Note `swarm_candidate: true`; `read_memory("feature/FEATURE_SWARM")` | `WF_ARCH_REVIEW` (swarm routing confirmed there) |
 
-- Questions about how code works, exploring patterns, finding files/symbols
-- Route: **WF_RESEARCH**
+### 3b. Architecture Review Necessity Check (Code Changes Only)
 
-#### Debugging (test-driven)
-
-- Failing tests, behavior differences between environments, test-driven debugging
-- Route: **WF_DEBUG_TDD**
-
-#### Operational (no code changes, execution only)
-
-- Run shell/WP-CLI commands, send HTTP requests, check database state, run test suites, verify deployments
-- These need feature context but do not modify source code. Skip arch review.
-- Route: **WF_EXECUTE** (after feature loading in Step 4)
-
-#### Code Changes
-
-- Bug fixes, feature additions, refactoring, documentation updates — anything that modifies source files
-- Route depends on the **Architecture Review Necessity Check** (Step 3b): minor patches skip arch review and go straight to **WF_EXECUTE**; new features, major module additions, or >5-file changes go to **WF_ARCH_REVIEW**.
-- Route: **WF_ARCH_REVIEW** or **WF_EXECUTE** per Step 3b (after feature loading in Step 4)
-
-#### Parallel Agents (6+ files OR 3+ architectural layers)
-
-When the task involves file reads/edits at scale with independent subtasks that can run concurrently:
-
-- Note `parallel_agents: true` in WM
-- These use Claude Code `Agent` tool with `run_in_background: true` and optionally `isolation: "worktree"` for edit conflicts
-- Route: **WF_ARCH_REVIEW** (parallel agent plan defined there)
-
-#### Ruflo Swarm (cognitive-only, consensus, no file access)
-
-Niche use case for reasoning, spec writing, architecture evaluation, or consensus decisions that do NOT need file access. Most tasks should use parallel agents instead.
-
-- Note `swarm_candidate: true` in WM
-- Load swarm config: `read_memory("feature/FEATURE_SWARM")`
-- Route: **WF_ARCH_REVIEW** (swarm routing confirmed there after feature context loaded)
-
----
-
-## Step 3b: Architecture Review Necessity Check (Code Changes Only)
-
-Not every code change needs a full architecture review. Decide whether this task may skip WF_ARCH_REVIEW and go straight to WF_EXECUTE.
-
-**REQUIRES WF_ARCH_REVIEW if ANY of these is true:**
+REQUIRES `WF_ARCH_REVIEW` if ANY is true:
 
 - New feature (net-new functionality, not a change to existing behavior)
 - Major module addition to an existing feature (new class/subsystem/integration surface)
-- Touches **more than 5 files**
-- Touches **3+ architectural layers**, or `parallel_agents` / `swarm_candidate` was noted
-- `gherkin_spec_needed: true` was noted at Step 2d (new feature needing specs)
+- Touches MORE than 5 files
+- Touches 3+ architectural layers, OR `parallel_agents` / `swarm_candidate` was noted
+- `gherkin_spec_needed: true` noted at Step 2d
 
-**MAY SKIP WF_ARCH_REVIEW → route directly to WF_EXECUTE if ALL of these hold:**
+MAY SKIP `WF_ARCH_REVIEW` → route directly to `WF_EXECUTE` ONLY if ALL hold:
 
-- It is a **minor patch to existing functionality** (bug fix, small refactor, copy/doc tweak, config value, localized behavior change) — NOT a new feature or major module addition
-- It touches **5 files or fewer**
-- Any design/approach questions are already resolved (the request is unambiguous, or the answers are obvious from the loaded primary feature memory) — there is nothing to ask at a question gate
+- Minor patch to EXISTING functionality (bug fix, small refactor, copy/doc tweak, config value, localized behavior change) — NOT a new feature or major module addition
+- Touches 5 files or fewer
+- All design/approach questions already resolved (request unambiguous, or answers obvious from the loaded primary feature memory) — nothing to ask at a question gate
 
-**When skipping arch review:**
+When skipping arch review:
 
 - Note `arch_review_skipped: true` and the reason in WM
-- You MUST still load the relevant DEV_*/DOM_* standards for the files you will touch (the load that WF_ARCH_REVIEW would have done) before editing — load them at the start of WF_EXECUTE, scoped to the touched files
-- If, once in WF_EXECUTE, the change turns out to be larger than classified (e.g. it now spans >5 files or adds a module), STOP and route back to WF_ARCH_REVIEW
+- You MUST still load the relevant DEV_*/DOM_* standards for the touched files (the load WF_ARCH_REVIEW would have done) at the START of WF_EXECUTE, scoped to touched files
+- If in WF_EXECUTE the change turns out larger than classified (>5 files or adds a module), STOP and route back to `WF_ARCH_REVIEW`
 
-**When in doubt, do NOT skip** — route to WF_ARCH_REVIEW. The skip is for genuinely small, well-understood changes only.
-
----
+When in doubt, do NOT skip → route to `WF_ARCH_REVIEW`. Skip is for genuinely small, well-understood changes only.
 
 ## Step 4: Feature Loading (Gate)
 
@@ -178,32 +132,24 @@ Complete all substeps before proceeding.
 
 ### 4a. Read Feature Registry
 
-```
-read_memory("index/INDEX_FEATURES")
-```
+`read_memory("index/INDEX_FEATURES")`
 
 ### 4b. Identify All Affected Features
 
 Scan request for feature indicators: explicit names, file paths spanning feature directories, cross-cutting concerns, domain terminology.
 
-### 4c. Load Only the PRIMARY FEATURE_[KEY]
+### 4c. Load ONLY the Primary FEATURE_[KEY]
 
-Load ONLY the single primary `FEATURE_[KEY]` needed to route this task:
-
-```
-read_memory("feature/FEATURE_[KEY]")
-```
-
-This is enough to classify and route. Do NOT load secondary features' full memories here, and do NOT read their Related Memories tables yet.
+- `read_memory("feature/FEATURE_[KEY]")` — the single primary feature needed to route.
+- Do NOT load secondary features' full memories here. Do NOT read their Related Memories tables yet.
 
 ### 4d. Defer the Broad Supporting-Memory Sweep
 
-The heavy `list_memories(topic="dom")` / `list_memories(topic="ref")` / `list_memories(topic="dev")` sweep and the "read each related memory" expansion are DEFERRED to keep this early stage light:
+Do NOT run `list_memories(topic="dom")` / `list_memories(topic="ref")` / `list_memories(topic="dev")` or the "read each related memory" expansion here.
 
-- **Code changes** → the dom/ref/dev sweep and DEV/DOM/SYS compliance-checklist load happens at **WF_ARCH_REVIEW**, scoped to the chosen approach.
-- **Operational tasks** → load only what WF_EXECUTE needs, when it needs it.
-
-Do NOT run the broad sweep or read "each related memory" here. Only INDEX_FEATURES (4a) and the single primary FEATURE_[KEY] (4c) are loaded at WF_CLASSIFY.
+- Code changes → dom/ref/dev sweep and DEV/DOM/SYS compliance-checklist load happens at `WF_ARCH_REVIEW`, scoped to the chosen approach.
+- Operational tasks → load only what WF_EXECUTE needs, when it needs it.
+- At WF_CLASSIFY load ONLY INDEX_FEATURES (4a) and the single primary FEATURE_[KEY] (4c).
 
 ### 4e. Update WM with Features
 
@@ -214,54 +160,46 @@ Do NOT run the broad sweep or read "each related memory" here. Only INDEX_FEATUR
 - **Secondary**: [KEY2] - [reason]
 ```
 
----
-
 ## Step 5: Validate Requirements Against Domain Memories
 
 If Step 2 detected requirements, compare them to loaded domain memories:
 
-1. **Check for existing domain memory:** Look for DOM_* memories that relate to detected requirements.
-2. **Compare:**
-   - **NEW requirement** — note it; will be added to domain memory after implementation
-   - **CONFLICTING requirement** — note the conflict in WM; do NOT route to WF_CLARIFY here. Approach/design conflicts (including overriding a documented domain rule) are deferred to the single question gate at WF_ARCH_REVIEW, where they are asked once alongside all other design questions.
-   - **EXISTING requirement** — acknowledge; domain already documents this behavior
-3. **No requirements detected at Step 2:** Skip this step.
-
----
+1. Check for DOM_* memories relating to the detected requirements.
+2. Compare:
+   - NEW requirement → note it; added to domain memory after implementation
+   - CONFLICTING requirement → note the conflict in WM. Do NOT route to WF_CLARIFY. Approach/design conflicts (including overriding a documented domain rule) are deferred to the single question gate at `WF_ARCH_REVIEW`, asked once alongside all design questions.
+   - EXISTING requirement → acknowledge; domain already documents this behavior
+3. No requirements detected at Step 2 → skip this step.
 
 ## Step 6: Note Key Information for Implementation
 
 From loaded feature memories, record: key file paths, class/function names for Serena lookups, testing commands, architecture patterns to follow.
 
----
-
 ## Skill Invocation Protocol
 
-When routing to a workflow-aware skill (e.g., `/research`):
+When routing to a workflow-aware skill (e.g. `/research`):
 
-1. **Set workflow context in WM:** Calling step, feature key, session ID, return step, invocation mode
-2. **Inform user:** `> Routing to /research skill. Will return to WF_CLASSIFY on completion.`
-3. **Handle return:**
+1. Set workflow context in WM: calling step, feature key, session ID, return step, invocation mode
+2. Inform user: `> Routing to /research skill. Will return to WF_CLASSIFY on completion.`
+3. Handle return:
 
 | Status | Action |
 |--------|--------|
 | `success` / `success_with_findings` | Continue to return step |
-| `needs_clarification` | Go to WF_CLARIFY |
-| `blocked` | Go to WF_CLARIFY |
-
----
+| `needs_clarification` | `WF_CLARIFY` |
+| `blocked` | `WF_CLARIFY` |
 
 ## Routing Table
 
 | Condition | Route To |
 |-----------|----------|
-| Hard blocker — cannot classify (e.g. which of two features) | WF_CLARIFY |
-| Research only | WF_RESEARCH |
-| Test debugging needed | WF_DEBUG_TDD |
-| Approach/design ambiguity or conflicting requirement | Defer to WF_ARCH_REVIEW (single question gate) |
-| Operational task (no code changes) | WF_EXECUTE |
-| Code change — minor patch to existing functionality, ≤5 files, no open questions (Step 3b) | WF_EXECUTE (`arch_review_skipped: true`) |
-| Code change — new feature, major module addition, >5 files, or 3+ layers (Step 3b) | WF_ARCH_REVIEW |
+| Hard blocker — cannot classify (e.g. which of two features) | `WF_CLARIFY` |
+| Research only | `WF_RESEARCH` |
+| Test debugging needed | `WF_DEBUG_TDD` |
+| Approach/design ambiguity or conflicting requirement | Defer to `WF_ARCH_REVIEW` (single question gate) |
+| Operational task (no code changes) | `WF_EXECUTE` |
+| Code change — minor patch to existing functionality, ≤5 files, no open questions (Step 3b) | `WF_EXECUTE` (`arch_review_skipped: true`) |
+| Code change — new feature, major module addition, >5 files, or 3+ layers (Step 3b) | `WF_ARCH_REVIEW` |
 | Gherkin spec authoring (explicit) | `/swe-gherkin-spec` |
 | Gherkin TDD from existing spec | `/swe-gherkin-dev` |
 
@@ -269,4 +207,4 @@ When routing to a workflow-aware skill (e.g., `/research`):
 2. Read that WF_* memory
 3. Report the new step to user
 
-Update WM via /swe-wm-update --from WF_CLASSIFY before transitioning.
+Update WM via `/swe-wm-update --from WF_CLASSIFY` before transitioning.

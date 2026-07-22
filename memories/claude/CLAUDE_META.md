@@ -1,78 +1,31 @@
-# Claude Workflow System - Meta Documentation
-
-This document explains the state machine workflow system used to guide Claude's behavior. Use this to understand, modify, or replicate the approach.
-
+---
+name: CLAUDE_META
+description: Meta-reference for the state-machine workflow system — its structure, memory types, step-reporting contract, and rules for adding/modifying states.
+metadata:
+  type: reference
 ---
 
-## The Problem
+# CLAUDE_META — Workflow System Reference
 
-Large CLAUDE.md files don't work well:
+## Why This System Exists
 
-- Claude skips or forgets instructions buried in long files
-- Context fills up, causing drift from instructions
-- No enforcement mechanism - rules are suggestions
-- Hard to maintain as project evolves
+- Large CLAUDE.md files fail: Claude skips buried instructions, context fills and drifts, rules become suggestions.
+- Split into: tiny CLAUDE.md entry point + one-responsibility WF_* state files + verification loops.
+- Claude MUST read the next state file to know the next step. This blocks skipping ahead, blocks hallucinated rules, and forces the declared transition path.
 
-## The Solution: State Machine Workflow
+## Context Minimization (hard rule)
 
-Instead of one large instruction file, we use:
+- Load ONLY memories needed for the current task. NEVER read unrelated layer patterns.
+- Applies to WF_* (single-responsibility states), DOM_* (domain requirements only), ARCH_* (one layer per file).
 
-1. **Tiny CLAUDE.md** (~20 lines) - just an entry point
-2. **Workflow memories** (WF_*) - small files (~10-15 lines each) that Claude reads one at a time
-3. **Each state points to the next** - Claude can't skip ahead because it doesn't know what's next
-4. **Verification loops** - violations send Claude back to START
+### Agent Spawning
 
----
+- `WF_ARCH_REVIEW`: read `ARCH_INDEX` (overview only) → propose needed layers → user approves.
+- `WF_EXECUTE`: spawn one parallel agent per layer; each agent loads only its `ARCH_LAYER_*` + relevant `REF_*`.
 
-## Key Insight
+## Step Reporting (contract — do NOT drop)
 
-**Claude must read the next instruction file to know what to do next.**
-
-This creates natural enforcement:
-
-- Can't skip steps (doesn't know them yet)
-- Can't hallucinate rules (must read from file)
-- Must follow the path (each state defines valid transitions)
-
----
-
-## Core Principle: Context Minimization
-
-**Every file in this system exists because large files cause drift and hallucination.**
-
-- An agent working on one layer should NOT read unrelated layer patterns
-- Load ONLY what's needed for the specific task
-
-This applies to:
-
-- **Workflow files** (WF_*) - small, single-responsibility states
-- **Domain files** (DOM_*) - domain-specific requirements only
-- **Architecture files** (ARCH_*) - layer-specific rules for agents
-
-### Agent Spawning Pattern
-
-When work spans multiple layers:
-
-```
-WF_ARCH_REVIEW:
-  1. Read ARCH_INDEX (overview only)
-  2. Propose which layers are needed
-  3. User approves
-     |
-WF_EXECUTE:
-  Spawn parallel agents:
-  +-- Layer A agent -> ARCH_LAYER_A + relevant REF_*
-  +-- Layer B agent -> ARCH_LAYER_B + relevant REF_*
-  +-- Layer C agent -> ARCH_LAYER_C + relevant REF_*
-```
-
-Each agent has minimal, focused context = fewer hallucinations, faster execution.
-
----
-
-## Step Reporting
-
-Each workflow state includes a reporting line with a distinct icon:
+- Each WF_* memory starts with its step name. Claude MUST output the report line before executing the step. This blocks silent step-skipping and creates the audit trail.
 
 | Step                  | Report                         |
 | --------------------- | ------------------------------ |
@@ -88,260 +41,68 @@ Each workflow state includes a reporting line with a distinct icon:
 | WF_RESEARCH           | **On step WF_RESEARCH**        |
 | WF_DONE               | **On step WF_DONE**            |
 
-**Benefits:**
-
-- Visual distinction for each step
-- User visibility into workflow progress
-- Ensures steps aren't silently skipped
-- Creates audit trail for debugging
-
-**Implementation:**
-
-- Each WF_* memory starts with its icon + step name
-- Claude outputs this line before executing the step
-
----
-
 ## File Structure
 
 ```
 project/
-+-- CLAUDE.md                    # Entry point (~20 lines)
-|
-+-- .serena/swe/            # Serena MCP memory storage
-    +-- CLAUDE_META.md           # This file - system documentation
-    +-- CLAUDE_WORKFLOW.md       # Visual diagram of state machine
-    +-- CLAUDE_OBLIGATIONS.md    # Behavioral constraints
-    |
-    +-- WF_*.md                  # Workflow states
-    |
-    +-- ARCH_INDEX.md            # Architecture overview
-    +-- ARCH_*.md                # Layer-specific architecture
-    |
-    +-- DOM_*.md                 # Domain-specific requirements
-    |
-    +-- INDEX_*.md               # Lookup tables
-    +-- REF_*.md                 # Reference documentation
-    |
-    +-- MEMORY.md                # Memory index (auto-loaded by Claude Code)
++-- CLAUDE.md                # Entry point (~20 lines)
++-- .serena/swe/             # Serena MCP memory storage
+    +-- CLAUDE_META.md       # This file
+    +-- CLAUDE_WORKFLOW.md   # State-machine diagram
+    +-- CLAUDE_OBLIGATIONS.md# Behavioral constraints
+    +-- WF_*.md              # Workflow states
+    +-- ARCH_INDEX.md        # Architecture overview
+    +-- ARCH_*.md            # Layer-specific architecture
+    +-- DOM_*.md             # Domain requirements
+    +-- INDEX_*.md           # Lookup tables
+    +-- REF_*.md             # Reference docs
+    +-- MEMORY.md            # Memory index (auto-loaded)
 ```
 
----
-
-## Components Explained
-
-### 1. CLAUDE.md (Entry Point)
-
-The only file Claude reads from disk at conversation start. Must be tiny:
-
-```markdown
-# Claude Code - Project Name
-
-## Entry Point
-
-Read `WF_INIT` memory. Follow the workflow.
-
-## Quick Reference
-
-| Memory               | Purpose             |
-| -------------------- | ------------------- |
-| `WF_*`               | Workflow states     |
-| `CLAUDE_OBLIGATIONS` | Hard rules          |
-| `ARCH_*`             | Architecture layers |
-| `DOM_*`              | Domain requirements |
-```
-
-### 2. Workflow States (WF_*)
-
-Small memory files that define:
-
-- What to do in this state
-- What to read/check
-- Which state(s) to go to next
-
-Example `WF_CLASSIFY`:
-
-```markdown
-# WF_CLASSIFY - Post-Init Entry
-
-**Report: "On step WF_CLASSIFY"**
-
-## Execute These Steps
-
-1. **Read CLAUDE_OBLIGATIONS**
-2. **Read WM (Working Memory)**
-3. **Classify task type:**
-   - Continue previous -> `WF_CONTINUE`
-   - Research only -> `WF_RESEARCH`
-   - Code change -> `WF_ARCH_REVIEW`
-
-## Next State
-
-Based on classification above.
-```
-
-### 3. CLAUDE_OBLIGATIONS.md
-
-Behavioral constraints only. Keep short (~20 lines):
-
-```markdown
-# Obligations
-
-## NEVER Do
-
-- [ ] Use unsafe type assertions
-- [ ] Create files without permission
-- [ ] Guess file paths
-
-## ALWAYS Do
-
-- [ ] Ask before modifying files
-- [ ] Use Serena tools before Read/Edit
-- [ ] Update WM after steps
-```
-
-### 4. Architecture Memories (ARCH_*)
-
-`ARCH_INDEX` provides architecture overview pointing to layer-specific files:
-
-- Each `ARCH_*` file defines rules for one architectural layer
-- Agents load only the architecture relevant to their task
-
-### 5. Domain Memories (DOM_*)
-
-Domain-specific requirements and patterns. Define WHAT the system needs to do, not HOW.
-
-**DO** (requirement style):
-
-- "Users must authenticate before accessing dashboard"
-- "Reports display date ranges selectable by user"
-
-**DON'T** (implementation details):
-
-- Function signatures, parameter types
-- Specific query implementations
-
-Implementation details belong in ARCH_* memories or are discovered via Serena tools at execution time.
-
-### 6. Index Memories (INDEX_*)
-
-Lookup tables for finding code:
-
-- Map logical names to file locations
-- Registry of components and their paths
-
-### 7. Reference Memories (REF_*)
-
-How-to guides and patterns:
-
-- Coding standards
-- Testing patterns
-- Framework-specific syntax
-
----
-
-## Workflow Design Principles
-
-### 1. Small States
-
-Each WF_* file should be 10-20 lines max. If it's longer, split it.
-
-### 2. Explicit Transitions
-
-Every state must declare what states it can transition to:
-
-```
-## Next State
-- Condition A -> `WF_FOO`
-- Condition B -> `WF_BAR`
-```
-
-### 3. Mandatory Checkpoints
-
-Key verification points that can't be skipped:
-
-- `WF_VERIFY` - after all code changes
-- `WF_CLARIFY` - when uncertain (reachable from multiple states)
-
-### 4. Loop Back on Violations
-
-`WF_VERIFY` checks for violations and loops back to `WF_CLASSIFY` if found. This forces Claude to fix issues rather than ignore them.
-
-### 5. Requirement Detection
-
-`WF_CLASSIFY` scans every user message for requirement language inline and validates requirements against domain memories in Step 5.
-
----
-
-## Adding New States
-
-1. Create memory file: `WF_NEWSTATE.md`
-2. Define: what to do, what to read, next states
-3. Update upstream states to route to new state
-4. Update `CLAUDE_WORKFLOW` diagram
-5. Update `MEMORY.md` index
-
-Example:
-
-```markdown
-# WF_NEWSTATE - Description
-
-## Execute These Steps
-
-1. Do something
-2. Check something
-
-## Next State
-
-- Condition -> `WF_NEXT`
-```
-
----
-
-## Modifying Existing States
-
-1. Read current state with `read_memory`
-2. Edit with `edit_memory`
-3. Update diagram if transitions changed
-4. Test the workflow path
-
----
-
-## Memory Tool Reference
-
-Using Serena MCP:
-
-```
-# List all memories
-list_memories()
-
-# Read a memory
-read_memory("MEMORY_NAME")
-
-# Write a memory
-write_memory("MEMORY_NAME", "content")
-
-# Edit a memory
-edit_memory("MEMORY_NAME", "old", "new")
-```
-
----
-
-## Summary
-
-| Component          | Purpose               | Size             |
-| ------------------ | --------------------- | ---------------- |
-| CLAUDE.md          | Entry point           | ~20 lines        |
-| WF_*               | Workflow states       | 10-20 lines each |
-| CLAUDE_OBLIGATIONS | Behavioral rules      | ~20 lines        |
-| ARCH_INDEX         | Architecture overview | ~50 lines        |
-| ARCH_*             | Layer architecture    | ~50 lines each   |
-| DOM_*              | Domain requirements   | Variable         |
-| INDEX_*            | Lookup tables         | Variable         |
-| REF_*              | Reference guides      | Variable         |
-
-**Key principles:**
-
-1. Claude can only know its next step by reading the next memory file
-2. Every file is small because large files cause drift and hallucination
-3. Agents load ONLY the architecture relevant to their layer
+## Memory Types
+
+| Type                 | Contains                                                              | Constraint                                    |
+| -------------------- | -------------------------------------------------------------------- | --------------------------------------------- |
+| CLAUDE.md            | Entry point only; reads `WF_INIT`                                    | ~20 lines; only file read from disk at start  |
+| `WF_*`               | What to do, what to read, next state(s)                              | 10-20 lines each; split if longer             |
+| `CLAUDE_OBLIGATIONS` | Behavioral constraints (NEVER/ALWAYS)                               | ~20 lines                                     |
+| `ARCH_INDEX`         | Architecture overview pointing to layer files                       | ~50 lines                                     |
+| `ARCH_*`             | Rules for ONE architectural layer                                    | ~50 lines each; agents load only their layer  |
+| `DOM_*`              | Domain requirements (WHAT, not HOW); NO signatures/queries          | Variable; implementation lives in `ARCH_*`/Serena |
+| `INDEX_*`            | Lookup tables mapping logical names → file paths                    | Variable                                      |
+| `REF_*`              | How-to guides, coding/testing standards, framework syntax           | Variable                                      |
+
+## Workflow Design Rules
+
+- Keep each WF_* file 10-20 lines max. Split when longer.
+- Every state MUST declare its explicit transitions (`condition → WF_TARGET`). NEVER leave next-state implicit.
+- `WF_VERIFY` runs after all code changes; on violation it loops back to `WF_CLASSIFY` to force a fix.
+- `WF_CLARIFY` is reachable from multiple states when uncertain.
+- `WF_CLASSIFY` scans every user message for requirement language inline, and validates requirements against domain memories in Step 5.
+
+## Adding a State
+
+1. Create `WF_NEWSTATE.md`: what to do, what to read, next states.
+2. Route upstream states to the new state.
+3. Update `CLAUDE_WORKFLOW` diagram.
+4. Update `MEMORY.md` index.
+
+## Modifying a State
+
+1. `read_memory` the current state.
+2. `edit_memory` to change it.
+3. Update `CLAUDE_WORKFLOW` diagram if transitions changed.
+4. Test the workflow path.
+
+## Serena Memory Tools
+
+- `list_memories()` — list all memories.
+- `read_memory("NAME")` — read one.
+- `write_memory("NAME", content)` — write one.
+- `edit_memory("NAME", old, new)` — patch one.
+
+## Invariants
+
+- Claude knows its next step ONLY by reading the next memory file.
+- Every file stays small because large files cause drift and hallucination.
+- Agents load ONLY the architecture relevant to their layer.

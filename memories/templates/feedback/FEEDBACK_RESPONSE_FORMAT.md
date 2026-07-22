@@ -1,7 +1,8 @@
 ---
 name: Response Format
 description: Strict formatting rules — no conversational language, use functional/direct phrasing only
-type: feedback
+metadata:
+  type: feedback
 ---
 
 Don't be conversational. Always be concise and to the point.

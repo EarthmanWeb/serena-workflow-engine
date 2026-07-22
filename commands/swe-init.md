@@ -17,7 +17,7 @@ First-time setup command for the SWE plugin. Launches an autonomous agent to com
 
 ```javascript
 Task({
-  subagent_type: "general-purpose",
+  subagent_type: "swe:swe-init-agent",
   description: "SWE plugin initialization",
   prompt: `You are the SWE Init Agent.
 
