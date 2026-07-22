@@ -1,7 +1,7 @@
 {
   "name": "swe",
-  "version": "1.2.23",
-  "description": "State-machine workflow engine with Serena memory persistence, hook-driven event architecture, and optional swarm orchestration",
+  "version": "1.2.24",
+  "description": "State-machine workflow engine with Serena memory persistence, hook-driven event architecture, and native subagent parallelization",
   "author": {
     "name": "EarthmanWeb",
     "email": "claude-swe@earthman.ca"
