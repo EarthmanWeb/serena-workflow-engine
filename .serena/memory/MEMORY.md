@@ -29,6 +29,7 @@ metadata:
 ## Architecture
 - [Architecture Index](arch/ARCH_INDEX.md) — Architecture overview
 - [Init memory-paths & Serena reconnect](dom/DOM_SWE_INIT_MEMORY_PATHS.md) — conf writes only ./.serena/memory (singular); Serena must reconnect after bootstrap or memories split-brain
+- [Two Memory Trees](dom/DOM_MEMORY_TREES.md) — plugin SOURCE (memories/, ships everywhere) vs this repo's OWN dev memories (.serena/memory/, local); edit source as files, dev via Serena tools
 
 ## Workflow Routing (v4)
 
