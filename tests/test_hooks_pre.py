@@ -1,0 +1,566 @@
+"""Tests for hooks/pre/* pure functions and module constants.
+
+Targets:
+  - pre/swe_pre_edit_validate: _is_bypass_write_attempt, _is_raw_memory_write,
+    _block_message; constants EDIT_ALLOWED, WARN_STATES.
+  - pre/swe_pre_tool_init_gate: _extract_session_id, _is_bypass_write_attempt,
+    check_working_memory_exists, check_lite_mode, inject_metadata; constants
+    INIT_ALLOWED_MEMORIES, SKIP_STREAM_TOOLS.
+  - pre/swe_pre_bash_test_gate: get_test_sentinel_path, load_bash_policy;
+    constant TEST_COMMAND_PATTERNS.
+
+ALREADY-TESTED elsewhere (skipped here): is_test_command, check_bash_policy,
+is_working_memory_write.
+
+Deterministic + offline: no network, no real Serena, no real git. IO goes
+through tempfile.TemporaryDirectory. Functions that resolve paths via
+get_project_root()/get_stream_dir() are exercised by monkeypatching the exact
+symbol the module imported and restoring it in tearDown.
+"""
+
+import json
+import os
+import sys
+import tempfile
+import unittest
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from _hookutil import import_hook, reset_caches  # noqa: E402
+
+edit_mod = import_hook("pre/swe_pre_edit_validate")
+init_mod = import_hook("pre/swe_pre_tool_init_gate")
+bash_mod = import_hook("pre/swe_pre_bash_test_gate")
+
+
+# ---------------------------------------------------------------------------
+# swe_pre_edit_validate
+# ---------------------------------------------------------------------------
+class TestEditValidateConstants(unittest.TestCase):
+    def test_edit_allowed_is_set_with_expected_states(self):
+        self.assertIsInstance(edit_mod.EDIT_ALLOWED, set)
+        for st in ('WF_EXECUTE', 'WF_DEBUG_TDD', 'WF_CHECKPOINT',
+                   'WF_INITIAL_SETUP', 'WF_ONBOARD', 'WF_VERIFY'):
+            self.assertIn(st, edit_mod.EDIT_ALLOWED)
+        # Classification/routing state is NOT an edit state.
+        self.assertNotIn('WF_CLASSIFY', edit_mod.EDIT_ALLOWED)
+
+    def test_warn_states_is_set_with_expected_states(self):
+        self.assertIsInstance(edit_mod.WARN_STATES, set)
+        self.assertEqual(edit_mod.WARN_STATES, {'WF_ARCH_REVIEW', 'WF_RESEARCH'})
+
+    def test_edit_allowed_and_warn_states_disjoint(self):
+        self.assertEqual(edit_mod.EDIT_ALLOWED & edit_mod.WARN_STATES, set())
+
+
+class TestEditIsBypassWriteAttempt(unittest.TestCase):
+    def test_edit_setting_bypass_true_in_setup_file_is_blocked(self):
+        data = {
+            'tool_name': 'Edit',
+            'tool_input': {
+                'file_path': '/proj/.serena/swe-setup-complete.json',
+                'new_string': '{"complete": true, "bypass": true}',
+            },
+        }
+        self.assertTrue(edit_mod._is_bypass_write_attempt(data))
+
+    def test_write_setting_bypass_true_via_content_is_blocked(self):
+        data = {
+            'tool_name': 'Write',
+            'tool_input': {
+                'file_path': '/x/.serena/swe-setup-complete.json',
+                'content': '{"bypass": true}',
+            },
+        }
+        self.assertTrue(edit_mod._is_bypass_write_attempt(data))
+
+    def test_quote_and_space_insensitive_match(self):
+        # single-quotes and extra spaces are normalized away
+        data = {
+            'tool_input': {
+                'file_path': 'swe-setup-complete.json',
+                'new_string': "{ 'bypass' :  true }",
+            },
+        }
+        self.assertTrue(edit_mod._is_bypass_write_attempt(data))
+
+    def test_memory_name_target_also_checked(self):
+        data = {
+            'tool_input': {
+                'memory_name': 'config/swe-setup-complete',
+                'content': '{"bypass":true}',
+            },
+        }
+        self.assertTrue(edit_mod._is_bypass_write_attempt(data))
+
+    def test_bypass_false_is_not_blocked(self):
+        data = {
+            'tool_input': {
+                'file_path': 'swe-setup-complete.json',
+                'content': '{"bypass": false}',
+            },
+        }
+        self.assertFalse(edit_mod._is_bypass_write_attempt(data))
+
+    def test_bypass_in_other_file_is_not_blocked(self):
+        # target does not mention swe-setup-complete -> returns before content check
+        data = {
+            'tool_input': {
+                'file_path': '/proj/config.json',
+                'content': '{"bypass": true}',
+            },
+        }
+        self.assertFalse(edit_mod._is_bypass_write_attempt(data))
+
+    def test_benign_edit_to_setup_file_is_not_blocked(self):
+        data = {
+            'tool_input': {
+                'file_path': 'swe-setup-complete.json',
+                'new_string': '{"complete": true}',
+            },
+        }
+        self.assertFalse(edit_mod._is_bypass_write_attempt(data))
+
+    def test_empty_input_is_not_blocked(self):
+        self.assertFalse(edit_mod._is_bypass_write_attempt({}))
+
+    def test_none_tool_input_is_not_blocked(self):
+        # tool_input explicitly None -> `or {}` guard
+        self.assertFalse(edit_mod._is_bypass_write_attempt({'tool_input': None}))
+
+
+class TestEditIsRawMemoryWrite(unittest.TestCase):
+    def test_edit_on_memory_file_is_raw_write(self):
+        data = {
+            'tool_name': 'Edit',
+            'tool_input': {'file_path': '/proj/.serena/memory/dom/DOM_X.md'},
+        }
+        self.assertTrue(edit_mod._is_raw_memory_write(data))
+
+    def test_write_on_memories_plural_dir_is_raw_write(self):
+        data = {
+            'tool_name': 'Write',
+            'tool_input': {'file_path': '/proj/.serena/memories/ref/REF_X.md'},
+        }
+        self.assertTrue(edit_mod._is_raw_memory_write(data))
+
+    def test_wm_file_is_exempt(self):
+        # WM_ session working memory is written by the harness/daemon by design
+        data = {
+            'tool_name': 'Write',
+            'tool_input': {'file_path': '/proj/.serena/memories/WM_abc12345.md'},
+        }
+        self.assertFalse(edit_mod._is_raw_memory_write(data))
+
+    def test_non_edit_write_tool_is_not_raw_memory_write(self):
+        data = {
+            'tool_name': 'Read',
+            'tool_input': {'file_path': '/proj/.serena/memory/dom/DOM_X.md'},
+        }
+        self.assertFalse(edit_mod._is_raw_memory_write(data))
+
+    def test_non_memory_path_is_not_raw_write(self):
+        data = {
+            'tool_name': 'Edit',
+            'tool_input': {'file_path': '/proj/src/main.py'},
+        }
+        self.assertFalse(edit_mod._is_raw_memory_write(data))
+
+    def test_backslash_path_is_normalized(self):
+        data = {
+            'tool_name': 'Edit',
+            'tool_input': {'file_path': r'C:\proj\.serena\memory\dom\DOM_X.md'},
+        }
+        self.assertTrue(edit_mod._is_raw_memory_write(data))
+
+    def test_missing_tool_input_is_not_raw_write(self):
+        data = {'tool_name': 'Edit'}
+        self.assertFalse(edit_mod._is_raw_memory_write(data))
+
+    def test_none_tool_input_is_not_raw_write(self):
+        data = {'tool_name': 'Edit', 'tool_input': None}
+        self.assertFalse(edit_mod._is_raw_memory_write(data))
+
+    def test_empty_input_is_not_raw_write(self):
+        self.assertFalse(edit_mod._is_raw_memory_write({}))
+
+
+class TestEditBlockMessage(unittest.TestCase):
+    def test_classify_message_mentions_state_and_routing(self):
+        msg = edit_mod._block_message('WF_CLASSIFY')
+        self.assertIsInstance(msg, str)
+        self.assertIn('WF_CLASSIFY', msg)
+        # Classify branch routes the assistant onward to execution.
+        self.assertIn('WF_EXECUTE', msg)
+
+    def test_generic_message_mentions_the_blocking_state(self):
+        msg = edit_mod._block_message('WF_RESEARCH')
+        self.assertIsInstance(msg, str)
+        self.assertIn('WF_RESEARCH', msg)
+        self.assertIn('WF_EXECUTE', msg)
+
+    def test_generic_message_for_unknown_state(self):
+        msg = edit_mod._block_message('WF_SOMETHING_ELSE')
+        self.assertIn('WF_SOMETHING_ELSE', msg)
+
+
+# ---------------------------------------------------------------------------
+# swe_pre_tool_init_gate
+# ---------------------------------------------------------------------------
+class TestInitGateConstants(unittest.TestCase):
+    def test_init_allowed_memories_is_frozenset(self):
+        self.assertIsInstance(init_mod.INIT_ALLOWED_MEMORIES, frozenset)
+        self.assertIn('wf/WF_INIT', init_mod.INIT_ALLOWED_MEMORIES)
+        self.assertIn('claude/CLAUDE_OBLIGATIONS', init_mod.INIT_ALLOWED_MEMORIES)
+        self.assertIn('wf/WF_CLASSIFY', init_mod.INIT_ALLOWED_MEMORIES)
+
+    def test_skip_stream_tools_is_frozenset(self):
+        self.assertIsInstance(init_mod.SKIP_STREAM_TOOLS, frozenset)
+        self.assertIn('ToolSearch', init_mod.SKIP_STREAM_TOOLS)
+        self.assertIn('SendMessage', init_mod.SKIP_STREAM_TOOLS)
+
+
+class TestInitExtractSessionId(unittest.TestCase):
+    def test_extracts_first_8_chars_of_uuid(self):
+        path = ('~/.claude/projects/foo/'
+                '00893aaf-19fa-41d2-8238-13269b9b3ca0.jsonl')
+        self.assertEqual(init_mod._extract_session_id(path), '00893aaf')
+
+    def test_empty_path_returns_none(self):
+        self.assertIsNone(init_mod._extract_session_id(''))
+
+    def test_none_path_returns_none(self):
+        self.assertIsNone(init_mod._extract_session_id(None))
+
+    def test_no_uuid_returns_none(self):
+        self.assertIsNone(init_mod._extract_session_id('/tmp/no-uuid-here.jsonl'))
+
+    def test_uppercase_uuid_is_not_matched(self):
+        # pattern is lowercase-hex only
+        path = '/x/00893AAF-19FA-41D2-8238-13269B9B3CA0.jsonl'
+        self.assertIsNone(init_mod._extract_session_id(path))
+
+
+class TestInitIsBypassWriteAttempt(unittest.TestCase):
+    # Bash vector
+    def test_bash_echo_bypass_true_into_setup_file_blocked(self):
+        ti = {'command': 'echo \'{"bypass": true}\' > .serena/swe-setup-complete.json'}
+        self.assertTrue(init_mod._is_bypass_write_attempt('Bash', ti))
+
+    def test_bash_spaced_bypass_true_variant_blocked(self):
+        ti = {'command': 'sed -i s/x/bypass true/ .serena/swe-setup-complete.json'}
+        self.assertTrue(init_mod._is_bypass_write_attempt('Bash', ti))
+
+    def test_bash_bypass_script_is_allowed(self):
+        # the dedicated user-only bypass script is the sanctioned write path
+        ti = {'command': 'python3 scripts/swe-bypass.py --enable swe-setup-complete'}
+        self.assertFalse(init_mod._is_bypass_write_attempt('Bash', ti))
+
+    def test_bash_touching_other_file_not_blocked(self):
+        ti = {'command': 'echo \'{"bypass": true}\' > /tmp/other.json'}
+        self.assertFalse(init_mod._is_bypass_write_attempt('Bash', ti))
+
+    def test_bash_command_without_bypass_not_blocked(self):
+        ti = {'command': 'cat .serena/swe-setup-complete.json'}
+        self.assertFalse(init_mod._is_bypass_write_attempt('Bash', ti))
+
+    # Edit/Write vector
+    def test_edit_bypass_true_into_setup_file_blocked(self):
+        ti = {'file_path': '.serena/swe-setup-complete.json',
+              'new_string': '{"bypass": true}'}
+        self.assertTrue(init_mod._is_bypass_write_attempt('Edit', ti))
+
+    def test_write_bypass_true_via_content_blocked(self):
+        ti = {'file_path': '/p/.serena/swe-setup-complete.json',
+              'content': "{ 'bypass' : true }"}
+        self.assertTrue(init_mod._is_bypass_write_attempt('Write', ti))
+
+    def test_edit_memory_name_target_blocked(self):
+        ti = {'memory_name': 'swe-setup-complete', 'repl': '{"bypass":true}'}
+        self.assertTrue(init_mod._is_bypass_write_attempt('Write', ti))
+
+    def test_edit_bypass_false_not_blocked(self):
+        ti = {'file_path': '.serena/swe-setup-complete.json',
+              'content': '{"bypass": false}'}
+        self.assertFalse(init_mod._is_bypass_write_attempt('Edit', ti))
+
+    def test_edit_other_file_not_blocked(self):
+        ti = {'file_path': '/p/config.json', 'content': '{"bypass": true}'}
+        self.assertFalse(init_mod._is_bypass_write_attempt('Edit', ti))
+
+    def test_none_tool_input_not_blocked(self):
+        self.assertFalse(init_mod._is_bypass_write_attempt('Edit', None))
+        self.assertFalse(init_mod._is_bypass_write_attempt('Bash', None))
+
+
+class TestInitCheckWorkingMemoryExists(unittest.TestCase):
+    def setUp(self):
+        reset_caches()
+        self._orig_root = init_mod.get_project_root
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = self.tmp.name
+        init_mod.get_project_root = lambda: self.root
+
+    def tearDown(self):
+        init_mod.get_project_root = self._orig_root
+        self.tmp.cleanup()
+        reset_caches()
+
+    def _state_dir(self):
+        d = os.path.join(self.root, '.serena', 'swe-state')
+        os.makedirs(d, exist_ok=True)
+        return d
+
+    def _memories_dir(self):
+        d = os.path.join(self.root, '.serena', 'memories')
+        os.makedirs(d, exist_ok=True)
+        return d
+
+    def test_valid_state_file_present(self):
+        sid = 'abc12345'
+        with open(os.path.join(self._state_dir(), f'{sid}.state'), 'w') as f:
+            f.write('{"current_state": "WF_EXECUTE"}')
+        ok, msg = init_mod.check_working_memory_exists(sid)
+        self.assertTrue(ok)
+        self.assertIn('state file', msg)
+
+    def test_empty_state_file_falls_through_to_missing_memories(self):
+        sid = 'abc12345'
+        # empty content -> not treated as valid; no memories dir -> missing
+        with open(os.path.join(self._state_dir(), f'{sid}.state'), 'w') as f:
+            f.write('   ')
+        ok, msg = init_mod.check_working_memory_exists(sid)
+        self.assertFalse(ok)
+        self.assertIn('No .serena/memories directory', msg)
+
+    def test_no_memories_dir_returns_false(self):
+        ok, msg = init_mod.check_working_memory_exists('deadbeef')
+        self.assertFalse(ok)
+        self.assertIn('No .serena/memories directory', msg)
+
+    def test_memories_dir_but_no_wm_file(self):
+        self._memories_dir()
+        ok, msg = init_mod.check_working_memory_exists('deadbeef')
+        self.assertFalse(ok)
+        self.assertIn('No state file', msg)
+
+    def test_valid_wm_file_with_workflow_context(self):
+        sid = 'feedface'
+        mem = self._memories_dir()
+        with open(os.path.join(mem, f'WM_{sid}.md'), 'w') as f:
+            f.write('# WM\n## Workflow Context\n**Current State**: WF_EXECUTE\n')
+        ok, msg = init_mod.check_working_memory_exists(sid)
+        self.assertTrue(ok)
+        self.assertIn('WM file', msg)
+
+    def test_wm_file_missing_context_but_filename_matches(self):
+        sid = 'feedface'
+        mem = self._memories_dir()
+        with open(os.path.join(mem, f'WM_{sid}.md'), 'w') as f:
+            f.write('nothing structured here\n')
+        ok, msg = init_mod.check_working_memory_exists(sid)
+        self.assertTrue(ok)
+        self.assertIn('filename match', msg)
+
+    def test_no_session_id_scans_all_wm_files(self):
+        mem = self._memories_dir()
+        with open(os.path.join(mem, 'WM_something.md'), 'w') as f:
+            f.write('## Workflow Context\n**Current State**: WF_INIT\n')
+        ok, msg = init_mod.check_working_memory_exists(None)
+        self.assertTrue(ok)
+        self.assertIn('WM file', msg)
+
+
+class TestInitCheckLiteMode(unittest.TestCase):
+    def setUp(self):
+        reset_caches()
+        self._orig_root = init_mod.get_project_root
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = self.tmp.name
+        init_mod.get_project_root = lambda: self.root
+
+    def tearDown(self):
+        init_mod.get_project_root = self._orig_root
+        self.tmp.cleanup()
+        reset_caches()
+
+    def test_none_session_id_returns_false(self):
+        self.assertFalse(init_mod.check_lite_mode(None))
+
+    def test_no_lite_marker_returns_false(self):
+        self.assertFalse(init_mod.check_lite_mode('abc12345'))
+
+    def test_lite_marker_present_returns_true(self):
+        sid = 'abc12345'
+        mem = os.path.join(self.root, '.serena', 'memories')
+        os.makedirs(mem, exist_ok=True)
+        with open(os.path.join(mem, f'LITE_MODE_{sid}.md'), 'w') as f:
+            f.write('lite')
+        self.assertTrue(init_mod.check_lite_mode(sid))
+
+
+class TestInitInjectMetadata(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.cwd = self.tmp.name
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def _write_state(self, sid, data):
+        d = os.path.join(self.cwd, '.serena', 'swe-state')
+        os.makedirs(d, exist_ok=True)
+        with open(os.path.join(d, f'{sid}.state'), 'w') as f:
+            json.dump(data, f)
+
+    def test_non_serena_tool_returns_none(self):
+        self.assertIsNone(
+            init_mod.inject_metadata('Bash', {'command': 'ls'}, 'abc12345', self.cwd)
+        )
+
+    def test_serena_tool_gets_metadata_from_state_file(self):
+        sid = 'abc12345'
+        self._write_state(sid, {'current_state': 'WF_EXECUTE',
+                                'feature_keys': 'SWE'})
+        ti = {'memory_name': 'wf/WF_EXECUTE'}
+        out = init_mod.inject_metadata(
+            'mcp__plugin_swe_serena__read_memory', ti, sid, self.cwd)
+        self.assertIsNotNone(out)
+        self.assertIn('_swe_metadata', out)
+        meta = out['_swe_metadata']
+        self.assertEqual(meta['session_id'], sid)
+        self.assertEqual(meta['state'], 'WF_EXECUTE')
+        self.assertEqual(meta['feature_keys'], 'SWE')
+        # original input preserved and not mutated in place
+        self.assertEqual(out['memory_name'], 'wf/WF_EXECUTE')
+        self.assertNotIn('_swe_metadata', ti)
+
+    def test_serena_alt_prefix_also_injected(self):
+        sid = 'abc12345'
+        out = init_mod.inject_metadata(
+            'mcp__serena__list_memories', {}, sid, self.cwd)
+        self.assertIsNotNone(out)
+        self.assertIn('_swe_metadata', out)
+
+    def test_serena_tool_with_no_state_file_gets_empty_state(self):
+        sid = 'abc12345'  # no state file written
+        out = init_mod.inject_metadata(
+            'mcp__plugin_swe_serena__read_memory', {}, sid, self.cwd)
+        self.assertIsNotNone(out)
+        meta = out['_swe_metadata']
+        self.assertEqual(meta['state'], '')
+        self.assertEqual(meta['feature_keys'], '')
+        self.assertEqual(meta['session_id'], sid)
+
+    def test_malformed_state_json_is_swallowed(self):
+        sid = 'abc12345'
+        d = os.path.join(self.cwd, '.serena', 'swe-state')
+        os.makedirs(d, exist_ok=True)
+        with open(os.path.join(d, f'{sid}.state'), 'w') as f:
+            f.write('{not valid json')
+        out = init_mod.inject_metadata(
+            'mcp__plugin_swe_serena__read_memory', {}, sid, self.cwd)
+        self.assertIsNotNone(out)
+        # falls back to empty state, still injects
+        self.assertEqual(out['_swe_metadata']['state'], '')
+
+
+# ---------------------------------------------------------------------------
+# swe_pre_bash_test_gate
+# ---------------------------------------------------------------------------
+class TestBashTestGateConstants(unittest.TestCase):
+    def test_test_command_patterns_shape(self):
+        self.assertIsInstance(bash_mod.TEST_COMMAND_PATTERNS, list)
+        self.assertTrue(len(bash_mod.TEST_COMMAND_PATTERNS) >= 1)
+        # the sole pattern gates playwright test execution via npx
+        self.assertIn(r'\bnpx\s+playwright\s+test\b',
+                      bash_mod.TEST_COMMAND_PATTERNS)
+
+
+class TestBashGetTestSentinelPath(unittest.TestCase):
+    def setUp(self):
+        reset_caches()
+        self._orig = bash_mod.get_stream_dir
+        self.tmp = tempfile.TemporaryDirectory()
+        self.stream_dir = os.path.join(self.tmp.name, '.serena', 'streams')
+        os.makedirs(self.stream_dir, exist_ok=True)
+        bash_mod.get_stream_dir = lambda: self.stream_dir
+
+    def tearDown(self):
+        bash_mod.get_stream_dir = self._orig
+        self.tmp.cleanup()
+        reset_caches()
+
+    def test_sentinel_path_shape(self):
+        p = bash_mod.get_test_sentinel_path('abc12345')
+        self.assertEqual(p, os.path.join(self.stream_dir, '.test_feature_abc12345'))
+        self.assertEqual(os.path.basename(p), '.test_feature_abc12345')
+
+    def test_sentinel_path_uses_session_id(self):
+        p = bash_mod.get_test_sentinel_path('deadbeef')
+        self.assertTrue(p.endswith('.test_feature_deadbeef'))
+
+
+class TestBashLoadPolicy(unittest.TestCase):
+    def setUp(self):
+        reset_caches()
+        self._orig = bash_mod.get_project_root
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = self.tmp.name
+        bash_mod.get_project_root = lambda: self.root
+
+    def tearDown(self):
+        bash_mod.get_project_root = self._orig
+        self.tmp.cleanup()
+        reset_caches()
+
+    def _write_policy(self, obj):
+        d = os.path.join(self.root, '.serena')
+        os.makedirs(d, exist_ok=True)
+        with open(os.path.join(d, 'bash-policy.json'), 'w') as f:
+            json.dump(obj, f)
+
+    def test_missing_file_returns_empty_list(self):
+        self.assertEqual(bash_mod.load_bash_policy(), [])
+
+    def test_valid_rules_are_loaded(self):
+        rules = [
+            {'pattern': r'docker\s+exec.*\bwp\b', 'message': 'use wp_cli MCP'},
+            {'pattern': r'\bgit\s+commit\b', 'message': 'user handles git'},
+        ]
+        self._write_policy(rules)
+        loaded = bash_mod.load_bash_policy()
+        self.assertEqual(len(loaded), 2)
+        self.assertEqual(loaded[0]['pattern'], r'docker\s+exec.*\bwp\b')
+        self.assertEqual(loaded[1]['message'], 'user handles git')
+
+    def test_non_list_json_returns_empty(self):
+        self._write_policy({'pattern': 'x', 'message': 'y'})  # dict, not list
+        self.assertEqual(bash_mod.load_bash_policy(), [])
+
+    def test_malformed_rules_are_filtered_out(self):
+        rules = [
+            {'pattern': 'ok', 'message': 'good'},   # kept
+            {'pattern': 'no-message'},              # dropped: missing message
+            {'message': 'no-pattern'},              # dropped: missing pattern
+            {'pattern': '', 'message': 'empty pat'},  # dropped: falsy pattern
+            'not-a-dict',                            # dropped: not a dict
+        ]
+        self._write_policy(rules)
+        loaded = bash_mod.load_bash_policy()
+        self.assertEqual(len(loaded), 1)
+        self.assertEqual(loaded[0]['pattern'], 'ok')
+
+    def test_invalid_json_file_returns_empty(self):
+        d = os.path.join(self.root, '.serena')
+        os.makedirs(d, exist_ok=True)
+        with open(os.path.join(d, 'bash-policy.json'), 'w') as f:
+            f.write('{ not valid json ')
+        self.assertEqual(bash_mod.load_bash_policy(), [])
+
+    def test_empty_list_returns_empty(self):
+        self._write_policy([])
+        self.assertEqual(bash_mod.load_bash_policy(), [])
+
+
+if __name__ == "__main__":
+    unittest.main()

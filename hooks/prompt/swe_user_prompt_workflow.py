@@ -222,6 +222,8 @@ def main():
         if not prompt or not prompt.strip():
             sys.exit(0)
 
+        prompt_lower = prompt.lower().strip()
+
         # Check setup
         setup = load_setup_complete(cwd)
         if not setup or not setup.get('complete'):
