@@ -494,46 +494,6 @@ class TestEnsureMemoryPathsConf(unittest.TestCase):
         self.assertEqual(content.count('./.serena/memory'), 1)
 
 
-class TestEnsureMcpJson(unittest.TestCase):
-    def setUp(self):
-        self.tmp = tempfile.TemporaryDirectory()
-        self.root = self.tmp.name
-        self.path = os.path.join(self.root, '.mcp.json')
-
-    def tearDown(self):
-        self.tmp.cleanup()
-
-    def test_creates_when_absent(self):
-        self.assertTrue(mod.ensure_mcp_json(self.root))
-        with open(self.path) as f:
-            data = json.load(f)
-        self.assertIn('browser-devtools', data['mcpServers'])
-        self.assertEqual(data['mcpServers']['browser-devtools']['command'], 'npx')
-
-    def test_merges_without_clobbering_other_servers(self):
-        existing = {'mcpServers': {'other': {'command': 'foo'}}}
-        with open(self.path, 'w') as f:
-            json.dump(existing, f)
-        self.assertTrue(mod.ensure_mcp_json(self.root))
-        with open(self.path) as f:
-            data = json.load(f)
-        self.assertIn('other', data['mcpServers'])
-        self.assertIn('browser-devtools', data['mcpServers'])
-        self.assertEqual(data['mcpServers']['other']['command'], 'foo')
-
-    def test_idempotent_when_already_configured(self):
-        mod.ensure_mcp_json(self.root)
-        self.assertFalse(mod.ensure_mcp_json(self.root))
-
-    def test_malformed_existing_treated_as_empty(self):
-        with open(self.path, 'w') as f:
-            f.write('{ not valid json')
-        self.assertTrue(mod.ensure_mcp_json(self.root))
-        with open(self.path) as f:
-            data = json.load(f)
-        self.assertIn('browser-devtools', data['mcpServers'])
-
-
 class TestCreateProjectYml(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()

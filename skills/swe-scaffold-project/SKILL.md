@@ -146,12 +146,11 @@ The bootstrap script (`swe-bootstrap.py`) auto-detects project name, primary lan
 
 **Templates rendered (from `memories/templates/`):**
 
-1. **MEMORY.md** — Memory index with default entries (response format, MCP browser devtools, workflow routing)
+1. **MEMORY.md** — Memory index with default entries (response format, workflow routing)
 2. **feedback/FEEDBACK_RESPONSE_FORMAT.md** — Functional language directive (no conversational filler)
 3. **feedback/FEEDBACK_READ_DOCS_MEANS_LIST.md** — "Read docs" = use Serena list_memories
-4. **ref/REF_MCP_BROWSER_DEVTOOLS.md** — Browser DevTools MCP reference with scenarios-first rule, session isolation
-5. **FEATURE_TESTS.md** — Test configuration with detected framework and commands
-6. **FEATURE_DEV_STANDARDS.md** — Development standards index with primary language
+4. **FEATURE_TESTS.md** — Test configuration with detected framework and commands
+5. **FEATURE_DEV_STANDARDS.md** — Development standards index with primary language
 
 **Additionally, create these non-template memories:**
 
@@ -204,7 +203,6 @@ The bootstrap script (`swe-bootstrap.py`) auto-detects project name, primary lan
 - MEMORY.md (with default entries)
 - feedback/FEEDBACK_RESPONSE_FORMAT.md
 - feedback/FEEDBACK_READ_DOCS_MEANS_LIST.md
-- ref/REF_MCP_BROWSER_DEVTOOLS.md
 - INDEX_FEATURES
 - ARCH_INDEX
 
@@ -274,7 +272,7 @@ If user skips feature setup, enable minimal mode:
 - **Project Root**: [path]
 - **Language**: [detected]
 - **Framework**: [detected or none]
-- **Memories Created**: MEMORY.md, FEEDBACK_RESPONSE_FORMAT, FEEDBACK_READ_DOCS_MEANS_LIST, REF_MCP_BROWSER_DEVTOOLS, INDEX_FEATURES, ARCH_INDEX
+- **Memories Created**: MEMORY.md, FEEDBACK_RESPONSE_FORMAT, FEEDBACK_READ_DOCS_MEANS_LIST, INDEX_FEATURES, ARCH_INDEX
 - **Next Step Hint**: WF_CLASSIFY or /swe-feature-onboard
 ```
 

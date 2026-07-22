@@ -116,7 +116,6 @@ Templates rendered to `.serena/memory/`:
 - `FEATURE_TESTS.md` -- test config with detected framework
 - `FEATURE_DEV_STANDARDS.md` -- dev standards index
 - `feedback/FEEDBACK_RESPONSE_FORMAT.md` -- response style
-- `ref/REF_MCP_BROWSER_DEVTOOLS.md` -- browser DevTools reference
 
 Unresolved placeholders are left as-is for manual fill-out.
 

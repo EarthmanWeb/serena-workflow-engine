@@ -116,27 +116,9 @@ For multi-layer work or user-facing changes:
 
 If automated tests exist, run them.
 
-### 4c. Browser Verification Fallback (No Automated Tests)
+### 4c. No Automated Tests
 
-If no automated tests exist for this feature, verify visually in the dev browser when a local environment is available.
-
-Prerequisites:
-
-1. Check for local environment — look for local dev server URLs in `FEATURE_[KEY]`, project config, or `.serena/` files. If none available, note it in WM and skip to Step 4.
-2. Check for saved scenarios — call `mcp__browser-devtools__scenario-list()` first.
-
-Verification steps:
-
-| Step | Action |
-|------|--------|
-| 1 | Use scenarios first — if a saved scenario covers the changed flow, run it with `scenario-run`. |
-| 2 | Manual verification — if no scenario matches, navigate to the affected page(s), take an ARIA snapshot, verify changes are reflected in the UI. |
-| 3 | Screenshot evidence — take a screenshot of the verified state for WM documentation. |
-| 4 | Create scenario — if manual steps are useful for future verification, save them with `scenario-add`. |
-
-See `REF_MCP_BROWSER_DEVTOOLS` for browser interaction rules.
-
-If no local environment AND no automated tests: note in WM that verification was not possible and flag for user attention before proceeding.
+If no automated tests exist for this feature, note in WM that automated verification was not possible and flag for user attention before proceeding.
 
 ## 5. Fix Violations
 
@@ -173,9 +155,8 @@ When a fix exceeds the scope of a minor correction, re-classify rather than sile
 | Minor violation — fixable in place (≤5 files, existing functionality) | Fix in WF_VERIFY (no transition) |
 | Fix grew large (>5 files / new module / 3+ layers) — needs re-planning | `WF_CLASSIFY` (re-runs Step 3b) |
 | Larger fix, still plain implementation (no new design) | `WF_EXECUTE` |
-| Tests missing AND no browser verification possible | `WF_EXECUTE` |
-| Browser verification failed (visual defects found) | Fix in WF_VERIFY, or `WF_EXECUTE` if larger |
+| Tests missing AND no automated verification possible | `WF_EXECUTE` |
 | WM not updated | Invoke `/swe-wm-update --from WF_VERIFY` |
-| All clean, tests/browser verification pass, WM updated | `WF_DONE` |
+| All clean, tests pass, WM updated | `WF_DONE` |
 
 Update WM via `/swe-wm-update` before transitioning.

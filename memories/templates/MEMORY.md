@@ -13,9 +13,6 @@ The write_memory hook warns when these are violated; trim on the warning.
 - [Response Format](feedback/FEEDBACK_RESPONSE_FORMAT.md) — no conversational language, use functional/direct phrasing only
 - [Read docs = list memories](feedback/FEEDBACK_READ_DOCS_MEANS_LIST.md) — "read the docs" means check MEMORY.md and use Serena to list_memories, not external docs
 
-## Browser Session Isolation
-- [MCP Browser DevTools](ref/REF_MCP_BROWSER_DEVTOOLS.md) — scenarios-first rule, storageState reuse for parallel agents, tool reference
-
 ## Features
 - [Feature Index](index/INDEX_FEATURES.md) — Feature registry with relationships and types
 

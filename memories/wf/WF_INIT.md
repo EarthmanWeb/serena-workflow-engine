@@ -119,12 +119,6 @@ Use Serena symbolic tools before reading full files:
 - When symbol extraction returns empty, fall back to `search_for_pattern` with regex.
 - Read full files ONLY for config files, files with poor language server support, or when full file context is explicitly needed.
 
-## Browser DevTools
-
-- Call `scenario-list()` before any `mcp__browser-devtools__` tool.
-- Use `scenario-run()` when a matching scenario exists.
-- Fall back to individual tools ONLY for one-off inspection.
-
 ## Step Reporting
 
 After reading any WF_* memory, output the step report line before any other output. For WF_INIT, include plugin version:
