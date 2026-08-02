@@ -38,7 +38,7 @@ hooks/
 └── hooks.json
 ```
 
-## Hook Inventory (15 scripts)
+## Hook Inventory (18 scripts)
 
 ### Session (`session/`)
 
@@ -61,6 +61,8 @@ hooks/
 | `swe_pre_edit_validate.py` | PreToolUse (Edit/Write/Serena) | Block edits in planning states (WF_VERIFY is edit-allowed); flag staleness at 10 edits |
 | `swe_pre_memory_index_gate.py` | PreToolUse (Edit/Write/write_memory/edit_memory) | HARD-DENY spec/report/research/project links entering MEMORY.md (state-independent; the post-hook only advises) |
 | `swe_pre_bash_test_gate.py` | PreToolUse (Bash) | Validate test commands against WF_DEBUG_TDD |
+| `swe_pre_search_docs_gate.py` | PreToolUse (Grep/Glob/search_for_pattern) | DOCS-FIRST blocking gate: deny wide searches until a memory read (`docread`) since the last prompt |
+| `swe_pre_question_consent_gate.py` | PreToolUse (AskUserQuestion) | Deny questions while `auto_approve`/`blanket_consent` is set in WM (override tag for destructive/scope changes) |
 
 ### Post-Tool (`post/`) — observers/learners
 
