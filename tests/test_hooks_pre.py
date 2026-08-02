@@ -668,6 +668,51 @@ class TestSearchDocsGate(unittest.TestCase):
         self.assertFalse(search_docs_mod.docs_consulted_this_turn(self.stream))
 
 
+class TestSearchDocsGateScoping(unittest.TestCase):
+    """is_gated_call: which tool calls count as docs-first-gated code-surfing."""
+
+    def test_wide_searches_always_gated(self):
+        self.assertTrue(search_docs_mod.is_gated_call('Grep', {'pattern': 'x'}))
+        self.assertTrue(search_docs_mod.is_gated_call('Glob', {'pattern': '*.php'}))
+        self.assertTrue(search_docs_mod.is_gated_call(
+            'mcp__plugin_swe_serena__search_for_pattern', {'substring_pattern': 'x'}))
+
+    def test_bash_inspection_commands_gated(self):
+        for cmd in ('cat package.json',
+                    'head -20 .github/workflows/deploy.yml',
+                    'cd /x && cat composer.json',
+                    'git log --oneline -5',
+                    'git diff HEAD~1',
+                    'ls -la .github/workflows/',
+                    'npm run build && cat dist/manifest.json'):
+            self.assertTrue(search_docs_mod.is_gated_call('Bash', {'command': cmd}), cmd)
+
+    def test_bash_work_commands_not_gated(self):
+        for cmd in ('npm run build',
+                    'git commit -m "x"',
+                    'mkdir -p /tmp/x',
+                    'python3 scripts/test-bash-policy.py',
+                    'git add -A',
+                    'docker restart demo1-devcontainer-1'):
+            self.assertFalse(search_docs_mod.is_gated_call('Bash', {'command': cmd}), cmd)
+
+    def test_read_project_file_gated(self):
+        self.assertTrue(search_docs_mod.is_gated_call(
+            'Read', {'file_path': '/Volumes/T7/LocalSites/x/src/index.ts'}))
+
+    def test_read_exempt_paths_not_gated(self):
+        for path in ('/Volumes/T7/LocalSites/x/.serena/memories/WM_ab.md',
+                     '/Volumes/T7/LocalSites/x/.claude/settings.json',
+                     '/private/tmp/claude-501/x/scratchpad/log.txt',
+                     '/tmp/foo.log'):
+            self.assertFalse(search_docs_mod.is_gated_call('Read', {'file_path': path}), path)
+
+    def test_other_tools_not_gated(self):
+        self.assertFalse(search_docs_mod.is_gated_call('Edit', {'file_path': '/x/y.php'}))
+        self.assertFalse(search_docs_mod.is_gated_call('Bash', {}))
+        self.assertFalse(search_docs_mod.is_gated_call('Read', {}))
+
+
 consent_mod = import_hook("pre/swe_pre_question_consent_gate")
 
 

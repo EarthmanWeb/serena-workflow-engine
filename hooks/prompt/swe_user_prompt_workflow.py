@@ -151,6 +151,33 @@ NEW_TASK_PATTERNS = [
 ]
 
 
+# Deploy/push/ship intent in a prompt: inject the docs-first pre-deploy gate
+# INTO the turn's context, at the decision point. Reading git/package.json to
+# "figure out the pipeline" instead of the deploy memories is the canonical
+# violation this prevents.
+DEPLOY_INTENT_RE = re.compile(
+    r'\b(deploy|push (it|this|live)|ship (it|this)|go(es)? live|release (it|this|the))\b',
+    re.IGNORECASE,
+)
+
+PRE_DEPLOY_NOTE = """🚀 PRE-DEPLOY GATE (docs first — mechanically enforced):
+LITERAL FIRST tool calls for a deploy/push/ship request are MEMORY reads, in this order:
+  1. mcp__plugin_swe_serena__search_memories_by_name("deploy") → read every deploy
+     memory for this project (pipeline, commands, permission rules)
+  2. Only THEN identify what changed and run the DOCUMENTED pipeline in its order.
+Reading git status/diff/log, package.json, or .github/workflows/ to reverse-engineer
+the pipeline BEFORE the deploy memories is the forbidden improvisation — the
+docs-first gate will deny those calls until a memory is consulted this turn.
+Push and deploy each require explicit operator permission THIS session.
+
+"""
+
+
+def deploy_note_for(prompt: str) -> str:
+    """Return the pre-deploy context block for deploy-intent prompts, else ''."""
+    return PRE_DEPLOY_NOTE if DEPLOY_INTENT_RE.search(prompt or '') else ''
+
+
 # A direct slash-command invocation. The harness wraps command runs in a
 # <command-name>/foo</command-name> marker; bare prompts that the user types as
 # "/foo ..." also count. Either way the tool/command fully encodes intent — no
@@ -377,7 +404,7 @@ NO classification, NO WF_INIT chain, NO WF_CLASSIFY. Fast-tracked to WF_EXECUTE.
         
         # Handle WF_INIT state - always direct to WF_INIT workflow
         if current_state == 'WF_INIT':
-            context = f"""<workflow-gate state="WF_INIT" session="{session_id or 'unknown'}">
+            context = deploy_note_for(prompt) + f"""<workflow-gate state="WF_INIT" session="{session_id or 'unknown'}">
 <blocking-instruction priority="CRITICAL">
 STOP. Your next action MUST be a tool call. Not text. A tool call.
 
@@ -576,12 +603,12 @@ Use: mcp__plugin_swe_serena__read_memory(memory_name="wf/WF_CLASSIFY")
         output = {
             "hookSpecificOutput": {
                 "hookEventName": "UserPromptSubmit",
-                "additionalContext": context
+                "additionalContext": deploy_note_for(prompt) + context
             }
         }
         print(json.dumps(output))
         sys.exit(0)
-        
+
     except Exception as e:
         print(json.dumps({"systemMessage": f"Workflow hook error: {e}"}), file=sys.stdout)
         sys.exit(0)

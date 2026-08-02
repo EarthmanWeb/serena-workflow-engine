@@ -65,7 +65,7 @@
         ]
       },
       {
-        "matcher": "Grep|Glob|mcp__plugin_swe_serena__search_for_pattern|mcp__serena__search_for_pattern",
+        "matcher": "Grep|Glob|Bash|Read|mcp__plugin_swe_serena__search_for_pattern|mcp__serena__search_for_pattern",
         "hooks": [
           {
             "type": "command",

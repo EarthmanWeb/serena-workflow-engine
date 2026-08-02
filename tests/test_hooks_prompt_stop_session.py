@@ -422,5 +422,30 @@ class TestMarkWmAbandoned(unittest.TestCase):
             self.assertEqual(self._read(path), content0)
 
 
+class TestDeployIntentInjection(unittest.TestCase):
+    mod = import_hook("prompt/swe_user_prompt_workflow")
+
+    def test_deploy_prompt_gets_pre_deploy_note(self):
+        note = self.mod.deploy_note_for("deploy the theme to production")
+        self.assertIn("PRE-DEPLOY GATE", note)
+
+    def test_push_it_live_gets_note(self):
+        self.assertIn("PRE-DEPLOY GATE", self.mod.deploy_note_for("ok push it live"))
+
+    def test_ship_it_gets_note(self):
+        self.assertIn("PRE-DEPLOY GATE", self.mod.deploy_note_for("ship it"))
+
+    def test_plain_prompt_gets_empty(self):
+        self.assertEqual(self.mod.deploy_note_for("update the docs for the CRM"), "")
+
+    def test_pushed_past_tense_not_matched(self):
+        # "pushed the commit yesterday" is narration, not a deploy ask
+        self.assertEqual(self.mod.deploy_note_for("I pushed the commit yesterday"), "")
+
+    def test_empty_prompt_gets_empty(self):
+        self.assertEqual(self.mod.deploy_note_for(""), "")
+        self.assertEqual(self.mod.deploy_note_for(None), "")
+
+
 if __name__ == "__main__":
     unittest.main()
