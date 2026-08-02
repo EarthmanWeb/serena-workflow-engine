@@ -22,7 +22,7 @@ Priority order: KISS → DRY → YAGNI.
 
 - Write simple, readable code.
 - Search for existing features before creating new ones.
-- Extract at 3+ occurrences.
+- Extract at 2+ occurrences.
 - NEVER over-engineer. Stick to specs. Build only when needed.
 
 ## NEVER Do

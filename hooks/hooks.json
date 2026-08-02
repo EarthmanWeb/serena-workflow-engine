@@ -53,6 +53,26 @@
             "timeout": 10
           }
         ]
+      },
+      {
+        "matcher": "Grep|Glob|mcp__plugin_swe_serena__search_for_pattern|mcp__serena__search_for_pattern",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/pre/swe_pre_search_docs_gate.py",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "AskUserQuestion",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/pre/swe_pre_question_consent_gate.py",
+            "timeout": 10
+          }
+        ]
       }
     ],
     "PostToolUse": [

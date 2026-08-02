@@ -14,6 +14,7 @@
    swe_post_read_state.py). Same pattern as the other feature gates.
 """
 
+import hashlib
 import os
 import sys
 import json
@@ -25,7 +26,7 @@ try:
     from swe_hooks.core.output import output_empty, output_block
     from swe_hooks.core.input import read_stdin_safe, get_input_field
     from swe_hooks.core.session import extract_session_id
-    from swe_hooks.core.stream import get_stream_dir
+    from swe_hooks.core.stream import get_stream_dir, get_stream_path, append_event
     from swe_hooks.core.config import get_project_root
 except ImportError as e:
     swe_hooks.bootstrap.import_error_exit(e, "PreToolUse")
@@ -67,6 +68,73 @@ def check_bash_policy(command: str):
     return None
 
 
+def command_hash(command: str) -> str:
+    """Stable hash of the exact command string (whitespace-trimmed only)."""
+    return hashlib.sha256(command.strip().encode('utf-8')).hexdigest()[:16]
+
+
+def count_prior_denials(stream_path: str, cmd_hash: str) -> int:
+    """Count prior 'bash_deny' events with the same command hash.
+
+    Reads the recent tail of the stream (same 10KB window as the other
+    counters). Not required to be consecutive — interleaved tool calls do
+    not reset the count; only a CHANGED command string escapes escalation.
+    """
+    if not os.path.exists(stream_path):
+        return 0
+    try:
+        file_size = os.path.getsize(stream_path)
+        with open(stream_path, 'r') as f:
+            if file_size > 10240:
+                f.seek(max(0, file_size - 10240))
+                f.readline()  # Skip partial line
+            lines = f.readlines()
+        count = 0
+        for line in lines:
+            try:
+                event = json.loads(line.strip())
+                if event.get('type') == 'bash_deny' and event.get('h') == cmd_hash:
+                    count += 1
+            except (json.JSONDecodeError, ValueError):
+                continue
+        return count
+    except IOError:
+        return 0
+
+
+COMPOUND_RE = re.compile(r'(&&|\|\||;|\|)')
+
+
+def build_denial_message(rule, command: str, prior_denials: int) -> str:
+    """Compose the block message: rule message + deterministic-denial
+    escalation on repeats + all-or-nothing note for compound commands."""
+    parts = [
+        "⛔ BASH POLICY VIOLATION\n\n"
+        f"{rule['message']}\n\n"
+        f"(Matched rule: {rule['pattern']} — "
+        f"policy source: .serena/bash-policy.json)"
+    ]
+    if COMPOUND_RE.search(command):
+        parts.append(
+            "NOTE: NONE of this compound command ran — a policy denial is "
+            "all-or-nothing, earlier segments did NOT execute. Re-run the "
+            "non-gated setup segments separately before retrying the gated part."
+        )
+    if prior_denials >= 1:
+        n = prior_denials + 1
+        parts.append(
+            f"🔁 DETERMINISTIC DENIAL ×{n}: you have sent this BYTE-IDENTICAL "
+            "command before and it was denied. The gate is a pure function of "
+            "the command string — resending it unchanged will be denied every "
+            "time. The COMMAND STRING must change. Re-read the rule message "
+            "above, apply its sanctioned form to the `command` field itself "
+            "(not the description), and diff your intended fix against the "
+            "actual command before sending. If you cannot satisfy the rule, "
+            "STOP and ask the user instead of retrying."
+        )
+    return "\n\n".join(parts)
+
+
 def get_test_sentinel_path(session_id: str) -> str:
     """Get sentinel file path for FEATURE_TESTS read confirmation."""
     return os.path.join(get_stream_dir(), f'.test_feature_{session_id}')
@@ -92,12 +160,21 @@ def main():
         # Project Bash policy (deny-list) — checked before the test gate.
         violated = check_bash_policy(command)
         if violated:
-            output_block(
-                f"⛔ BASH POLICY VIOLATION\n\n"
-                f"{violated['message']}\n\n"
-                f"(Matched rule: {violated['pattern']} — "
-                f"policy source: .serena/bash-policy.json)"
-            )
+            # Deterministic-denial tracking: a policy denial is a pure function
+            # of the command string, so an identical resend is denied
+            # identically. Log the denial hash and escalate the message on
+            # repeats (session 264de5e5 Failure 1: byte-identical command
+            # re-sent 4× after denial).
+            prior = 0
+            transcript_path = get_input_field(input_data, 'transcript_path', default='')
+            session_id = extract_session_id(transcript_path)
+            if session_id:
+                stream_path = get_stream_path(session_id)
+                cmd_hash = command_hash(command)
+                prior = count_prior_denials(stream_path, cmd_hash)
+                append_event(stream_path, 'bash_deny', h=cmd_hash,
+                             s=session_id, cmd=command[:120])
+            output_block(build_denial_message(violated, command, prior))
             return
 
         if not is_test_command(command):

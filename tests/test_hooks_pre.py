@@ -562,5 +562,161 @@ class TestBashLoadPolicy(unittest.TestCase):
         self.assertEqual(bash_mod.load_bash_policy(), [])
 
 
+class TestBashDenialEscalation(unittest.TestCase):
+    """Deterministic-denial tracking: command_hash, count_prior_denials,
+    build_denial_message escalation + compound note."""
+
+    RULE = {'pattern': r'\bgit\s+push\b', 'message': 'push needs approval'}
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.stream = os.path.join(self.tmp.name, 'sess.jsonl')
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def _write_events(self, events):
+        with open(self.stream, 'w') as f:
+            for e in events:
+                f.write(json.dumps(e) + '\n')
+
+    def test_command_hash_stable_and_trimmed(self):
+        self.assertEqual(bash_mod.command_hash('git push'),
+                         bash_mod.command_hash('  git push  '))
+        self.assertNotEqual(bash_mod.command_hash('git push'),
+                            bash_mod.command_hash('git push origin main'))
+
+    def test_count_prior_denials_counts_matching_hash_only(self):
+        h = bash_mod.command_hash('git push')
+        other = bash_mod.command_hash('npm run x')
+        self._write_events([
+            {'type': 'bash_deny', 'h': h},
+            {'type': 'tool', 'name': 'Bash'},
+            {'type': 'bash_deny', 'h': other},
+            {'type': 'bash_deny', 'h': h},
+        ])
+        self.assertEqual(bash_mod.count_prior_denials(self.stream, h), 2)
+        self.assertEqual(bash_mod.count_prior_denials(self.stream, other), 1)
+
+    def test_count_prior_denials_missing_stream_is_zero(self):
+        self.assertEqual(bash_mod.count_prior_denials(
+            os.path.join(self.tmp.name, 'nope.jsonl'), 'abc'), 0)
+
+    def test_first_denial_has_no_escalation(self):
+        msg = bash_mod.build_denial_message(self.RULE, 'git push', 0)
+        self.assertIn('push needs approval', msg)
+        self.assertNotIn('DETERMINISTIC DENIAL', msg)
+
+    def test_repeat_denial_escalates_with_count(self):
+        msg = bash_mod.build_denial_message(self.RULE, 'git push', 2)
+        self.assertIn('DETERMINISTIC DENIAL ×3', msg)
+        self.assertIn('COMMAND STRING must change', msg)
+
+    def test_compound_command_gets_none_ran_note(self):
+        msg = bash_mod.build_denial_message(
+            self.RULE, 'docker cp a b && git push', 0)
+        self.assertIn('NONE of this compound command ran', msg)
+
+    def test_simple_command_has_no_compound_note(self):
+        msg = bash_mod.build_denial_message(self.RULE, 'git push', 0)
+        self.assertNotIn('compound', msg)
+
+
+search_docs_mod = import_hook("pre/swe_pre_search_docs_gate")
+
+
+class TestSearchDocsGate(unittest.TestCase):
+    """docs_consulted_this_turn: docread-since-last-prompt semantics."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.stream = os.path.join(self.tmp.name, 'sess.jsonl')
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def _write_events(self, events):
+        with open(self.stream, 'w') as f:
+            for e in events:
+                f.write(json.dumps(e) + '\n')
+
+    def test_docread_after_prompt_allows(self):
+        self._write_events([
+            {'type': 'prompt'},
+            {'type': 'docread'},
+            {'type': 'search'},
+        ])
+        self.assertTrue(search_docs_mod.docs_consulted_this_turn(self.stream))
+
+    def test_docread_before_last_prompt_blocks(self):
+        self._write_events([
+            {'type': 'docread'},
+            {'type': 'prompt'},
+            {'type': 'search'},
+        ])
+        self.assertFalse(search_docs_mod.docs_consulted_this_turn(self.stream))
+
+    def test_no_prompt_marker_falls_back_to_any_docread(self):
+        self._write_events([
+            {'type': 'docread'},
+            {'type': 'search'},
+        ])
+        self.assertTrue(search_docs_mod.docs_consulted_this_turn(self.stream))
+
+    def test_empty_stream_blocks(self):
+        self._write_events([])
+        self.assertFalse(search_docs_mod.docs_consulted_this_turn(self.stream))
+
+
+consent_mod = import_hook("pre/swe_pre_question_consent_gate")
+
+
+class TestQuestionConsentGate(unittest.TestCase):
+    """wm_has_blanket_consent: WM flag detection."""
+
+    SESSION = 'cafe1234'
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = self.tmp.name
+        self.memories = os.path.join(self.root, '.serena', 'memories')
+        os.makedirs(self.memories, exist_ok=True)
+        # find_working_memory_for_session resolves via get_project_root(),
+        # not the cwd arg — point it at the temp root (same pattern as
+        # test_core_session).
+        from swe_hooks.core import session as core_session
+        self._orig_root = core_session.get_project_root
+        core_session.get_project_root = lambda: self.root
+
+    def tearDown(self):
+        from swe_hooks.core import session as core_session
+        core_session.get_project_root = self._orig_root
+        self.tmp.cleanup()
+        reset_caches()
+
+    def _write_wm(self, body):
+        with open(os.path.join(self.memories, f'WM_{self.SESSION}.md'), 'w') as f:
+            f.write(body)
+
+    def test_blanket_consent_flag_detected(self):
+        self._write_wm('## Context\n- blanket_consent: true (operator said go)\n')
+        self.assertTrue(consent_mod.wm_has_blanket_consent(self.root, self.SESSION))
+
+    def test_auto_approve_flag_detected(self):
+        self._write_wm('## Task Context\n- auto_approve: true\n')
+        self.assertTrue(consent_mod.wm_has_blanket_consent(self.root, self.SESSION))
+
+    def test_no_flag_returns_false(self):
+        self._write_wm('## Context\n- normal session\n')
+        self.assertFalse(consent_mod.wm_has_blanket_consent(self.root, self.SESSION))
+
+    def test_false_flag_returns_false(self):
+        self._write_wm('## Context\n- auto_approve: false\n')
+        self.assertFalse(consent_mod.wm_has_blanket_consent(self.root, self.SESSION))
+
+    def test_missing_wm_returns_false(self):
+        self.assertFalse(consent_mod.wm_has_blanket_consent(self.root, self.SESSION))
+
+
 if __name__ == "__main__":
     unittest.main()

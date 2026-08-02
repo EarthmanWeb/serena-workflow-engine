@@ -171,6 +171,7 @@ Before proposing new files: check existing patterns in similar files, read relev
 Check whether the INITIAL user prompt gave blanket consent — phrases like "get it done", "continue to completion", "don't stop till finished", "run to completion", "don't ask me questions", "no questions" (the `auto_approve` / `no_questions` flags noted at WF_CLASSIFY).
 
 - If blanket consent given: SKIP the final validate-or-continue question. If "no questions" was requested, ALSO derive the most logical choices for any design/approach questions yourself and proceed on that consent — do NOT call `AskUserQuestion`. Go directly to `WF_EXECUTE` (parallel subagents, if planned, launch there).
+- PERSIST the grant: note `blanket_consent: true` in the WM `Context` section (via `swe_wm_update_section`). While that flag is set, a PreToolUse gate DENIES `AskUserQuestion` for the rest of the session — derive choices and proceed. Only a destructive action or a genuine scope change may re-ask, by including the literal tag `[consent-override]` + the reason in the question text (the tag asserts the condition holds; it is not a bypass).
 - Otherwise: assemble and ask the single question call below.
 
 ### Assemble & Ask ONE Question Call

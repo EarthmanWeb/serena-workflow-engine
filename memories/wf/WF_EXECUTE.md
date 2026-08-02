@@ -16,6 +16,7 @@ metadata:
 - If the sanctioned tool errors, FIX its configuration (e.g. re-run `/swe-wp-cli-setup`). A broken sanctioned path is a blocker to repair, NEVER a license to work around it.
 - Precede any factual claim about backend/environment state (DB contents, existing environments, container state, remote data) with a verification call (`wp_cli`, `terminus`, `docker`, `sps_log`/QM) in the SAME turn.
 - If you cannot verify, label the statement "unverified" or ask. NEVER assert unverified state as fact.
+- NEGATIVE findings need a POSITIVE CONTROL. Before stating "X is empty / missing / not registered / returns nothing", run one probe proving your method CAN detect X when present (e.g. the same query against a known-good key, an unescaped vs escaped match, a published vs draft page). A negative result from an unvalidated probe is "probe unverified", not "X is absent" — wrong option key, ACF-escaped slashes (`em\/page-hero`), and 404s on drafts have each produced false "it's missing" conclusions.
 
 ## Feature Memory Verification
 

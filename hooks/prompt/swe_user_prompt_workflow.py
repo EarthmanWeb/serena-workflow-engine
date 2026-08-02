@@ -278,6 +278,11 @@ def main():
         transcript_path = input_data.get('transcript_path', '')
         session_id = extract_session_id(transcript_path)
 
+        # Turn marker for per-turn gates (e.g. the docs-first search gate
+        # counts 'docread' events since the last 'prompt' marker).
+        if session_id:
+            append_event(get_stream_path(session_id), 'prompt', s=session_id)
+
         # ═══ FAST TRACK: direct slash-command invocation ═══
         # A slash command fully encodes intent — there is nothing to classify.
         # Create the WM + sentinel directly at WF_EXECUTE so the init gate opens
