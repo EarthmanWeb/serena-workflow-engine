@@ -1,6 +1,6 @@
 ---
 name: swe-wm-update
-version: 4.0.0
+version: 4.1.0
 description: Comprehensive Working Memory update with per-step checklists using swe-wm MCP tools
 workflow:
   aware: true
@@ -41,9 +41,10 @@ entire file and risk clobbering daemon-managed fields.
 
 | Tool                      | Purpose                                       |
 | ------------------------- | --------------------------------------------- |
-| `swe_wm_read`             | Read WM state + content                       |
-| `swe_wm_update_section`   | Update a specific section (agent-owned only)  |
-| `swe_wm_update_status`    | Update `**[STATUS]**:` tag                    |
+| `swe_wm_update`           | **CANONICAL** — batched status + all section updates in ONE call; returns post-update state |
+| `swe_wm_read`             | Read WM state + content (only when you need existing content to decide) |
+| `swe_wm_update_section`   | Legacy single-section update (agent-owned only) |
+| `swe_wm_update_status`    | Legacy status-only update of `**[STATUS]**:` tag |
 
 **Daemon-managed fields** (updated automatically by Python hooks — DO NOT touch):
 
@@ -55,13 +56,15 @@ entire file and risk clobbering daemon-managed fields.
 
 ---
 
-## Step 1: Read Current WM
+## Step 1: Read Current WM (only if needed)
+
+Skip this step by default — `swe_wm_update` (Step 3) returns the post-update
+state. Read ONLY when an update decision depends on existing section content
+(e.g. carrying forward progress in WF_CONTINUE):
 
 ```
 mcp__swe-wm__swe_wm_read(session_id="{session_id}")
 ```
-
-Note the current state and section contents for your update decisions.
 
 ---
 
@@ -73,8 +76,9 @@ Note the current state and section contents for your update decisions.
 
 - [ ] Feature(s) identified from INDEX_FEATURES
 - [ ] Task description captured
-- [ ] FEATURE_[KEY] loaded for each feature
-- [ ] Supporting memories loaded (DOM_*, SYS_*, REF_*, ARCH_*, INDEX_*)
+- [ ] FEATURE_[KEY] loaded for each feature (incl. fuzzy-fallback hits outside INDEX_FEATURES)
+- [ ] Feature Knowledge Sweep (Step 4d) completed — related FEATURE_*/REF_*/DOM_*/SYS_*/ARCH_* memories READ, list recorded in `Memories loaded`
+- [ ] No spec/report/research/project memories read (unless the task explicitly targets one)
 - [ ] Requirements validated against domain memories (or "none detected")
 - [ ] Task type classified (simple / medium / large / operational)
 - [ ] Update `Current Task` section with task + context
@@ -147,29 +151,27 @@ Note the current state and section contents for your update decisions.
 
 ---
 
-## Step 3: Write Updates Using MCP Tools
+## Step 3: Write ALL Updates in ONE Batched Call
 
-**Use targeted section updates. One call per section that changed.**
+**Use `swe_wm_update` — status + every changed section together. Do NOT issue
+serial `swe_wm_update_section`/`swe_wm_update_status` calls.**
 
 ```
-# Update task status
-mcp__swe-wm__swe_wm_update_status(session_id="{session_id}", status="IN_PROGRESS")
-
-# Update specific sections (replace mode)
-mcp__swe-wm__swe_wm_update_section(
+mcp__swe-wm__swe_wm_update(
   session_id="{session_id}",
-  section="Progress",
-  content="- [x] Step 1 done\n- [ ] Step 2 pending"
-)
-
-# Append to a section (e.g., adding a new file entry)
-mcp__swe-wm__swe_wm_update_section(
-  session_id="{session_id}",
-  section="Notes",
-  content="- New finding: ...",
-  append=true
+  status="IN_PROGRESS",                       # optional
+  sections=[
+    {"section": "Current Task", "content": "**[IN_PROGRESS]** ..."},
+    {"section": "Progress", "content": "- [x] Step 1 done\n- [ ] Step 2 pending"},
+    {"section": "Notes", "content": "- New finding: ...", "append": true},
+  ]
 )
 ```
+
+- Sections apply in order; the call stops at the first error and reports what
+  was applied.
+- The response includes the post-update workflow state — no follow-up read.
+- The legacy single-purpose tools remain available but are NOT the standard path.
 
 **Agent-owned sections** (safe to update):
 
@@ -185,13 +187,8 @@ mcp__swe-wm__swe_wm_update_section(
 
 ## Step 4: Validate
 
-After writing, optionally re-read to confirm:
-
-```
-mcp__swe-wm__swe_wm_read(session_id="{session_id}")
-```
-
-Verify:
+Check the `state` returned by `swe_wm_update` (re-read via `swe_wm_read` only
+if the response was lost):
 
 - [ ] Session ID is correct
 - [ ] Feature Key(s) is NOT empty or "(to be determined)"

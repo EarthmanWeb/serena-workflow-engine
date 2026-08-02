@@ -32,7 +32,7 @@ class TestConstants(unittest.TestCase):
     def test_protocol_and_server_identity(self):
         self.assertEqual(wm.PROTOCOL_VERSION, "2024-11-05")
         self.assertEqual(wm.SERVER_NAME, "swe-wm")
-        self.assertEqual(wm.SERVER_VERSION, "1.0.0")
+        self.assertEqual(wm.SERVER_VERSION, "1.1.0")
 
     def test_protected_sections(self):
         # Daemon-managed sections the agent must never touch.
@@ -59,12 +59,23 @@ class TestConstants(unittest.TestCase):
 # ──────────────────────────────────────────────────────────────────
 
 class TestToolDefinitions(unittest.TestCase):
-    def test_lists_the_four_wm_tools(self):
+    def test_lists_the_five_wm_tools(self):
         names = {t["name"] for t in wm.TOOL_DEFINITIONS}
         self.assertEqual(
             names,
-            {"swe_wm_read", "swe_wm_update_section", "swe_wm_list", "swe_wm_update_status"},
+            {"swe_wm_read", "swe_wm_update", "swe_wm_update_section",
+             "swe_wm_list", "swe_wm_update_status"},
         )
+
+    def test_batch_update_schema(self):
+        tool = next(t for t in wm.TOOL_DEFINITIONS if t["name"] == "swe_wm_update")
+        props = tool["inputSchema"]["properties"]
+        self.assertEqual(props["status"]["enum"], wm.VALID_STATUSES)
+        items = props["sections"]["items"]
+        self.assertEqual(items["properties"]["section"]["enum"], wm.ALLOWED_SECTIONS)
+        self.assertEqual(items["required"], ["section", "content"])
+        # Both top-level fields optional — status-only and sections-only calls are valid.
+        self.assertEqual(tool["inputSchema"]["required"], [])
 
     def test_every_tool_def_has_required_keys(self):
         for tool in wm.TOOL_DEFINITIONS:
@@ -638,3 +649,86 @@ class TestSyncSectionToStateFile(_FSBase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestToolSweWmUpdate(_FSBase):
+    """Batched update: status + ordered sections in one call."""
+
+    WM_BODY = (
+        "# Working Memory: Session abcd1234\n\n"
+        "## Current Task\n**[IN_PROGRESS]**: initial\n\n"
+        "## Progress\n- [ ] start\n\n"
+        "## Workflow Context\n**Current State**: WF_EXECUTE\n"
+    )
+
+    def test_no_session_id_error(self):
+        result = wm.tool_swe_wm_update(sections=[{"section": "Progress", "content": "x"}])
+        self.assertIn("error", result)
+
+    def test_nothing_to_do_error(self):
+        self._write_wm(self.WM_BODY)
+        result = wm.tool_swe_wm_update(session_id=self.SID)
+        self.assertIn("error", result)
+        self.assertIn("Nothing to do", result["error"])
+
+    def test_status_and_sections_applied_in_one_call(self):
+        self._write_wm(self.WM_BODY)
+        self._write_state({"current_state": "WF_EXECUTE", "prev_state": "WF_CLASSIFY"})
+        result = wm.tool_swe_wm_update(
+            session_id=self.SID,
+            status="COMPLETED",
+            sections=[
+                {"section": "Progress", "content": "- [x] done"},
+                {"section": "Notes", "content": "- a note", "append": True},
+            ],
+        )
+        self.assertTrue(result.get("success"))
+        self.assertEqual(len(result["applied"]), 3)
+        self.assertIn("Progress replaced", result["applied"])
+        self.assertIn("Notes appended", result["applied"])
+        self.assertEqual(result["state"]["current_state"], "WF_EXECUTE")
+        self.assertIn("; ", result["summary"])  # single-line combined summary
+        with open(self._wm_path()) as f:
+            body = f.read()
+        self.assertIn("**[COMPLETED]**:", body)
+        self.assertIn("- [x] done", body)
+        self.assertIn("- a note", body)
+
+    def test_sections_only_call_is_valid(self):
+        self._write_wm(self.WM_BODY)
+        result = wm.tool_swe_wm_update(
+            session_id=self.SID,
+            sections=[{"section": "Files", "content": "- file.py"}],
+        )
+        self.assertTrue(result.get("success"))
+        self.assertEqual(result["applied"], ["Files replaced"])
+
+    def test_stops_at_first_error_and_reports_applied(self):
+        self._write_wm(self.WM_BODY)
+        result = wm.tool_swe_wm_update(
+            session_id=self.SID,
+            sections=[
+                {"section": "Progress", "content": "- [x] one"},
+                {"section": "Workflow Context", "content": "hax"},
+                {"section": "Notes", "content": "never applied"},
+            ],
+        )
+        self.assertIn("error", result)
+        self.assertIn("Workflow Context", result["error"])
+        self.assertEqual(result["applied"], ["Progress replaced"])
+        with open(self._wm_path()) as f:
+            body = f.read()
+        self.assertIn("- [x] one", body)
+        self.assertNotIn("never applied", body)
+
+    def test_malformed_section_spec_error(self):
+        self._write_wm(self.WM_BODY)
+        result = wm.tool_swe_wm_update(
+            session_id=self.SID, sections=[{"content": "no section key"}]
+        )
+        self.assertIn("error", result)
+        self.assertIn("sections[0]", result["error"])
+
+    def test_registered_in_tool_registry(self):
+        self.assertIn("swe_wm_update", wm.TOOL_REGISTRY)
+        self.assertIs(wm.TOOL_REGISTRY["swe_wm_update"], wm.tool_swe_wm_update)

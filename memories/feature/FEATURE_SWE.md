@@ -87,14 +87,15 @@ WF_INIT → WF_CLASSIFY → WF_ARCH_REVIEW → WF_EXECUTE
 | Tool                    | Purpose                                              |
 | ----------------------- | ---------------------------------------------------- |
 | `swe_wm_read`           | Read WM state + full content for a session           |
-| `swe_wm_update_section` | Update agent-owned section (protects daemon fields)  |
-| `swe_wm_update_status`  | Update `**[STATUS]**:` tag in Current Task           |
+| `swe_wm_update`         | CANONICAL — batched status + section updates in ONE call; returns post-update state |
+| `swe_wm_update_section` | Legacy single-section update (protects daemon fields) |
+| `swe_wm_update_status`  | Legacy status-only update of `**[STATUS]**:` tag     |
 
 - Protected sections (tools REJECT writes): `Workflow Context`, `Transitions`.
 - Agent-owned sections: `Current Task`, `Progress`, `Files`, `Notes`, `Requirements`, `Implementation Notes`, `Previous Task`, `Task Context`, `Affected Features`, `Context`, `Feature(s)`.
-- Usage: `mcp__swe-wm__swe_wm_update_section(session_id="...", section="Progress", content="...")`.
+- Usage: `mcp__swe-wm__swe_wm_update(session_id="...", status="IN_PROGRESS", sections=[{"section": "Progress", "content": "..."}, ...])` — one call per workflow step.
 
-## Hooks (15 Python scripts by event type)
+## Hooks (16 Python scripts by event type)
 
 ### Session Hooks (`hooks/session/`)
 
@@ -115,6 +116,7 @@ WF_INIT → WF_CLASSIFY → WF_ARCH_REVIEW → WF_EXECUTE
 | ------------------------------- | ------------------------------ | ---------------------------------- |
 | `swe_pre_tool_init_gate.py`     | PreToolUse                     | Block ALL tools until WF_INIT read |
 | `swe_pre_edit_validate.py`      | PreToolUse (Edit/Write/Serena) | Validate edit permissions          |
+| `swe_pre_memory_index_gate.py`  | PreToolUse (Edit/Write/write_memory/edit_memory) | HARD-DENY spec/report/research/project links entering MEMORY.md |
 | `swe_pre_bash_test_gate.py`     | PreToolUse (Bash)              | Feature gate: FEATURE_TESTS        |
 
 ### Post-Tool Hooks (`hooks/post/`)

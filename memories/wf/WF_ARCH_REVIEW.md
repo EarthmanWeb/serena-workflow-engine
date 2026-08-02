@@ -21,7 +21,7 @@ Single planning gate for **major** code changes: design, architecture compliance
 
 - If a `SPEC_*` memory is loaded (check WM), SKIP steps 1-4 and reference the SPEC by name. Go to step 5 (Parallel Execution Assessment), then the Single Question + Consent Gate.
 - If no SPEC loaded, follow steps 1-4.
-- Steps 1, 2, 2b, 2c (heavy memory load + compliance-checklist derivation) are DEFERRED from WF_CLASSIFY and run AFTER questions are answered — see "Heavy Memory Load (After Questions Answered)". Use steps 1-2c there, scoped to the chosen approach.
+- Feature knowledge (FEATURE_*/REF_*/DOM_*/SYS_*/ARCH_*) is already loaded by the WF_CLASSIFY Step 4d Feature Knowledge Sweep — check WM `Memories loaded` and do NOT re-read those. What remains for this state is DEV_* standards + compliance-checklist derivation (steps 2b, 2c), run AFTER questions are answered — see "Heavy Memory Load (After Questions Answered)".
 
 ## Gherkin Spec Gate
 
@@ -46,7 +46,7 @@ If WM contains `gherkin_spec_needed: true` (set at WF_CLASSIFY step 2d):
 
 ### 1. Get Feature Architecture
 
-If not already loaded at WF_CLASSIFY (check WM):
+Normally loaded by the WF_CLASSIFY Step 4d sweep (check WM `Memories loaded`). Gap-fill ONLY what the sweep missed:
 
 ```
 mcp__plugin_swe_serena__read_memory("index/INDEX_FEATURES")   # active feature
@@ -56,7 +56,7 @@ mcp__plugin_swe_serena__read_memory("arch/ARCH_INDEX")        # architecture ove
 
 ### 2. Read Layer Documentation
 
-For each layer in the design, read its rules:
+For each layer in the design, read its rules — skipping memories already read in the Step 4d sweep:
 
 ```
 mcp__plugin_swe_serena__read_memory("sys/SYS_[SYSTEM]")   # system docs (feature-specific)
@@ -205,7 +205,7 @@ Answering this call IS consent. There is no second approval prompt.
 
 ### Heavy Memory Load (After Questions Answered)
 
-Run the heavy memory load DEFERRED from WF_CLASSIFY — scoped to the chosen approach's files:
+Feature knowledge is already in context from the WF_CLASSIFY Step 4d sweep. Load ONLY the edit-time standards, scoped to the chosen approach's files:
 
 1. `read_memory("feature/FEATURE_DEV_STANDARDS")` and the relevant `DEV_*` / `DOM_*` / `SYS_*` memories for the languages/layers the chosen approach touches (steps 2 / 2b).
 2. Derive the `## Compliance Checklist` in WM (step 2c) from those memories.

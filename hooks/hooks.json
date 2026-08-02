@@ -45,6 +45,16 @@
         ]
       },
       {
+        "matcher": "Edit|Write|mcp__plugin_swe_serena__write_memory|mcp__plugin_swe_serena__edit_memory|mcp__serena__write_memory|mcp__serena__edit_memory",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/pre/swe_pre_memory_index_gate.py",
+            "timeout": 10
+          }
+        ]
+      },
+      {
         "matcher": "Bash",
         "hooks": [
           {

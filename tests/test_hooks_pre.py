@@ -720,3 +720,87 @@ class TestQuestionConsentGate(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+# ---------------------------------------------------------------------------
+# swe_pre_memory_index_gate
+# ---------------------------------------------------------------------------
+memidx_mod = import_hook("pre/swe_pre_memory_index_gate")
+
+
+class TestMemoryIndexGateTargets(unittest.TestCase):
+    def test_memory_name_memory_is_target(self):
+        self.assertTrue(memidx_mod.targets_memory_index({'memory_name': 'MEMORY'}))
+
+    def test_memory_name_memory_md_is_target(self):
+        self.assertTrue(memidx_mod.targets_memory_index({'memory_name': 'MEMORY.md'}))
+
+    def test_file_path_memory_md_is_target(self):
+        self.assertTrue(memidx_mod.targets_memory_index(
+            {'file_path': '/proj/.serena/memory/MEMORY.md'}))
+
+    def test_auto_memory_symlink_path_is_target(self):
+        self.assertTrue(memidx_mod.targets_memory_index(
+            {'file_path': '/Users/x/.claude/projects/-proj/memory/MEMORY.md'}))
+
+    def test_other_memory_is_not_target(self):
+        self.assertFalse(memidx_mod.targets_memory_index(
+            {'memory_name': 'feature/FEATURE_SWE'}))
+
+    def test_other_file_is_not_target(self):
+        self.assertFalse(memidx_mod.targets_memory_index(
+            {'file_path': '/proj/README.md'}))
+
+    def test_empty_input_is_not_target(self):
+        self.assertFalse(memidx_mod.targets_memory_index({}))
+
+
+class TestMemoryIndexGateCategoryLinks(unittest.TestCase):
+    def test_spec_dir_link_detected_in_edit_repl(self):
+        self.assertEqual(
+            memidx_mod.written_category_links(
+                {'repl': '- [Manager fleet-ops spec](spec/SPEC_MANAGER_FLEET_OPS.md) — build spec'}),
+            ['spec'])
+
+    def test_report_dir_link_detected_in_write_content(self):
+        self.assertEqual(
+            memidx_mod.written_category_links(
+                {'content': '## Idx\n- [R](report/REPORT_AUDIT.md) — x'}),
+            ['report'])
+
+    def test_full_path_category_link_detected(self):
+        self.assertEqual(
+            memidx_mod.written_category_links(
+                {'new_string': '- [S](.serena/memory/research/RESEARCH_X.md)'}),
+            ['research'])
+
+    def test_bare_basename_spec_link_detected(self):
+        self.assertEqual(
+            memidx_mod.written_category_links({'repl': '- [S](SPEC_FOO.md)'}),
+            ['spec'])
+
+    def test_multiple_categories_detected_sorted(self):
+        blob = '- [A](spec/SPEC_A.md)\n- [B](project/PROJECT_B.md)'
+        self.assertEqual(
+            memidx_mod.written_category_links({'content': blob}),
+            ['project', 'spec'])
+
+    def test_feature_and_ref_links_pass(self):
+        blob = ('- [CRM](feature/FEATURE_CRM.md) — core\n'
+                '- [Deploy](ref/REF_DEPLOY.md) — rules')
+        self.assertEqual(memidx_mod.written_category_links({'content': blob}), [])
+
+    def test_prose_mention_of_spec_word_passes(self):
+        self.assertEqual(
+            memidx_mod.written_category_links(
+                {'content': '- [X](feature/FEATURE_X.md) — per spec discussions'}),
+            [])
+
+    def test_specific_prefix_in_title_but_safe_target_passes(self):
+        self.assertEqual(
+            memidx_mod.written_category_links(
+                {'content': '- [SPEC review notes](ref/REF_SPEC_REVIEWS.md) — how we review'}),
+            [])
+
+    def test_empty_input_passes(self):
+        self.assertEqual(memidx_mod.written_category_links({}), [])

@@ -37,7 +37,7 @@ from swe_hooks.core.session import (
 
 PROTOCOL_VERSION = "2024-11-05"
 SERVER_NAME = "swe-wm"
-SERVER_VERSION = "1.0.0"
+SERVER_VERSION = "1.1.0"
 
 # Sections that the daemon manages — agent must never touch these
 PROTECTED_SECTIONS = {"Workflow Context", "Transitions"}
@@ -71,6 +71,55 @@ TOOL_DEFINITIONS = [
                 "session_id": {
                     "type": "string",
                     "description": "8-character session ID (e.g., 'ca2d3450'). If omitted, uses SWE_SESSION_ID env var.",
+                },
+            },
+            "required": [],
+        },
+    },
+    {
+        "name": "swe_wm_update",
+        "description": (
+            "Batched Working Memory update — apply an optional status change and "
+            "any number of section updates in ONE call (replaces serial "
+            "swe_wm_update_section/swe_wm_update_status calls). Returns the "
+            "post-update workflow state, so a separate swe_wm_read is not needed. "
+            "Sections apply in order; the call stops at the first error."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "session_id": {
+                    "type": "string",
+                    "description": "8-character session ID. If omitted, uses SWE_SESSION_ID env var.",
+                },
+                "status": {
+                    "type": "string",
+                    "enum": VALID_STATUSES,
+                    "description": "Optional task status tag, applied before the section updates.",
+                },
+                "sections": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "section": {
+                                "type": "string",
+                                "enum": ALLOWED_SECTIONS,
+                                "description": "The heading name of the section to update.",
+                            },
+                            "content": {
+                                "type": "string",
+                                "description": "New markdown content for the section.",
+                            },
+                            "append": {
+                                "type": "boolean",
+                                "description": "If true, append instead of replacing. Default: false.",
+                                "default": False,
+                            },
+                        },
+                        "required": ["section", "content"],
+                    },
+                    "description": "Section updates applied in order.",
                 },
             },
             "required": [],
@@ -413,6 +462,60 @@ def tool_swe_wm_update_status(status: str, session_id: str = None) -> dict:
     }
 
 
+def tool_swe_wm_update(
+    sections: List[Dict[str, Any]] = None, status: str = None, session_id: str = None
+) -> dict:
+    """Batched WM update: optional status + ordered section updates in one call.
+
+    Applies status first, then each section via the same code paths as the
+    single-purpose tools. Stops at the first error and reports what succeeded.
+    Returns the post-update workflow state so a follow-up read is unnecessary.
+    """
+    session_id = _resolve_session_id(session_id)
+    if not session_id:
+        return {"error": "No session_id provided and no SWE_SESSION_ID env var set"}
+    if not status and not sections:
+        return {"error": "Nothing to do: provide `status` and/or `sections`"}
+
+    applied = []
+
+    if status:
+        result = tool_swe_wm_update_status(status, session_id=session_id)
+        if result.get("error"):
+            return {"error": result["error"], "applied": applied}
+        applied.append(f"status {result.get('old_status') or '—'} → {status}")
+
+    for i, spec in enumerate(sections or []):
+        if not isinstance(spec, dict) or "section" not in spec or "content" not in spec:
+            return {
+                "error": f"sections[{i}] must be an object with `section` and `content`",
+                "applied": applied,
+            }
+        result = tool_swe_wm_update_section(
+            spec["section"], spec["content"],
+            session_id=session_id, append=bool(spec.get("append", False)),
+        )
+        if result.get("error"):
+            return {"error": f"sections[{i}] ({spec['section']}): {result['error']}", "applied": applied}
+        applied.append(f"{spec['section']} {result['action']}")
+
+    state_file = read_state_file(session_id) or {}
+    state = {
+        "current_state": state_file.get("current_state"),
+        "prev_state": state_file.get("prev_state"),
+        "task": state_file.get("task", ""),
+        "features": state_file.get("features", []),
+    }
+
+    return {
+        "success": True,
+        "session_id": session_id,
+        "applied": applied,
+        "state": state,
+        "summary": f"✅ WM[{session_id}] " + "; ".join(applied),
+    }
+
+
 def tool_swe_wm_list() -> dict:
     """List all WM files in the project's .serena/memories/ directory."""
     import glob as _glob
@@ -442,6 +545,7 @@ def tool_swe_wm_list() -> dict:
 TOOL_REGISTRY = {
     "swe_wm_read": tool_swe_wm_read,
     "swe_wm_list": tool_swe_wm_list,
+    "swe_wm_update": tool_swe_wm_update,
     "swe_wm_update_section": tool_swe_wm_update_section,
     "swe_wm_update_status": tool_swe_wm_update_status,
 }

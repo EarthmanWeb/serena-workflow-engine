@@ -59,6 +59,7 @@ hooks/
 | ---- | ----- | ------- |
 | `swe_pre_tool_init_gate.py` | PreToolUse | Block ALL tools until WF_INIT chain complete |
 | `swe_pre_edit_validate.py` | PreToolUse (Edit/Write/Serena) | Block edits in planning states (WF_VERIFY is edit-allowed); flag staleness at 10 edits |
+| `swe_pre_memory_index_gate.py` | PreToolUse (Edit/Write/write_memory/edit_memory) | HARD-DENY spec/report/research/project links entering MEMORY.md (state-independent; the post-hook only advises) |
 | `swe_pre_bash_test_gate.py` | PreToolUse (Bash) | Validate test commands against WF_DEBUG_TDD |
 
 ### Post-Tool (`post/`) — observers/learners
