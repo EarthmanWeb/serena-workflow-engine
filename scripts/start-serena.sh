@@ -52,10 +52,35 @@ fi
 
 PATCH_SCRIPT="$INSTALLED_ROOT/scripts/serena_memory_patch.py"
 
+# ALWAYS-LATEST, WITHOUT RE-RESOLVING EVERY LAUNCH (mcp-wp-cli-terminus pattern):
+# Passing the branch spec to uv makes every session start re-resolve the ref and,
+# on a moved branch, cold-build inside the MCP connect window (startup timeout).
+# Instead resolve REF -> immutable commit SHA with one cheap `git ls-remote` and
+# pin the git spec to that SHA:
+#   • REF unchanged -> uv reuses its per-SHA cache -> fast launch.
+#   • REF moved     -> new SHA -> uv installs the new build automatically
+#     (one cold install, covered by MCP_TIMEOUT=300000 in ~/.claude.json).
+# Config knobs (env):
+#   SWE_SERENA_REF          git ref to run (branch/tag/sha). Default: swe.
+#   SWE_SERENA_NO_REFRESH=1 skip the ls-remote re-check; pin the spec to REF
+#                           literally (offline / don't re-resolve each start).
+SERENA_REPO="github.com/EarthmanWeb/serena"
+SERENA_REF="${SWE_SERENA_REF:-swe}"
+PIN="$SERENA_REF"
+if [ -z "${SWE_SERENA_NO_REFRESH:-}" ]; then
+  SHA="$(git ls-remote "https://${SERENA_REPO}.git" "$SERENA_REF" | cut -f1)"
+  if [ -z "$SHA" ]; then
+    echo "start-serena: could not resolve ref '${SERENA_REF}' in ${SERENA_REPO} (offline? set SWE_SERENA_NO_REFRESH=1 to pin the ref literally)." >&2
+    exit 1
+  fi
+  PIN="$SHA"
+fi
+SERENA_SPEC="git+https://${SERENA_REPO}@${PIN}"
+
 if [ -f "$PATCH_SCRIPT" ]; then
   # Use patched wrapper for automatic memory prefix resolution
   exec uv run \
-    --with "git+https://github.com/EarthmanWeb/serena@swe" \
+    --with "$SERENA_SPEC" \
     python "$PATCH_SCRIPT" \
     --context claude-code \
     --project ./ \
@@ -64,7 +89,7 @@ if [ -f "$PATCH_SCRIPT" ]; then
 else
   # Fallback to direct Serena startup
   exec uvx \
-    --from "git+https://github.com/EarthmanWeb/serena@swe" \
+    --from "$SERENA_SPEC" \
     serena start-mcp-server \
     --context claude-code \
     --project ./ \
