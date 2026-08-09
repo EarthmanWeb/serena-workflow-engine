@@ -4,10 +4,8 @@ DOCS-FIRST blocking gate.
 
 The informational docs-first hint (swe_post_search_docs_hint.py) fires only
 AFTER repeated undocumented searches — the violation has already happened.
-This gate inverts that: surfing the codebase is DENIED unless the agent has
-consulted documentation (any read_memory / list_memories → 'docread' event)
-since the last user prompt ('prompt' event, appended by
-swe_user_prompt_workflow.py).
+This gate inverts that: surfing the codebase is DENIED unless the agent holds
+docs-consult budget — see "Clearing" below.
 
 Covered vectors — all the ways an agent reverse-engineers instead of reading
 docs (a deploy task answered with `cat package.json` + `head .github/workflows/`
