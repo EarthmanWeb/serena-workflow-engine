@@ -44,7 +44,7 @@ hooks/
 
 | Hook | Event | Purpose |
 | ---- | ----- | ------- |
-| `swe_session_start.py` | SessionStart | Initialize workflow state, auto-update |
+| `swe_session_start.py` | SessionStart | Initialize workflow state, auto-update. Appends `session_boot` (with `src`: startup/resume/clear/compact) BEFORE the self-update and `selfupdate` (ok/old/new or err) after it — a `session_boot` with no following `selfupdate` = update killed by the hook timeout (30s) |
 | `swe_session_end.py` | SessionEnd | Clean up sentinels, mark WM abandoned |
 
 ### Prompt (`prompt/`)
