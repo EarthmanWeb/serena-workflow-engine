@@ -118,14 +118,14 @@ WF_INIT → WF_CLASSIFY → WF_ARCH_REVIEW → WF_EXECUTE
 | `swe_pre_edit_validate.py`      | PreToolUse (Edit/Write/Serena) | Validate edit permissions          |
 | `swe_pre_memory_index_gate.py`  | PreToolUse (Edit/Write/write_memory/edit_memory) | HARD-DENY spec/report/research/project links entering MEMORY.md |
 | `swe_pre_bash_test_gate.py`     | PreToolUse (Bash)              | Feature gate: FEATURE_TESTS        |
-| `swe_pre_search_docs_gate.py`   | PreToolUse (Grep/Glob/search_for_pattern) | DOCS-FIRST gate: deny wide searches until a memory read this turn |
+| `swe_pre_search_docs_gate.py`   | PreToolUse (Grep/Glob/search_for_pattern/Bash-inspection/Read) | DOCS-FIRST gate, budget model: one docs consult clears the next 5 gated calls |
 | `swe_pre_question_consent_gate.py` | PreToolUse (AskUserQuestion) | Deny questions under blanket consent (`auto_approve`/`blanket_consent`) |
 
 ### Post-Tool Hooks (`hooks/post/`)
 
 | Hook                                  | Trigger                         | Purpose                          |
 | ------------------------------------- | ------------------------------- | -------------------------------- |
-| `swe_post_read_state.py`              | PostToolUse (read_memory/list_memories) | State transitions, plan mode; appends `docread` (resets search streak) |
+| `swe_post_read_state.py`              | PostToolUse (read_memory/list_memories/search_memories_by_*) | State transitions, plan mode; appends `docread` (resets search streak, refills docs-gate budget) |
 | `swe_post_edit_checkpoint.py`         | PostToolUse (Edit/Write/Serena) | Track edits, checkpoint at 10 edits |
 | `swe_post_search_docs_hint.py`        | PostToolUse (Grep/Glob/search_for_pattern) | Docs-first sentinel: 3 consecutive wide searches → check memories first |
 | `swe_post_todo_wm_sync.py`            | PostToolUse (TodoWrite)         | WM sync reminder on todo changes |
