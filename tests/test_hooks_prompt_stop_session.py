@@ -447,5 +447,56 @@ class TestDeployIntentInjection(unittest.TestCase):
         self.assertEqual(self.mod.deploy_note_for(None), "")
 
 
+class TestSessionStartForensics(unittest.TestCase):
+    """session_boot lands BEFORE the self-update, selfupdate logs its outcome —
+    a boot marker with no following selfupdate event = update killed mid-run."""
+
+    mod = import_hook("session/swe_session_start")
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.stream = os.path.join(self.tmp.name, 'sess.jsonl')
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def _events(self):
+        with open(self.stream) as f:
+            return [json.loads(line) for line in f]
+
+    def test_log_boot_appends_marker_with_source(self):
+        self.mod._log_boot(self.stream, 'abcd1234', 'resume')
+        e = self._events()
+        self.assertEqual(len(e), 1)
+        self.assertEqual(e[0]['type'], 'session_boot')
+        self.assertEqual(e[0]['src'], 'resume')
+
+    def test_self_update_success_logged(self):
+        orig = self.mod._self_update
+        self.mod._self_update = lambda: (True, '1.0.0', '1.0.1')
+        try:
+            result = self.mod._run_self_update_logged(self.stream)
+        finally:
+            self.mod._self_update = orig
+        self.assertEqual(result, (True, '1.0.0', '1.0.1'))
+        e = self._events()[0]
+        self.assertEqual((e['type'], e['ok'], e['old'], e['new']),
+                         ('selfupdate', True, '1.0.0', '1.0.1'))
+
+    def test_self_update_failure_logged_not_raised(self):
+        orig = self.mod._self_update
+        def boom():
+            raise RuntimeError('pull failed')
+        self.mod._self_update = boom
+        try:
+            result = self.mod._run_self_update_logged(self.stream)
+        finally:
+            self.mod._self_update = orig
+        self.assertEqual(result, (False, None, None))
+        e = self._events()[0]
+        self.assertEqual((e['type'], e['ok']), ('selfupdate', False))
+        self.assertIn('pull failed', e['err'])
+
+
 if __name__ == "__main__":
     unittest.main()

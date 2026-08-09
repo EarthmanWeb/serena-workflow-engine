@@ -29,6 +29,7 @@ try:
         resolve_installed_plugin, resolve_plugin_root,
     )
     from swe_hooks.core.state_manager import StateManager
+    from swe_hooks.core.stream import get_stream_path, append_event
 except ImportError as e:
     swe_hooks.bootstrap.import_error_exit(e, "SessionStart")
 
@@ -310,19 +311,33 @@ def _reap_outdated_daemons():
     return reaped
 
 
+def _log_boot(stream_path, session_id, source):
+    """Forensic marker: SessionStart FIRED — appended before the self-update so
+    a timeout-killed update still leaves evidence ('session_boot' with no
+    following 'selfupdate' = the update was killed mid-run)."""
+    try:
+        append_event(stream_path, 'session_boot', s=session_id, src=source or '')
+    except Exception:
+        pass
+
+
+def _run_self_update_logged(stream_path):
+    """Run _self_update and append its outcome to the stream."""
+    try:
+        updated, old_ver, new_ver = _self_update()
+        append_event(stream_path, 'selfupdate', ok=bool(updated),
+                     old=old_ver or '', new=new_ver or '')
+        return updated, old_ver, new_ver
+    except Exception as e:
+        append_event(stream_path, 'selfupdate', ok=False, err=str(e)[:200])
+        return False, None, None
+
+
 def main():
     try:
-        # Self-update FIRST — before anything reads from the plugin tree
-        updated, old_ver, new_ver = _self_update()
-
-        # Reap any daemons left running from an OLDER plugin version. After an
-        # in-place update, an old client's daemons can linger and race the
-        # current daemon over the shared project .state file (state corruption /
-        # stuck WF_CLASSIFY). Kill outdated daemons so only the installed version
-        # owns the state. Best-effort; never blocks session start.
-        reaped_daemons = _reap_outdated_daemons()
-
-        # Read input
+        # Read input + derive session id BEFORE the self-update: the boot
+        # marker must land in the stream even if the update is killed by the
+        # hook timeout. Neither touches the plugin tree the update replaces.
         input_data = {}
         try:
             input_data = json.load(sys.stdin)
@@ -330,7 +345,7 @@ def main():
             pass
 
         cwd = input_data.get('cwd', os.getcwd())
-        
+
         # Extract unique session ID from transcript_path (contains UUID per conversation)
         # This ensures each chat gets its own isolated session
         transcript_path = input_data.get('transcript_path', '')
@@ -344,6 +359,19 @@ def main():
                 session_id = datetime.now().strftime('%Y%m%d_%H%M%S')
         else:
             session_id = datetime.now().strftime('%Y%m%d_%H%M%S')
+
+        stream_path = get_stream_path(session_id)
+        _log_boot(stream_path, session_id, input_data.get('source'))
+
+        # Self-update — before anything reads from the plugin tree
+        updated, old_ver, new_ver = _run_self_update_logged(stream_path)
+
+        # Reap any daemons left running from an OLDER plugin version. After an
+        # in-place update, an old client's daemons can linger and race the
+        # current daemon over the shared project .state file (state corruption /
+        # stuck WF_CLASSIFY). Kill outdated daemons so only the installed version
+        # owns the state. Best-effort; never blocks session start.
+        reaped_daemons = _reap_outdated_daemons()
 
         # Check bypass FIRST. Bypass lives as "bypass": true inside
         # swe-setup-complete.json (the same file used for init). When set, SWE
