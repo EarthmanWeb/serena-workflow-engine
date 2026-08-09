@@ -625,8 +625,10 @@ class TestBashDenialEscalation(unittest.TestCase):
 search_docs_mod = import_hook("pre/swe_pre_search_docs_gate")
 
 
-class TestSearchDocsGate(unittest.TestCase):
-    """docs_consulted_this_turn: docread-since-last-prompt semantics."""
+class TestSearchDocsGateBudget(unittest.TestCase):
+    """Budget semantics: one docread clears the gate for the next
+    GATED_CALL_BUDGET gated calls; the next call after that re-fires.
+    Prompt markers are irrelevant — clearance survives turn boundaries."""
 
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -640,32 +642,55 @@ class TestSearchDocsGate(unittest.TestCase):
             for e in events:
                 f.write(json.dumps(e) + '\n')
 
-    def test_docread_after_prompt_allows(self):
-        self._write_events([
-            {'type': 'prompt'},
-            {'type': 'docread'},
-            {'type': 'search'},
-        ])
-        self.assertTrue(search_docs_mod.docs_consulted_this_turn(self.stream))
+    def test_budget_constant_is_five(self):
+        self.assertEqual(search_docs_mod.GATED_CALL_BUDGET, 5)
 
-    def test_docread_before_last_prompt_blocks(self):
-        self._write_events([
-            {'type': 'docread'},
-            {'type': 'prompt'},
-            {'type': 'search'},
-        ])
-        self.assertFalse(search_docs_mod.docs_consulted_this_turn(self.stream))
+    def test_no_docread_denies(self):
+        self._write_events([{'type': 'prompt'}, {'type': 'search'}])
+        self.assertFalse(search_docs_mod.docs_budget_allows(self.stream))
 
-    def test_no_prompt_marker_falls_back_to_any_docread(self):
-        self._write_events([
-            {'type': 'docread'},
-            {'type': 'search'},
-        ])
-        self.assertTrue(search_docs_mod.docs_consulted_this_turn(self.stream))
-
-    def test_empty_stream_blocks(self):
+    def test_empty_stream_denies(self):
         self._write_events([])
-        self.assertFalse(search_docs_mod.docs_consulted_this_turn(self.stream))
+        self.assertFalse(search_docs_mod.docs_budget_allows(self.stream))
+
+    def test_docread_grants_budget(self):
+        self._write_events([{'type': 'prompt'}, {'type': 'docread'}])
+        self.assertTrue(search_docs_mod.docs_budget_allows(self.stream))
+
+    def test_budget_survives_turn_boundary(self):
+        # docread in an EARLIER turn still clears — no per-prompt re-arm.
+        self._write_events([
+            {'type': 'docread'},
+            {'type': 'prompt'},
+            {'type': 'gated'},
+        ])
+        self.assertTrue(search_docs_mod.docs_budget_allows(self.stream))
+
+    def test_budget_not_exhausted_at_four_gated(self):
+        self._write_events([{'type': 'docread'}] + [{'type': 'gated'}] * 4)
+        self.assertTrue(search_docs_mod.docs_budget_allows(self.stream))
+
+    def test_budget_exhausted_at_five_gated(self):
+        self._write_events([{'type': 'docread'}] + [{'type': 'gated'}] * 5)
+        self.assertFalse(search_docs_mod.docs_budget_allows(self.stream))
+
+    def test_new_docread_refills_budget(self):
+        self._write_events(
+            [{'type': 'docread'}] + [{'type': 'gated'}] * 5 + [{'type': 'docread'}])
+        self.assertTrue(search_docs_mod.docs_budget_allows(self.stream))
+
+    def test_gate_and_record_depletes_budget(self):
+        # After one docread: exactly GATED_CALL_BUDGET calls pass, then deny.
+        self._write_events([{'type': 'docread'}])
+        verdicts = [search_docs_mod.gate_and_record(self.stream) for _ in range(6)]
+        self.assertEqual(verdicts, [True] * 5 + [False])
+
+    def test_deny_message_instructs_doc_backfill(self):
+        # Cleared-but-discovery-was-required ⇒ the message must tell the agent
+        # to ADD docs filling the gap found during discovery.
+        msg = search_docs_mod.build_deny_message('Bash')
+        self.assertIn('write_memory', msg)
+        self.assertIn('search_memories_by_name', msg)
 
 
 class TestSearchDocsGateScoping(unittest.TestCase):
@@ -684,7 +709,9 @@ class TestSearchDocsGateScoping(unittest.TestCase):
                     'git log --oneline -5',
                     'git diff HEAD~1',
                     'ls -la .github/workflows/',
-                    'npm run build && cat dist/manifest.json'):
+                    'npm run build && cat dist/manifest.json',
+                    # FEEDBACK_ENFORCEMENT: newline-hidden command must match too
+                    'echo setup\ncat package.json'):
             self.assertTrue(search_docs_mod.is_gated_call('Bash', {'command': cmd}), cmd)
 
     def test_bash_work_commands_not_gated(self):
@@ -711,6 +738,32 @@ class TestSearchDocsGateScoping(unittest.TestCase):
         self.assertFalse(search_docs_mod.is_gated_call('Edit', {'file_path': '/x/y.php'}))
         self.assertFalse(search_docs_mod.is_gated_call('Bash', {}))
         self.assertFalse(search_docs_mod.is_gated_call('Read', {}))
+
+
+class TestDocsGateClearingWiring(unittest.TestCase):
+    """The gate message sanctions search_memories_by_name/_by_front_matter as
+    step 1 — those calls MUST therefore append a docread (i.e. be matched by
+    the swe_post_read_state.py PostToolUse matcher). This was the original
+    bug: the sanctioned clearing step did not clear the gate."""
+
+    def _read_state_matchers(self):
+        path = os.path.join(os.path.dirname(os.path.dirname(
+            os.path.abspath(__file__))), 'hooks', 'hooks.json')
+        with open(path) as f:
+            config = json.load(f)
+        for entry in config['hooks']['PostToolUse']:
+            cmds = [h['command'] for h in entry.get('hooks', [])]
+            if any('swe_post_read_state' in c for c in cmds):
+                return entry['matcher']
+        self.fail('swe_post_read_state.py not registered in PostToolUse')
+
+    def test_memory_search_tools_feed_docread(self):
+        matcher = self._read_state_matchers()
+        for name in ('mcp__plugin_swe_serena__search_memories_by_name',
+                     'mcp__serena__search_memories_by_name',
+                     'mcp__plugin_swe_serena__search_memories_by_front_matter',
+                     'mcp__serena__search_memories_by_front_matter'):
+            self.assertIn(name, matcher.split('|'), name)
 
 
 consent_mod = import_hook("pre/swe_pre_question_consent_gate")

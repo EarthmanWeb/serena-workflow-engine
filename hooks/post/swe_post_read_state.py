@@ -187,6 +187,13 @@ def main():
         except Exception:
             pass
 
+        # Memory-name/front-matter searches count as consulting docs (the
+        # docread above clears/refills the docs-first gate budget) but carry
+        # no memory_name — log and stop before the read/WF_* handling.
+        if 'search_memories' in tool_name:
+            output_status("🔎 Memory search logged — docs-first credit")
+            return
+
         # Handle list_memories calls (no memory_name) — inject continuation
         if 'list_memories' in tool_name:
             state_mgr = StateManager(cwd, session_id=session_id)

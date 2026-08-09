@@ -17,16 +17,18 @@ is the canonical violation):
     git status/diff/log/show/blame) — mutation/build commands are NOT gated
   - Read of project files — reads under .serena/, scratchpad, or tmp are exempt
 
-Clearing the gate is deliberately cheap: ONE list_memories or read_memory call
-per turn satisfies it — and that call is exactly the mandated docs-first
-behavior. There is no other escape.
+Clearing the gate is deliberately cheap and BUDGETED: ONE docs consult
+(read_memory / list_memories / search_memories_by_name /
+search_memories_by_front_matter → 'docread' event) clears the gate for the
+next GATED_CALL_BUDGET gated calls. Each allowed gated call appends a 'gated'
+event; when the budget is spent the gate re-fires and another docs consult
+refills it. Clearance survives turn boundaries — there is no per-prompt
+re-arm. There is no other escape.
 
 Exemptions (fail-open by design):
   - No session id / no stream → not a managed session, allow.
   - No init sentinel → spawned agent or unmanaged session (subagents bypass
     the workflow and must not be doc-gated), allow.
-  - Stream with no 'prompt' marker in the tail window → fall back to "any
-    docread in the window" (pre-upgrade streams stay usable).
 """
 
 import os
@@ -42,17 +44,22 @@ try:
     from swe_hooks.core.session import extract_session_id
     from swe_hooks.core.stream import (
         get_stream_path, get_sentinel_path, count_events_since_last,
+        append_event,
     )
 except ImportError as e:
     swe_hooks.bootstrap.import_error_exit(e, "PreToolUse")
 
 
+# One docs consult clears the gate for this many gated calls.
+GATED_CALL_BUDGET = 5
+
 # Bash command words that are pure inspection/recon — reading state instead of
-# consulting docs. Matched at command start or after a separator. Mutation,
+# consulting docs. Matched at command start or after a separator (incl. \n —
+# patterns run without re.MULTILINE, so ^ alone misses line 2+). Mutation,
 # build, and pipeline commands are deliberately absent: they are doing work,
 # not surfing.
 BASH_INSPECT_RE = re.compile(
-    r'(^|[;&|]\s*)('
+    r'(^|[\n;&|]\s*)('
     r'(cat|head|tail|less|more|grep|rg|find|ls|tree|awk|sed)\b'
     r'|git\s+(status|diff|log|show|blame)\b'
     r')',
@@ -86,19 +93,52 @@ def is_gated_call(tool_name: str, tool_input: dict) -> bool:
     return False
 
 
-def docs_consulted_this_turn(stream_path: str) -> bool:
-    """True when a 'docread' event exists after the last 'prompt' marker.
+def docs_budget_allows(stream_path: str) -> bool:
+    """True while docs-first budget remains: a 'docread' exists in the tail
+    window AND fewer than GATED_CALL_BUDGET 'gated' events follow the most
+    recent one.
 
-    count_events_since_last scans backwards and stops at the first marker, so
-    with marker_types=('prompt',) it counts docreads in the current turn. In a
-    stream that predates 'prompt' markers it counts docreads across the tail
-    window — the graceful fallback.
+    Empty marker_types never breaks the backward scan, so the first call
+    counts docreads across the whole tail window; the second stops at the
+    most recent docread, counting only the gated calls spent since it.
     """
-    return count_events_since_last(
-        stream_path,
-        marker_types=('prompt',),
-        count_type='docread',
-    ) > 0
+    docreads = count_events_since_last(
+        stream_path, marker_types=(), count_type='docread')
+    if docreads == 0:
+        return False
+    spent = count_events_since_last(
+        stream_path, marker_types=('docread',), count_type='gated')
+    return spent < GATED_CALL_BUDGET
+
+
+def gate_and_record(stream_path: str) -> bool:
+    """Verdict for a gated call; an allowed call depletes the budget by one."""
+    if not docs_budget_allows(stream_path):
+        return False
+    append_event(stream_path, 'gated')
+    return True
+
+
+def build_deny_message(tool_name: str) -> str:
+    """Deny text: budget model, sanctioned clearers, doc-backfill duty."""
+    return (
+        f"📓 DOCS FIRST — {tool_name or 'search'} blocked: docs-consult budget "
+        f"spent (one memory consult clears the next {GATED_CALL_BUDGET} source "
+        "reads/searches).\n\n"
+        "Ops, deploy, and lookup answers live in memories — consult them before "
+        "reverse-engineering the codebase (cat/head/grep/git log/Read).\n\n"
+        "  1. mcp__plugin_swe_serena__search_memories_by_name(\"<key terms>\") — or "
+        "list_memories(topic=\"<prefix>\") / search_memories_by_front_matter\n"
+        "  2. mcp__plugin_swe_serena__read_memory(memory_name=\"<hit>\")\n\n"
+        f"ANY ONE of those calls refills the budget ({GATED_CALL_BUDGET} more "
+        "gated calls) — then re-run this call if the docs did not answer.\n\n"
+        "⚠️ If the docs did NOT answer and source discovery was required: ADD "
+        "the missing docs — write_memory the discovered facts into the relevant "
+        "memory (and index it in MEMORY.md) so the next lookup is answered by "
+        "docs, not re-discovery.\n\n"
+        "This is the CLAUDE.md '⛔ DOCS FIRST' rule, enforced. See "
+        "feedback/FEEDBACK_DOCS_FIRST_ALWAYS."
+    )
 
 
 def main():
@@ -127,23 +167,11 @@ def main():
             output_empty()
             return
 
-        if docs_consulted_this_turn(stream_path):
+        if gate_and_record(stream_path):
             output_empty()
             return
 
-        output_block(
-            f"📓 DOCS FIRST — {tool_name or 'search'} blocked: no memory was consulted "
-            "this turn, and this call reads/searches source instead of docs.\n\n"
-            "Reverse-engineering the codebase (cat/head/grep/git log/Read) for "
-            "something that is documented is the canonical violation — ops, deploy, "
-            "and lookup answers live in memories, not in package.json or workflows/.\n\n"
-            "  1. mcp__plugin_swe_serena__search_memories_by_name(\"<key terms>\") — or "
-            "list_memories(topic=\"<prefix>\") / search_memories_by_front_matter\n"
-            "  2. mcp__plugin_swe_serena__read_memory(memory_name=\"<hit>\")\n\n"
-            "ONE memory list/read this turn clears this gate — then re-run this call "
-            "if the docs did not answer. This is the CLAUDE.md '⛔ DOCS FIRST' rule, "
-            "enforced. See feedback/FEEDBACK_DOCS_FIRST_ALWAYS."
-        )
+        output_block(build_deny_message(tool_name))
 
     except Exception as e:
         output = {"hookSpecificOutput": {"hookEventName": "PreToolUse",

@@ -87,7 +87,7 @@
     ],
     "PostToolUse": [
       {
-        "matcher": "mcp__serena__read_memory|mcp__plugin_swe_serena__read_memory|mcp__serena__list_memories|mcp__plugin_swe_serena__list_memories",
+        "matcher": "mcp__serena__read_memory|mcp__plugin_swe_serena__read_memory|mcp__serena__list_memories|mcp__plugin_swe_serena__list_memories|mcp__serena__search_memories_by_name|mcp__plugin_swe_serena__search_memories_by_name|mcp__serena__search_memories_by_front_matter|mcp__plugin_swe_serena__search_memories_by_front_matter",
         "hooks": [
           {
             "type": "command",
