@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""PreToolUse hook for Grep/Glob/search_for_pattern/Bash-inspection/Read —
+"""PreToolUse hook for Grep/Glob/search_for_pattern/Bash-inspection —
 DOCS-FIRST blocking gate.
 
 The informational docs-first hint (swe_post_search_docs_hint.py) fires only
@@ -7,13 +7,19 @@ AFTER repeated undocumented searches — the violation has already happened.
 This gate inverts that: surfing the codebase is DENIED unless the agent holds
 docs-consult budget — see "Clearing" below.
 
-Covered vectors — all the ways an agent reverse-engineers instead of reading
-docs (a deploy task answered with `cat package.json` + `head .github/workflows/`
-is the canonical violation):
+Covered vectors — the ways an agent reverse-engineers instead of reading docs
+(a deploy task answered with `cat package.json` + `head .github/workflows/`, or
+a plugin-location question answered with `ls … | find … | grep`, is the
+canonical violation):
   - Grep / Glob / search_for_pattern — wide searches
-  - Bash INSPECTION commands (cat/head/tail/less/grep/rg/find/ls/awk/sed and
-    git status/diff/log/show/blame) — mutation/build commands are NOT gated
-  - Read of project files — reads under .serena/, scratchpad, or tmp are exempt
+  - Bash INSPECTION/recon commands (cat/head/tail/less/grep/rg/find/ls/tree/
+    awk/sed and git status/diff/log/show/blame), INCLUDING inside a pipeline —
+    mutation/build/test commands are NOT gated
+
+Deliberately NOT gated: the Read tool. Opening a specific, known file (a source
+file you already located, CLAUDE.md, a config) is not untargeted surfing — it
+is the normal way to do the work. Only wide searches and Bash recon count
+against the budget.
 
 Clearing the gate is deliberately cheap and BUDGETED: ONE docs consult
 (read_memory / list_memories / search_memories_by_name /
@@ -52,10 +58,10 @@ except ImportError as e:
 GATED_CALL_BUDGET = 5
 
 # Bash command words that are pure inspection/recon — reading state instead of
-# consulting docs. Matched at command start or after a separator (incl. \n —
-# patterns run without re.MULTILINE, so ^ alone misses line 2+). Mutation,
-# build, and pipeline commands are deliberately absent: they are doing work,
-# not surfing.
+# consulting docs. Matched ANYWHERE in the command (start, after a separator,
+# OR after a pipe) so `ls … | find … | grep` — recon dressed as a pipeline — is
+# caught. Patterns run without re.MULTILINE, so the alternation lists \n too.
+# Mutation, build, and test commands are deliberately absent: they do work.
 BASH_INSPECT_RE = re.compile(
     r'(^|[\n;&|]\s*)('
     r'(cat|head|tail|less|more|grep|rg|find|ls|tree|awk|sed)\b'
@@ -64,20 +70,14 @@ BASH_INSPECT_RE = re.compile(
     re.IGNORECASE,
 )
 
-# Read-tool paths that are NOT code-surfing: the memory store / WM, workflow
-# machinery, scratchpads, and temp files.
-READ_EXEMPT_RE = re.compile(
-    r'(/\.serena/|/\.claude/|/scratchpad/|^/(private/)?tmp/|/T/[^/]+/)',
-    re.IGNORECASE,
-)
-
 
 def is_gated_call(tool_name: str, tool_input: dict) -> bool:
     """True when this tool call is a docs-first-gated code-surf.
 
     Grep/Glob/search_for_pattern: always gated.
-    Bash: gated only when the command contains an inspection segment.
-    Read: gated unless the target path is exempt (memories, scratchpad, tmp).
+    Bash: gated only when a command segment is inspection/recon (incl. inside a
+    pipeline). Mutation/build/test commands pass through.
+    Read: NEVER gated — opening a specific known file is not surfing.
     Anything else: not gated.
     """
     tool_input = tool_input or {}
@@ -85,9 +85,6 @@ def is_gated_call(tool_name: str, tool_input: dict) -> bool:
         return True
     if tool_name == 'Bash':
         return bool(BASH_INSPECT_RE.search(str(tool_input.get('command', ''))))
-    if tool_name == 'Read':
-        path = str(tool_input.get('file_path', ''))
-        return bool(path) and not READ_EXEMPT_RE.search(path)
     return False
 
 

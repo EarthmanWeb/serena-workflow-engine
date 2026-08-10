@@ -710,6 +710,9 @@ class TestSearchDocsGateScoping(unittest.TestCase):
                     'git diff HEAD~1',
                     'ls -la .github/workflows/',
                     'npm run build && cat dist/manifest.json',
+                    # recon dressed as a pipeline — inspection after a pipe must match
+                    'ls /x/*/hooks/ | head -40',
+                    'ls /a 2>/dev/null; echo === ; find /b -name "*.py" | grep pre',
                     # FEEDBACK_ENFORCEMENT: newline-hidden command must match too
                     'echo setup\ncat package.json'):
             self.assertTrue(search_docs_mod.is_gated_call('Bash', {'command': cmd}), cmd)
@@ -723,14 +726,12 @@ class TestSearchDocsGateScoping(unittest.TestCase):
                     'docker restart demo1-devcontainer-1'):
             self.assertFalse(search_docs_mod.is_gated_call('Bash', {'command': cmd}), cmd)
 
-    def test_read_project_file_gated(self):
-        self.assertTrue(search_docs_mod.is_gated_call(
-            'Read', {'file_path': '/Volumes/T7/LocalSites/x/src/index.ts'}))
-
-    def test_read_exempt_paths_not_gated(self):
-        for path in ('/Volumes/T7/LocalSites/x/.serena/memories/WM_ab.md',
-                     '/Volumes/T7/LocalSites/x/.claude/settings.json',
-                     '/private/tmp/claude-501/x/scratchpad/log.txt',
+    def test_read_never_gated(self):
+        # Read opens a specific known file — not untargeted surfing. NEVER gated,
+        # regardless of path (project source, config, or CLAUDE.md).
+        for path in ('/Users/webdev/LocalSites/x/src/index.ts',
+                     '/Users/webdev/LocalSites/x/CLAUDE.md',
+                     '/Users/webdev/LocalSites/x/.serena/memories/WM_ab.md',
                      '/tmp/foo.log'):
             self.assertFalse(search_docs_mod.is_gated_call('Read', {'file_path': path}), path)
 
