@@ -98,24 +98,21 @@ def get_event_count(stream_path: str) -> int:
         return 0
 
 
-def collect_values_since_task_start(stream_path: str, count_type: str = 'docread',
-                                    value_key: str = 'name') -> set:
-    """Collect normalized value_key values from count_type events since the
-    current task started.
+def events_since_task_start(stream_path: str) -> list:
+    """All events since the current task started, in order.
 
     Task start = the LAST 'state' event whose to_s is WF_CLASSIFY (a follow-up
     task re-entering classification), or the last 'session_start' event if no
-    such re-entry exists. Reads from a prior task NEVER satisfy the current
-    task's sweep. Values are normalized lowercase with any '.md' suffix and
-    'mem:' prefix stripped. Full-file scan — per-session streams are small.
+    such re-entry exists. Events from a prior task NEVER count toward the
+    current task. Full-file scan — per-session streams are small.
     """
     if not os.path.exists(stream_path):
-        return set()
+        return []
     try:
         with open(stream_path, 'r') as f:
             lines = f.readlines()
     except IOError:
-        return set()
+        return []
 
     events = []
     for line in lines:
@@ -131,13 +128,25 @@ def collect_values_since_task_start(stream_path: str, count_type: str = 'docread
             start = i
         elif etype == 'state' and event.get('to_s') == 'WF_CLASSIFY':
             start = i
+    return events[start:]
 
+
+def collect_values_since_task_start(stream_path: str, count_type: str = 'docread',
+                                    value_key: str = 'name') -> set:
+    """Collect normalized value_key values from count_type events since the
+    current task started. A list-valued key contributes every element.
+
+    Values are normalized lowercase with any '.md' suffix and 'mem:' prefix
+    stripped.
+    """
     values = set()
-    for event in events[start:]:
+    for event in events_since_task_start(stream_path):
         if event.get('type') != count_type:
             continue
         value = event.get(value_key)
-        if value:
+        if isinstance(value, list):
+            values.update(normalize_memory_name(str(v)) for v in value if v)
+        elif value:
             values.add(normalize_memory_name(str(value)))
     return values
 

@@ -33,6 +33,39 @@ except ImportError as e:
 # tool result; normalization happens in _extract_memory_names.
 MEMORY_NAME_RE = re.compile(r'\b[a-z][a-z0-9_.-]*/[A-Za-z0-9][A-Za-z0-9_.-]*')
 
+# Explicit memory links INSIDE a read memory's content: `mem:dir/NAME` and
+# `[[dir/NAME]]`. Bare dir/NAME mentions are NOT links.
+MEMORY_LINK_RE = re.compile(
+    r'(?:mem:|\[\[)\s*([a-z][a-z0-9_.-]*/[A-Za-z0-9][A-Za-z0-9_./-]*?)\s*(?:\]\]|(?=[^A-Za-z0-9_./-])|$)')
+
+# Topics excluded from related-link tracking — workflow machinery and the
+# WF_CLASSIFY 4d sweep exclusions (never loaded as general context).
+LINK_EXCLUDED_PREFIXES = (
+    'wf/', 'claude/', 'spec/', 'report/', 'research/', 'project/',
+    'templates/',
+)
+
+
+def _related_links(text: str) -> set:
+    """Normalized memory names explicitly linked from read memory content."""
+    from swe_hooks.core.stream import normalize_memory_name
+    if not text:
+        return set()
+    links = set()
+    for match in MEMORY_LINK_RE.findall(str(text)):
+        name = normalize_memory_name(match)
+        if not name.startswith(LINK_EXCLUDED_PREFIXES):
+            links.add(name)
+    return links
+
+
+def _unread_related(memory_name: str, content: str, read_names: set) -> set:
+    """Related links of a just-read memory not yet read this task."""
+    from swe_hooks.core.stream import normalize_memory_name
+    return (_related_links(content)
+            - set(read_names)
+            - {normalize_memory_name(memory_name)})
+
 
 def _extract_memory_names(text: str) -> set:
     """Extract normalized memory names from a search tool result blob."""
@@ -252,6 +285,32 @@ def main():
         except Exception:
             pass
 
+        # Related-links surfacing (mirrors the search rule for reads): a read
+        # whose content links memories unread this task records them as
+        # pending discovery — the docs-first gate lists them as the designated
+        # next reads, and re-reading this same memory will not refill budget.
+        pending_msg = ''
+        if memory_name and not bare_name.startswith('WF_'):
+            raw_result = tool_result or get_input_field(
+                input_data, 'tool_response', default='')
+            try:
+                read_names = collect_values_since_task_start(
+                    get_stream_path(session_id))
+                unread = _unread_related(memory_name, str(raw_result), read_names)
+            except Exception:
+                unread = set()
+            if unread:
+                try:
+                    append_event(get_stream_path(session_id), 'docpending',
+                                 s=session_id, new=sorted(unread))
+                except Exception:
+                    pass
+                pending_msg = (
+                    "📚 Related docs linked here, UNREAD this task: "
+                    + ", ".join(sorted(unread))
+                    + " — read them before further source work; re-reading an "
+                    "already-read memory does not refill the docs budget.")
+
         # Handle list_memories calls (no memory_name) — inject continuation
         if 'list_memories' in tool_name:
             state_mgr = StateManager(cwd, session_id=session_id)
@@ -269,7 +328,11 @@ def main():
         # Handle FEATURE_TESTS read - create sentinel for test gate
         if bare_name == 'FEATURE_TESTS':
             create_feature_sentinel(session_id, 'test')
-            output_status(f"📖 Read: {memory_name} {_in_label}")
+            output = HookOutput(event_name="PostToolUse")
+            output.add_message(f"📖 Read: {memory_name} {_in_label}")
+            if pending_msg:
+                output.add_message(pending_msg)
+            output.output_and_exit()
             return
 
         # Non-WF_* memories: log read + inject continuation directive
@@ -278,11 +341,14 @@ def main():
             current = state_mgr.get_current_state()
             directive = _get_continuation(current)
 
-            if directive:
+            if directive or pending_msg:
                 output = HookOutput(event_name="PostToolUse")
                 output.add_message(f"📖 Read: {memory_name or 'unknown'} {_in_label}")
-                output.add_message("")
-                output.add_message(directive)
+                if pending_msg:
+                    output.add_message(pending_msg)
+                if directive:
+                    output.add_message("")
+                    output.add_message(directive)
                 output.output_and_exit()
 
             output_status(f"📖 Read: {memory_name or 'unknown'} {_in_label}")

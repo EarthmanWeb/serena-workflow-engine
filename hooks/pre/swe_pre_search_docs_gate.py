@@ -47,8 +47,9 @@ try:
     from swe_hooks.core.input import read_stdin_safe, get_input_field
     from swe_hooks.core.session import extract_session_id
     from swe_hooks.core.stream import (
-        get_stream_path, get_sentinel_path, count_events_since_last,
-        append_event,
+        get_stream_path, get_sentinel_path, append_event,
+        events_since_task_start, collect_values_since_task_start,
+        normalize_memory_name,
     )
 except ImportError as e:
     swe_hooks.bootstrap.import_error_exit(e, "PreToolUse")
@@ -88,22 +89,45 @@ def is_gated_call(tool_name: str, tool_input: dict) -> bool:
     return False
 
 
-def docs_budget_allows(stream_path: str) -> bool:
-    """True while docs-first budget remains: a 'docread' exists in the tail
-    window AND fewer than GATED_CALL_BUDGET 'gated' events follow the most
-    recent one.
+# docread names that refill even when repeated: credited memory searches
+# (a search confirming already-read docs is the sanctioned re-consult).
+ALWAYS_FRESH_NAMES = {'memory-search'}
 
-    Empty marker_types never breaks the backward scan, so the first call
-    counts docreads across the whole tail window; the second stops at the
-    most recent docread, counting only the gated calls spent since it.
+
+def docs_budget_allows(stream_path: str) -> bool:
+    """Budget walk since the current task started: a FRESH docread (a memory
+    name not yet read this task, a credited memory search, or a legacy
+    nameless event) refills the budget to GATED_CALL_BUDGET; each 'gated'
+    event spends one.
+
+    Re-reading an already-read doc does NOT refill — that is the observed
+    budget-farming exploit (re-read one memory between grinds). Freshness
+    resets at task start (WF_CLASSIFY re-entry), so a prior task's reads
+    never mute the current task's refills.
     """
-    docreads = count_events_since_last(
-        stream_path, marker_types=(), count_type='docread')
-    if docreads == 0:
-        return False
-    spent = count_events_since_last(
-        stream_path, marker_types=('docread',), count_type='gated')
-    return spent < GATED_CALL_BUDGET
+    budget = 0
+    seen = set()
+    for event in events_since_task_start(stream_path):
+        etype = event.get('type')
+        if etype == 'docread':
+            name = normalize_memory_name(str(event.get('name') or ''))
+            if not name or name in ALWAYS_FRESH_NAMES or name not in seen:
+                budget = GATED_CALL_BUDGET
+            if name:
+                seen.add(name)
+        elif etype == 'gated':
+            budget -= 1
+    return budget > 0
+
+
+def pending_related_docs(stream_path: str) -> set:
+    """Docs surfaced as related links this task ('docpending') and still
+    unread — the designated next reads when the budget is spent."""
+    surfaced = collect_values_since_task_start(
+        stream_path, count_type='docpending', value_key='new')
+    read = collect_values_since_task_start(
+        stream_path, count_type='docread', value_key='name')
+    return surfaced - read
 
 
 def gate_and_record(stream_path: str) -> bool:
@@ -114,12 +138,25 @@ def gate_and_record(stream_path: str) -> bool:
     return True
 
 
-def build_deny_message(tool_name: str) -> str:
-    """Deny text: budget model, sanctioned clearers, doc-backfill duty."""
+def build_deny_message(tool_name: str, pending: set = None) -> str:
+    """Deny text: budget model, sanctioned clearers, doc-backfill duty.
+
+    When related docs surfaced this task remain unread, they are listed as
+    the designated next reads — reading THOSE is the expected refill.
+    """
+    pending_block = ""
+    if pending:
+        pending_block = (
+            "📚 UNREAD related docs surfaced this task — read these FIRST "
+            "(each is a fresh read and refills the budget): "
+            + ", ".join(sorted(pending)) + "\n\n"
+        )
     return (
         f"📓 DOCS FIRST — {tool_name or 'search'} blocked: docs-consult budget "
-        f"spent (one memory consult clears the next {GATED_CALL_BUDGET} source "
-        "reads/searches).\n\n"
+        f"spent (one FRESH memory consult clears the next {GATED_CALL_BUDGET} "
+        "source reads/searches; re-reading an already-read memory does NOT "
+        "refill).\n\n"
+        + pending_block +
         "Ops, deploy, and lookup answers live in memories — consult them before "
         "reverse-engineering the codebase (cat/head/grep/git log/Read).\n\n"
         "  1. mcp__plugin_swe_serena__search_memories_by_name(\"<key terms>\") — or "
@@ -173,7 +210,8 @@ def main():
             output_empty()
             return
 
-        output_block(build_deny_message(tool_name))
+        output_block(build_deny_message(
+            tool_name, pending=pending_related_docs(stream_path)))
 
     except Exception as e:
         output = {"hookSpecificOutput": {"hookEventName": "PreToolUse",
