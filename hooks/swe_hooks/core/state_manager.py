@@ -187,6 +187,24 @@ EXIT_PLAN_MODE_STATES = {
 }
 
 
+def clear_sweep_sentinel(session_id: str) -> None:
+    """Remove the per-task Feature Knowledge Sweep sentinel.
+
+    Called on every transition INTO WF_CLASSIFY: each task (including
+    same-session follow-ups) must re-verify its sweep before the edit gate
+    unlocks. Best-effort — never raises.
+    """
+    if not session_id:
+        return
+    try:
+        from .stream import get_feature_sentinel_path
+        sentinel = get_feature_sentinel_path(session_id, 'sweep')
+        if os.path.exists(sentinel):
+            os.remove(sentinel)
+    except Exception:
+        pass
+
+
 class StateManager:
     """Manages workflow state transitions.
 
@@ -305,6 +323,11 @@ class StateManager:
 
         # Save state — decoupled state file is authoritative
         sid = self.session_id or self.state.get("session_id")
+
+        # Entering classification starts a NEW task: invalidate the per-task
+        # sweep sentinel so the edit gate re-arms for follow-up tasks.
+        if new_state == 'WF_CLASSIFY':
+            clear_sweep_sentinel(sid)
 
         if self.wm_filepath:
             if write_working_memory_state(self.cwd, self.wm_filepath, new_state, session_id=sid):

@@ -33,6 +33,15 @@ def get_sentinel_path(session_id: str) -> str:
     return os.path.join(get_stream_dir(), f'.init_{session_id}')
 
 
+def get_feature_sentinel_path(session_id: str, gate_name: str) -> str:
+    """Get sentinel file path for a feature/task gate.
+
+    Pattern: .serena/streams/.{gate_name}_feature_{session_id}
+    Gates: 'test' (FEATURE_TESTS read), 'sweep' (WF_CLASSIFY 4d sweep verified).
+    """
+    return os.path.join(get_stream_dir(), f'.{gate_name}_feature_{session_id}')
+
+
 def append_event(stream_path: str, event_type: str, **data):
     """Append an event to the stream. O(1) append, no reads."""
     event = {"t": int(time.time()), "type": event_type}
@@ -87,6 +96,61 @@ def get_event_count(stream_path: str) -> int:
             return sum(1 for _ in f)
     except IOError:
         return 0
+
+
+def collect_values_since_task_start(stream_path: str, count_type: str = 'docread',
+                                    value_key: str = 'name') -> set:
+    """Collect normalized value_key values from count_type events since the
+    current task started.
+
+    Task start = the LAST 'state' event whose to_s is WF_CLASSIFY (a follow-up
+    task re-entering classification), or the last 'session_start' event if no
+    such re-entry exists. Reads from a prior task NEVER satisfy the current
+    task's sweep. Values are normalized lowercase with any '.md' suffix and
+    'mem:' prefix stripped. Full-file scan — per-session streams are small.
+    """
+    if not os.path.exists(stream_path):
+        return set()
+    try:
+        with open(stream_path, 'r') as f:
+            lines = f.readlines()
+    except IOError:
+        return set()
+
+    events = []
+    for line in lines:
+        try:
+            events.append(json.loads(line.strip()))
+        except (json.JSONDecodeError, ValueError):
+            continue
+
+    start = 0
+    for i, event in enumerate(events):
+        etype = event.get('type')
+        if etype == 'session_start':
+            start = i
+        elif etype == 'state' and event.get('to_s') == 'WF_CLASSIFY':
+            start = i
+
+    values = set()
+    for event in events[start:]:
+        if event.get('type') != count_type:
+            continue
+        value = event.get(value_key)
+        if value:
+            values.add(normalize_memory_name(str(value)))
+    return values
+
+
+def normalize_memory_name(name: str) -> str:
+    """Normalize a memory name for comparison: lowercase, strip whitespace,
+    'mem:' prefix, and '.md' suffix."""
+    name = name.strip().lower()
+    if name.startswith('mem:'):
+        name = name[4:]
+    if name.endswith('.md'):
+        name = name[:-3]
+    return name
 
 
 def count_edits_since_checkpoint(stream_path: str) -> int:

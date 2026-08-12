@@ -30,6 +30,12 @@ from swe_hooks.core.session import (
     find_working_memory_for_session,
     get_project_root,
 )
+from swe_hooks.core.stream import (
+    get_stream_path,
+    get_feature_sentinel_path,
+    collect_values_since_task_start,
+    normalize_memory_name,
+)
 
 # ──────────────────────────────────────────────────────────────────
 # Constants
@@ -342,6 +348,97 @@ def tool_swe_wm_read(session_id: str = None) -> dict:
     }
 
 
+# "Memories loaded" line inside an Affected Features write, e.g.
+#   - **Memories loaded**: feature/FEATURE_X, dom/DOM_X, ref/REF_Y
+MEMORIES_LOADED_RE = re.compile(
+    r'\*\*Memories loaded\*\*:?[ \t]*(.*)$', re.IGNORECASE | re.MULTILINE)
+
+# Explicit declaration that the task has no feature memory (both fuzzy
+# searches returned nothing at WF_CLASSIFY 4b) — the sanctioned exception to
+# the "list must include a feature/* memory" rule.
+NO_FEATURE_TOKEN = 'no-feature'
+
+
+def _parse_memories_loaded(content: str) -> Optional[set]:
+    """Parse the '**Memories loaded**:' list from an Affected Features write.
+
+    Returns a set of normalized names, or None when the line is absent.
+    An empty set means the line exists but lists nothing.
+    """
+    match = MEMORIES_LOADED_RE.search(content or '')
+    if not match:
+        return None
+    names = set()
+    for part in match.group(1).split(','):
+        name = normalize_memory_name(part.strip().strip('[]`'))
+        if name and '/' in name:
+            names.add(name)
+    return names
+
+
+def _check_memory_sweep(session_id: str, content: str) -> Optional[str]:
+    """Validate an Affected Features write against the ACTUAL memory reads of
+    the current task (WF_CLASSIFY Step 4d Feature Knowledge Sweep).
+
+    Contract:
+      - The write must carry a '**Memories loaded**:' list (absent is allowed
+        only once a sweep sentinel already exists for the session/task).
+      - Every listed name must have a matching 'docread' stream event SINCE
+        the current task started (reads from a prior task never count).
+      - The list must include at least one 'feature/*' memory, or the content
+        must carry the literal token 'no-feature' (both WF_CLASSIFY 4b fuzzy
+        searches returned nothing).
+
+    On success creates the 'sweep' sentinel that unlocks the edit gate.
+    Returns an error string on violation, None on pass/skip.
+    """
+    listed = _parse_memories_loaded(content)
+    sentinel = get_feature_sentinel_path(session_id, 'sweep')
+
+    if listed is None:
+        if os.path.exists(sentinel):
+            return None  # sweep already verified this task; free-form update
+        return (
+            "Affected Features must record the Feature Knowledge Sweep: include "
+            "a '- **Memories loaded**: <name>, <name>, …' line listing every "
+            "memory read for this task (WF_CLASSIFY Step 4e)."
+        )
+
+    if not listed:
+        return (
+            "'**Memories loaded**:' lists no memory names. Enumerate and read "
+            "the full WF_CLASSIFY 4d sweep set (primary feature + its "
+            "ARCH_/DOM_/REF_/SYS_ related memories), then list them."
+        )
+
+    if (not any(n.startswith('feature/') for n in listed)
+            and NO_FEATURE_TOKEN not in (content or '').lower()):
+        return (
+            "Memories loaded lists no feature/* memory. Load the primary "
+            "FEATURE_[KEY] (WF_CLASSIFY Step 4c), or — only when BOTH fuzzy "
+            "searches (4b) returned nothing — state 'no-feature' in the section."
+        )
+
+    read_names = collect_values_since_task_start(get_stream_path(session_id))
+    unread = sorted(listed - read_names)
+    if unread:
+        return (
+            "Sweep verification FAILED — listed but not actually read this "
+            f"task: {', '.join(unread)}. read_memory each of them, then re-run "
+            "this update. Reads from a previous task in this session do not "
+            "count; the sweep is per-task."
+        )
+
+    try:
+        os.makedirs(os.path.dirname(sentinel), exist_ok=True)
+        with open(sentinel, 'w') as f:
+            json.dump({"session_id": session_id, "memories": sorted(listed)},
+                      f, separators=(',', ':'))
+    except IOError:
+        pass
+    return None
+
+
 def tool_swe_wm_update_section(
     section: str, content: str, session_id: str = None, append: bool = False
 ) -> dict:
@@ -356,6 +453,14 @@ def tool_swe_wm_update_section(
 
     if section in PROTECTED_SECTIONS:
         return {"error": f"Section '{section}' is daemon-managed and cannot be updated via this tool"}
+
+    # Affected Features writes carry the Feature Knowledge Sweep record —
+    # verify every listed memory was ACTUALLY read this task before accepting
+    # (creates the 'sweep' sentinel that unlocks the edit gate on pass).
+    if section == "Affected Features":
+        sweep_error = _check_memory_sweep(session_id, content)
+        if sweep_error:
+            return {"error": sweep_error}
 
     cwd = get_project_root()
     wm_filepath = find_working_memory_for_session(cwd, session_id)

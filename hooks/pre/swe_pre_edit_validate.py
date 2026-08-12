@@ -17,8 +17,14 @@ try:
     from swe_hooks.core.state_manager import StateManager
     from swe_hooks.core.session import extract_session_id
     from swe_hooks.core.config import get_project_root, resolve_setup_state
+    from swe_hooks.core.stream import (
+        get_stream_path, get_feature_sentinel_path,
+        collect_values_since_task_start, normalize_memory_name,
+    )
 except ImportError as e:
     swe_hooks.bootstrap.import_error_exit(e, "PreToolUse")
+
+import re
 
 # States where edits are allowed
 # WF_VERIFY may edit: verification must fix violations in place.
@@ -26,6 +32,105 @@ EDIT_ALLOWED = {'WF_EXECUTE', 'WF_DEBUG_TDD', 'WF_CHECKPOINT', 'WF_INITIAL_SETUP
 
 # States where edits should show a warning
 WARN_STATES = {'WF_ARCH_REVIEW', 'WF_RESEARCH'}
+
+# Setup/onboarding states run before any classification — the sweep gate does
+# not apply there.
+SWEEP_EXEMPT_STATES = {'WF_INITIAL_SETUP', 'WF_ONBOARD'}
+
+# Test-artifact paths: writing one requires the project's test-harness docs to
+# have been read THIS TASK (when the project documents a harness).
+TEST_TARGET_RE = re.compile(
+    r'(^|/)tests?/'
+    r'|(^|/)e2e/'
+    r'|(^|/)test_[^/]+\.py$'
+    r'|\.(test|spec)\.[jt]sx?$'
+    r'|\.spec\.ts$'
+    r'|\.feature$'
+    r'|Test\.php$'
+)
+
+# Test-harness memories checked for existence under .serena/memor(y|ies)/.
+TEST_DOC_NAMES = ('dev/DEV_TESTS', 'feature/FEATURE_TESTS')
+
+
+def _is_test_target(file_path: str) -> bool:
+    """True when the edit target is a test artifact."""
+    return bool(TEST_TARGET_RE.search(str(file_path or '').replace('\\', '/')))
+
+
+def _required_test_docs(project_root: str) -> list:
+    """Test-harness memories the project actually documents (files exist)."""
+    required = []
+    for name in TEST_DOC_NAMES:
+        for mem_dir in ('memory', 'memories'):
+            if os.path.exists(os.path.join(
+                    project_root, '.serena', mem_dir, name + '.md')):
+                required.append(name)
+                break
+    return required
+
+
+def _sweep_block_message() -> str:
+    return (
+        "🛑 SWEEP GATE — edit blocked: the Feature Knowledge Sweep "
+        "(WF_CLASSIFY Step 4d) is not verified for THIS task. Refilling the "
+        "docs-first budget with one memory read is NOT research.\n"
+        "Before the first edit of a task:\n"
+        "  1. Enumerate the touched areas' memories: primary FEATURE_[KEY] + "
+        "its ARCH_/DOM_/REF_/SYS_ set, MEMORY.md matches, "
+        "search_memories_by_name hits\n"
+        "  2. read_memory EVERY enumerated memory\n"
+        "  3. Record the sweep: swe_wm_update(sections=[{section: \"Affected "
+        "Features\", content: \"…\\n- **Memories loaded**: <name>, <name>, "
+        "…\"}]) — the list is verified against your ACTUAL reads this task "
+        "and unlocks edits.\n"
+        "Canon: wf/WF_CLASSIFY Step 4d."
+    )
+
+
+def _test_docs_block_message(unread: list) -> str:
+    return (
+        "🛑 SWEEP GATE — test-file edit blocked: this project documents its "
+        "test harness, and the harness docs were not read this task: "
+        f"{', '.join(unread)}.\n"
+        "Hand-writing shims/boilerplate without the harness pattern is the "
+        "documented failure mode. read_memory each of the above, then retry."
+    )
+
+
+def _sweep_gate_verdict(session_id, tool_input):
+    """Deny message when the per-task sweep is unverified, else None.
+
+    Fail-open by design: no session id, no init sentinel (spawned agent /
+    unmanaged session), or no stream → not gated. WM_* writes are harness-
+    managed and exempt.
+    """
+    if not session_id:
+        return None
+    tool_input = tool_input or {}
+    target = str(tool_input.get('file_path')
+                 or tool_input.get('relative_path') or '')
+    if os.path.basename(target.replace('\\', '/')).startswith('WM_'):
+        return None
+
+    stream_path = get_stream_path(session_id)
+    init_sentinel = os.path.join(
+        os.path.dirname(stream_path), f'.init_{session_id}')
+    if not os.path.exists(init_sentinel) or not os.path.exists(stream_path):
+        return None
+
+    if not os.path.exists(get_feature_sentinel_path(session_id, 'sweep')):
+        return _sweep_block_message()
+
+    if _is_test_target(target):
+        required = _required_test_docs(get_project_root())
+        if required:
+            read_names = collect_values_since_task_start(stream_path)
+            unread = [n for n in required
+                      if normalize_memory_name(n) not in read_names]
+            if unread:
+                return _test_docs_block_message(unread)
+    return None
 
 
 def _is_bypass_write_attempt(input_data):
@@ -154,8 +259,17 @@ def main():
         state_mgr = StateManager(cwd, session_id=session_id)
         current = state_mgr.get_current_state()
 
-        # Allow edits in execution states
+        # Allow edits in execution states — but only once the per-task
+        # Feature Knowledge Sweep is verified (sweep sentinel exists).
         if current in EDIT_ALLOWED:
+            if current not in SWEEP_EXEMPT_STATES:
+                verdict = _sweep_gate_verdict(
+                    session_id, input_data.get('tool_input', {}))
+                if verdict:
+                    output = HookOutput(event_name="PreToolUse")
+                    output.block(verdict)
+                    output.output_and_exit()
+                    return
             output_status(f"✓ Edit allowed ({current})", event="PreToolUse")
             return
 

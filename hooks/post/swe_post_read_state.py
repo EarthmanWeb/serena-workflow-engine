@@ -17,12 +17,42 @@ try:
     from swe_hooks.core.state_manager import StateManager, STATE_ICONS, is_forward_read_transition
     from swe_hooks.core.session import extract_session_id, get_project_root, find_working_memory_for_session
     from swe_hooks.core.config import append_transition_to_wm, write_state_file, resolve_installed_plugin, resolve_plugin_root
-    from swe_hooks.core.stream import get_stream_path, append_event, get_sentinel_path
+    from swe_hooks.core.stream import (
+        get_stream_path, append_event, get_sentinel_path,
+        collect_values_since_task_start,
+    )
     from datetime import datetime
     import re
     import time
 except ImportError as e:
     swe_hooks.bootstrap.import_error_exit(e)
+
+
+# Memory names in search results look like "dir/NAME" (e.g.
+# "feedback/FEEDBACK_DOCS_FIRST_ALWAYS"). Matched anywhere in the serialized
+# tool result; normalization happens in _extract_memory_names.
+MEMORY_NAME_RE = re.compile(r'\b[a-z][a-z0-9_.-]*/[A-Za-z0-9][A-Za-z0-9_.-]*')
+
+
+def _extract_memory_names(text: str) -> set:
+    """Extract normalized memory names from a search tool result blob."""
+    from swe_hooks.core.stream import normalize_memory_name
+    if not text:
+        return set()
+    return {normalize_memory_name(m) for m in MEMORY_NAME_RE.findall(str(text))}
+
+
+def _search_credit(hit_names: set, read_names: set):
+    """Decide docs-first credit for a memory search.
+
+    Returns (credit, new_names). Credit is granted when the search surfaced
+    NOTHING the agent has not already read this task — either zero hits
+    (nothing documented → exploring source is legitimate) or every hit already
+    read (re-search confirming the same authoritative docs). NEW names mean
+    unread documentation was just surfaced: no credit until it is read.
+    """
+    new_names = set(hit_names) - set(read_names)
+    return (len(new_names) == 0, new_names)
 
 
 def create_feature_sentinel(session_id: str, gate_name: str) -> bool:
@@ -180,19 +210,47 @@ def main():
         transcript_path = get_input_field(input_data, 'transcript_path', default='')
         session_id = extract_session_id(transcript_path)
 
+        # Memory-name/front-matter searches: credit is NAME-AWARE. A search
+        # whose hits are all already read this task (or that finds nothing)
+        # counts as consulting docs — docread credit, budget refill. A search
+        # that surfaces UNREAD memories is discovery, not research: no credit
+        # until the surfaced docs are actually read.
+        if 'search_memories' in tool_name:
+            stream_path = get_stream_path(session_id)
+            raw_result = tool_result or get_input_field(
+                input_data, 'tool_response', default='')
+            hits = _extract_memory_names(str(raw_result))
+            read_names = collect_values_since_task_start(stream_path)
+            credit, new_names = _search_credit(hits, read_names)
+            if credit:
+                try:
+                    append_event(stream_path, 'docread', s=session_id,
+                                 name='memory-search')
+                except Exception:
+                    pass
+                output_status("🔎 Memory search logged — docs-first credit "
+                              "(no unread docs surfaced)")
+            else:
+                try:
+                    append_event(stream_path, 'docsearch', s=session_id,
+                                 new=sorted(new_names))
+                except Exception:
+                    pass
+                listing = ", ".join(sorted(new_names))
+                output_status(
+                    "🔎 Discovery surfaced UNREAD docs — NO docs-first credit "
+                    f"until they are read: {listing}. read_memory each before "
+                    "proceeding; reading them grants the credit.")
+            return
+
         # Consulting documentation (any list_memories / read_memory) resets the
-        # wide-search streak tracked by swe_post_search_docs_hint.py. Best-effort.
+        # wide-search streak tracked by swe_post_search_docs_hint.py and records
+        # WHICH memory was read (sweep-gate verification). Best-effort.
         try:
-            append_event(get_stream_path(session_id), 'docread', s=session_id)
+            append_event(get_stream_path(session_id), 'docread', s=session_id,
+                         name=memory_name or tool_name)
         except Exception:
             pass
-
-        # Memory-name/front-matter searches count as consulting docs (the
-        # docread above clears/refills the docs-first gate budget) but carry
-        # no memory_name — log and stop before the read/WF_* handling.
-        if 'search_memories' in tool_name:
-            output_status("🔎 Memory search logged — docs-first credit")
-            return
 
         # Handle list_memories calls (no memory_name) — inject continuation
         if 'list_memories' in tool_name:
