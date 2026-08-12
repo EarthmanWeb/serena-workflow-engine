@@ -58,17 +58,17 @@ hooks/
 | Hook | Event | Purpose |
 | ---- | ----- | ------- |
 | `swe_pre_tool_init_gate.py` | PreToolUse | Block ALL tools until WF_INIT chain complete |
-| `swe_pre_edit_validate.py` | PreToolUse (Edit/Write/Serena) | Block edits in planning states (WF_VERIFY is edit-allowed); flag staleness at 10 edits |
+| `swe_pre_edit_validate.py` | PreToolUse (Edit/Write/Serena) | Block edits in planning states (WF_VERIFY is edit-allowed); in execution states DENY until the per-task sweep sentinel exists (WF_CLASSIFY 4d/4e verified); test-artifact edits additionally require dev/DEV_TESTS + feature/FEATURE_TESTS docreads when those memories exist |
 | `swe_pre_memory_index_gate.py` | PreToolUse (Edit/Write/write_memory/edit_memory) | HARD-DENY spec/report/research/project links entering MEMORY.md (state-independent; the post-hook only advises) |
 | `swe_pre_bash_test_gate.py` | PreToolUse (Bash) | Validate test commands against WF_DEBUG_TDD |
-| `swe_pre_search_docs_gate.py` | PreToolUse (Grep/Glob/search_for_pattern/Bash-inspection/Read) | DOCS-FIRST blocking gate, BUDGET model: one docs consult (`docread`) clears the next 5 gated calls (`GATED_CALL_BUDGET`); each allowed call appends a `gated` event; deny when the budget is spent or no `docread` exists. Clearance survives turn boundaries. Deny message instructs write_memory backfill when discovery was required |
+| `swe_pre_search_docs_gate.py` | PreToolUse (Grep/Glob/search_for_pattern/Bash-inspection; `Read` is matched in hooks.json but NEVER gated — opening a known file is not surfing) | DOCS-FIRST blocking gate, BUDGET model: one docs consult (`docread`) clears the next 5 gated calls (`GATED_CALL_BUDGET`); each allowed call appends a `gated` event; deny when the budget is spent or no `docread` exists. Clearance survives turn boundaries. Deny message: budget refill ≠ completed research; instructs write_memory backfill when discovery was required |
 | `swe_pre_question_consent_gate.py` | PreToolUse (AskUserQuestion) | Deny questions while `auto_approve`/`blanket_consent` is set in WM (override tag for destructive/scope changes) |
 
 ### Post-Tool (`post/`) — observers/learners
 
 | Hook | Event | Purpose |
 | ---- | ----- | ------- |
-| `swe_post_read_state.py` | PostToolUse (read_memory/list_memories/search_memories_by_name/search_memories_by_front_matter) | Pure read/display: log "ON STEP" + continuation for CURRENT state — NO transition. Appends a `docread` event (resets the wide-search streak AND refills the docs-first gate budget); memory-name/front-matter searches log a docs-first-credit line |
+| `swe_post_read_state.py` | PostToolUse (read_memory/list_memories/search_memories_by_name/search_memories_by_front_matter) | Pure read/display: log "ON STEP" + continuation for CURRENT state — NO transition. Appends a `docread` event WITH the memory name (resets the wide-search streak, refills the docs-first gate budget, feeds sweep verification). Memory searches get credit ONLY when they surface no unread names; new names → `docsearch` event + instruction to read them first |
 | `swe_post_edit_checkpoint.py` | PostToolUse (Edit/Write/Serena) | Edit counting, checkpoint at 10 edits (`CHECKPOINT_THRESHOLD`) |
 | `swe_post_search_docs_hint.py` | PostToolUse (Grep/Glob/search_for_pattern) | Counts CONSECUTIVE wide searches; at 3 in a row (`SEARCH_HINT_THRESHOLD`) reminds to check memories/docs first. `docread`/`state`/`checkpoint` events reset the streak |
 | `swe_post_write_continue.py` | PostToolUse (write_memory) | Post-write continuation |

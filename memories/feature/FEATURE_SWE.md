@@ -118,14 +118,14 @@ WF_INIT → WF_CLASSIFY → WF_ARCH_REVIEW → WF_EXECUTE
 | `swe_pre_edit_validate.py`      | PreToolUse (Edit/Write/Serena) | Validate edit permissions          |
 | `swe_pre_memory_index_gate.py`  | PreToolUse (Edit/Write/write_memory/edit_memory) | HARD-DENY spec/report/research/project links entering MEMORY.md |
 | `swe_pre_bash_test_gate.py`     | PreToolUse (Bash)              | Feature gate: FEATURE_TESTS        |
-| `swe_pre_search_docs_gate.py`   | PreToolUse (Grep/Glob/search_for_pattern/Bash-inspection/Read) | DOCS-FIRST gate, budget model: one docs consult clears the next 5 gated calls |
+| `swe_pre_search_docs_gate.py`   | PreToolUse (Grep/Glob/search_for_pattern/Bash-inspection; Read matched but never gated) | DOCS-FIRST gate, budget model: one docs consult clears the next 5 gated calls; refill ≠ research |
 | `swe_pre_question_consent_gate.py` | PreToolUse (AskUserQuestion) | Deny questions under blanket consent (`auto_approve`/`blanket_consent`) |
 
 ### Post-Tool Hooks (`hooks/post/`)
 
 | Hook                                  | Trigger                         | Purpose                          |
 | ------------------------------------- | ------------------------------- | -------------------------------- |
-| `swe_post_read_state.py`              | PostToolUse (read_memory/list_memories/search_memories_by_*) | State transitions, plan mode; appends `docread` (resets search streak, refills docs-gate budget) |
+| `swe_post_read_state.py`              | PostToolUse (read_memory/list_memories/search_memories_by_*) | State transitions, plan mode; appends named `docread` (resets search streak, refills docs-gate budget, feeds sweep verification); searches surfacing unread docs get NO credit until read |
 | `swe_post_edit_checkpoint.py`         | PostToolUse (Edit/Write/Serena) | Track edits, checkpoint at 10 edits |
 | `swe_post_search_docs_hint.py`        | PostToolUse (Grep/Glob/search_for_pattern) | Docs-first sentinel: 3 consecutive wide searches → check memories first |
 | `swe_post_todo_wm_sync.py`            | PostToolUse (TodoWrite)         | WM sync reminder on todo changes |
@@ -213,6 +213,11 @@ Feature gates block specific tools until the relevant FEATURE_* memory is read. 
 | Gate Name | Pre-Hook                        | Blocks                 | Sentinel                   | Feature Memory |
 | --------- | ------------------------------- | ---------------------- | -------------------------- | -------------- |
 | `test`    | `swe_pre_bash_test_gate.py`     | `npx playwright test`  | `.test_feature_{session}`  | FEATURE_TESTS  |
+| `sweep`   | `swe_pre_edit_validate.py`      | ALL edits in execution states | `.sweep_feature_{session}` | (WM-verified, not read-created — see below) |
+
+### The `sweep` Gate (per-task, WM-verified)
+
+Unlike read-created feature gates, the sweep sentinel is created ONLY by the WM server: an `Affected Features` write whose `**Memories loaded**:` list is verified against the task's actual named `docread` events (`_check_memory_sweep` in `wm_server.py`). Every transition INTO WF_CLASSIFY deletes it (`clear_sweep_sentinel` in `state_manager.py`), so same-session follow-up tasks must re-sweep before their first edit. Contract: `wf/WF_CLASSIFY` Steps 4d/4e. Tests: `tests/test_sweep_gate.py`.
 
 ### Adding a New Gate
 
@@ -266,6 +271,7 @@ Feature gates block specific tools until the relevant FEATURE_* memory is read. 
 | `.serena/swe-state/<session>.state`| Decoupled workflow state (authoritative) |
 | `.serena/streams/<session>.jsonl`  | Append-only event log              |
 | `.serena/streams/.init_<session>`  | Init gate sentinel cache (self-healing: recreated from WM if missing) |
+| `.serena/streams/.sweep_feature_<session>` | Per-task Feature Knowledge Sweep sentinel (created by WM-server sweep verification; cleared on WF_CLASSIFY entry) |
 | `.serena/memories/WM_<session>.md` | Working Memory (per-session)       |
 
 ## Bootstrap & Init Flow (New Projects)

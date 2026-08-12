@@ -171,7 +171,7 @@ Exclusions — do NOT read during the sweep:
 
 The sweep is memory reads ONLY — still no source-file reads, no symbol lookups, no edits.
 
-### 4e. Update WM with Features + Loaded Memories
+### 4e. Update WM with Features + Loaded Memories (ENFORCED)
 
 ```markdown
 ## Affected Features
@@ -180,6 +180,13 @@ The sweep is memory reads ONLY — still no source-file reads, no symbol lookups
 - **Secondary**: [KEY2] - [reason]
 - **Memories loaded**: [comma-separated list from the 4d sweep]
 ```
+
+The sweep is HARD-ENFORCED, per task (follow-up tasks re-arm it):
+
+- The `Affected Features` write is verified by the WM server: every name in `**Memories loaded**:` must have an ACTUAL `read_memory` this task (reads from a prior task in the session do not count). Unread names → the update is rejected.
+- The list must include ≥1 `feature/*` memory, or state `no-feature` (only when BOTH 4b searches returned nothing).
+- A verified write creates the sweep sentinel; the edit gate (`swe_pre_edit_validate.py`) DENIES every Edit/Write/Serena-edit until it exists. Test-artifact edits additionally require `dev/DEV_TESTS` + `feature/FEATURE_TESTS` reads when the project has them.
+- Refilling the docs-first search budget with one memory read is NOT the sweep.
 
 ## Step 5: Validate Requirements Against Domain Memories
 
