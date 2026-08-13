@@ -692,6 +692,21 @@ class TestSearchDocsGateBudget(unittest.TestCase):
         self.assertIn('write_memory', msg)
         self.assertIn('search_memories_by_name', msg)
 
+    def test_deny_message_routes_undocumented_area_to_onboard_agent(self):
+        # When NO reasonable feature memories exist for the code area, the
+        # FIRST step is NOT more manual grepping — it is delegating indexing
+        # to a FOREGROUND agent running /swe-feature-onboard (new area) or
+        # /swe-feature-update (stale docs), WAITING for it, then reading the
+        # memories it created to clear the gate.
+        msg = search_docs_mod.build_deny_message('Grep')
+        self.assertIn('/swe-feature-onboard', msg)
+        self.assertIn('/swe-feature-update', msg)
+        self.assertIn('WAIT', msg)
+        # foreground semantics: explicitly forbid fire-and-forget
+        self.assertIn('run_in_background', msg)
+        # the agent-tool delegation itself
+        self.assertIn('Agent', msg)
+
 
 class TestSearchDocsGateScoping(unittest.TestCase):
     """is_gated_call: which tool calls count as docs-first-gated code-surfing."""

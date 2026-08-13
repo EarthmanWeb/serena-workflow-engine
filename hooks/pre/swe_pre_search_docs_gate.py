@@ -29,6 +29,12 @@ event; when the budget is spent the gate re-fires and another docs consult
 refills it. Clearance survives turn boundaries — there is no per-prompt
 re-arm. There is no other escape.
 
+Undocumented code areas: when no reasonable feature memories exist for the
+area under research, the deny message routes the agent to delegate indexing
+to a FOREGROUND Agent running /swe-feature-onboard (or /swe-feature-update
+for stale docs), wait for it, then read the memories it wrote — continued
+manual grepping is explicitly NOT the remedy.
+
 Exemptions (fail-open by design):
   - Subagent transcript (<session>/subagents/agent-*.jsonl) → spawned agent;
     subagents bypass the workflow and must not be doc-gated, allow. (Their
@@ -167,6 +173,17 @@ def build_deny_message(tool_name: str, pending: set = None) -> str:
         "  2. mcp__plugin_swe_serena__read_memory(memory_name=\"<hit>\")\n\n"
         f"ANY ONE of those calls refills the budget ({GATED_CALL_BUDGET} more "
         "gated calls) — then re-run this call if the docs did not answer.\n\n"
+        "🚫 NO reasonable feature memories for this code area (both searches "
+        "return nothing relevant)? Do NOT continue grepping manually. FIRST "
+        "STEP: delegate indexing to a FOREGROUND agent —\n"
+        "  Agent(prompt=\"You are a subagent. BYPASS WF_INIT. Run the "
+        "/swe-feature-onboard skill for <area>\", description=\"Onboard "
+        "<area> feature\")\n"
+        "(use /swe-feature-update instead when the feature exists but its "
+        "docs are stale/incomplete). Do NOT set run_in_background — WAIT for "
+        "the agent to complete, THEN read the FEATURE_/ARCH_/DOM_/REF_ "
+        "memories it wrote. Those fresh reads clear this gate, and the new "
+        "docs — not manual grepping — are what your work continues from.\n\n"
         "⚠️ Refilling the budget is NOT completed research. Reverse-engineering "
         "source before the feature + standards docs are read is the violation — "
         "not just a spent budget. On a documented subsystem, complete the "
