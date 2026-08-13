@@ -208,7 +208,7 @@ def main():
             output_empty()
             return
 
-        # Spawned agents / unmanaged sessions have no init sentinel — never gate them.
+        # Unmanaged sessions have no init sentinel — never gate them.
         if not os.path.exists(get_sentinel_path(session_id)):
             output_empty()
             return
