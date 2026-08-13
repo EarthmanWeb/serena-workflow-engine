@@ -30,9 +30,12 @@ refills it. Clearance survives turn boundaries — there is no per-prompt
 re-arm. There is no other escape.
 
 Exemptions (fail-open by design):
+  - Subagent transcript (<session>/subagents/agent-*.jsonl) → spawned agent;
+    subagents bypass the workflow and must not be doc-gated, allow. (Their
+    path contains the PARENT session UUID, so the sentinel check below would
+    NOT exempt them — this check must come first.)
   - No session id / no stream → not a managed session, allow.
-  - No init sentinel → spawned agent or unmanaged session (subagents bypass
-    the workflow and must not be doc-gated), allow.
+  - No init sentinel → unmanaged session, allow.
 """
 
 import os
@@ -45,7 +48,7 @@ import swe_hooks.bootstrap  # noqa: E402
 try:
     from swe_hooks.core.output import output_empty, output_block
     from swe_hooks.core.input import read_stdin_safe, get_input_field
-    from swe_hooks.core.session import extract_session_id
+    from swe_hooks.core.session import extract_session_id, is_subagent_transcript
     from swe_hooks.core.stream import (
         get_stream_path, get_sentinel_path, append_event,
         events_since_task_start, collect_values_since_task_start,
@@ -191,6 +194,15 @@ def main():
             return
 
         transcript_path = get_input_field(input_data, 'transcript_path', default='')
+
+        # Spawned agents run under <session-uuid>/subagents/agent-<id>.jsonl —
+        # extract_session_id resolves them to the PARENT session, whose init
+        # sentinel exists, so the no-sentinel exemption below never triggers.
+        # Detect the subagent transcript shape directly: never gate them.
+        if is_subagent_transcript(transcript_path):
+            output_empty()
+            return
+
         session_id = extract_session_id(transcript_path)
         if not session_id:
             output_empty()

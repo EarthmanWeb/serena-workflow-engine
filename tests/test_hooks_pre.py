@@ -741,6 +741,73 @@ class TestSearchDocsGateScoping(unittest.TestCase):
         self.assertFalse(search_docs_mod.is_gated_call('Read', {}))
 
 
+class TestDocsGateSubagentExemption(unittest.TestCase):
+    """Spawned agents must NEVER be doc-gated. Their transcripts sit UNDER
+    the parent session dir (<session-uuid>/subagents/agent-<id>.jsonl), so
+    extract_session_id resolves to the PARENT session, whose init sentinel
+    exists — the no-sentinel exemption never triggers. The gate must detect
+    the subagent transcript shape itself."""
+
+    SUBAGENT_PATH = ("/Users/x/.claude/projects/-Users-x-proj/"
+                     "94aee7ae-ebde-442b-a66c-2cac8ccdd262/subagents/"
+                     "agent-ab0cfb5f7dcdeb663.jsonl")
+    MAIN_PATH = ("/Users/x/.claude/projects/-Users-x-proj/"
+                 "94aee7ae-ebde-442b-a66c-2cac8ccdd262.jsonl")
+
+    def test_gate_exempts_subagent_transcript(self):
+        self.assertTrue(search_docs_mod.is_subagent_transcript(self.SUBAGENT_PATH))
+
+    def test_gate_does_not_exempt_main_transcript(self):
+        self.assertFalse(search_docs_mod.is_subagent_transcript(self.MAIN_PATH))
+
+    def test_subagent_path_resolves_to_parent_session(self):
+        # the trap this exemption fixes: parent session id + existing
+        # sentinel would otherwise gate the subagent on the parent budget
+        self.assertEqual(
+            search_docs_mod.extract_session_id(self.SUBAGENT_PATH), "94aee7ae")
+
+    def _run_main(self, transcript_path):
+        """Drive main() end-to-end with a fully-gated parent session
+        (sentinel exists, budget spent). Returns the emitted hook JSON."""
+        import contextlib
+        import io
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        sentinel = os.path.join(tmp.name, '.init_94aee7ae')
+        stream = os.path.join(tmp.name, '94aee7ae.jsonl')
+        open(sentinel, 'w').close()
+        with open(stream, 'w') as f:
+            f.write(json.dumps({'type': 'prompt'}) + '\n')  # no docread: deny
+        orig = (search_docs_mod.read_stdin_safe,
+                search_docs_mod.get_sentinel_path,
+                search_docs_mod.get_stream_path)
+        search_docs_mod.read_stdin_safe = lambda **kw: {
+            'tool_name': 'Grep', 'tool_input': {'pattern': 'x'},
+            'transcript_path': transcript_path}
+        search_docs_mod.get_sentinel_path = lambda sid: sentinel
+        search_docs_mod.get_stream_path = lambda sid: stream
+        buf = io.StringIO()
+        try:
+            with contextlib.redirect_stdout(buf):
+                with self.assertRaises(SystemExit):
+                    search_docs_mod.main()
+        finally:
+            (search_docs_mod.read_stdin_safe,
+             search_docs_mod.get_sentinel_path,
+             search_docs_mod.get_stream_path) = orig
+        return json.loads(buf.getvalue())
+
+    def test_main_allows_subagent_even_when_parent_fully_gated(self):
+        result = self._run_main(self.SUBAGENT_PATH)
+        self.assertEqual(result, {})
+
+    def test_main_denies_main_session_when_budget_spent(self):
+        # positive control: same gated setup DOES deny the main session
+        result = self._run_main(self.MAIN_PATH)
+        self.assertEqual(
+            result['hookSpecificOutput']['permissionDecision'], 'deny')
+
+
 class TestDocsGateClearingWiring(unittest.TestCase):
     """The gate message sanctions search_memories_by_name/_by_front_matter as
     step 1 — those calls MUST therefore append a docread (i.e. be matched by

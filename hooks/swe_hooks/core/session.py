@@ -47,6 +47,22 @@ def extract_session_id(transcript_path: str) -> Optional[str]:
     return None
 
 
+def is_subagent_transcript(transcript_path: str) -> bool:
+    """True when transcript_path belongs to a spawned agent (Agent tool).
+
+    Subagent transcripts live UNDER the parent session's directory:
+        .../<session-uuid>/subagents/agent-<id>.jsonl
+    The parent UUID wins extract_session_id's regex, so a subagent resolves
+    to the PARENT session (whose sentinels/streams exist). Gates that must
+    not fire on spawned agents check this explicitly.
+    """
+    if not transcript_path:
+        return False
+    normalized = transcript_path.replace('\\', '/')
+    return ('/subagents/' in normalized
+            or os.path.basename(normalized).startswith('agent-'))
+
+
 def find_project_root(start_dir: str) -> str:
     """Find the project root by walking up looking for .git/.
 

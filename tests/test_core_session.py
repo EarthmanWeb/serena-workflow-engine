@@ -51,6 +51,40 @@ class ExtractSessionIdTests(unittest.TestCase):
         self.assertEqual(result, "abcdef01")
 
 
+class IsSubagentTranscriptTests(unittest.TestCase):
+    """Subagent transcripts live UNDER the parent session's directory
+    (<session-uuid>/subagents/agent-<id>.jsonl), so extract_session_id
+    resolves them to the PARENT session — gates that must not fire on
+    spawned agents need this explicit check."""
+
+    def test_real_subagent_path_is_detected(self):
+        # exact shape observed on disk for Agent-tool subagents
+        path = ("/Users/x/.claude/projects/-Users-x-proj/"
+                "94aee7ae-ebde-442b-a66c-2cac8ccdd262/subagents/"
+                "agent-ab0cfb5f7dcdeb663.jsonl")
+        self.assertTrue(session.is_subagent_transcript(path))
+
+    def test_agent_basename_without_subagents_dir_is_detected(self):
+        path = "/tmp/whatever/agent-a35680c6338ceb695.jsonl"
+        self.assertTrue(session.is_subagent_transcript(path))
+
+    def test_main_session_transcript_is_not_detected(self):
+        path = ("/Users/x/.claude/projects/-Users-x-proj/"
+                "00893aaf-19fa-41d2-8238-13269b9b3ca0.jsonl")
+        self.assertFalse(session.is_subagent_transcript(path))
+
+    def test_empty_and_none_are_not_detected(self):
+        self.assertFalse(session.is_subagent_transcript(""))
+        self.assertFalse(session.is_subagent_transcript(None))
+
+    def test_parent_session_id_still_extracted_from_subagent_path(self):
+        # documents WHY the check exists: the parent UUID wins the regex
+        path = ("/Users/x/.claude/projects/-Users-x-proj/"
+                "94aee7ae-ebde-442b-a66c-2cac8ccdd262/subagents/"
+                "agent-ab0cfb5f7dcdeb663.jsonl")
+        self.assertEqual(session.extract_session_id(path), "94aee7ae")
+
+
 class FindProjectRootTests(unittest.TestCase):
     def test_finds_git_at_start_dir(self):
         with tempfile.TemporaryDirectory() as tmp:
