@@ -294,9 +294,14 @@ class TestResolveSessionId(unittest.TestCase):
         os.environ["CLAUDE_SESSION_ID"] = "claudelongid"
         self.assertEqual(wm._resolve_session_id(), "sweid001")
 
-    def test_fallback_finds_most_recent_wm_file(self):
-        # No env vars set — resolver globs .serena/memories/WM_*.md and extracts
-        # the 8-hex session id from the most-recently-modified filename.
+    def test_no_most_recent_wm_guess(self):
+        # No explicit id and no env → None, EVEN when WM files exist. Guessing
+        # "the most recently modified WM" resolves to a DIFFERENT session
+        # whenever two sessions share the project (observed live: swe_wm_read
+        # answered for session b32e80e6 while 1fbbd3f6 was active — sweep
+        # verification then ran against the wrong session's stream). The
+        # session id is printed in every workflow hook message; callers pass
+        # it explicitly.
         with tempfile.TemporaryDirectory() as tmp:
             mem = os.path.join(tmp, ".serena", "memories")
             os.makedirs(mem)
@@ -306,16 +311,15 @@ class TestResolveSessionId(unittest.TestCase):
                 f.write("# old\n")
             with open(newer, "w") as f:
                 f.write("# new\n")
-            # Force newer to have a strictly later mtime.
             os.utime(older, (1000, 1000))
             os.utime(newer, (2000, 2000))
             config._PROJECT_ROOT = tmp
             try:
-                self.assertEqual(wm._resolve_session_id(), "bbbbbbbb")
+                self.assertIsNone(wm._resolve_session_id())
             finally:
                 config._PROJECT_ROOT = None
 
-    def test_fallback_returns_none_when_no_wm_files(self):
+    def test_returns_none_when_no_wm_files(self):
         with tempfile.TemporaryDirectory() as tmp:
             os.makedirs(os.path.join(tmp, ".serena", "memories"))
             config._PROJECT_ROOT = tmp

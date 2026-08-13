@@ -13,8 +13,9 @@ a plugin-location question answered with `ls … | find … | grep`, is the
 canonical violation):
   - Grep / Glob / search_for_pattern — wide searches
   - Bash INSPECTION/recon commands (cat/head/tail/less/grep/rg/find/ls/tree/
-    awk/sed and git status/diff/log/show/blame), INCLUDING inside a pipeline —
-    mutation/build/test commands are NOT gated
+    awk/sed and git status/diff/log/show/blame) as the PRIMARY command of any
+    `;`/`&&`-sequenced group — mutation/build/test commands are NOT gated,
+    including when their output is piped through head/tail/grep filters
 
 Deliberately NOT gated: the Read tool. Opening a specific, known file (a source
 file you already located, CLAUDE.md, a config) is not untargeted surfing — it
@@ -67,26 +68,48 @@ except ImportError as e:
 # One docs consult clears the gate for this many gated calls.
 GATED_CALL_BUDGET = 5
 
-# Bash command words that are pure inspection/recon — reading state instead of
-# consulting docs. Matched ANYWHERE in the command (start, after a separator,
-# OR after a pipe) so `ls … | find … | grep` — recon dressed as a pipeline — is
-# caught. Patterns run without re.MULTILINE, so the alternation lists \n too.
+# Bash inspection classification — by command GROUP, judged on the group's
+# FIRST pipeline stage:
+#   - Groups are split on `;`, `&&`, `||`, `&`, newline. Each group is a
+#     standalone command: a `;`/`&&`-sequenced `cat`/`grep` after a build IS
+#     recon and gates.
+#   - Within a group, only the FIRST pipe stage classifies it. A work command
+#     whose output is piped through head/tail/grep is still work — the filter
+#     reads the command's own output, not the codebase. `pytest … | tail`,
+#     `composer test | grep FAIL`, `phpcbf … | head` must NOT gate; pure recon
+#     pipelines (`ls … | head`, `find … | grep`) still do.
+#   - Leading VAR=value assignments on a stage are stripped before matching.
 # Mutation, build, and test commands are deliberately absent: they do work.
-BASH_INSPECT_RE = re.compile(
-    r'(^|[\n;&|]\s*)('
-    r'(cat|head|tail|less|more|grep|rg|find|ls|tree|awk|sed)\b'
-    r'|git\s+(status|diff|log|show|blame)\b'
+BASH_GROUP_SPLIT_RE = re.compile(r'(?:;|&&|\|\||&|\n)+')
+BASH_PIPE_SPLIT_RE = re.compile(r'\|(?!\|)')
+BASH_ENV_ASSIGN_RE = re.compile(
+    r'^(?:[A-Za-z_][A-Za-z0-9_]*=(?:"[^"]*"|\'[^\']*\'|\S*)\s+)*')
+BASH_INSPECT_FIRST_RE = re.compile(
+    r'^(?:'
+    r'(?:cat|head|tail|less|more|grep|rg|find|ls|tree|awk|sed)\b'
+    r'|git\s+(?:status|diff|log|show|blame)\b'
     r')',
     re.IGNORECASE,
 )
+
+
+def bash_is_inspection(command: str) -> bool:
+    """True when any command group's first pipeline stage is inspection/recon."""
+    for group in BASH_GROUP_SPLIT_RE.split(command or ''):
+        first_stage = BASH_PIPE_SPLIT_RE.split(group, 1)[0].strip()
+        first_stage = BASH_ENV_ASSIGN_RE.sub('', first_stage)
+        if BASH_INSPECT_FIRST_RE.match(first_stage):
+            return True
+    return False
 
 
 def is_gated_call(tool_name: str, tool_input: dict) -> bool:
     """True when this tool call is a docs-first-gated code-surf.
 
     Grep/Glob/search_for_pattern: always gated.
-    Bash: gated only when a command segment is inspection/recon (incl. inside a
-    pipeline). Mutation/build/test commands pass through.
+    Bash: gated only when a command group's PRIMARY (first-stage) command is
+    inspection/recon. Mutation/build/test commands pass through, including
+    when their output is piped through pagination/filter stages.
     Read: NEVER gated — opening a specific known file is not surfing.
     Anything else: not gated.
     """
@@ -94,7 +117,7 @@ def is_gated_call(tool_name: str, tool_input: dict) -> bool:
     if tool_name in ('Grep', 'Glob') or tool_name.endswith('search_for_pattern'):
         return True
     if tool_name == 'Bash':
-        return bool(BASH_INSPECT_RE.search(str(tool_input.get('command', ''))))
+        return bash_is_inspection(str(tool_input.get('command', '')))
     return False
 
 

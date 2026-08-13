@@ -207,7 +207,15 @@ TOOL_REGISTRY: Dict[str, Any] = {}  # populated after function definitions
 # ──────────────────────────────────────────────────────────────────
 
 def _resolve_session_id(explicit: str = None) -> Optional[str]:
-    """Resolve session_id: explicit param > env vars > most recent WM file."""
+    """Resolve session_id: explicit param > env vars > None (fail loud).
+
+    ⛔ NO most-recent-WM guessing. With two sessions on one project, the
+    most-recently-modified WM belongs to WHICHEVER session wrote last — reads
+    answer for the wrong session and sweep verification runs against the
+    wrong session's stream (rejecting memories the active session read, and
+    creating the sweep sentinel for the wrong session id). Every workflow
+    hook message prints the session id; callers pass it explicitly.
+    """
     if explicit:
         return explicit
     sid = os.environ.get("SWE_SESSION_ID")
@@ -216,19 +224,6 @@ def _resolve_session_id(explicit: str = None) -> Optional[str]:
     sid = os.environ.get("CLAUDE_SESSION_ID")
     if sid:
         return sid[:8]
-    # Fallback: find most recent WM file and extract session ID from filename
-    try:
-        import glob as _glob
-        cwd = get_project_root()
-        swe_dir = os.path.join(cwd, '.serena', 'memories')
-        wm_files = _glob.glob(os.path.join(swe_dir, 'WM_*.md'))
-        if wm_files:
-            most_recent = max(wm_files, key=os.path.getmtime)
-            match = re.search(r'WM_([a-f0-9]{8})', os.path.basename(most_recent))
-            if match:
-                return match.group(1)
-    except Exception:
-        pass
     return None
 
 # ──────────────────────────────────────────────────────────────────
@@ -309,7 +304,7 @@ def tool_swe_wm_read(session_id: str = None) -> dict:
     """
     session_id = _resolve_session_id(session_id)
     if not session_id:
-        return {"error": "No session_id provided and no SWE_SESSION_ID env var set"}
+        return {"error": "No session_id provided and no SWE_SESSION_ID env var set — pass session_id explicitly (it is printed in every workflow hook message, e.g. WM[<id>] / session=\"<id>\")"}
 
     cwd = get_project_root()
 
@@ -449,7 +444,7 @@ def tool_swe_wm_update_section(
     """
     session_id = _resolve_session_id(session_id)
     if not session_id:
-        return {"error": "No session_id provided and no SWE_SESSION_ID env var set"}
+        return {"error": "No session_id provided and no SWE_SESSION_ID env var set — pass session_id explicitly (it is printed in every workflow hook message, e.g. WM[<id>] / session=\"<id>\")"}
 
     if section in PROTECTED_SECTIONS:
         return {"error": f"Section '{section}' is daemon-managed and cannot be updated via this tool"}
@@ -526,7 +521,7 @@ def tool_swe_wm_update_status(status: str, session_id: str = None) -> dict:
     """Update the **[STATUS]**: tag in Current Task."""
     session_id = _resolve_session_id(session_id)
     if not session_id:
-        return {"error": "No session_id provided and no SWE_SESSION_ID env var set"}
+        return {"error": "No session_id provided and no SWE_SESSION_ID env var set — pass session_id explicitly (it is printed in every workflow hook message, e.g. WM[<id>] / session=\"<id>\")"}
 
     if status not in VALID_STATUSES:
         return {"error": f"Invalid status '{status}'. Valid: {VALID_STATUSES}"}
@@ -578,7 +573,7 @@ def tool_swe_wm_update(
     """
     session_id = _resolve_session_id(session_id)
     if not session_id:
-        return {"error": "No session_id provided and no SWE_SESSION_ID env var set"}
+        return {"error": "No session_id provided and no SWE_SESSION_ID env var set — pass session_id explicitly (it is printed in every workflow hook message, e.g. WM[<id>] / session=\"<id>\")"}
     if not status and not sections:
         return {"error": "Nothing to do: provide `status` and/or `sections`"}
 

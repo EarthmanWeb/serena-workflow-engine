@@ -741,6 +741,29 @@ class TestSearchDocsGateScoping(unittest.TestCase):
                     'docker restart demo1-devcontainer-1'):
             self.assertFalse(search_docs_mod.is_gated_call('Bash', {'command': cmd}), cmd)
 
+    def test_bash_work_with_output_filter_pipes_not_gated(self):
+        # A work command whose OUTPUT is piped through a pagination/filter
+        # stage is still work, not recon — the filter reads the command's own
+        # output, not the codebase. Observed false positives: test runners and
+        # formatters denied because of a trailing `| tail` / `| head`.
+        for cmd in (
+                'python3 -m pytest tests/test_sweep_gate.py -q 2>&1 | tail -15',
+                'cd /x && python3 -m unittest tests.test_sweep_gate -v 2>&1 | tail -6',
+                'cd /x/em-flex-pay && composer test:real 2>&1 | grep -E "FAIL|OK"',
+                'vendor/bin/phpcbf --standard=phpcs.xml a.php b.php 2>&1 | head -20',
+                'CLAUDE_PROJECT_DIR=$PWD python3 tools/set_state.py abc WF_EXECUTE | head -5',
+                'git commit -m "x" 2>&1 | tail -3'):
+            self.assertFalse(search_docs_mod.is_gated_call('Bash', {'command': cmd}), cmd)
+
+    def test_bash_sequenced_recon_after_work_still_gated(self):
+        # A `;`/`&&`-SEQUENCED inspection command is a standalone read of the
+        # codebase (recon appended to work) — still gated. Only PIPES inherit
+        # the work classification of their first stage.
+        for cmd in ('npm run build && cat dist/manifest.json',
+                    'echo "===" && grep -rn "Identity" tests/',
+                    'composer test; git diff HEAD~1'):
+            self.assertTrue(search_docs_mod.is_gated_call('Bash', {'command': cmd}), cmd)
+
     def test_read_never_gated(self):
         # Read opens a specific known file — not untargeted surfing. NEVER gated,
         # regardless of path (project source, config, or CLAUDE.md).

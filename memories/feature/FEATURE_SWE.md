@@ -94,6 +94,7 @@ WF_INIT → WF_CLASSIFY → WF_ARCH_REVIEW → WF_EXECUTE
 - Protected sections (tools REJECT writes): `Workflow Context`, `Transitions`.
 - Agent-owned sections: `Current Task`, `Progress`, `Files`, `Notes`, `Requirements`, `Implementation Notes`, `Previous Task`, `Task Context`, `Affected Features`, `Context`, `Feature(s)`.
 - Usage: `mcp__swe-wm__swe_wm_update(session_id="...", status="IN_PROGRESS", sections=[{"section": "Progress", "content": "..."}, ...])` — one call per workflow step.
+- Session resolution (`_resolve_session_id`): explicit param > `SWE_SESSION_ID` > `CLAUDE_SESSION_ID[:8]` > ERROR. ⛔ No most-recent-WM guessing — with two sessions on one project it answers for the WRONG session and sweep verification runs against the wrong stream. ALWAYS pass `session_id` explicitly (printed in every hook message: `WM[<id>]` / `session="<id>"`).
 
 ## Hooks (18 Python scripts by event type)
 
