@@ -142,6 +142,13 @@ State-aware responses:
 - Valid WM but missing sentinel → recreate sentinel before routing (prevents init-gate deadlock).
 - Same-session new_task from WF_DONE → include previous feature keys for fast-path to WF_ARCH_REVIEW.
 
+Task-boundary stamping (sweep verification):
+- `events_since_task_start()` bounds the current task at the LAST `session_start` event or `state` event with `to_s=WF_CLASSIFY`. Emit those ONLY at genuine task starts.
+- Genuine new task (new_task intent from an active state, same-session re-entry after WF_DONE) → `append_task_boundary()` (core/stream.py) stamps the boundary after a SUCCESSFUL `transition_to('WF_CLASSIFY')`.
+- Continuation / addition / unknown-intent prompts NEVER stamp — they must not invalidate the in-flight task's docreads for sweep verification.
+- Slash-command FAST TRACK: `create_wm_and_sentinel(..., stamp_session_start=False)` when the session already has a state file — a mid-task command invocation (e.g. `/swe-wm-update`) re-creates the WM WITHOUT advancing the boundary. ⛔ Re-stamping mid-task drops every prior docread and makes the sweep an unwinnable re-read loop.
+- Tests: `tests/test_sweep_gate.py::TestTaskBoundaryStamping`.
+
 ## Init Gate (`swe_pre_tool_init_gate.py`)
 
 Block ALL tool calls until the full init chain completes (sentinel created on entry to WF_CLASSIFY).

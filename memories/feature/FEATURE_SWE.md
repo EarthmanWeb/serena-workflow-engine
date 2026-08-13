@@ -219,6 +219,8 @@ Feature gates block specific tools until the relevant FEATURE_* memory is read. 
 
 Unlike read-created feature gates, the sweep sentinel is created ONLY by the WM server: an `Affected Features` write whose `**Memories loaded**:` list is verified against the task's actual named `docread` events (`_check_memory_sweep` in `wm_server.py`). Every transition INTO WF_CLASSIFY deletes it (`clear_sweep_sentinel` in `state_manager.py`), so same-session follow-up tasks must re-sweep before their first edit. Contract: `wf/WF_CLASSIFY` Steps 4d/4e. Tests: `tests/test_sweep_gate.py`.
 
+"This task" = events since the last task boundary in the stream: the last `session_start` event or `state` event with `to_s=WF_CLASSIFY` (`events_since_task_start` in `core/stream.py`). Boundaries are stamped ONLY at genuine task starts — the prompt hook's new_task / after-WF_DONE transitions (`append_task_boundary`) and first-time session creation. Continuation/unclear prompts and mid-session slash commands (FAST TRACK re-invocation) NEVER stamp, so a task's docreads keep counting across interleaved prompts. See `DOM_SWE_HOOKS` "Task-boundary stamping".
+
 ### Adding a New Gate
 
 1. Create pre-hook `hooks/pre/swe_pre_{name}_gate.py` — check sentinel, block if missing.
