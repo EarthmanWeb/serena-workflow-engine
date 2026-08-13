@@ -131,6 +131,19 @@ def events_since_task_start(stream_path: str) -> list:
     return events[start:]
 
 
+def append_task_boundary(stream_path: str, from_state: str, session_id: str):
+    """Stamp a task boundary: a 'state' event into WF_CLASSIFY.
+
+    events_since_task_start() keys its boundary on exactly this shape, so it
+    must be emitted ONLY at genuine new-task starts (prompt-hook new_task /
+    same-session re-entry after WF_DONE) — NEVER for continuation, unclear,
+    or slash-command prompts, which would drop the task's docreads and make
+    sweep verification reject memories the agent already read this task.
+    """
+    append_event(stream_path, 'state',
+                 from_s=from_state, to_s='WF_CLASSIFY', s=session_id)
+
+
 def collect_values_since_task_start(stream_path: str, count_type: str = 'docread',
                                     value_key: str = 'name') -> set:
     """Collect normalized value_key values from count_type events since the

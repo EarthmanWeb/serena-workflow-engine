@@ -15,6 +15,7 @@ happened before the first edit. New surfaces under test:
 Stdlib unittest only. Deterministic + offline; IO via tempfile, path
 resolution via monkeypatching the exact symbol each module imported.
 """
+import inspect
 import json
 import os
 import sys
@@ -390,6 +391,104 @@ class TestSweepGateVerdict(unittest.TestCase):
         self._create_sweep()
         self.assertIsNone(edit_mod._sweep_gate_verdict(
             self.session, {"file_path": "tests/test_new.py"}))
+
+
+# ──────────────────────────────────────────────────────────────────
+# Task-boundary correctness — docreads survive continuation prompts
+# and mid-task slash commands; only a REAL new task resets the sweep
+# ──────────────────────────────────────────────────────────────────
+
+class TestTaskBoundaryStamping(unittest.TestCase):
+    """Regression guards for the sweep task-boundary bug: the boundary in
+    events_since_task_start() advances on 'session_start' and
+    to_s=WF_CLASSIFY 'state' events, so those events must be emitted ONLY
+    at genuine task starts.
+
+    Observed live (session 94aee7ae): a mid-task slash-command invocation
+    re-ran the prompt hook's FAST TRACK, which re-stamped 'session_start'
+    and silently dropped every docread before it — sweep verification then
+    rejected memories the agent HAD read this task, and each /swe-wm-update
+    invocation re-stamped again (unwinnable loop). Inverse defect: genuine
+    new-task transitions via the prompt hook appended NO boundary event, so
+    follow-up tasks could reuse a prior task's reads.
+    """
+
+    prompt_mod = import_hook("prompt/swe_user_prompt_workflow")
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.session = "bnd00001"
+        self.stream_path = os.path.join(self.tmp.name, f"{self.session}.jsonl")
+        self._orig_stream_path = wm.get_stream_path
+        self._orig_sentinel = wm.get_feature_sentinel_path
+        wm.get_stream_path = lambda sid: os.path.join(self.tmp.name, f"{sid}.jsonl")
+        wm.get_feature_sentinel_path = (
+            lambda sid, gate: os.path.join(self.tmp.name, f".{gate}_feature_{sid}"))
+
+    def tearDown(self):
+        wm.get_stream_path = self._orig_stream_path
+        wm.get_feature_sentinel_path = self._orig_sentinel
+        self.tmp.cleanup()
+
+    def test_append_task_boundary_resets_sweep(self):
+        # A REAL new task stamps a boundary; prior reads stop counting.
+        _write_stream(self.stream_path, [
+            {"type": "session_start", "s": self.session},
+            {"type": "docread", "name": "feature/FEATURE_X"},
+        ])
+        stream.append_task_boundary(self.stream_path, "WF_DONE", self.session)
+        err = wm._check_memory_sweep(
+            self.session, "- **Memories loaded**: feature/FEATURE_X\n")
+        self.assertIsNotNone(err)
+        self.assertIn("feature/feature_x", err.lower())
+
+    def test_boundary_event_shape_matches_collector(self):
+        # The stamped event must be exactly what events_since_task_start keys
+        # on: type=state, to_s=WF_CLASSIFY.
+        stream.append_task_boundary(self.stream_path, "WF_EXECUTE", self.session)
+        with open(self.stream_path) as f:
+            event = json.loads(f.readline())
+        self.assertEqual(event["type"], "state")
+        self.assertEqual(event["to_s"], "WF_CLASSIFY")
+        self.assertEqual(event["from_s"], "WF_EXECUTE")
+
+    def test_wm_recreate_without_stamp_preserves_task_reads(self):
+        # Mid-task slash command (FAST TRACK re-invocation): WM is recreated
+        # but the task boundary must NOT advance — docreads from earlier in
+        # the task still satisfy the sweep afterward.
+        _write_stream(self.stream_path, [
+            {"type": "session_start", "s": self.session},
+            {"type": "docread", "name": "feature/FEATURE_X"},
+            {"type": "docread", "name": "dom/DOM_X"},
+        ])
+        os.environ["CLAUDE_PROJECT_DIR"] = self.tmp.name
+        try:
+            self.prompt_mod.create_wm_and_sentinel(
+                self.tmp.name, self.session,
+                initial_state="WF_EXECUTE", prev_state="WF_FASTTRACK",
+                task="Direct command: /swe-wm-update",
+                stamp_session_start=False)
+        finally:
+            os.environ.pop("CLAUDE_PROJECT_DIR", None)
+        names = stream.collect_values_since_task_start(self.stream_path)
+        self.assertEqual(names, {"feature/feature_x", "dom/dom_x"})
+        err = wm._check_memory_sweep(
+            self.session,
+            "- **Memories loaded**: feature/FEATURE_X, dom/DOM_X\n")
+        self.assertIsNone(err)
+
+    def test_fast_track_reinvocation_does_not_restamp(self):
+        # Source guard (main() reads stdin): the FAST TRACK block must skip
+        # the session_start stamp when the session already has a state file.
+        src = inspect.getsource(self.prompt_mod.main)
+        self.assertIn("stamp_session_start", src)
+
+    def test_new_task_branch_stamps_boundary(self):
+        # Source guard: genuine new-task transitions into WF_CLASSIFY stamp
+        # the task boundary; the unknown-intent branch must NOT (an unclear
+        # or continuation prompt never invalidates the task's reads).
+        src = inspect.getsource(self.prompt_mod.main)
+        self.assertIn("append_task_boundary", src)
 
 
 # ──────────────────────────────────────────────────────────────────

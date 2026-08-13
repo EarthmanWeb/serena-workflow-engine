@@ -28,13 +28,15 @@ try:
     from swe_hooks.core.state_manager import StateManager
     from swe_hooks.core.stream import (
         get_stream_path, get_event_count, get_sentinel_path, append_event,
+        append_task_boundary,
     )
 except ImportError as e:
     swe_hooks.bootstrap.import_error_exit(e, "UserPromptSubmit")
 
 
 def create_wm_and_sentinel(cwd, session_id, initial_state='WF_CLASSIFY',
-                           prev_state='WF_INIT', task='(awaiting classification)'):
+                           prev_state='WF_INIT', task='(awaiting classification)',
+                           stamp_session_start=True):
     """Create the Working Memory markdown, state file, init sentinel, and
     session_start stream event when a session first enters WF_CLASSIFY.
 
@@ -45,6 +47,11 @@ def create_wm_and_sentinel(cwd, session_id, initial_state='WF_CLASSIFY',
     `initial_state`/`prev_state`/`task` are parameterized so the fast-track
     path can create the WM directly at WF_EXECUTE. Defaults preserve the
     standard WF_CLASSIFY entry for all existing callers.
+
+    `stamp_session_start=False` re-creates the WM WITHOUT advancing the task
+    boundary: 'session_start' is a boundary in events_since_task_start(), so
+    a mid-session re-invocation (slash-command fast track) must not stamp it —
+    the in-flight task's docreads must keep counting toward sweep verification.
     """
     project_root = get_project_root()
     wm_filename = f"WM_{session_id}.md"
@@ -83,9 +90,10 @@ def create_wm_and_sentinel(cwd, session_id, initial_state='WF_CLASSIFY',
     # Write initial decoupled state file
     write_state_file(session_id, initial_state, prev_state=prev_state)
 
-    # Append session start event to stream
-    stream_path = get_stream_path(session_id)
-    append_event(stream_path, 'session_start', s=session_id)
+    # Session-start stream event = task boundary; skipped on mid-session
+    # WM re-creation so the in-flight task's docreads keep counting.
+    if stamp_session_start:
+        append_event(get_stream_path(session_id), 'session_start', s=session_id)
 
     # Create init sentinel — unlocks the pre-init gate for this session
     sentinel = get_sentinel_path(session_id)
@@ -319,11 +327,17 @@ def main():
         # to WF_EXECUTE; an existing WM is overwritten for this session).
         command = detect_slash_command(prompt)
         if command and session_id:
+            # Mid-session re-invocation keeps the current task boundary:
+            # stamping 'session_start' again would drop the task's docreads
+            # from sweep verification (an unwinnable re-read loop when the
+            # command IS /swe-wm-update). Only a session with no state file
+            # yet gets the boundary stamp.
             create_wm_and_sentinel(
                 cwd, session_id,
                 initial_state='WF_EXECUTE',
                 prev_state='WF_FASTTRACK',
                 task=f'Direct command: {command}',
+                stamp_session_start=not read_state_file(session_id),
             )
             context = f"""⚡ FAST TRACK — direct command: {command}
 Working Memory: WM_{session_id} (state: WF_EXECUTE)
@@ -449,7 +463,12 @@ If your next output contains ANY text instead of a tool call, you have failed.
 
             if is_same_session_new_task:
                 # Same session, new task after completion - go to WF_CLASSIFY, preserve WM
-                state_mgr.transition_to('WF_CLASSIFY')
+                success, _ = state_mgr.transition_to('WF_CLASSIFY')
+                if success and session_id:
+                    # Genuine new task: stamp the boundary so the sweep is
+                    # verified against THIS task's reads only.
+                    append_task_boundary(
+                        get_stream_path(session_id), current_state, session_id)
                 current_state = 'WF_CLASSIFY'
                 # Analyze the prompt to understand intent (don't force new_task)
                 prompt_intent = analyze_prompt(prompt, current_state)
@@ -459,7 +478,8 @@ If your next output contains ANY text instead of a tool call, you have failed.
                 # Truly new session or no working memory - go to WF_CLASSIFY
                 state_mgr.transition_to('WF_CLASSIFY')
                 current_state = 'WF_CLASSIFY'
-                # No WM exists for this session yet — create it now.
+                # No WM exists for this session yet — create it now (its
+                # session_start event is the task boundary).
                 if not wm_file:
                     wm_file = create_wm_and_sentinel(cwd, session_id)
                 prompt_intent = 'new_task'
@@ -555,7 +575,13 @@ Or fast-path: mcp__plugin_swe_serena__read_memory(memory_name="wf/WF_ARCH_REVIEW
         elif prompt_intent == 'new_task':
             # New task - transition to WF_CLASSIFY
             if current_state not in ['WF_CLASSIFY', 'WF_INIT']:
-                state_mgr.transition_to('WF_CLASSIFY')
+                success, _ = state_mgr.transition_to('WF_CLASSIFY')
+                if success and session_id:
+                    # Genuine new task: stamp the boundary. Continuation /
+                    # unclear prompts never stamp — they must not invalidate
+                    # the in-flight task's docreads for sweep verification.
+                    append_task_boundary(
+                        get_stream_path(session_id), current_state, session_id)
                 current_state = 'WF_CLASSIFY'
                 if not wm_file:
                     wm_file = create_wm_and_sentinel(cwd, session_id)
