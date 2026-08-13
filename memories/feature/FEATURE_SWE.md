@@ -118,7 +118,7 @@ WF_INIT → WF_CLASSIFY → WF_ARCH_REVIEW → WF_EXECUTE
 | `swe_pre_edit_validate.py`      | PreToolUse (Edit/Write/Serena) | Validate edit permissions          |
 | `swe_pre_memory_index_gate.py`  | PreToolUse (Edit/Write/write_memory/edit_memory) | HARD-DENY spec/report/research/project links entering MEMORY.md |
 | `swe_pre_bash_test_gate.py`     | PreToolUse (Bash)              | Feature gate: FEATURE_TESTS        |
-| `swe_pre_search_docs_gate.py`   | PreToolUse (Grep/Glob/search_for_pattern/Bash-inspection; Read matched but never gated) | DOCS-FIRST gate, budget model: one FRESH docs consult clears the next 5 gated calls (re-reads don't refill); deny lists pending related docs; refill ≠ research; subagent transcripts (`<session>/subagents/agent-*.jsonl`) are NEVER gated |
+| `swe_pre_search_docs_gate.py`   | PreToolUse (Grep/Glob/search_for_pattern/Bash-inspection; Read matched but never gated) | DOCS-FIRST gate, budget model: one FRESH docs consult clears the next 5 gated calls (re-reads don't refill); deny lists pending related docs; refill ≠ research; no-docs areas route to a FOREGROUND /swe-feature-onboard (or -update) agent — wait, then read its memories; subagent transcripts (`<session>/subagents/agent-*.jsonl`) are NEVER gated |
 | `swe_pre_question_consent_gate.py` | PreToolUse (AskUserQuestion) | Deny questions under blanket consent (`auto_approve`/`blanket_consent`) |
 
 ### Post-Tool Hooks (`hooks/post/`)
