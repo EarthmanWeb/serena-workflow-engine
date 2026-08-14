@@ -757,18 +757,29 @@ class TestSearchDocsGateSweepBonus(unittest.TestCase):
         self.assertGreaterEqual(search_docs_mod.SWEEP_BONUS, 30)
 
     def test_sweep_present_survives_a_long_grind(self):
-        # docread + verified sweep ⇒ base 15 + bonus 40; deep into a long
-        # execution grind (25 gated) the agent is STILL allowed.
+        # docread + verified sweep ⇒ base 15 + bonus 40; driving 25 gated
+        # calls through the real gate (which stamps the one-time bonus on the
+        # first call) leaves the agent STILL allowed deep into a long grind.
         self._make_sweep_sentinel()
-        self._write_events([{'type': 'docread', 'name': 'feature/x'}]
+        self._write_events([{'type': 'docread', 'name': 'feature/x'}])
+        verdicts = [search_docs_mod.gate_and_record(self.stream) for _ in range(25)]
+        self.assertTrue(all(verdicts))
+        self.assertTrue(search_docs_mod.docs_budget_allows(self.stream))
+
+    def test_sweep_bonus_present_in_budget_walk(self):
+        # A stamped 'sweep_bonus' marker adds SWEEP_BONUS on top of the base:
+        # base 15 + 40 = 55 survives 25 gated in a raw walk.
+        self._write_events([{'type': 'docread', 'name': 'feature/x'},
+                            {'type': 'sweep_bonus'}]
                            + [{'type': 'gated'}] * 25)
         self.assertTrue(search_docs_mod.docs_budget_allows(self.stream))
 
     def test_no_sweep_sentinel_no_bonus(self):
-        # Without the sentinel, only the base budget applies — 25 gated calls
-        # after one docread must exhaust it.
-        self._write_events([{'type': 'docread', 'name': 'feature/x'}]
-                           + [{'type': 'gated'}] * 25)
+        # Without the sentinel, gate_and_record never stamps a bonus — only the
+        # base budget applies, so 25 gated calls after one docread exhaust it.
+        self._write_events([{'type': 'docread', 'name': 'feature/x'}])
+        verdicts = [search_docs_mod.gate_and_record(self.stream) for _ in range(25)]
+        self.assertFalse(all(verdicts))
         self.assertFalse(search_docs_mod.docs_budget_allows(self.stream))
 
     def test_bonus_credited_only_once_per_task(self):
