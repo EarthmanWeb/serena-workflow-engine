@@ -722,21 +722,24 @@ class TestSearchDocsGateSweepBonus(unittest.TestCase):
     'sweep_bonus' marker in the stream), and re-reads still never refill."""
 
     def setUp(self):
+        # Hermetic: patch the exact symbols the module imported so streams and
+        # the sweep sentinel resolve into tmp — get_project_root() ignores
+        # CLAUDE_PROJECT_DIR unless it contains .git/, so env override is not
+        # enough (it would leak into the real repo .serena/streams).
         self.tmp = tempfile.TemporaryDirectory()
-        # Streams + sentinels resolve under $CLAUDE_PROJECT_DIR/.serena/streams.
-        self._orig_env = os.environ.get('CLAUDE_PROJECT_DIR')
-        os.environ['CLAUDE_PROJECT_DIR'] = self.tmp.name
-        reset_caches()
         self.session = 'sweepbon'
-        self.stream = search_docs_mod.get_stream_path(self.session)
-        os.makedirs(os.path.dirname(self.stream), exist_ok=True)
+        self.stream = os.path.join(self.tmp.name, f'{self.session}.jsonl')
+        self._sentinel = os.path.join(self.tmp.name, f'.sweep_feature_{self.session}')
+        self._orig_stream = search_docs_mod.get_stream_path
+        self._orig_sentinel = search_docs_mod.get_feature_sentinel_path
+        search_docs_mod.get_stream_path = (
+            lambda sid: os.path.join(self.tmp.name, f'{sid}.jsonl'))
+        search_docs_mod.get_feature_sentinel_path = (
+            lambda sid, gate: os.path.join(self.tmp.name, f'.{gate}_feature_{sid}'))
 
     def tearDown(self):
-        if self._orig_env is None:
-            os.environ.pop('CLAUDE_PROJECT_DIR', None)
-        else:
-            os.environ['CLAUDE_PROJECT_DIR'] = self._orig_env
-        reset_caches()
+        search_docs_mod.get_stream_path = self._orig_stream
+        search_docs_mod.get_feature_sentinel_path = self._orig_sentinel
         self.tmp.cleanup()
 
     def _write_events(self, events):
@@ -745,9 +748,7 @@ class TestSearchDocsGateSweepBonus(unittest.TestCase):
                 f.write(json.dumps(e) + '\n')
 
     def _make_sweep_sentinel(self):
-        path = search_docs_mod.get_feature_sentinel_path(self.session, 'sweep')
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        with open(path, 'w') as f:
+        with open(self._sentinel, 'w') as f:
             f.write('')
 
     def test_budget_constant_is_fifteen(self):
