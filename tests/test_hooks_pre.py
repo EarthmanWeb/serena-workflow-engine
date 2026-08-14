@@ -642,8 +642,8 @@ class TestSearchDocsGateBudget(unittest.TestCase):
             for e in events:
                 f.write(json.dumps(e) + '\n')
 
-    def test_budget_constant_is_five(self):
-        self.assertEqual(search_docs_mod.GATED_CALL_BUDGET, 5)
+    def test_budget_constant_is_fifteen(self):
+        self.assertEqual(search_docs_mod.GATED_CALL_BUDGET, 15)
 
     def test_no_docread_denies(self):
         self._write_events([{'type': 'prompt'}, {'type': 'search'}])
@@ -666,24 +666,30 @@ class TestSearchDocsGateBudget(unittest.TestCase):
         ])
         self.assertTrue(search_docs_mod.docs_budget_allows(self.stream))
 
-    def test_budget_not_exhausted_at_four_gated(self):
-        self._write_events([{'type': 'docread'}] + [{'type': 'gated'}] * 4)
+    def test_budget_not_exhausted_below_budget(self):
+        self._write_events([{'type': 'docread'}]
+                           + [{'type': 'gated'}] * (search_docs_mod.GATED_CALL_BUDGET - 1))
         self.assertTrue(search_docs_mod.docs_budget_allows(self.stream))
 
-    def test_budget_exhausted_at_five_gated(self):
-        self._write_events([{'type': 'docread'}] + [{'type': 'gated'}] * 5)
+    def test_budget_exhausted_at_budget(self):
+        self._write_events([{'type': 'docread'}]
+                           + [{'type': 'gated'}] * search_docs_mod.GATED_CALL_BUDGET)
         self.assertFalse(search_docs_mod.docs_budget_allows(self.stream))
 
     def test_new_docread_refills_budget(self):
         self._write_events(
-            [{'type': 'docread'}] + [{'type': 'gated'}] * 5 + [{'type': 'docread'}])
+            [{'type': 'docread'}]
+            + [{'type': 'gated'}] * search_docs_mod.GATED_CALL_BUDGET
+            + [{'type': 'docread', 'name': 'feature/other'}])
         self.assertTrue(search_docs_mod.docs_budget_allows(self.stream))
 
     def test_gate_and_record_depletes_budget(self):
-        # After one docread: exactly GATED_CALL_BUDGET calls pass, then deny.
+        # After one docread (no sweep sentinel): exactly GATED_CALL_BUDGET
+        # calls pass, then deny.
         self._write_events([{'type': 'docread'}])
-        verdicts = [search_docs_mod.gate_and_record(self.stream) for _ in range(6)]
-        self.assertEqual(verdicts, [True] * 5 + [False])
+        n = search_docs_mod.GATED_CALL_BUDGET
+        verdicts = [search_docs_mod.gate_and_record(self.stream) for _ in range(n + 1)]
+        self.assertEqual(verdicts, [True] * n + [False])
 
     def test_deny_message_instructs_doc_backfill(self):
         # Cleared-but-discovery-was-required ⇒ the message must tell the agent
@@ -706,6 +712,79 @@ class TestSearchDocsGateBudget(unittest.TestCase):
         self.assertIn('run_in_background', msg)
         # the agent-tool delegation itself
         self.assertIn('Agent', msg)
+
+
+class TestSearchDocsGateSweepBonus(unittest.TestCase):
+    """A WM-verified 4d sweep (sweep sentinel present this task) tops the budget
+    up ONCE by SWEEP_BONUS — so an agent that has provably done its research
+    keeps source access through execution without hunting for a fresh unrelated
+    memory to re-arm. The top-up is credited exactly once per task (a
+    'sweep_bonus' marker in the stream), and re-reads still never refill."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        # Streams + sentinels resolve under $CLAUDE_PROJECT_DIR/.serena/streams.
+        self._orig_env = os.environ.get('CLAUDE_PROJECT_DIR')
+        os.environ['CLAUDE_PROJECT_DIR'] = self.tmp.name
+        reset_caches()
+        self.session = 'sweepbon'
+        self.stream = search_docs_mod.get_stream_path(self.session)
+        os.makedirs(os.path.dirname(self.stream), exist_ok=True)
+
+    def tearDown(self):
+        if self._orig_env is None:
+            os.environ.pop('CLAUDE_PROJECT_DIR', None)
+        else:
+            os.environ['CLAUDE_PROJECT_DIR'] = self._orig_env
+        reset_caches()
+        self.tmp.cleanup()
+
+    def _write_events(self, events):
+        with open(self.stream, 'w') as f:
+            for e in events:
+                f.write(json.dumps(e) + '\n')
+
+    def _make_sweep_sentinel(self):
+        path = search_docs_mod.get_feature_sentinel_path(self.session, 'sweep')
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, 'w') as f:
+            f.write('')
+
+    def test_budget_constant_is_fifteen(self):
+        self.assertEqual(search_docs_mod.GATED_CALL_BUDGET, 15)
+
+    def test_sweep_bonus_constant(self):
+        self.assertGreaterEqual(search_docs_mod.SWEEP_BONUS, 30)
+
+    def test_sweep_present_survives_a_long_grind(self):
+        # docread + verified sweep ⇒ base 15 + bonus 40; deep into a long
+        # execution grind (25 gated) the agent is STILL allowed.
+        self._make_sweep_sentinel()
+        self._write_events([{'type': 'docread', 'name': 'feature/x'}]
+                           + [{'type': 'gated'}] * 25)
+        self.assertTrue(search_docs_mod.docs_budget_allows(self.stream))
+
+    def test_no_sweep_sentinel_no_bonus(self):
+        # Without the sentinel, only the base budget applies — 25 gated calls
+        # after one docread must exhaust it.
+        self._write_events([{'type': 'docread', 'name': 'feature/x'}]
+                           + [{'type': 'gated'}] * 25)
+        self.assertFalse(search_docs_mod.docs_budget_allows(self.stream))
+
+    def test_bonus_credited_only_once_per_task(self):
+        # gate_and_record appends the one-time 'sweep_bonus' marker on the
+        # first allowed call under a present sentinel; a second walk must NOT
+        # re-add it (budget = base + ONE bonus, then depletes).
+        self._make_sweep_sentinel()
+        self._write_events([{'type': 'docread', 'name': 'feature/x'}])
+        cap = search_docs_mod.GATED_CALL_BUDGET + search_docs_mod.SWEEP_BONUS
+        verdicts = [search_docs_mod.gate_and_record(self.stream)
+                    for _ in range(cap + 1)]
+        self.assertEqual(verdicts, [True] * cap + [False])
+        # exactly one bonus marker was written
+        with open(self.stream) as f:
+            markers = [l for l in f if '"sweep_bonus"' in l]
+        self.assertEqual(len(markers), 1)
 
 
 class TestSearchDocsGateScoping(unittest.TestCase):

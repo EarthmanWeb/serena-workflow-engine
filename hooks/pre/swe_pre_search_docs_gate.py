@@ -57,16 +57,29 @@ try:
     from swe_hooks.core.input import read_stdin_safe, get_input_field
     from swe_hooks.core.session import extract_session_id, is_subagent_transcript
     from swe_hooks.core.stream import (
-        get_stream_path, get_sentinel_path, append_event,
-        events_since_task_start, collect_values_since_task_start,
+        get_stream_path, get_sentinel_path, get_feature_sentinel_path,
+        append_event, events_since_task_start, collect_values_since_task_start,
         normalize_memory_name,
     )
 except ImportError as e:
     swe_hooks.bootstrap.import_error_exit(e, "PreToolUse")
 
 
-# One docs consult clears the gate for this many gated calls.
-GATED_CALL_BUDGET = 5
+# One docs consult clears the gate for this many gated calls. The default
+# (docread → base) is generous: a single relevant memory read buys a long run
+# of source reads, so a well-scoped task rarely re-hits the gate.
+GATED_CALL_BUDGET = 15
+
+# A WM-verified WF_CLASSIFY 4d sweep (the '.sweep_feature_<session>' sentinel,
+# created ONLY when the Affected-Features "Memories loaded" list was validated
+# against this task's actual docreads) is PROOF the agent read the primary
+# feature + its arch/dom/ref set. When present, top the budget up ONCE by this
+# much so an agent that has provably done its research keeps source access
+# through execution — instead of hunting for a fresh, unrelated memory to
+# re-arm. Credited exactly once per task via a 'sweep_bonus' stream marker;
+# the sweep sentinel is cleared on every WF_CLASSIFY re-entry, so it cannot
+# farm across tasks.
+SWEEP_BONUS = 40
 
 # Bash inspection classification — by command GROUP, judged on the group's
 # FIRST pipeline stage:
@@ -159,11 +172,31 @@ def is_gated_call(tool_name: str, tool_input: dict) -> bool:
 ALWAYS_FRESH_NAMES = {'memory-search'}
 
 
+def _session_id_from_stream(stream_path: str) -> str:
+    """Recover the session id from a stream path ('<dir>/<session>.jsonl').
+
+    The budget walk needs it to locate the sibling sweep sentinel. Keeping the
+    public signature as (stream_path) means every existing caller and test is
+    unaffected — a stream with no sibling sentinel simply earns no bonus.
+    """
+    base = os.path.basename(stream_path)
+    return base[:-6] if base.endswith('.jsonl') else base
+
+
+def sweep_verified(stream_path: str) -> bool:
+    """True when this task's WM-verified 4d-sweep sentinel exists."""
+    session_id = _session_id_from_stream(stream_path)
+    if not session_id:
+        return False
+    return os.path.exists(get_feature_sentinel_path(session_id, 'sweep'))
+
+
 def docs_budget_allows(stream_path: str) -> bool:
     """Budget walk since the current task started: a FRESH docread (a memory
     name not yet read this task, a credited memory search, or a legacy
     nameless event) refills the budget to GATED_CALL_BUDGET; each 'gated'
-    event spends one.
+    event spends one. A 'sweep_bonus' marker (stamped once by gate_and_record
+    when the WM-verified sweep sentinel is present) adds SWEEP_BONUS on top.
 
     Re-reading an already-read doc does NOT refill — that is the observed
     budget-farming exploit (re-read one memory between grinds). Freshness
@@ -180,9 +213,19 @@ def docs_budget_allows(stream_path: str) -> bool:
                 budget = GATED_CALL_BUDGET
             if name:
                 seen.add(name)
+        elif etype == 'sweep_bonus':
+            budget += SWEEP_BONUS
         elif etype == 'gated':
             budget -= 1
     return budget > 0
+
+
+def _sweep_bonus_credited(stream_path: str) -> bool:
+    """True when the one-time sweep top-up was already stamped this task."""
+    for event in events_since_task_start(stream_path):
+        if event.get('type') == 'sweep_bonus':
+            return True
+    return False
 
 
 def pending_related_docs(stream_path: str) -> set:
@@ -196,7 +239,16 @@ def pending_related_docs(stream_path: str) -> set:
 
 
 def gate_and_record(stream_path: str) -> bool:
-    """Verdict for a gated call; an allowed call depletes the budget by one."""
+    """Verdict for a gated call; an allowed call depletes the budget by one.
+
+    Before judging, credit the one-time sweep top-up: if this task's 4d-sweep
+    sentinel is present and the bonus was not already stamped, append a single
+    'sweep_bonus' marker. This makes the credit available on the FIRST gated
+    call after a verified sweep and, being a stream event, exactly once per
+    task (the sentinel is cleared on WF_CLASSIFY re-entry).
+    """
+    if sweep_verified(stream_path) and not _sweep_bonus_credited(stream_path):
+        append_event(stream_path, 'sweep_bonus')
     if not docs_budget_allows(stream_path):
         return False
     append_event(stream_path, 'gated')
@@ -220,7 +272,9 @@ def build_deny_message(tool_name: str, pending: set = None) -> str:
         f"📓 DOCS FIRST — {tool_name or 'search'} blocked: docs-consult budget "
         f"spent (one FRESH memory consult clears the next {GATED_CALL_BUDGET} "
         "source reads/searches; re-reading an already-read memory does NOT "
-        "refill).\n\n"
+        f"refill). A WM-verified WF_CLASSIFY 4d sweep tops this up by "
+        f"{SWEEP_BONUS} once per task — if you have not completed the sweep, "
+        "that is the real refill here, not another lone read.\n\n"
         + pending_block +
         "Ops, deploy, and lookup answers live in memories — consult them before "
         "reverse-engineering the codebase (cat/head/grep/git log/Read).\n\n"
