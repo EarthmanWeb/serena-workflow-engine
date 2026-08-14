@@ -152,6 +152,20 @@ class TestParseMemoriesLoaded(unittest.TestCase):
     def test_returns_none_when_line_absent(self):
         self.assertIsNone(wm._parse_memories_loaded("- **Primary**: X\n"))
 
+    def test_strips_annotation_text_after_name(self):
+        # Live failure 2026-08-14: the agent annotated a list entry —
+        # "index/INDEX_FEATURES (both 4b searches returned no matching feature
+        # memory)" — and the whole entry was treated as one unmatched name.
+        # Memory names never contain whitespace; anything after the first
+        # token is annotation and must be dropped.
+        content = ("- **Memories loaded**: "
+                   "index/INDEX_FEATURES (both 4b searches returned no "
+                   "matching feature memory), feature/FEATURE_X - primary, "
+                   "`dom/DOM_X`\n")
+        names = wm._parse_memories_loaded(content)
+        self.assertEqual(
+            names, {"index/index_features", "feature/feature_x", "dom/dom_x"})
+
 
 class TestCheckMemorySweep(unittest.TestCase):
     def setUp(self):
@@ -219,6 +233,42 @@ class TestCheckMemorySweep(unittest.TestCase):
         err = wm._check_memory_sweep(
             self.session, "- **Memories loaded**:\n")
         self.assertIsNotNone(err)
+
+    def test_workflow_machinery_names_tolerated(self):
+        # Live failure 2026-08-14: the agent listed the init-chain memories
+        # (wf/WF_INIT, claude/CLAUDE_OBLIGATIONS, wf/WF_CLASSIFY) alongside the
+        # sweep. Those are read BEFORE the task boundary (state→WF_CLASSIFY)
+        # so their docreads never fall inside events_since_task_start — and
+        # they are documented 4d sweep EXCLUSIONS. The verifier must ignore
+        # wf/* and claude/* names instead of failing the whole write.
+        _write_stream(self.stream_path, [
+            {"type": "docread", "name": "wf/WF_INIT"},
+            {"type": "session_start", "s": self.session},
+            {"type": "docread", "name": "feature/FEATURE_X"},
+            {"type": "docread", "name": "dom/DOM_X"},
+        ])
+        content = ("- **Memories loaded**: wf/WF_INIT, "
+                   "claude/CLAUDE_OBLIGATIONS, wf/WF_CLASSIFY, "
+                   "feature/FEATURE_X, dom/DOM_X\n")
+        err = wm._check_memory_sweep(self.session, content)
+        self.assertIsNone(err)
+        self.assertTrue(os.path.exists(self._sentinel()))
+        # Machinery names stay OUT of the recorded sweep set.
+        with open(self._sentinel()) as f:
+            recorded = json.load(f)["memories"]
+        self.assertEqual(
+            recorded, ["dom/dom_x", "feature/feature_x"])
+
+    def test_only_machinery_names_still_rejected(self):
+        # A list of ONLY workflow-machinery names is no sweep at all.
+        _write_stream(self.stream_path, [
+            {"type": "session_start", "s": self.session},
+        ])
+        err = wm._check_memory_sweep(
+            self.session,
+            "- **Memories loaded**: wf/WF_INIT, claude/CLAUDE_OBLIGATIONS\n")
+        self.assertIsNotNone(err)
+        self.assertFalse(os.path.exists(self._sentinel()))
 
 
 class TestUpdateSectionSweepWiring(unittest.TestCase):

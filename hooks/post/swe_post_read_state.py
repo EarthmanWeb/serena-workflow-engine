@@ -141,14 +141,21 @@ def _get_plugin_version() -> str:
         return ''
 
 
-def _get_continuation(current_state: str) -> str:
+def _get_continuation(current_state: str, session_id: str = None) -> str:
     """Get a one-line continuation directive for the current workflow state.
 
     Prevents mid-step stalls by reminding the agent what to do next.
-    Only fires for states where stalls have been observed.
+    Only fires for states where stalls have been observed. For WF_CLASSIFY the
+    directive embeds the exact one-pass WM call — the observed failure mode is
+    the agent omitting session_id or serializing legacy per-section calls.
     """
+    sid = f'session_id="{session_id}"' if session_id else 'session_id="<id>"'
     directives = {
-        "WF_CLASSIFY": "Load ALL FEATURE_[KEY] + supporting DOM_*/SYS_*/SPEC_* memories → update WM → route to next step",
+        "WF_CLASSIFY": (
+            "Load ALL FEATURE_[KEY] + supporting DOM_*/SYS_*/SPEC_* memories "
+            f"→ ONE swe_wm_update call ({sid}, sections=[Affected Features "
+            "with '**Memories loaded**:' as PLAIN comma-separated names — no "
+            "annotations, no wf/*+claude/*]) → route to next step"),
         "WF_ARCH_REVIEW": "Complete architecture review → present plan → route to WF_EXECUTE",
         "WF_EXECUTE": "Continue implementation → checkpoint at 3+ edits → WF_VERIFY when done",
         "WF_RESEARCH": "Continue investigation → record findings → route when complete",
@@ -315,7 +322,7 @@ def main():
         if 'list_memories' in tool_name:
             state_mgr = StateManager(cwd, session_id=session_id)
             current = state_mgr.get_current_state()
-            directive = _get_continuation(current)
+            directive = _get_continuation(current, session_id)
             if directive:
                 output = HookOutput(event_name="PostToolUse")
                 output.add_message("📋 Memories listed")
@@ -339,7 +346,7 @@ def main():
         if not bare_name or not bare_name.startswith('WF_'):
             state_mgr = StateManager(cwd, session_id=session_id)
             current = state_mgr.get_current_state()
-            directive = _get_continuation(current)
+            directive = _get_continuation(current, session_id)
 
             if directive or pending_msg:
                 output = HookOutput(event_name="PostToolUse")
@@ -410,7 +417,7 @@ def main():
         if not labelled:
             output.add_message(label)
 
-        directive = _get_continuation(current)
+        directive = _get_continuation(current, session_id)
         if directive:
             output.add_message("")
             output.add_message(directive)

@@ -353,6 +353,12 @@ MEMORIES_LOADED_RE = re.compile(
 # the "list must include a feature/* memory" rule.
 NO_FEATURE_TOKEN = 'no-feature'
 
+# Workflow-machinery prefixes excluded from the 4d sweep (wf/WF_CLASSIFY
+# exclusion list). Init-chain memories are read BEFORE the task boundary
+# (the state event into WF_CLASSIFY), so their docreads can never verify —
+# ignore them in a Memories-loaded list instead of failing the write.
+MACHINERY_PREFIXES = ('wf/', 'claude/')
+
 
 def _parse_memories_loaded(content: str) -> Optional[set]:
     """Parse the '**Memories loaded**:' list from an Affected Features write.
@@ -365,7 +371,13 @@ def _parse_memories_loaded(content: str) -> Optional[set]:
         return None
     names = set()
     for part in match.group(1).split(','):
-        name = normalize_memory_name(part.strip().strip('[]`'))
+        # Memory names never contain whitespace — anything after the first
+        # token is agent annotation ("index/INDEX_FEATURES (no match)",
+        # "feature/FEATURE_X - primary") and must not poison the name.
+        tokens = part.strip().strip('[]`').split()
+        if not tokens:
+            continue
+        name = normalize_memory_name(tokens[0].strip('[]`'))
         if name and '/' in name:
             names.add(name)
     return names
@@ -388,6 +400,11 @@ def _check_memory_sweep(session_id: str, content: str) -> Optional[str]:
     Returns an error string on violation, None on pass/skip.
     """
     listed = _parse_memories_loaded(content)
+    if listed:
+        # Drop workflow-machinery names (init chain, read pre-boundary and
+        # excluded from the sweep contract) rather than rejecting the write.
+        listed = {n for n in listed
+                  if not n.startswith(MACHINERY_PREFIXES)}
     sentinel = get_feature_sentinel_path(session_id, 'sweep')
 
     if listed is None:
@@ -401,8 +418,9 @@ def _check_memory_sweep(session_id: str, content: str) -> Optional[str]:
 
     if not listed:
         return (
-            "'**Memories loaded**:' lists no memory names. Enumerate and read "
-            "the full WF_CLASSIFY 4d sweep set (primary feature + its "
+            "'**Memories loaded**:' lists no memory names (wf/* and claude/* "
+            "workflow memories do not count). Enumerate and read the full "
+            "WF_CLASSIFY 4d sweep set (primary feature + its "
             "ARCH_/DOM_/REF_/SYS_ related memories), then list them."
         )
 

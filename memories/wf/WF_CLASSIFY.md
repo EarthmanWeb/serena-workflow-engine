@@ -173,6 +173,15 @@ The sweep is memory reads ONLY — still no source-file reads, no symbol lookups
 
 ### 4e. Update WM with Features + Loaded Memories (ENFORCED)
 
+ONE `swe_wm_update` call, `session_id` passed EXPLICITLY (it is printed in every hook message: `WM[<id>]` / `session="<id>"` — NEVER omit it; there is no env fallback in practice):
+
+```
+mcp__plugin_swe_swe-wm__swe_wm_update(
+  session_id="<id from hook messages>",
+  status="IN_PROGRESS",
+  sections=[{"section": "Affected Features", "content": <below>}, …])
+```
+
 ```markdown
 ## Affected Features
 
@@ -180,6 +189,11 @@ The sweep is memory reads ONLY — still no source-file reads, no symbol lookups
 - **Secondary**: [KEY2] - [reason]
 - **Memories loaded**: [comma-separated list from the 4d sweep]
 ```
+
+`**Memories loaded**:` list rules:
+
+- PLAIN comma-separated memory names ONLY — no annotations, parentheses, or trailing commentary on an entry (annotation after the first whitespace is stripped, but do not rely on it).
+- List ONLY memories read THIS task during Steps 4a–4d. Do NOT list the init chain (`wf/*`, `claude/*`) — those are workflow machinery, read before the task boundary; the verifier ignores them and they never count toward the sweep.
 
 The sweep is HARD-ENFORCED, per task (follow-up tasks re-arm it):
 
