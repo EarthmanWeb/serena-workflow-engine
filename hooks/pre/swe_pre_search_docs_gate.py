@@ -79,6 +79,11 @@ GATED_CALL_BUDGET = 5
 #     `composer test | grep FAIL`, `phpcbf … | head` must NOT gate; pure recon
 #     pipelines (`ls … | head`, `find … | grep`) still do.
 #   - Leading VAR=value assignments on a stage are stripped before matching.
+#   - EXCEPTION: an inspection group whose ONLY path operand is a transient
+#     OUTPUT path (/tmp, /var/tmp, $TMPDIR, /dev/…) is result-inspection, not
+#     codebase recon — that file is command output, never source. So
+#     `grep … /tmp/test-pp.log` after a test run does NOT gate. Absolute paths
+#     that are NOT transient (a repo checkout under /Users, /x, …) still gate.
 # Mutation, build, and test commands are deliberately absent: they do work.
 BASH_GROUP_SPLIT_RE = re.compile(r'(?:;|&&|\|\||&|\n)+')
 BASH_PIPE_SPLIT_RE = re.compile(r'\|(?!\|)')
@@ -91,6 +96,29 @@ BASH_INSPECT_FIRST_RE = re.compile(
     r')',
     re.IGNORECASE,
 )
+# Transient OUTPUT locations — a file here is command output, never source, so
+# an inspection group reading ONLY such a path is result-inspection, not recon.
+BASH_TRANSIENT_PATH_RE = re.compile(
+    r'(?:^|[\s"\'=(])(?:/tmp/|/var/tmp/|/dev/|/private/(?:tmp|var)/|\$\{?TMPDIR\}?/)')
+# Any explicit filesystem path operand (absolute, ./…, ../…, or a bare
+# dir/file token). Used to decide whether an inspection group targets ONLY
+# transient output vs. reaches into the tree.
+BASH_PATH_OPERAND_RE = re.compile(r'(?:^|[\s"\'=(])(?:/|\./|\.\./|\$\{?TMPDIR\}?/)')
+
+
+def _inspects_only_transient(group: str) -> bool:
+    """True when an inspection group's only path operands are transient output.
+
+    `grep … /tmp/run.log`, `cat "$TMPDIR/out"`, `tail /dev/stdin` inspect
+    produced output, not the codebase, so they must NOT gate. A group that also
+    reaches a non-transient path (`grep -rn X /Users/…/src`) still gates.
+    """
+    if not BASH_TRANSIENT_PATH_RE.search(group):
+        return False
+    # Every path-like operand must be transient. Strip the transient ones, then
+    # look for any remaining filesystem path (a non-transient target).
+    remainder = BASH_TRANSIENT_PATH_RE.sub(' ', group)
+    return not BASH_PATH_OPERAND_RE.search(remainder)
 
 
 def bash_is_inspection(command: str) -> bool:
@@ -99,6 +127,11 @@ def bash_is_inspection(command: str) -> bool:
         first_stage = BASH_PIPE_SPLIT_RE.split(group, 1)[0].strip()
         first_stage = BASH_ENV_ASSIGN_RE.sub('', first_stage)
         if BASH_INSPECT_FIRST_RE.match(first_stage):
+            # Judge the transient-vs-recon question on the WHOLE group: a `\|`
+            # inside a quoted grep pattern otherwise splits the path off the
+            # first pipe stage. A single-stage group == first_stage.
+            if _inspects_only_transient(group.strip()):
+                continue
             return True
     return False
 

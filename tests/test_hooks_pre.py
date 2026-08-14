@@ -764,6 +764,28 @@ class TestSearchDocsGateScoping(unittest.TestCase):
                     'composer test; git diff HEAD~1'):
             self.assertTrue(search_docs_mod.is_gated_call('Bash', {'command': cmd}), cmd)
 
+    def test_bash_inspect_of_transient_output_path_not_gated(self):
+        # Grepping/cat-ing a transient output path (/tmp, /var/tmp, $TMPDIR,
+        # /dev/…) is result-inspection, not codebase recon — the file is command
+        # output, never source. Observed false positive: a test run writing
+        # /tmp/test-pp.log then a newline-separated `grep … /tmp/test-pp.log`.
+        for cmd in (
+                'grep -h "^OK\\|Failures" /tmp/test-pp.log',
+                'cd /x/em-flex-pay && composer test > /tmp/test-pp.log 2>&1; echo "exit $?"\n'
+                'grep -h "^OK\\|Failures\\|Errors\\|FAILURES" /tmp/test-pp.log',
+                'cat /tmp/build.out',
+                'tail -20 /var/tmp/run.log',
+                'grep ERROR "$TMPDIR/out.txt"',
+                'head /dev/stdin'):
+            self.assertFalse(search_docs_mod.is_gated_call('Bash', {'command': cmd}), cmd)
+
+    def test_bash_recon_of_project_paths_still_gated(self):
+        # Absolute paths that are NOT transient output are still codebase recon.
+        for cmd in ('find /b -name "*.py" | grep pre',
+                    'grep -rn "Identity" /Users/webdev/x/src',
+                    'cat /x/composer.json'):
+            self.assertTrue(search_docs_mod.is_gated_call('Bash', {'command': cmd}), cmd)
+
     def test_read_never_gated(self):
         # Read opens a specific known file — not untargeted surfing. NEVER gated,
         # regardless of path (project source, config, or CLAUDE.md).
