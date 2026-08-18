@@ -196,6 +196,21 @@ class TestCheckMemorySweep(unittest.TestCase):
         self.assertIsNone(err)
         self.assertTrue(os.path.exists(self._sentinel()))
 
+    def test_tiered_narrow_list_passes(self):
+        # Tiered 4d loading (v1.2.60+): the sweep loads the primary FEATURE +
+        # task-relevant refs and DEFERS cold refs to on-miss expansion. A narrow
+        # but valid list (primary feature + one relevant ref) must PASS even
+        # though other enumerated refs exist unread — deferral is sanctioned, and
+        # the verifier only checks that every LISTED name was read + >=1 feature.
+        _write_stream(self.stream_path, [
+            {"type": "docread", "name": "feature/FEATURE_X"},
+            {"type": "docread", "name": "ref/REF_RELEVANT"},
+        ])
+        content = "- **Memories loaded**: feature/FEATURE_X, ref/REF_RELEVANT\n"
+        err = wm._check_memory_sweep(self.session, content)
+        self.assertIsNone(err)
+        self.assertTrue(os.path.exists(self._sentinel()))
+
     def test_listed_but_unread_names_rejected(self):
         _write_stream(self.stream_path, [
             {"type": "docread", "name": "feature/FEATURE_X"},

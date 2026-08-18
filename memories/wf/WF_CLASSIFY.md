@@ -153,7 +153,7 @@ Then the MANDATORY fuzzy fallback — absence from `INDEX_FEATURES` is NOT absen
 
 ### 4d. Feature Knowledge Sweep (MANDATORY — every route)
 
-Read the feature's full knowledge set BEFORE transitioning — work must NEVER start on the primary FEATURE memory alone. This applies to EVERY route: operational, research, audit, and code-change tasks alike.
+Load the feature's knowledge set BEFORE transitioning — work must NEVER start on the primary FEATURE memory alone. This applies to EVERY route: operational, research, audit, and code-change tasks alike.
 
 Enumerate related memories from THREE sources:
 
@@ -161,7 +161,13 @@ Enumerate related memories from THREE sources:
 2. `MEMORY.md` index lines whose title/hook matches the feature area or the request's domain terms.
 3. `search_memories_by_name("<feature key / domain terms>")` — catches memories neither the feature table nor MEMORY.md lists.
 
-Then `read_memory` EVERY enumerated `FEATURE_*`, `REF_*`, `DOM_*`, `SYS_*`, `ARCH_*` memory (secondary features included).
+Then load, TIERED by relevance — read the task-relevant set, defer the rest to on-miss expansion:
+
+1. ALWAYS read: the primary `FEATURE_*`, every secondary `FEATURE_*` the request touches, and each enumerated `REF_*`/`DOM_*`/`SYS_*`/`ARCH_*` whose title/hook is **directly relevant to what this task changes or inspects**. Judge relevance from the request's domain terms + the files/behavior in scope.
+2. DEFER (do NOT read up front): enumerated refs that are cold to this task — tangential subsystems, sibling-feature detail the request never touches. Keep them enumerated in WM as candidates.
+3. ON-MISS EXPANSION: the moment a deferred ref turns out to matter (a rule you need, a pattern the edit must follow, a `docpending` link the work surfaces), read it THEN, before the dependent edit. Reaching for a deferred ref mid-task is expected, not a failure.
+
+Rationale: reading the entire `[[link]]` closure up front is the dominant per-task token cost and most of it goes unused. Tiered loading keeps the enforcement floor (primary + task-relevant feature knowledge in context before any edit) while deferring cold refs. When genuinely unsure whether a ref is relevant, read it — correctness beats token savings.
 
 Exclusions — do NOT read during the sweep:
 
@@ -187,13 +193,14 @@ mcp__plugin_swe_swe-wm__swe_wm_update(
 
 - **Primary**: [KEY1] - [reason]
 - **Secondary**: [KEY2] - [reason]
-- **Memories loaded**: [comma-separated list from the 4d sweep]
+- **Memories loaded**: [comma-separated list of the task-relevant set read in 4d — tiered, not the full closure]
 ```
 
 `**Memories loaded**:` list rules:
 
 - PLAIN comma-separated memory names ONLY — no annotations, parentheses, or trailing commentary on an entry (annotation after the first whitespace is stripped, but do not rely on it).
 - List ONLY memories read THIS task during Steps 4a–4d. Do NOT list the init chain (`wf/*`, `claude/*`) — those are workflow machinery, read before the task boundary; the verifier ignores them and they never count toward the sweep.
+- List the tier-1 (task-relevant) set you actually read — NOT deferred cold refs. Deferred refs read later via on-miss expansion still count toward the task's docreads; re-run the `Affected Features` write to append them only if a later gate needs them recorded.
 
 The sweep is HARD-ENFORCED, per task (follow-up tasks re-arm it):
 

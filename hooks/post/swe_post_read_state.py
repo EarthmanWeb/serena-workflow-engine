@@ -315,8 +315,10 @@ def main():
                 pending_msg = (
                     "📚 Related docs linked here, UNREAD this task: "
                     + ", ".join(sorted(unread))
-                    + " — read them before further source work; re-reading an "
-                    "already-read memory does not refill the docs budget.")
+                    + " — deferred refs (tiered 4d loading). Read one the moment "
+                    "it becomes relevant to what you change/inspect (on-miss "
+                    "expansion), not preemptively; re-reading an already-read "
+                    "memory does not refill the docs budget.")
 
         # Handle list_memories calls (no memory_name) — inject continuation
         if 'list_memories' in tool_name:
