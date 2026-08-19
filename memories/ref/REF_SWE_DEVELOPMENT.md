@@ -1,11 +1,29 @@
 ---
 name: REF_SWE_DEVELOPMENT
-description: Development standards for the Serena Workflow Engine plugin — dual-location sync, hook synchronization, plugin-file edit method, pre-commit checklist.
+description: Development standards for the Serena Workflow Engine plugin — how to deploy (push to GitHub → auto-update next load), dual-location sync, hook synchronization, plugin-file edit method, pre-commit checklist.
 metadata:
   type: reference
+  keywords: deploy, push, github, publish, release, plugin auto-update, cache priming, dual-location, hook sync
 ---
 
 # REF_SWE_DEVELOPMENT — Plugin Development Standards
+
+## Deploying
+
+Deploying is just **pushing the source repo to GitHub** (`origin` =
+`EarthmanWeb/serena-workflow-engine`, branch `main`). No build, publish, or
+release step. `git push origin main` IS the deploy — Claude Code auto-updates
+the installed plugin from the marketplace on the next session load, so the
+pushed commit is live next session.
+
+- **Cache priming is allowed during active development**: copy a changed source
+  file over its installed copy (`~/.claude/plugins/marketplaces/EarthmanWeb/…`
+  or `cache/EarthmanWeb/swe/<version>/…`) so the CURRENT session picks it up
+  without waiting for auto-update. Convenience only — cache edits are
+  overwritten on the next update and are never the source of truth. Still push.
+- ⛔ NEVER treat a primed cache as the deploy. A cache edit with no push is lost.
+
+See `REF_SWE_DEPLOY` for the short version.
 
 ## Dual-Location Architecture
 

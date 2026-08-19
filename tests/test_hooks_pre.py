@@ -877,6 +877,40 @@ class TestSearchDocsGateScoping(unittest.TestCase):
                     'cat /x/composer.json'):
             self.assertTrue(search_docs_mod.is_gated_call('Bash', {'command': cmd}), cmd)
 
+    def test_docker_exec_container_recon_gated(self):
+        # "Digging in Docker": docker exec / compose exec whose payload
+        # reverse-engineers the running stack (grep/sed/cat/env recon or a
+        # `php -r` inline probe of wp-config / object-cache / redis / env).
+        # The group's first token is `docker`, so the plain inspection
+        # classifier never sees it — this vector must gate independently.
+        for cmd in (
+                "docker exec c sh -c \"grep -rniE 'redis|object.?cache' "
+                "/workspace/wp-config.php\"",
+                "docker exec c sh -c 'sed -n \"1,40p\" /workspace/wp-config.php'",
+                "docker exec c sh -c 'echo x; cat /workspace/wp-config-ocp.php'",
+                "docker exec c php -d display_errors=1 -r "
+                "'var_dump(getenv(\"PANTHEON_ENVIRONMENT\"));'",
+                "docker exec c php -d display_errors=stderr -d "
+                "error_reporting=E_ALL -r 'echo 1;'",
+                "docker compose exec php sh -c 'grep WP_REDIS wp-config.php'",
+                "docker exec c env"):
+            self.assertTrue(
+                search_docs_mod.is_gated_call('Bash', {'command': cmd}), cmd)
+
+    def test_docker_lifecycle_and_wp_and_work_not_gated(self):
+        # Container mutation/build/lifecycle and raw `docker exec … wp …`
+        # (the WP-CLI-MCP / block-wordpress-exec path) and real work commands
+        # run in the container are NOT docs recon.
+        for cmd in (
+                'docker compose -f .devcontainer/docker-compose.yml up -d',
+                'docker exec c wp plugin list --allow-root --path=/workspace',
+                'docker restart demo1-devcontainer-1',
+                'docker exec c php artisan migrate',
+                'docker exec c composer install',
+                'docker exec c php index.php'):
+            self.assertFalse(
+                search_docs_mod.is_gated_call('Bash', {'command': cmd}), cmd)
+
     def test_read_never_gated(self):
         # Read opens a specific known file — not untargeted surfing. NEVER gated,
         # regardless of path (project source, config, or CLAUDE.md).

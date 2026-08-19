@@ -16,6 +16,13 @@ canonical violation):
     awk/sed and git status/diff/log/show/blame) as the PRIMARY command of any
     `;`/`&&`-sequenced group — mutation/build/test commands are NOT gated,
     including when their output is piped through head/tail/grep filters
+  - Container recon ("digging in Docker"): `docker exec` / `docker compose
+    exec` whose executed command reverse-engineers the running stack —
+    grep/sed/cat/env recon or `php -r` inline probes of wp-config /
+    object-cache / redis / env wiring INSIDE the container. The first token
+    is `docker`, so the inspection classifier above never sees it; this
+    catches it. Container up/down/build/restart and `docker exec … wp …`
+    (the WP-CLI-MCP path) are NOT recon.
 
 Deliberately NOT gated: the Read tool. Opening a specific, known file (a source
 file you already located, CLAUDE.md, a config) is not untargeted surfing — it
@@ -118,6 +125,52 @@ BASH_TRANSIENT_PATH_RE = re.compile(
 # transient output vs. reaches into the tree.
 BASH_PATH_OPERAND_RE = re.compile(r'(?:^|[\s"\'=(])(?:/|\./|\.\./|\$\{?TMPDIR\}?/)')
 
+# Container recon ("digging in Docker"): reverse-engineering the running stack
+# by hand-grepping its filesystem / config / env INSIDE the container instead
+# of consulting docs or the WP-CLI / QM / sps_log tooling. The canonical field
+# violation: an agent debugging a blank page runs a chain of
+# `docker exec <c> sh -c 'grep … wp-config.php'`, `sed -n … wp-config.php`,
+# `php -r 'var_dump(getenv("PANTHEON_ENVIRONMENT")…)'` to spelunk redis /
+# object-cache / env wiring. The group's first token is `docker`, so
+# BASH_INSPECT_FIRST_RE never matches — this pair classifies the recon that
+# runs inside the container.
+#
+# Gated: `docker exec` / `docker[- ]compose exec` whose executed payload is
+#   - a recon binary run directly or via `sh -c` / `bash -c`
+#     (grep/sed/cat/head/tail/less/more/awk/find/ls/tree/env/printenv/rg), OR
+#   - `php -r` / `php -d … -r` inline probes (getenv/$_ENV/$_SERVER/define
+#     introspection of the running config).
+# NOT gated: container mutation/build/lifecycle (up/down/build/restart/cp) and
+# `docker exec … wp …` — raw WP-CLI is the block-wordpress-exec / WP-CLI-MCP
+# concern, not docs recon.
+BASH_DOCKER_EXEC_RE = re.compile(
+    r'\bdocker(?:[-\s]+compose)?\s+exec\b', re.IGNORECASE)
+BASH_CONTAINER_RECON_RE = re.compile(
+    r'(?:'
+    r'(?:sh|bash)\s+-c\b.*?'
+    r'(?:cat|head|tail|less|more|grep|rg|find|ls|tree|awk|sed|env|printenv)\b'
+    r'|(?:^|[\s\'"])(?:cat|head|tail|less|more|grep|rg|find|ls|tree|awk|sed|'
+    r'env|printenv)(?:\s|$)'
+    r'|php\s+(?:-[A-Za-z]\S*\s+|[A-Za-z_][\w.=]*\s+)*-r\b'
+    r')',
+    re.IGNORECASE | re.DOTALL,
+)
+
+
+def _is_container_recon(group: str) -> bool:
+    """True when a command group is `docker exec`-style container recon.
+
+    Digging inside the running container (grep/sed/cat/php -r probing
+    wp-config, object-cache, redis, env) is reverse-engineering the stack —
+    the docs / WP-CLI MCP / QM / sps_log answer it. Container
+    mutation/build/lifecycle and raw `docker exec … wp` are NOT recon.
+    """
+    if not BASH_DOCKER_EXEC_RE.search(group):
+        return False
+    # The portion after `exec` is what runs in the container.
+    payload = BASH_DOCKER_EXEC_RE.split(group, 1)[-1]
+    return bool(BASH_CONTAINER_RECON_RE.search(payload))
+
 
 def _inspects_only_transient(group: str) -> bool:
     """True when an inspection group's only path operands are transient output.
@@ -135,8 +188,11 @@ def _inspects_only_transient(group: str) -> bool:
 
 
 def bash_is_inspection(command: str) -> bool:
-    """True when any command group's first pipeline stage is inspection/recon."""
+    """True when any command group's first pipeline stage is inspection/recon,
+    or the group is `docker exec`-style container recon."""
     for group in BASH_GROUP_SPLIT_RE.split(command or ''):
+        if _is_container_recon(group):
+            return True
         first_stage = BASH_PIPE_SPLIT_RE.split(group, 1)[0].strip()
         first_stage = BASH_ENV_ASSIGN_RE.sub('', first_stage)
         if BASH_INSPECT_FIRST_RE.match(first_stage):
