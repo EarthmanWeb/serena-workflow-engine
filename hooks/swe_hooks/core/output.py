@@ -100,6 +100,24 @@ def output_empty():
     sys.exit(0)
 
 
+def output_allow_with_input(updated_input: Dict[str, Any], context: Optional[str] = None):
+    """Allow a PreToolUse call but replace its tool input (auto-repair).
+
+    Uses permissionDecision="allow" + updatedInput so the harness runs the
+    corrected command in place of the one the model sent. Optional context is
+    surfaced to the model so it sees what was rewritten.
+    """
+    hook_out: Dict[str, Any] = {
+        "hookEventName": "PreToolUse",
+        "permissionDecision": "allow",
+        "updatedInput": updated_input,
+    }
+    if context:
+        hook_out["permissionDecisionReason"] = context
+    print(json.dumps({"hookSpecificOutput": hook_out}), file=sys.stdout)
+    sys.exit(0)
+
+
 def output_status(status: str, event: str = "PostToolUse"):
     """Output a concise one-line status message.
 

@@ -607,10 +607,17 @@ class TestBashDenialEscalation(unittest.TestCase):
         self.assertIn('push needs approval', msg)
         self.assertNotIn('DETERMINISTIC DENIAL', msg)
 
-    def test_repeat_denial_escalates_with_count(self):
-        msg = bash_mod.build_denial_message(self.RULE, 'git push', 2)
-        self.assertIn('DETERMINISTIC DENIAL ×3', msg)
+    def test_first_repeat_escalates_but_does_not_hard_stop(self):
+        msg = bash_mod.build_denial_message(self.RULE, 'git push', 1)
+        self.assertIn('DETERMINISTIC DENIAL ×2', msg)
         self.assertIn('COMMAND STRING must change', msg)
+        self.assertNotIn('HARD STOP', msg)
+
+    def test_third_denial_hard_stops(self):
+        msg = bash_mod.build_denial_message(self.RULE, 'git push', 2)
+        self.assertIn('HARD STOP', msg)
+        self.assertIn('×3', msg)
+        self.assertIn('ask the user', msg)
 
     def test_compound_command_gets_none_ran_note(self):
         msg = bash_mod.build_denial_message(
@@ -620,6 +627,50 @@ class TestBashDenialEscalation(unittest.TestCase):
     def test_simple_command_has_no_compound_note(self):
         msg = bash_mod.build_denial_message(self.RULE, 'git push', 0)
         self.assertNotIn('compound', msg)
+
+
+class TestBashMissingCdAutoRepair(unittest.TestCase):
+    """Auto-repair for the missing-absolute-cd rule: a repo-targeting command
+    that lacks a leading `cd /` is deterministically un-satisfiable by a bare
+    resend, so the gate rewrites it (prepend `cd <cwd>`, allow) rather than
+    denying it repeatedly."""
+
+    # The real missing-cd rule from .serena/bash-policy.json (negative lookahead).
+    CD_RULE = {
+        'pattern': r'^(?!.*\bcd\s+/)(?:.*(?:^|[\n;]|&&|\|\|)\s*)?'
+                   r'(npm\s+run\s|yarn\s+(run\s+)?\w|gulp\b)',
+        'message': 'Repo-targeting commands need an ABSOLUTE `cd`.',
+    }
+    OTHER_RULE = {'pattern': r'\bgit\s+push\b', 'message': 'push needs approval'}
+
+    def test_identifies_missing_cd_rule(self):
+        self.assertTrue(bash_mod.is_missing_cd_rule(self.CD_RULE))
+
+    def test_non_cd_rule_is_not_missing_cd(self):
+        self.assertFalse(bash_mod.is_missing_cd_rule(self.OTHER_RULE))
+
+    def test_auto_repair_prepends_cd_to_cwd(self):
+        got = bash_mod.auto_repair_cd(
+            'npm run format:plugin -- em-events-calendar 2>&1',
+            '/Users/webdev/LocalSites/convenely/convenely_plugin_repo')
+        self.assertEqual(
+            got,
+            'cd /Users/webdev/LocalSites/convenely/convenely_plugin_repo\n'
+            'npm run format:plugin -- em-events-calendar 2>&1')
+
+    def test_repaired_command_passes_the_cd_rule(self):
+        repaired = bash_mod.auto_repair_cd('npm run build', '/repo/root')
+        # The whole point: the rewritten command no longer violates the rule.
+        self.assertIsNone(
+            bash_mod.check_bash_policy_against([self.CD_RULE], repaired))
+
+    def test_no_cwd_cannot_repair(self):
+        self.assertIsNone(bash_mod.auto_repair_cd('npm run build', ''))
+        self.assertIsNone(bash_mod.auto_repair_cd('npm run build', None))
+
+    def test_relative_cwd_cannot_repair(self):
+        # Prepending a non-absolute cwd would not satisfy the `cd /` rule.
+        self.assertIsNone(bash_mod.auto_repair_cd('npm run build', 'relative/dir'))
 
 
 search_docs_mod = import_hook("pre/swe_pre_search_docs_gate")

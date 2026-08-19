@@ -23,7 +23,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import swe_hooks.bootstrap  # noqa: E402
 
 try:
-    from swe_hooks.core.output import output_empty, output_block
+    from swe_hooks.core.output import (
+        output_empty, output_block, output_allow_with_input)
     from swe_hooks.core.input import read_stdin_safe, get_input_field
     from swe_hooks.core.session import extract_session_id
     from swe_hooks.core.stream import get_stream_dir, get_stream_path, append_event
@@ -57,15 +58,43 @@ def load_bash_policy():
         return []
 
 
-def check_bash_policy(command: str):
-    """Return the first policy rule the command violates, else None."""
-    for rule in load_bash_policy():
+def check_bash_policy_against(rules, command: str):
+    """Return the first rule in `rules` the command violates, else None."""
+    for rule in rules:
         try:
             if re.search(rule['pattern'], command, re.IGNORECASE | re.DOTALL):
                 return rule
         except re.error:
             continue  # skip malformed patterns rather than blocking everything
     return None
+
+
+def check_bash_policy(command: str):
+    """Return the first policy rule the command violates, else None."""
+    return check_bash_policy_against(load_bash_policy(), command)
+
+
+def is_missing_cd_rule(rule) -> bool:
+    """True when `rule` is the missing-absolute-cd guard.
+
+    Identified structurally: its pattern carries a `cd\\s+/` term inside a
+    negative lookahead `(?!...)`. Such a rule fires only because the command
+    lacks an absolute `cd`, which a bare resend can never satisfy — the sole
+    class of denial the gate can deterministically repair.
+    """
+    pattern = rule.get('pattern', '') if isinstance(rule, dict) else ''
+    return bool(re.search(r'\(\?!.*cd\\s\+/', pattern))
+
+
+def auto_repair_cd(command: str, cwd) -> str:
+    """Return `command` with an absolute `cd <cwd>` prepended, or None.
+
+    None when the repair cannot be made safely: no cwd, or a non-absolute cwd
+    (prepending a relative dir would not satisfy the `cd /` rule anyway).
+    """
+    if not cwd or not str(cwd).startswith('/'):
+        return None
+    return f"cd {cwd}\n{command}"
 
 
 def command_hash(command: str) -> str:
@@ -120,7 +149,17 @@ def build_denial_message(rule, command: str, prior_denials: int) -> str:
             "all-or-nothing, earlier segments did NOT execute. Re-run the "
             "non-gated setup segments separately before retrying the gated part."
         )
-    if prior_denials >= 1:
+    if prior_denials >= 2:
+        n = prior_denials + 1
+        parts.append(
+            f"🛑 HARD STOP — DETERMINISTIC DENIAL ×{n}: you have sent this "
+            "BYTE-IDENTICAL command and it was denied every time. Retrying is "
+            "futile — the gate is a pure function of the command string. Do "
+            "NOT send another Bash call for this command. STOP and ask the "
+            "user how to proceed. If you believe the rule is wrong, say so to "
+            "the user; do not attempt further variations."
+        )
+    elif prior_denials >= 1:
         n = prior_denials + 1
         parts.append(
             f"🔁 DETERMINISTIC DENIAL ×{n}: you have sent this BYTE-IDENTICAL "
@@ -160,11 +199,29 @@ def main():
         # Project Bash policy (deny-list) — checked before the test gate.
         violated = check_bash_policy(command)
         if violated:
+            # The missing-absolute-cd rule is deterministically un-satisfiable
+            # by a bare resend: the model narrates "adding cd" but re-emits the
+            # same string. Repair it in place — prepend `cd <cwd>` and ALLOW —
+            # so a repo-targeting command runs instead of looping on denial.
+            if is_missing_cd_rule(violated):
+                cwd = get_input_field(input_data, 'cwd', default='')
+                repaired = auto_repair_cd(command, cwd)
+                if repaired is not None:
+                    tool_input = dict(get_input_field(
+                        input_data, 'tool_input', default={}) or {})
+                    tool_input['command'] = repaired
+                    output_allow_with_input(
+                        tool_input,
+                        context=(f"↺ AUTO-REPAIRED: prepended `cd {cwd}` — the "
+                                 "command lacked an absolute `cd /`. It now "
+                                 "runs from the project root. Include the "
+                                 "`cd /…` line yourself next time."))
+                    return
+
             # Deterministic-denial tracking: a policy denial is a pure function
             # of the command string, so an identical resend is denied
             # identically. Log the denial hash and escalate the message on
-            # repeats (session 264de5e5 Failure 1: byte-identical command
-            # re-sent 4× after denial).
+            # repeats.
             prior = 0
             transcript_path = get_input_field(input_data, 'transcript_path', default='')
             session_id = extract_session_id(transcript_path)
