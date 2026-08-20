@@ -498,5 +498,105 @@ class TestSessionStartForensics(unittest.TestCase):
         self.assertIn('pull failed', e['err'])
 
 
+class TestMarketplaceSelfUpdateDirtyClone(unittest.TestCase):
+    """REGRESSION: the marketplace clone is a managed mirror that accumulates
+    local file drift at runtime. The old `git pull --ff-only` ABORTED on a dirty
+    clone ('local changes would be overwritten'), so every self-update silently
+    failed and the plugin stayed pinned at the old version. The update must now
+    fetch + hard-reset to origin/main, advancing even when the clone is dirty."""
+
+    import subprocess as _subprocess
+    import shutil as _shutil
+
+    mod = import_hook("session/swe_session_start")
+
+    def _git(self, cwd, *args):
+        self._subprocess.run(['git', *args], cwd=cwd, check=True,
+                             capture_output=True, text=True)
+
+    def setUp(self):
+        if self._shutil.which('git') is None:
+            self.skipTest('git not available')
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        root = self.tmp.name
+
+        # A bare "origin" that the marketplace clone tracks.
+        self.origin = os.path.join(root, 'origin.git')
+        os.makedirs(self.origin)
+        self._git(self.origin, 'init', '--bare', '-b', 'main')
+
+        # A seed working tree → v1.0.0, pushed to origin.
+        seed = os.path.join(root, 'seed')
+        os.makedirs(os.path.join(seed, '.claude-plugin'))
+        self._git(seed, 'init', '-b', 'main')
+        self._git(seed, 'config', 'user.email', 't@t')
+        self._git(seed, 'config', 'user.name', 't')
+        self._write_version(seed, '1.0.0')
+        with open(os.path.join(seed, 'hooks_file.py'), 'w') as f:
+            f.write("# original\n")
+        self._git(seed, 'add', '-A')
+        self._git(seed, 'commit', '-m', 'v1.0.0')
+        self._git(seed, 'remote', 'add', 'origin', self.origin)
+        self._git(seed, 'push', '-u', 'origin', 'main')
+
+        # The marketplace CACHE layout: .../cache/<Market>/<plugin>/<version>/
+        cache = os.path.join(root, '.claude', 'plugins', 'cache')
+        self.plugin_root = os.path.join(cache, 'MyMarket', 'myplugin', '1.0.0')
+        os.makedirs(os.path.dirname(self.plugin_root))
+        self._git(root, 'clone', seed, self.plugin_root)  # temp; replaced below
+        self._shutil.rmtree(self.plugin_root)
+
+        # The real marketplace CLONE that Claude Code maintains.
+        self.clone = os.path.join(root, '.claude', 'plugins',
+                                  'marketplaces', 'MyMarket')
+        os.makedirs(os.path.dirname(self.clone))
+        self._git(root, 'clone', self.origin, self.clone)
+        self._git(self.clone, 'config', 'user.email', 't@t')
+        self._git(self.clone, 'config', 'user.name', 't')
+        # Cache version dir mirrors the clone at v1.0.0.
+        self._shutil.copytree(self.clone, self.plugin_root,
+                              ignore=self._shutil.ignore_patterns('.git'))
+
+        # Advance origin to v1.0.1 (a new release to pull).
+        self._write_version(seed, '1.0.1')
+        with open(os.path.join(seed, 'hooks_file.py'), 'w') as f:
+            f.write("# upstream v1.0.1 change\n")
+        self._git(seed, 'commit', '-am', 'v1.0.1')
+        self._git(seed, 'push', 'origin', 'main')
+
+        # DIRTY the clone — exactly the failure mode (runtime-touched hook file).
+        with open(os.path.join(self.clone, 'hooks_file.py'), 'w') as f:
+            f.write("# LOCAL DRIFT that would block ff-only pull\n")
+
+    def _write_version(self, tree, version):
+        pj = os.path.join(tree, '.claude-plugin', 'plugin.json')
+        os.makedirs(os.path.dirname(pj), exist_ok=True)
+        with open(pj, 'w') as f:
+            json.dump({'name': 'myplugin', 'version': version}, f)
+
+    def test_dirty_clone_still_updates_to_new_version(self):
+        updated, old, new = self.mod._self_update_marketplace(self.plugin_root)
+        self.assertEqual((old, new), ('1.0.0', '1.0.1'))
+        self.assertTrue(updated)
+        # New versioned cache dir was created from the reset clone.
+        new_cache = os.path.join(os.path.dirname(self.plugin_root), '1.0.1')
+        self.assertTrue(os.path.isdir(new_cache))
+        # The clone was hard-reset: local drift is gone, upstream content present.
+        with open(os.path.join(self.clone, 'hooks_file.py')) as f:
+            self.assertEqual(f.read(), "# upstream v1.0.1 change\n")
+
+    def test_clone_already_current_is_noop(self):
+        # Reset origin expectation: when clone already matches origin's version,
+        # no new cache dir is made and updated is False.
+        self._git(self.clone, 'fetch', 'origin', 'main', '--quiet')
+        self._git(self.clone, 'reset', '--hard', 'origin/main')
+        # Cache already at latest → bump the cache plugin.json to the new version
+        self._write_version(self.plugin_root, '1.0.1')
+        updated, old, new = self.mod._self_update_marketplace(self.plugin_root)
+        self.assertFalse(updated)
+        self.assertEqual((old, new), ('1.0.1', '1.0.1'))
+
+
 if __name__ == "__main__":
     unittest.main()

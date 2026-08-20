@@ -151,13 +151,26 @@ def _self_update_marketplace(plugin_root):
     except (IOError, json.JSONDecodeError):
         pass
 
-    # Pull marketplace clone (same as Claude Code's auto-update)
+    # Sync marketplace clone to origin/main. This clone is a Claude-Code-managed
+    # mirror, NOT a dev checkout — it must track the remote exactly. A plain
+    # `git pull --ff-only` ABORTS when the clone has local drift ("local changes
+    # would be overwritten by merge"), which is exactly what happened: files
+    # under the clone had diverged, so every self-update silently failed
+    # (selfupdate ok:false) and the plugin stayed pinned at the old version.
+    # Fetch then HARD-RESET to origin/main so runtime drift can never block the
+    # update. Discarding local edits here is correct: the clone owns no work.
     try:
-        result = subprocess.run(
-            ['git', 'pull', '--ff-only', 'origin', 'main'],
+        fetch = subprocess.run(
+            ['git', 'fetch', 'origin', 'main', '--quiet'],
             cwd=marketplace_clone, capture_output=True, text=True, timeout=15
         )
-        if result.returncode != 0:
+        if fetch.returncode != 0:
+            return False, old_version, None
+        reset = subprocess.run(
+            ['git', 'reset', '--hard', 'origin/main'],
+            cwd=marketplace_clone, capture_output=True, text=True, timeout=15
+        )
+        if reset.returncode != 0:
             return False, old_version, None
     except (subprocess.TimeoutExpired, FileNotFoundError):
         return False, old_version, None
