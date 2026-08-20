@@ -63,6 +63,29 @@ def is_subagent_transcript(transcript_path: str) -> bool:
             or os.path.basename(normalized).startswith('agent-'))
 
 
+def is_spawned_agent(hook_input: dict) -> bool:
+    """True when a PreToolUse/PostToolUse payload originates in a spawned agent.
+
+    Claude Code stamps a subagent tool call with dedicated fields that are
+    present and non-empty ONLY for spawned agents (Agent/Task tool):
+        agent_id    unique id of the subagent
+        agent_type  the subagent type name (e.g. "Explore")
+    The main session omits both. This is the ROBUST runtime signal — the
+    session_id is the SAME parent id for main and subagent, and the
+    transcript_path the hook receives cannot be relied on to carry the
+    '/subagents/agent-*.jsonl' shape, so is_subagent_transcript() alone
+    misses spawned agents and they get doc-gated on the parent's budget.
+    Gates that must not fire on spawned agents check THIS first.
+    """
+    if not isinstance(hook_input, dict):
+        return False
+    for key in ('agent_id', 'agentId', 'agent_type', 'agentType'):
+        val = hook_input.get(key)
+        if isinstance(val, str) and val.strip():
+            return True
+    return False
+
+
 def find_project_root(start_dir: str) -> str:
     """Find the project root by walking up looking for .git/.
 

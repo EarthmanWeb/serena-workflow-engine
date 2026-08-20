@@ -85,6 +85,43 @@ class IsSubagentTranscriptTests(unittest.TestCase):
         self.assertEqual(session.extract_session_id(path), "94aee7ae")
 
 
+class IsSpawnedAgentTests(unittest.TestCase):
+    """Robust runtime signal for a spawned-agent tool call. Claude Code stamps
+    subagent PreToolUse/PostToolUse payloads with a non-empty agent_id /
+    agent_type (present ONLY for subagents; session_id is the SAME parent id
+    for main + subagent). This is what gates key on — the transcript_path the
+    hook receives is not guaranteed to carry the /subagents/ shape."""
+
+    def test_agent_id_present_is_spawned(self):
+        self.assertTrue(session.is_spawned_agent({'agent_id': 'aac4dea2590360b94'}))
+
+    def test_agent_type_present_is_spawned(self):
+        self.assertTrue(session.is_spawned_agent({'agent_type': 'Explore'}))
+
+    def test_camelcase_variants_detected(self):
+        self.assertTrue(session.is_spawned_agent({'agentId': 'aac4dea2590360b94'}))
+        self.assertTrue(session.is_spawned_agent({'agentType': 'Explore'}))
+
+    def test_main_session_payload_not_spawned(self):
+        self.assertFalse(session.is_spawned_agent(
+            {'tool_name': 'Grep', 'transcript_path': '/x/00893aaf-....jsonl'}))
+
+    def test_empty_agent_fields_not_spawned(self):
+        # empty string must not count — a subagent always has a real id/type
+        self.assertFalse(session.is_spawned_agent({'agent_id': '', 'agent_type': ''}))
+
+    def test_whitespace_agent_id_not_spawned(self):
+        self.assertFalse(session.is_spawned_agent({'agent_id': '   '}))
+
+    def test_non_string_agent_id_not_spawned(self):
+        self.assertFalse(session.is_spawned_agent({'agent_id': 123}))
+
+    def test_non_dict_input_not_spawned(self):
+        self.assertFalse(session.is_spawned_agent(None))
+        self.assertFalse(session.is_spawned_agent("agent_id=x"))
+        self.assertFalse(session.is_spawned_agent([]))
+
+
 class FindProjectRootTests(unittest.TestCase):
     def test_finds_git_at_start_dir(self):
         with tempfile.TemporaryDirectory() as tmp:

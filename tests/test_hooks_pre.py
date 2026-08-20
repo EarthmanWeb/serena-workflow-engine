@@ -1002,9 +1002,10 @@ class TestDocsGateSubagentExemption(unittest.TestCase):
         self.assertEqual(
             search_docs_mod.extract_session_id(self.SUBAGENT_PATH), "94aee7ae")
 
-    def _run_main(self, transcript_path):
+    def _run_main(self, transcript_path, **extra):
         """Drive main() end-to-end with a fully-gated parent session
-        (sentinel exists, budget spent). Returns the emitted hook JSON."""
+        (sentinel exists, budget spent). Returns the emitted hook JSON.
+        `extra` merges additional fields into the hook input (e.g. agent_id)."""
         import contextlib
         import io
         tmp = tempfile.TemporaryDirectory()
@@ -1014,12 +1015,13 @@ class TestDocsGateSubagentExemption(unittest.TestCase):
         open(sentinel, 'w').close()
         with open(stream, 'w') as f:
             f.write(json.dumps({'type': 'prompt'}) + '\n')  # no docread: deny
+        payload = {'tool_name': 'Grep', 'tool_input': {'pattern': 'x'},
+                   'transcript_path': transcript_path}
+        payload.update(extra)
         orig = (search_docs_mod.read_stdin_safe,
                 search_docs_mod.get_sentinel_path,
                 search_docs_mod.get_stream_path)
-        search_docs_mod.read_stdin_safe = lambda **kw: {
-            'tool_name': 'Grep', 'tool_input': {'pattern': 'x'},
-            'transcript_path': transcript_path}
+        search_docs_mod.read_stdin_safe = lambda **kw: payload
         search_docs_mod.get_sentinel_path = lambda sid: sentinel
         search_docs_mod.get_stream_path = lambda sid: stream
         buf = io.StringIO()
@@ -1040,6 +1042,56 @@ class TestDocsGateSubagentExemption(unittest.TestCase):
     def test_main_denies_main_session_when_budget_spent(self):
         # positive control: same gated setup DOES deny the main session
         result = self._run_main(self.MAIN_PATH)
+        self.assertEqual(
+            result['hookSpecificOutput']['permissionDecision'], 'deny')
+
+    # --- agent_id/agent_type runtime signal (primary exemption) ---------------
+    # The REAL-WORLD failure: Claude Code hands the PreToolUse hook the PARENT
+    # transcript path for a spawned-agent tool call (session_id is the parent
+    # id), so the transcript-shape check misses it. The robust discriminator is
+    # the dedicated agent_id/agent_type field, present ONLY for subagents.
+
+    def test_is_spawned_agent_true_on_agent_id(self):
+        self.assertTrue(search_docs_mod.is_spawned_agent(
+            {'agent_id': 'aac4dea2590360b94'}))
+
+    def test_is_spawned_agent_true_on_agent_type(self):
+        self.assertTrue(search_docs_mod.is_spawned_agent(
+            {'agent_type': 'Explore'}))
+
+    def test_is_spawned_agent_true_on_camelcase(self):
+        # tolerate the camelCase variant seen in transcript records
+        self.assertTrue(search_docs_mod.is_spawned_agent(
+            {'agentId': 'aac4dea2590360b94'}))
+
+    def test_is_spawned_agent_false_on_main_session(self):
+        # main-session payload carries NO agent_id/agent_type
+        self.assertFalse(search_docs_mod.is_spawned_agent(
+            {'tool_name': 'Grep', 'transcript_path': self.MAIN_PATH}))
+
+    def test_is_spawned_agent_false_on_empty_agent_fields(self):
+        # empty-string agent fields must NOT exempt (defensive: never a subagent)
+        self.assertFalse(search_docs_mod.is_spawned_agent(
+            {'agent_id': '', 'agent_type': ''}))
+
+    def test_is_spawned_agent_false_on_non_dict(self):
+        self.assertFalse(search_docs_mod.is_spawned_agent(None))
+
+    def test_main_allows_subagent_by_agent_id_with_parent_transcript(self):
+        # THE regression: parent transcript path (misses is_subagent_transcript)
+        # BUT agent_id present ⇒ still exempt even though the parent is fully
+        # gated. Without the agent_id check this would deny.
+        result = self._run_main(self.MAIN_PATH, agent_id='aac4dea2590360b94')
+        self.assertEqual(result, {})
+
+    def test_main_allows_subagent_by_agent_type_with_parent_transcript(self):
+        result = self._run_main(self.MAIN_PATH, agent_type='Explore')
+        self.assertEqual(result, {})
+
+    def test_main_denies_main_session_with_empty_agent_fields(self):
+        # negative control: empty agent fields on the MAIN session still deny —
+        # the exemption keys on a NON-EMPTY agent id/type only.
+        result = self._run_main(self.MAIN_PATH, agent_id='', agent_type='')
         self.assertEqual(
             result['hookSpecificOutput']['permissionDecision'], 'deny')
 
