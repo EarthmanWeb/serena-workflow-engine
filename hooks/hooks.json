@@ -21,6 +21,15 @@
             "timeout": 10
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/prompt/swe_prompt_format_reminder.py",
+            "timeout": 5
+          }
+        ]
       }
     ],
     "PreToolUse": [
@@ -163,6 +172,15 @@
           {
             "type": "command",
             "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/stop/swe_stop_continue_working.py",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/stop/swe_stop_response_format.py",
             "timeout": 10
           }
         ]

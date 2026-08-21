@@ -96,7 +96,7 @@ WF_INIT → WF_CLASSIFY → WF_ARCH_REVIEW → WF_EXECUTE
 - Usage: `mcp__swe-wm__swe_wm_update(session_id="...", status="IN_PROGRESS", sections=[{"section": "Progress", "content": "..."}, ...])` — one call per workflow step.
 - Session resolution (`_resolve_session_id`): explicit param > `SWE_SESSION_ID` > `CLAUDE_SESSION_ID[:8]` > ERROR. ⛔ No most-recent-WM guessing — with two sessions on one project it answers for the WRONG session and sweep verification runs against the wrong stream. ALWAYS pass `session_id` explicitly (printed in every hook message: `WM[<id>]` / `session="<id>"`).
 
-## Hooks (18 Python scripts by event type)
+## Hooks (20 Python scripts by event type)
 
 ### Session Hooks (`hooks/session/`)
 
@@ -110,6 +110,7 @@ WF_INIT → WF_CLASSIFY → WF_ARCH_REVIEW → WF_EXECUTE
 | Hook                          | Trigger          | Purpose                         |
 | ----------------------------- | ---------------- | ------------------------------- |
 | `swe_user_prompt_workflow.py` | UserPromptSubmit | Intent analysis, state transitions, sentinel recovery |
+| `swe_prompt_format_reminder.py` | UserPromptSubmit | Surface the response-format budget on the turn after `swe_stop_response_format.py` blocked; clears the sentinel. Same enabled/bypass guards |
 
 ### Pre-Tool Hooks (`hooks/pre/`)
 
@@ -140,6 +141,7 @@ WF_INIT → WF_CLASSIFY → WF_ARCH_REVIEW → WF_EXECUTE
 | Hook                              | Trigger | Purpose                                   |
 | --------------------------------- | ------- | ----------------------------------------- |
 | `swe_stop_continue_working.py`    | Stop    | Block unnecessary stops, continue-working |
+| `swe_stop_response_format.py`     | Stop    | Terse-format gate: block over-budget / recap-scaffolded replies. ON by default; config via `CLAUDE_PLUGIN_OPTION_RESPONSE_FORMAT_*` (plugin.json `userConfig` block); silent when SWE bypassed / uninitialized / disabled. Sentinel + offender log under `.serena/streams/` |
 
 ## Skills (14 total)
 
@@ -228,6 +230,27 @@ Unlike read-created feature gates, the sweep sentinel is created ONLY by the WM 
 2. In `swe_post_read_state.py`, call `create_feature_sentinel(session_id, '{gate_name}')` when FEATURE_* is read.
 3. Register in `hooks/hooks.json`.
 4. Add a directive to the FEATURE_* memory documenting the gate.
+
+## Response-Format Gate (config-driven)
+
+`swe_stop_response_format.py` (Stop) enforces a terse reply budget; `swe_prompt_format_reminder.py` (UserPromptSubmit) surfaces the budget the turn after a block. Both are ON by default and skip silently when SWE is bypassed, the project is uninitialized, or the gate is disabled.
+
+### Config — the canonical Claude-plugin mechanism
+
+- Declared as a `userConfig` block in `.claude-plugin/plugin.json`. Claude Code exports each key to hook subprocesses as `CLAUDE_PLUGIN_OPTION_<KEY>`.
+- Read via `core.config.get_response_format_config()` — env-only, never a project file (project-scoped `.claude/settings.json` is intentionally NOT trusted for plugin config).
+- Keys + defaults: `response_format_enabled` (bool, true) · `response_format_terse_limit` (int, 40) · `response_format_detail_limit` (int, 600).
+- Detail is opt-in via a literal `DETAIL:` / `DETAIL -` prompt prefix ONLY — natural language ("explain", "why") does NOT raise the budget.
+- Per-project override: set the plugin option in a user/managed scope (`~/.claude.json`), NOT the repo. Opt a project out with `response_format_enabled=false`.
+
+### Runtime files (under `.serena/streams/`)
+
+- `.format-gate-block-<session>` — sentinel the Stop gate writes on a block; the prompt reminder reads + clears it.
+- `response-format-offenders.log` — one entry per blocked turn (prompt + offending reply) for regex tuning.
+
+### Testable seam
+
+- `swe_stop_response_format.evaluate(assistant_msgs, last_user_text, terse_limit, detail_limit, retry)` is a pure function (no IO) returning `(reason|None, scanned, words)`. Tests: `tests/test_response_format_gate.py`.
 
 ## Plan Mode Triggers
 

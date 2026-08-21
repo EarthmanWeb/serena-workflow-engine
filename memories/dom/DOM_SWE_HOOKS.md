@@ -52,6 +52,7 @@ hooks/
 | Hook | Event | Purpose |
 | ---- | ----- | ------- |
 | `swe_user_prompt_workflow.py` | UserPromptSubmit | WF_INIT gate, intent analysis, state transitions |
+| `swe_prompt_format_reminder.py` | UserPromptSubmit | Pre-emptive format-budget reminder: when `swe_stop_response_format.py` blocked the prior turn, surface the budget on the next turn + clear the sentinel. Same enabled/bypass guards |
 
 ### Pre-Tool (`pre/`) — gatekeepers
 
@@ -113,6 +114,7 @@ Sentinels are non-blocking PostToolUse nudges driven by the append-only JSONL st
 | Hook | Event | Purpose |
 | ---- | ----- | ------- |
 | `swe_stop_continue_working.py` | Stop | Block unnecessary stops, continue-working |
+| `swe_stop_response_format.py` | Stop | Terse-format gate: block replies over the word budget or emitting recap/summary/self-congratulation scaffolding. ON by default; config from `CLAUDE_PLUGIN_OPTION_RESPONSE_FORMAT_*` env (`core.config.get_response_format_config`). Silent when SWE bypassed / project uninitialized / disabled. Writes a per-session `.format-gate-block-<session>` sentinel (read by `swe_prompt_format_reminder.py`) + a `response-format-offenders.log`, both under `.serena/streams/` |
 
 ## Prompt Intent Routing (`swe_user_prompt_workflow.py`)
 

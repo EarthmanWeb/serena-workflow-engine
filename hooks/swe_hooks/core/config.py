@@ -720,6 +720,80 @@ def resolve_setup_state(project_root: str) -> Dict[str, Any]:
     }
 
 
+# =============================================================================
+# Response-Format Gate Configuration
+#
+# The response-format Stop gate (swe_stop_response_format.py) enforces a terse
+# reply budget. It is ON by default for every SWE project.
+#
+# Config is passed the CANONICAL Claude-plugin way: the plugin declares a
+# `userConfig` block in .claude-plugin/plugin.json, and Claude Code exports each
+# value to hook subprocesses as CLAUDE_PLUGIN_OPTION_<KEY>.
+# A user overrides per-project via the plugin config in a user/managed scope
+# (~/.claude.json) — project-scoped .claude/settings.json is intentionally NOT
+# trusted for plugin config, so repo code cannot re-tune the gate.
+#
+#   CLAUDE_PLUGIN_OPTION_RESPONSE_FORMAT_ENABLED       ("false" to opt out)
+#   CLAUDE_PLUGIN_OPTION_RESPONSE_FORMAT_TERSE_LIMIT    (int, default 40)
+#   CLAUDE_PLUGIN_OPTION_RESPONSE_FORMAT_DETAIL_LIMIT   (int, default 600)
+#
+# Defaults (env unset): enabled, terse_limit=40, detail_limit=600.
+# =============================================================================
+
+RESPONSE_FORMAT_DEFAULTS = {
+    "enabled": True,
+    "terse_limit": 40,
+    "detail_limit": 600,
+}
+
+_ENV_TRUE = {"1", "true", "yes", "on"}
+_ENV_FALSE = {"0", "false", "no", "off"}
+
+
+def _env_bool(name: str, default: bool) -> bool:
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    v = raw.strip().lower()
+    if v in _ENV_TRUE:
+        return True
+    if v in _ENV_FALSE:
+        return False
+    return default
+
+
+def _env_int(name: str, default: int) -> int:
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    try:
+        return int(raw.strip())
+    except (TypeError, ValueError):
+        return default
+
+
+def get_response_format_config() -> Dict[str, Any]:
+    """Resolve the response-format gate config from CLAUDE_PLUGIN_OPTION_* env.
+
+    ON by default (opt-out). Values come from the plugin `userConfig` block
+    exported by Claude Code to the hook subprocess. Unset or malformed env falls
+    back to RESPONSE_FORMAT_DEFAULTS — a broken config must never crash a hook.
+
+    Returns dict: {enabled: bool, terse_limit: int, detail_limit: int}.
+    """
+    return {
+        "enabled": _env_bool(
+            "CLAUDE_PLUGIN_OPTION_RESPONSE_FORMAT_ENABLED",
+            RESPONSE_FORMAT_DEFAULTS["enabled"]),
+        "terse_limit": _env_int(
+            "CLAUDE_PLUGIN_OPTION_RESPONSE_FORMAT_TERSE_LIMIT",
+            RESPONSE_FORMAT_DEFAULTS["terse_limit"]),
+        "detail_limit": _env_int(
+            "CLAUDE_PLUGIN_OPTION_RESPONSE_FORMAT_DETAIL_LIMIT",
+            RESPONSE_FORMAT_DEFAULTS["detail_limit"]),
+    }
+
+
 # Brief, reusable notice shown when a project is workflow-bypassed.
 BYPASS_NOTICE = (
     "🚫 SWE workflow BYPASSED for this project.\n"
