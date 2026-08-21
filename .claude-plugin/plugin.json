@@ -1,6 +1,6 @@
 {
   "name": "swe",
-  "version": "1.2.66",
+  "version": "1.2.67",
   "description": "State-machine workflow engine with Serena memory persistence, hook-driven event architecture, and native subagent parallelization",
   "author": {
     "name": "EarthmanWeb",
@@ -19,16 +19,19 @@
   "userConfig": {
     "response_format_enabled": {
       "type": "boolean",
+      "title": "Response Format Gate",
       "default": true,
       "description": "Enforce the terse response-format Stop gate (blocks over-long / recap-scaffolded replies). ON by default; set false to opt out per project."
     },
     "response_format_terse_limit": {
       "type": "number",
+      "title": "Terse Word Limit",
       "default": 40,
       "description": "Max prose words in a reply when the user did NOT request detail (prefix a prompt with 'DETAIL:' to license a long answer)."
     },
     "response_format_detail_limit": {
       "type": "number",
+      "title": "Detail Word Limit",
       "default": 600,
       "description": "Max prose words when detail was explicitly requested via a leading 'DETAIL:' token."
     }
