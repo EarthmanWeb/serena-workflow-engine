@@ -175,6 +175,94 @@ class TestEvaluate(unittest.TestCase):
         reason, _, _ = gate.evaluate([], "ok", 40, 600, False)
         self.assertIsNone(reason)
 
+    def test_duplicate_answer_blocks(self):
+        # Long original + a condensed near-duplicate restatement -> block.
+        original = (
+            "The cache key was built from the raw request path which dropped the "
+            "query string so two distinct requests collided in the store and "
+            "returned each other's payload."
+        )
+        restated = (
+            "The cache key used the raw request path and dropped the query string, "
+            "so two distinct requests collided in the store and returned the wrong "
+            "payload."
+        )
+        reason, _, _ = gate.evaluate([original, restated], "why?", 600, 600, False)
+        self.assertIsNotNone(reason)
+        self.assertIn("repeated", reason)
+
+    def test_short_ack_plus_answer_passes(self):
+        # A short ack under the min-words guard does not count as a duplicate.
+        answer = (
+            "The bug was an off-by-one in the loop bound that skipped the final "
+            "element of the batch during flush."
+        )
+        reason, _, _ = gate.evaluate(["Done.", answer], "fix it", 600, 600, False)
+        self.assertIsNone(reason)
+
+    def test_distinct_followup_passes(self):
+        # Two substantial messages that share few tokens -> not a duplicate.
+        first = (
+            "The parser rejected the header because the boundary token contained "
+            "an unescaped semicolon inside its quoted value."
+        )
+        second = (
+            "Separately, timezone conversion drifted by an hour whenever daylight "
+            "saving flipped mid-render on the calendar widget."
+        )
+        reason, _, _ = gate.evaluate([first, second], "anything else?", 600, 600, False)
+        self.assertIsNone(reason)
+
+    def test_retry_with_duplicate_preblock_passes(self):
+        # Duplicate lives in the pre-block text; newest msg is clean -> pass.
+        dup = ("alpha beta gamma delta epsilon zeta eta theta iota kappa "
+               "lambda mu nu xi omicron")
+        reason, _, _ = gate.evaluate([dup, dup, "Fixed."], "ok", 600, 600, True)
+        self.assertIsNone(reason)
+
+
+# ---------------------------------------------------------------------------
+# duplicate_answer / similarity / word_bag
+# ---------------------------------------------------------------------------
+class TestDuplicateAnswer(unittest.TestCase):
+    def test_similarity_identical_is_one(self):
+        bag = gate.word_bag("the quick brown fox")
+        self.assertEqual(gate.similarity(bag, bag), 1.0)
+
+    def test_similarity_disjoint_is_zero(self):
+        a = gate.word_bag("alpha beta gamma")
+        b = gate.word_bag("delta epsilon zeta")
+        self.assertEqual(gate.similarity(a, b), 0.0)
+
+    def test_similarity_empty_is_zero(self):
+        self.assertEqual(gate.similarity(set(), gate.word_bag("word")), 0.0)
+        self.assertEqual(gate.similarity(gate.word_bag("word"), set()), 0.0)
+
+    def test_word_bag_excludes_code_fences(self):
+        bag = gate.word_bag("hello\n```\nsecret code words\n```\nworld")
+        self.assertEqual(bag, {"hello", "world"})
+
+    def test_word_bag_lowercases_and_tokenizes(self):
+        self.assertEqual(gate.word_bag("Foo, BAR-baz 42!"),
+                         {"foo", "bar", "baz", "42"})
+
+    def test_near_duplicate_detected(self):
+        a = ("the deploy failed because the ssh host secret was stale and pointed "
+             "at the old server address after the migration")
+        b = ("the deploy failed because the ssh host secret was stale and pointed "
+             "at an old server address following the migration")
+        self.assertTrue(gate.duplicate_answer([a, b]))
+
+    def test_short_messages_ignored(self):
+        self.assertFalse(gate.duplicate_answer(["Done.", "Done."]))
+
+    def test_distinct_messages_not_duplicate(self):
+        a = ("the parser rejected the header because the boundary token had an "
+             "unescaped semicolon inside its quoted value string")
+        b = ("timezone conversion drifted by one hour whenever daylight saving "
+             "flipped mid render inside the calendar widget component")
+        self.assertFalse(gate.duplicate_answer([a, b]))
+
 
 # ---------------------------------------------------------------------------
 # config resolution (CLAUDE_PLUGIN_OPTION_* env)

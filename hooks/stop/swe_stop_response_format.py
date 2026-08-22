@@ -128,6 +128,42 @@ def prose_words(text):
     return full + half // 2
 
 
+_WORD_RE = re.compile(r"[a-z0-9]+")
+DUP_SIMILARITY_THRESHOLD = 0.6
+DUP_MIN_WORDS = 15
+
+
+def word_bag(text):
+    """Set of lowercased word tokens outside fenced code blocks."""
+    no_code = re.sub(r"```.*?```", "", text, flags=re.DOTALL)
+    return set(_WORD_RE.findall(no_code.lower()))
+
+
+def similarity(a, b):
+    """Jaccard similarity of two word bags; 0.0 when either is empty."""
+    if not a or not b:
+        return 0.0
+    return len(a & b) / len(a | b)
+
+
+def duplicate_answer(assistant_since_user):
+    """True when two substantial messages this turn are near-duplicates.
+
+    A message under DUP_MIN_WORDS prose words (short acks) is ignored, so a
+    "Done." plus one real answer never trips the check.
+    """
+    bags = []
+    for text in assistant_since_user:
+        bags.append(word_bag(text) if prose_words(text) >= DUP_MIN_WORDS else None)
+    for i in range(len(bags)):
+        for j in range(i + 1, len(bags)):
+            if bags[i] is None or bags[j] is None:
+                continue
+            if similarity(bags[i], bags[j]) >= DUP_SIMILARITY_THRESHOLD:
+                return True
+    return False
+
+
 def evaluate(assistant_since_user, last_user_text, terse_limit, detail_limit, retry):
     """Decide whether to block. Pure function — no IO.
 
@@ -163,6 +199,17 @@ def evaluate(assistant_since_user, last_user_text, terse_limit, detail_limit, re
             "status summary, NO closing wrap-up. The work is already visible in the "
             "tool calls. Re-answer with ONLY the result or the single question you "
             "need answered (<=10 lines). Do not apologize."
+        )
+        return reason, scanned, words
+
+    # A repeated answer blocks even when each copy is individually under budget.
+    # Skip on retry: retry judges only the newest message, and the earlier
+    # pre-block text lingers in `reply` by design.
+    if not retry and duplicate_answer(assistant_since_user):
+        reason = (
+            "RESPONSE FORMAT GATE: emitted a repeated answer — keep ONLY the last "
+            "(tightest) version; the earlier restatement should not have shipped. "
+            "Re-answer with a single terse version (<=10 lines). Do not apologize."
         )
         return reason, scanned, words
 
