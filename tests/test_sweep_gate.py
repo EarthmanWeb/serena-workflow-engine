@@ -285,6 +285,91 @@ class TestCheckMemorySweep(unittest.TestCase):
         self.assertIsNotNone(err)
         self.assertFalse(os.path.exists(self._sentinel()))
 
+    # ── docpending enforcement: read-or-defer, never silent skip ──
+
+    def test_outstanding_docpending_rejected(self):
+        # Live failure 2026-08-26: the primary FEATURE read surfaced mem:
+        # links (docpending), tier-1 judgment silently skipped one, and the
+        # operator had to prompt "read all related docs". Surfaced links must
+        # be read or explicitly deferred — never silently dropped.
+        _write_stream(self.stream_path, [
+            {"type": "docread", "name": "feature/FEATURE_X"},
+            {"type": "docpending", "new": ["dom/dom_joiners", "ref/ref_cold"]},
+        ])
+        content = "- **Memories loaded**: feature/FEATURE_X\n"
+        err = wm._check_memory_sweep(self.session, content)
+        self.assertIsNotNone(err)
+        self.assertIn("dom/dom_joiners", err)
+        self.assertIn("ref/ref_cold", err)
+        self.assertFalse(os.path.exists(self._sentinel()))
+
+    def test_docpending_read_passes(self):
+        _write_stream(self.stream_path, [
+            {"type": "docread", "name": "feature/FEATURE_X"},
+            {"type": "docpending", "new": ["dom/dom_joiners"]},
+            {"type": "docread", "name": "dom/DOM_JOINERS"},
+        ])
+        content = ("- **Memories loaded**: feature/FEATURE_X, "
+                   "dom/DOM_JOINERS\n")
+        err = wm._check_memory_sweep(self.session, content)
+        self.assertIsNone(err)
+        self.assertTrue(os.path.exists(self._sentinel()))
+
+    def test_docpending_deferred_with_reason_passes(self):
+        _write_stream(self.stream_path, [
+            {"type": "docread", "name": "feature/FEATURE_X"},
+            {"type": "docpending", "new": ["ref/ref_cold"]},
+        ])
+        content = ("- **Memories loaded**: feature/FEATURE_X\n"
+                   "- **Memories deferred**: ref/REF_COLD — cold: admin UI only\n")
+        err = wm._check_memory_sweep(self.session, content)
+        self.assertIsNone(err)
+        with open(self._sentinel()) as f:
+            self.assertEqual(json.load(f)["deferred"], ["ref/ref_cold"])
+
+    def test_deferred_without_reason_rejected(self):
+        _write_stream(self.stream_path, [
+            {"type": "docread", "name": "feature/FEATURE_X"},
+            {"type": "docpending", "new": ["ref/ref_cold"]},
+        ])
+        content = ("- **Memories loaded**: feature/FEATURE_X\n"
+                   "- **Memories deferred**: ref/REF_COLD\n")
+        err = wm._check_memory_sweep(self.session, content)
+        self.assertIsNotNone(err)
+        self.assertIn("reason", err.lower())
+        self.assertFalse(os.path.exists(self._sentinel()))
+
+    def test_docpending_from_prior_task_ignored(self):
+        _write_stream(self.stream_path, [
+            {"type": "docpending", "new": ["ref/ref_old"]},
+            {"type": "state", "from_s": "WF_DONE", "to_s": "WF_CLASSIFY"},
+            {"type": "docread", "name": "feature/FEATURE_X"},
+        ])
+        content = "- **Memories loaded**: feature/FEATURE_X\n"
+        err = wm._check_memory_sweep(self.session, content)
+        self.assertIsNone(err)
+
+
+class TestParseMemoriesDeferred(unittest.TestCase):
+    def test_absent_line_returns_empty(self):
+        self.assertEqual(wm._parse_memories_deferred("no line here"),
+                         (set(), set()))
+
+    def test_parses_names_and_flags_reasonless(self):
+        content = ("- **Memories deferred**: ref/REF_A — cold sibling, "
+                   "dom/DOM_B\n")
+        names, reasonless = wm._parse_memories_deferred(content)
+        self.assertEqual(names, {"ref/ref_a", "dom/dom_b"})
+        self.assertEqual(reasonless, {"dom/dom_b"})
+
+    def test_comma_inside_reason_fragments_ignored(self):
+        # "…admin UI, not touched" splits; the fragment has no dir/name token.
+        content = ("- **Memories deferred**: ref/REF_A — admin UI, "
+                   "not touched here\n")
+        names, reasonless = wm._parse_memories_deferred(content)
+        self.assertEqual(names, {"ref/ref_a"})
+        self.assertEqual(reasonless, set())
+
 
 class TestUpdateSectionSweepWiring(unittest.TestCase):
     """tool_swe_wm_update_section validates Affected Features writes."""

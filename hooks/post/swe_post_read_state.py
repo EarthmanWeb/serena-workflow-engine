@@ -315,9 +315,11 @@ def main():
                 pending_msg = (
                     "📚 Related docs linked here, UNREAD this task: "
                     + ", ".join(sorted(unread))
-                    + " — deferred refs (tiered 4d loading). Read one the moment "
-                    "it becomes relevant to what you change/inspect (on-miss "
-                    "expansion), not preemptively; re-reading an already-read "
+                    + " — each must be READ or explicitly DEFERRED with a "
+                    "reason ('- **Memories deferred**: <name> — <reason>') in "
+                    "the Affected Features sweep write, or the write is "
+                    "rejected. Read what could bear on this task; defer only "
+                    "what is genuinely cold. Re-reading an already-read "
                     "memory does not refill the docs budget.")
 
         # Handle list_memories calls (no memory_name) — inject continuation

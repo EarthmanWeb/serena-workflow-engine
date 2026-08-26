@@ -348,6 +348,13 @@ def tool_swe_wm_read(session_id: str = None) -> dict:
 MEMORIES_LOADED_RE = re.compile(
     r'\*\*Memories loaded\*\*:?[ \t]*(.*)$', re.IGNORECASE | re.MULTILINE)
 
+# "Memories deferred" line inside an Affected Features write — explicit
+# deferral of docpending-linked memories the agent chose NOT to read this
+# task. Entries are "<name> — <reason>", comma-separated, e.g.
+#   - **Memories deferred**: ref/REF_X — cold: admin UI only, dom/DOM_Y — sibling detail
+MEMORIES_DEFERRED_RE = re.compile(
+    r'\*\*Memories deferred\*\*:?[ \t]*(.*)$', re.IGNORECASE | re.MULTILINE)
+
 # Explicit declaration that the task has no feature memory (both fuzzy
 # searches returned nothing at WF_CLASSIFY 4b) — the sanctioned exception to
 # the "list must include a feature/* memory" rule.
@@ -383,6 +390,32 @@ def _parse_memories_loaded(content: str) -> Optional[set]:
     return names
 
 
+def _parse_memories_deferred(content: str):
+    """Parse the '**Memories deferred**:' list from an Affected Features write.
+
+    Returns (names, reasonless): the set of normalized deferred names, and the
+    subset listed WITHOUT a reason (nothing after the name in its entry).
+    Reason fragments containing commas split into name-less fragments, which
+    are ignored (no '/' in the first token).
+    """
+    match = MEMORIES_DEFERRED_RE.search(content or '')
+    if not match:
+        return set(), set()
+    names, reasonless = set(), set()
+    for part in match.group(1).split(','):
+        tokens = part.strip().strip('[]`').split()
+        if not tokens:
+            continue
+        name = normalize_memory_name(tokens[0].strip('[]`'))
+        if not name or '/' not in name:
+            continue
+        names.add(name)
+        # A reason is any text after the name token (e.g. "— cold: admin UI").
+        if len(tokens) < 2 or not ''.join(tokens[1:]).strip('—-–:'):
+            reasonless.add(name)
+    return names, reasonless
+
+
 def _check_memory_sweep(session_id: str, content: str) -> Optional[str]:
     """Validate an Affected Features write against the ACTUAL memory reads of
     the current task (WF_CLASSIFY Step 4d Feature Knowledge Sweep).
@@ -395,6 +428,8 @@ def _check_memory_sweep(session_id: str, content: str) -> Optional[str]:
       - The list must include at least one 'feature/*' memory, or the content
         must carry the literal token 'no-feature' (both WF_CLASSIFY 4b fuzzy
         searches returned nothing).
+      - Every 'docpending' link surfaced by this task's reads must be read or
+        explicitly deferred with a reason on a '**Memories deferred**:' line.
 
     On success creates the 'sweep' sentinel that unlocks the edit gate.
     Returns an error string on violation, None on pass/skip.
@@ -442,10 +477,36 @@ def _check_memory_sweep(session_id: str, content: str) -> Optional[str]:
             "count; the sweep is per-task."
         )
 
+    # Docpending enforcement: every related link surfaced by this task's reads
+    # must be read or EXPLICITLY deferred with a reason — silent skipping is
+    # what forces the operator to prompt "read all related docs" manually.
+    deferred, reasonless = _parse_memories_deferred(content)
+    if reasonless:
+        return (
+            "'**Memories deferred**:' entries need a reason: "
+            f"{', '.join(sorted(reasonless))}. Format: <name> — <short reason> "
+            "(e.g. 'ref/REF_X — cold: admin UI only')."
+        )
+    pending = collect_values_since_task_start(
+        get_stream_path(session_id), count_type='docpending', value_key='new')
+    pending = {n for n in pending if not n.startswith(MACHINERY_PREFIXES)}
+    outstanding = sorted(pending - read_names - deferred)
+    if outstanding:
+        return (
+            "Sweep verification FAILED — related docs surfaced this task are "
+            f"neither read nor deferred: {', '.join(outstanding)}. For each: "
+            "read_memory it if it could bear on what this task changes or "
+            "inspects, OTHERWISE add it to a '- **Memories deferred**: <name> "
+            "— <reason>' line in this section. Then re-run this update. Do "
+            "not blanket-defer: deferral asserts the doc is cold for THIS "
+            "task."
+        )
+
     try:
         os.makedirs(os.path.dirname(sentinel), exist_ok=True)
         with open(sentinel, 'w') as f:
-            json.dump({"session_id": session_id, "memories": sorted(listed)},
+            json.dump({"session_id": session_id, "memories": sorted(listed),
+                       "deferred": sorted(deferred)},
                       f, separators=(',', ':'))
     except IOError:
         pass
