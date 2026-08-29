@@ -237,7 +237,21 @@ def write_state_file(session_id: str, new_state: str,
     — the dual-daemon race that corrupts session state.
     """
     if _is_stale_daemon():
-        return False
+        # A mid-session AUTO-UPDATE brands every hook of the still-running
+        # session as stale (observed 1.2.68 -> 1.2.69: the live session's
+        # hooks keep loading from the 1.2.68 cache). Refusing ALL writes then
+        # BRICKS the session: the .state file is never created, the prompt
+        # hook resolves WF_INIT on every prompt, task boundaries never stamp,
+        # docpending accumulates all session, and terminal states (WF_DONE)
+        # become inescapable. Back off ONLY when a strictly-NEWER-version
+        # daemon actually owns this session's state file — the dual-daemon
+        # clobber race this guard exists for. An unowned/self-owned/older
+        # state file is ours to keep writing.
+        existing = read_state_file(session_id) or {}
+        owner = existing.get('writer_version')
+        own = _own_plugin_version()
+        if owner and own and _version_tuple(owner) > _version_tuple(own):
+            return False
     state_dir = get_state_dir()
     os.makedirs(state_dir, exist_ok=True)
     path = get_state_file_path(session_id)
@@ -254,6 +268,11 @@ def write_state_file(session_id: str, new_state: str,
         "task": task if task is not None else existing.get("task", ""),
         "features": features if features is not None else existing.get("features", []),
         "progress": progress if progress is not None else existing.get("progress", []),
+        # Stamp the writer's version so a genuinely newer-version daemon can
+        # detect it owns this file and an older one must back off (the guard
+        # at the top of this function). Falls back to the prior owner so a dev
+        # checkout (no manifest version) never erases a real owner stamp.
+        "writer_version": _own_plugin_version() or existing.get("writer_version"),
     }
     if return_step:
         data["return"] = return_step

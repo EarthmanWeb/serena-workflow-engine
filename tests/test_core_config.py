@@ -417,6 +417,67 @@ class TestCreateInitialState(unittest.TestCase):
         self.assertEqual(state["current_state"], "UNINITIALIZED")
 
 
+class TestWriteStateFileStaleGuard(unittest.TestCase):
+    """The stale-daemon guard in write_state_file must NOT brick a session
+    whose state file is unowned or self-owned — only a strictly-newer owner
+    (the real dual-daemon clobber race) may refuse the write. Regression for
+    the 1.2.68 -> 1.2.69 auto-update deadlock (WF_DONE became inescapable
+    because the state file was never created)."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        config.get_project_root = lambda: self.tmp.name
+        os.makedirs(os.path.join(self.tmp.name, ".serena", "swe-state"),
+                    exist_ok=True)
+        self._own = config._own_plugin_version
+        self._stale = config._is_stale_daemon
+
+    def tearDown(self):
+        config._own_plugin_version = self._own
+        config._is_stale_daemon = self._stale
+        self.tmp.cleanup()
+        reset_caches()
+
+    def _seed(self, sid, owner):
+        p = config.get_state_file_path(sid)
+        with open(p, "w") as f:
+            json.dump({"current_state": "WF_DONE", "writer_version": owner}, f)
+
+    def test_current_daemon_writes_and_stamps_version(self):
+        config._own_plugin_version = lambda: "1.2.69"
+        config._is_stale_daemon = lambda: False
+        self.assertTrue(config.write_state_file("s1", "WF_EXECUTE"))
+        st = config.read_state_file("s1")
+        self.assertEqual(st["current_state"], "WF_EXECUTE")
+        self.assertEqual(st["writer_version"], "1.2.69")
+
+    def test_stale_daemon_refuses_when_file_owned_by_newer(self):
+        # The genuine dual-daemon race: a newer daemon owns the file.
+        self._seed("s2", "1.2.69")
+        config._own_plugin_version = lambda: "1.2.68"
+        config._is_stale_daemon = lambda: True
+        self.assertFalse(config.write_state_file("s2", "WF_EXECUTE"))
+        st = config.read_state_file("s2")
+        self.assertEqual(st["current_state"], "WF_DONE")  # untouched
+        self.assertEqual(st["writer_version"], "1.2.69")
+
+    def test_stale_daemon_writes_when_file_unowned(self):
+        # Auto-update brick case: no prior owner stamp -> write through.
+        config._own_plugin_version = lambda: "1.2.68"
+        config._is_stale_daemon = lambda: True
+        self.assertTrue(config.write_state_file("s3", "WF_EXECUTE"))
+        self.assertEqual(config.read_state_file("s3")["current_state"],
+                         "WF_EXECUTE")
+
+    def test_stale_daemon_writes_when_file_self_owned(self):
+        self._seed("s4", "1.2.68")
+        config._own_plugin_version = lambda: "1.2.68"
+        config._is_stale_daemon = lambda: True
+        self.assertTrue(config.write_state_file("s4", "WF_EXECUTE"))
+        self.assertEqual(config.read_state_file("s4")["current_state"],
+                         "WF_EXECUTE")
+
+
 class TestBypassNotice(unittest.TestCase):
     def test_bypass_notice_mentions_reinstatement_path(self):
         # Module-level constant: assert its load-bearing content.
