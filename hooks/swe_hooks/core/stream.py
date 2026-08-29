@@ -164,6 +164,34 @@ def collect_values_since_task_start(stream_path: str, count_type: str = 'docread
     return values
 
 
+def collect_docpending_sources(stream_path: str) -> dict:
+    """Map each docpending link surfaced this task → the set of source memories
+    (`src`) that surfaced it.
+
+    Used by the sweep gate's read-gated deferral rule: a pending link is
+    deferrable ONLY when NONE of its sources is the current primary feature —
+    i.e. it was raised by a paused/sibling-feature read during a task pivot, not
+    by the feature the task is actually working on. Links whose event carries no
+    `src` (pre-upgrade events) map to an empty source set and are treated as
+    deferrable (fail-open on legacy data, never fail-closed on an un-taggable
+    link).
+    """
+    sources = {}
+    for event in events_since_task_start(stream_path):
+        if event.get('type') != 'docpending':
+            continue
+        src = event.get('src')
+        src = normalize_memory_name(str(src)) if src else None
+        for link in event.get('new') or []:
+            key = normalize_memory_name(str(link))
+            if not key:
+                continue
+            bucket = sources.setdefault(key, set())
+            if src:
+                bucket.add(src)
+    return sources
+
+
 def normalize_memory_name(name: str) -> str:
     """Normalize a memory name for comparison: lowercase, strip whitespace,
     'mem:' prefix, and '.md' suffix."""

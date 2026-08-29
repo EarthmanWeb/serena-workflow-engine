@@ -34,6 +34,7 @@ from swe_hooks.core.stream import (
     get_stream_path,
     get_feature_sentinel_path,
     collect_values_since_task_start,
+    collect_docpending_sources,
     normalize_memory_name,
 )
 
@@ -348,12 +349,21 @@ def tool_swe_wm_read(session_id: str = None) -> dict:
 MEMORIES_LOADED_RE = re.compile(
     r'\*\*Memories loaded\*\*:?[ \t]*(.*)$', re.IGNORECASE | re.MULTILINE)
 
-# "Memories deferred" line inside an Affected Features write — explicit
-# deferral of docpending-linked memories the agent chose NOT to read this
-# task. Entries are "<name> — <reason>", comma-separated, e.g.
-#   - **Memories deferred**: ref/REF_X — cold: admin UI only, dom/DOM_Y — sibling detail
+# "Memories deferred" line(s) inside an Affected Features write — explicit
+# deferral of docpending links the agent chose NOT to read this task. Entries
+# are "<name> — <reason>", comma-separated. MULTILINE + collected with findall
+# (NOT a single search) so several deferred lines are ALL honored, e.g.
+#   - **Memories deferred**: ref/REF_X — cold: admin UI only, dom/DOM_Y — sibling
+#   - **Memories deferred**: sys/SYS_Z — cold: paused feature
 MEMORIES_DEFERRED_RE = re.compile(
     r'\*\*Memories deferred\*\*:?[ \t]*(.*)$', re.IGNORECASE | re.MULTILINE)
+
+# "Primary" feature line — the feature this task is actually working on.
+#   - **Primary**: SWE - remove deferral escape-hatch …
+# The KEY is the first bareword token after the label; it maps to the
+# feature/feature_<key> memory that must NOT be the source of a deferred link.
+PRIMARY_FEATURE_RE = re.compile(
+    r'\*\*Primary\*\*:?[ \t]*([A-Za-z0-9_-]+)', re.IGNORECASE | re.MULTILINE)
 
 # Explicit declaration that the task has no feature memory (both fuzzy
 # searches returned nothing at WF_CLASSIFY 4b) — the sanctioned exception to
@@ -391,29 +401,46 @@ def _parse_memories_loaded(content: str) -> Optional[set]:
 
 
 def _parse_memories_deferred(content: str):
-    """Parse the '**Memories deferred**:' list from an Affected Features write.
+    """Parse ALL '**Memories deferred**:' line(s) from an Affected Features
+    write.
 
     Returns (names, reasonless): the set of normalized deferred names, and the
     subset listed WITHOUT a reason (nothing after the name in its entry).
     Reason fragments containing commas split into name-less fragments, which
-    are ignored (no '/' in the first token).
+    are ignored (no '/' in the first token). Uses findall — multiple deferred
+    lines are all honored (a single search dropped every line but the first).
     """
-    match = MEMORIES_DEFERRED_RE.search(content or '')
-    if not match:
-        return set(), set()
     names, reasonless = set(), set()
-    for part in match.group(1).split(','):
-        tokens = part.strip().strip('[]`').split()
-        if not tokens:
-            continue
-        name = normalize_memory_name(tokens[0].strip('[]`'))
-        if not name or '/' not in name:
-            continue
-        names.add(name)
-        # A reason is any text after the name token (e.g. "— cold: admin UI").
-        if len(tokens) < 2 or not ''.join(tokens[1:]).strip('—-–:'):
-            reasonless.add(name)
+    for line_tail in MEMORIES_DEFERRED_RE.findall(content or ''):
+        for part in line_tail.split(','):
+            tokens = part.strip().strip('[]`').split()
+            if not tokens:
+                continue
+            name = normalize_memory_name(tokens[0].strip('[]`'))
+            if not name or '/' not in name:
+                continue
+            names.add(name)
+            # A reason is any text after the name token ("— cold: admin UI").
+            if len(tokens) < 2 or not ''.join(tokens[1:]).strip('—-–:'):
+                reasonless.add(name)
     return names, reasonless
+
+
+def _parse_primary_feature_memory(content: str):
+    """The feature/feature_<key> memory name for the write's **Primary** key,
+    or None when no primary key is declared.
+
+    A docpending link surfaced by THIS memory must be read — deferring it is the
+    dodge the read-gated rule closes. Links surfaced only by other (paused /
+    sibling) feature reads remain deferrable.
+    """
+    match = PRIMARY_FEATURE_RE.search(content or '')
+    if not match:
+        return None
+    key = match.group(1).strip().lower()
+    if not key or key == 'no-feature':
+        return None
+    return 'feature/feature_' + key
 
 
 def _check_memory_sweep(session_id: str, content: str) -> Optional[str]:
@@ -428,8 +455,10 @@ def _check_memory_sweep(session_id: str, content: str) -> Optional[str]:
       - The list must include at least one 'feature/*' memory, or the content
         must carry the literal token 'no-feature' (both WF_CLASSIFY 4b fuzzy
         searches returned nothing).
-      - Every 'docpending' link surfaced by this task's reads must be read or
-        explicitly deferred with a reason on a '**Memories deferred**:' line.
+      - Every 'docpending' link surfaced by this task's reads must be read.
+        Deferral (with a reason, on a '**Memories deferred**:' line) is honored
+        ONLY for a link surfaced solely by a paused/sibling-feature read during
+        a task pivot; a link surfaced by the PRIMARY feature must be read.
 
     On success creates the 'sweep' sentinel that unlocks the edit gate.
     Returns an error string on violation, None on pass/skip.
@@ -477,20 +506,46 @@ def _check_memory_sweep(session_id: str, content: str) -> Optional[str]:
             "count; the sweep is per-task."
         )
 
-    # Docpending enforcement: every related link surfaced by this task's reads
-    # must be read or EXPLICITLY deferred with a reason — silent skipping is
-    # what forces the operator to prompt "read all related docs" manually.
+    # Docpending enforcement (read-gated deferral): every related link surfaced
+    # by this task's reads must be read; deferral is NOT a free pass. A link
+    # surfaced by the CURRENT primary feature MUST be read — asserting it "cold"
+    # unread is the dodge this closes (a reason string costs nothing to write).
+    # Deferral-with-reason is honored ONLY for a link surfaced solely by a
+    # paused/sibling-feature read during a task pivot (its sources never include
+    # the primary feature memory).
     deferred, reasonless = _parse_memories_deferred(content)
     if reasonless:
         return (
             "'**Memories deferred**:' entries need a reason: "
             f"{', '.join(sorted(reasonless))}. Format: <name> — <short reason> "
-            "(e.g. 'ref/REF_X — cold: admin UI only')."
+            "(e.g. 'ref/REF_X — cold: paused sibling feature')."
         )
+    stream_path = get_stream_path(session_id)
     pending = collect_values_since_task_start(
-        get_stream_path(session_id), count_type='docpending', value_key='new')
+        stream_path, count_type='docpending', value_key='new')
     pending = {n for n in pending if not n.startswith(MACHINERY_PREFIXES)}
-    outstanding = sorted(pending - read_names - deferred)
+    sources = collect_docpending_sources(stream_path)
+    primary_mem = _parse_primary_feature_memory(content)
+
+    # Links whose source set INCLUDES the primary feature memory are not
+    # deferrable — they must be read (subtract only what was actually read).
+    primary_pending = {
+        n for n in pending
+        if primary_mem and primary_mem in sources.get(n, set())
+    }
+    other_pending = pending - primary_pending
+
+    must_read = sorted(primary_pending - read_names)
+    if must_read:
+        return (
+            "Sweep verification FAILED — related docs surfaced by the PRIMARY "
+            f"feature ({primary_mem}) must be READ, not deferred: "
+            f"{', '.join(must_read)}. read_memory each — a link the feature "
+            "you are working on links to is on-topic by construction; "
+            "deferral is reserved for links raised by a paused/other-feature "
+            "read during a pivot."
+        )
+    outstanding = sorted(other_pending - read_names - deferred)
     if outstanding:
         return (
             "Sweep verification FAILED — related docs surfaced this task are "

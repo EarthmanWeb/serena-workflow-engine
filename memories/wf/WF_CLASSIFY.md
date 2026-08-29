@@ -164,7 +164,7 @@ Enumerate related memories from THREE sources:
 Then load, TIERED by relevance — read the task-relevant set, defer the rest to on-miss expansion:
 
 1. ALWAYS read: the primary `FEATURE_*`, every secondary `FEATURE_*` the request touches, and each enumerated `REF_*`/`DOM_*`/`SYS_*`/`ARCH_*` whose title/hook is **directly relevant to what this task changes or inspects**. Judge relevance from the request's domain terms + the files/behavior in scope.
-2. DEFER (do NOT read up front): enumerated refs that are cold to this task — tangential subsystems, sibling-feature detail the request never touches. Deferral is EXPLICIT, never silent: every `docpending` link surfaced by this task's reads must appear either in `**Memories loaded**:` (read) or on the `**Memories deferred**:` line with a reason (4e) — the sweep write is rejected otherwise.
+2. DEFER (do NOT read up front): enumerated refs that are cold to this task — tangential subsystems, sibling-feature detail the request never touches. Deferral is EXPLICIT, never silent AND read-gated: a `docpending` link surfaced by the CURRENT **Primary** feature's own reads is on-topic by construction and MUST be read — it CANNOT be deferred (a reason string is free to write without opening the doc; that dodge is rejected). Deferral-with-reason (4e) is honored ONLY for a link surfaced solely by a PAUSED/sibling-feature read during a task pivot. Every surfaced link must therefore appear in `**Memories loaded**:` (read) or, if paused-feature-sourced, on a `**Memories deferred**:` line — the sweep write is rejected otherwise.
 3. ON-MISS EXPANSION: the moment a deferred ref turns out to matter (a rule you need, a pattern the edit must follow, a `docpending` link the work surfaces), read it THEN, before the dependent edit. Reaching for a deferred ref mid-task is expected, not a failure.
 
 Rationale: reading the entire `[[link]]` closure up front is the dominant per-task token cost and most of it goes unused. Tiered loading keeps the enforcement floor (primary + task-relevant feature knowledge in context before any edit) while deferring cold refs. When genuinely unsure whether a ref is relevant, read it — correctness beats token savings.
@@ -194,7 +194,7 @@ mcp__plugin_swe_swe-wm__swe_wm_update(
 - **Primary**: [KEY1] - [reason]
 - **Secondary**: [KEY2] - [reason]
 - **Memories loaded**: [comma-separated list of the task-relevant set read in 4d — tiered, not the full closure]
-- **Memories deferred**: [only if docpending links were deferred: <name> — <short reason>, <name> — <short reason>]
+- **Memories deferred**: [only if PAUSED/sibling-feature-sourced docpending links were deferred — one or more lines, each: <name> — <short reason>, <name> — <short reason>]
 ```
 
 `**Memories loaded**:` list rules:
@@ -203,10 +203,12 @@ mcp__plugin_swe_swe-wm__swe_wm_update(
 - List ONLY memories read THIS task during Steps 4a–4d. Do NOT list the init chain (`wf/*`, `claude/*`) — those are workflow machinery, read before the task boundary; the verifier ignores them and they never count toward the sweep.
 - List the tier-1 (task-relevant) set you actually read — NOT deferred cold refs. Deferred refs read later via on-miss expansion still count toward the task's docreads; re-run the `Affected Features` write to append them only if a later gate needs them recorded.
 
-`**Memories deferred**:` list rules (docpending enforcement):
+`**Memories deferred**:` list rules (read-gated docpending enforcement):
 
 - Every related doc surfaced as a `docpending` link by this task's reads must be READ (and listed in `**Memories loaded**:`) or DEFERRED here — the WM server rejects the write while any surfaced link is neither. Silent skipping is the failure mode this closes: the operator should never have to say "read all related docs".
-- Entry format: `<name> — <short comma-free reason>` (e.g. `ref/REF_X — cold: admin UI only`). A reasonless entry is rejected.
+- ⛔ A link surfaced by the CURRENT **Primary** feature is NOT deferrable — it MUST be read. The gate tags each surfaced link with the memory that surfaced it (`src`); a link whose `src` is the primary feature memory is rejected from the deferred list even with a reason (that was the dodge). Deferral is reserved for a link surfaced solely by a PAUSED/other-feature read during a task pivot.
+- Multiple `**Memories deferred**:` lines are all honored (parsed with findall), so you may split deferrals across several lines or keep them on one comma-separated line.
+- Entry format: `<name> — <short comma-free reason>` (e.g. `ref/REF_X — cold: paused sibling feature`). A reasonless entry is rejected.
 - Deferral is an assertion the doc is cold for THIS task — never blanket-defer to pass the gate. When genuinely unsure, read it instead.
 
 The sweep is HARD-ENFORCED, per task (follow-up tasks re-arm it):

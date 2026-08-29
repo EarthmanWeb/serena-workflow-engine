@@ -315,29 +315,99 @@ class TestCheckMemorySweep(unittest.TestCase):
         self.assertIsNone(err)
         self.assertTrue(os.path.exists(self._sentinel()))
 
-    def test_docpending_deferred_with_reason_passes(self):
+    def test_other_feature_docpending_deferred_with_reason_passes(self):
+        # A link surfaced by a PAUSED/sibling-feature read (src != primary) is
+        # deferrable with a reason — the legitimate task-pivot case.
         _write_stream(self.stream_path, [
             {"type": "docread", "name": "feature/FEATURE_X"},
-            {"type": "docpending", "new": ["ref/ref_cold"]},
+            {"type": "docpending", "new": ["ref/ref_cold"],
+             "src": "feature/feature_paused"},
         ])
-        content = ("- **Memories loaded**: feature/FEATURE_X\n"
-                   "- **Memories deferred**: ref/REF_COLD — cold: admin UI only\n")
+        content = ("- **Primary**: X - the working feature\n"
+                   "- **Memories loaded**: feature/FEATURE_X\n"
+                   "- **Memories deferred**: ref/REF_COLD — cold: paused sibling\n")
         err = wm._check_memory_sweep(self.session, content)
         self.assertIsNone(err)
         with open(self._sentinel()) as f:
             self.assertEqual(json.load(f)["deferred"], ["ref/ref_cold"])
 
+    def test_primary_sourced_docpending_not_deferrable(self):
+        # ⛔ The dodge this closes: a link surfaced BY the primary feature is
+        # on-topic by construction — asserting it cold (unread) is rejected even
+        # WITH a reason. Must be read.
+        _write_stream(self.stream_path, [
+            {"type": "docread", "name": "feature/FEATURE_X"},
+            {"type": "docpending", "new": ["sys/sys_x_api"],
+             "src": "feature/feature_x"},
+        ])
+        content = ("- **Primary**: X - the working feature\n"
+                   "- **Memories loaded**: feature/FEATURE_X\n"
+                   "- **Memories deferred**: sys/SYS_X_API — cold: dodge attempt\n")
+        err = wm._check_memory_sweep(self.session, content)
+        self.assertIsNotNone(err)
+        self.assertIn("sys/sys_x_api", err)
+        self.assertIn("PRIMARY", err)
+        self.assertFalse(os.path.exists(self._sentinel()))
+
+    def test_primary_sourced_docpending_read_passes(self):
+        _write_stream(self.stream_path, [
+            {"type": "docread", "name": "feature/FEATURE_X"},
+            {"type": "docpending", "new": ["sys/sys_x_api"],
+             "src": "feature/feature_x"},
+            {"type": "docread", "name": "sys/SYS_X_API"},
+        ])
+        content = ("- **Primary**: X - the working feature\n"
+                   "- **Memories loaded**: feature/FEATURE_X, sys/SYS_X_API\n")
+        err = wm._check_memory_sweep(self.session, content)
+        self.assertIsNone(err)
+        self.assertTrue(os.path.exists(self._sentinel()))
+
+    def test_no_src_docpending_treated_as_deferrable(self):
+        # Legacy/pre-upgrade events carry no src → fail-open to deferrable
+        # (never fail-closed on an un-taggable link).
+        _write_stream(self.stream_path, [
+            {"type": "docread", "name": "feature/FEATURE_X"},
+            {"type": "docpending", "new": ["ref/ref_legacy"]},
+        ])
+        content = ("- **Primary**: X - the working feature\n"
+                   "- **Memories loaded**: feature/FEATURE_X\n"
+                   "- **Memories deferred**: ref/REF_LEGACY — cold: legacy no-src\n")
+        err = wm._check_memory_sweep(self.session, content)
+        self.assertIsNone(err)
+
     def test_deferred_without_reason_rejected(self):
         _write_stream(self.stream_path, [
             {"type": "docread", "name": "feature/FEATURE_X"},
-            {"type": "docpending", "new": ["ref/ref_cold"]},
+            {"type": "docpending", "new": ["ref/ref_cold"],
+             "src": "feature/feature_paused"},
         ])
-        content = ("- **Memories loaded**: feature/FEATURE_X\n"
+        content = ("- **Primary**: X - the working feature\n"
+                   "- **Memories loaded**: feature/FEATURE_X\n"
                    "- **Memories deferred**: ref/REF_COLD\n")
         err = wm._check_memory_sweep(self.session, content)
         self.assertIsNotNone(err)
         self.assertIn("reason", err.lower())
         self.assertFalse(os.path.exists(self._sentinel()))
+
+    def test_multiple_deferred_lines_all_honored(self):
+        # Regression: a single re.search honored only the FIRST deferred line;
+        # findall honors every line. All three cold links are from paused reads.
+        _write_stream(self.stream_path, [
+            {"type": "docread", "name": "feature/FEATURE_X"},
+            {"type": "docpending",
+             "new": ["ref/ref_a", "ref/ref_b", "ref/ref_c"],
+             "src": "feature/feature_paused"},
+        ])
+        content = ("- **Primary**: X - working feature\n"
+                   "- **Memories loaded**: feature/FEATURE_X\n"
+                   "- **Memories deferred**: ref/REF_A — cold: paused one\n"
+                   "- **Memories deferred**: ref/REF_B — cold: paused two\n"
+                   "- **Memories deferred**: ref/REF_C — cold: paused three\n")
+        err = wm._check_memory_sweep(self.session, content)
+        self.assertIsNone(err)
+        with open(self._sentinel()) as f:
+            self.assertEqual(json.load(f)["deferred"],
+                             ["ref/ref_a", "ref/ref_b", "ref/ref_c"])
 
     def test_docpending_from_prior_task_ignored(self):
         _write_stream(self.stream_path, [
@@ -369,6 +439,57 @@ class TestParseMemoriesDeferred(unittest.TestCase):
         names, reasonless = wm._parse_memories_deferred(content)
         self.assertEqual(names, {"ref/ref_a"})
         self.assertEqual(reasonless, set())
+
+    def test_findall_collects_across_multiple_lines(self):
+        content = ("- **Memories deferred**: ref/REF_A — cold one\n"
+                   "- **Memories deferred**: dom/DOM_B — cold two\n")
+        names, reasonless = wm._parse_memories_deferred(content)
+        self.assertEqual(names, {"ref/ref_a", "dom/dom_b"})
+        self.assertEqual(reasonless, set())
+
+
+class TestParsePrimaryFeatureMemory(unittest.TestCase):
+    def test_maps_key_to_feature_memory(self):
+        self.assertEqual(
+            wm._parse_primary_feature_memory("- **Primary**: SWE - fix gate\n"),
+            "feature/feature_swe")
+
+    def test_absent_returns_none(self):
+        self.assertIsNone(wm._parse_primary_feature_memory("no primary here"))
+
+    def test_no_feature_token_returns_none(self):
+        self.assertIsNone(
+            wm._parse_primary_feature_memory("- **Primary**: no-feature\n"))
+
+
+class TestCollectDocpendingSources(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.stream_path = os.path.join(self.tmp.name, "s.jsonl")
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_maps_link_to_its_sources(self):
+        _write_stream(self.stream_path, [
+            {"type": "session_start", "s": "s"},
+            {"type": "docpending", "new": ["ref/ref_a"],
+             "src": "feature/feature_x"},
+            {"type": "docpending", "new": ["ref/ref_a", "dom/dom_b"],
+             "src": "feature/feature_y"},
+        ])
+        sources = stream.collect_docpending_sources(self.stream_path)
+        self.assertEqual(sources["ref/ref_a"],
+                         {"feature/feature_x", "feature/feature_y"})
+        self.assertEqual(sources["dom/dom_b"], {"feature/feature_y"})
+
+    def test_missing_src_maps_to_empty_source_set(self):
+        _write_stream(self.stream_path, [
+            {"type": "session_start", "s": "s"},
+            {"type": "docpending", "new": ["ref/ref_legacy"]},
+        ])
+        sources = stream.collect_docpending_sources(self.stream_path)
+        self.assertEqual(sources["ref/ref_legacy"], set())
 
 
 class TestUpdateSectionSweepWiring(unittest.TestCase):

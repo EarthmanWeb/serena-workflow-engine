@@ -19,7 +19,7 @@ try:
     from swe_hooks.core.config import append_transition_to_wm, write_state_file, resolve_installed_plugin, resolve_plugin_root
     from swe_hooks.core.stream import (
         get_stream_path, append_event, get_sentinel_path,
-        collect_values_since_task_start,
+        collect_values_since_task_start, normalize_memory_name,
     )
     from datetime import datetime
     import re
@@ -308,19 +308,26 @@ def main():
                 unread = set()
             if unread:
                 try:
+                    # Tag the SURFACING memory (src) so the sweep gate can tell a
+                    # link raised by the CURRENT primary feature (must be read —
+                    # deferral there is a dodge) from one raised by a
+                    # paused/sibling-feature read during a task pivot
+                    # (legitimately deferrable).
                     append_event(get_stream_path(session_id), 'docpending',
-                                 s=session_id, new=sorted(unread))
+                                 s=session_id, new=sorted(unread),
+                                 src=normalize_memory_name(memory_name))
                 except Exception:
                     pass
                 pending_msg = (
                     "📚 Related docs linked here, UNREAD this task: "
                     + ", ".join(sorted(unread))
-                    + " — each must be READ or explicitly DEFERRED with a "
-                    "reason ('- **Memories deferred**: <name> — <reason>') in "
-                    "the Affected Features sweep write, or the write is "
-                    "rejected. Read what could bear on this task; defer only "
-                    "what is genuinely cold. Re-reading an already-read "
-                    "memory does not refill the docs budget.")
+                    + " — READ each that could bear on this task. A link "
+                    "surfaced by the CURRENT primary feature MUST be read; "
+                    "deferral is allowed ONLY for a link surfaced by a "
+                    "paused/other-feature read during a pivot, on a "
+                    "'- **Memories deferred**: <name> — <reason>' line. "
+                    "Re-reading an already-read memory does not refill the "
+                    "docs budget.")
 
         # Handle list_memories calls (no memory_name) — inject continuation
         if 'list_memories' in tool_name:
