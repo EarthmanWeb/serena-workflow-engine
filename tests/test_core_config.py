@@ -426,6 +426,7 @@ class TestWriteStateFileStaleGuard(unittest.TestCase):
 
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
+        self._get_root = config.get_project_root
         config.get_project_root = lambda: self.tmp.name
         os.makedirs(os.path.join(self.tmp.name, ".serena", "swe-state"),
                     exist_ok=True)
@@ -433,6 +434,12 @@ class TestWriteStateFileStaleGuard(unittest.TestCase):
         self._stale = config._is_stale_daemon
 
     def tearDown(self):
+        # Restore EVERY monkeypatched global. get_project_root here points at this
+        # class's tempdir, which cleanup deletes; any later test module under
+        # `unittest discover` that calls read/write_state_file (e.g. test_wm_server)
+        # would then resolve a dead path and get None back. Restoring it keeps the
+        # global module state clean for the rest of the run.
+        config.get_project_root = self._get_root
         config._own_plugin_version = self._own
         config._is_stale_daemon = self._stale
         self.tmp.cleanup()

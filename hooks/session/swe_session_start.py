@@ -39,7 +39,10 @@ def _self_update():
 
     For git-managed installs (dev checkouts): git pull in place.
     For marketplace cache installs: pull marketplace clone, create new versioned
-    cache directory, orphan old cache, update installed_plugins.json.
+    cache directory, repoint installed_plugins.json, then orphan old cache.
+    The repoint — not the cache dir's presence — is the source of truth for
+    "updated", so an install left with a new-version dir but a stale manifest
+    pointer self-heals on the next boot instead of stalling forever.
 
     Returns: (updated: bool, old_version: str|None, new_version: str|None)
     """
@@ -190,22 +193,27 @@ def _self_update_marketplace(plugin_root):
     if not new_version or new_version == old_version:
         return False, old_version, old_version
 
-    # Create new versioned cache directory
+    # Create the new versioned cache directory IF it does not already exist.
+    # It CAN already exist yet the update be INCOMPLETE: a prior session created
+    # the dir but died — or hit the old dead-end guard — before repointing
+    # installed_plugins.json, leaving the manifest pinned at old_version forever
+    # (every later boot then re-entered, saw the dir, and bailed: permanent
+    # stall). So an existing dir is NOT a reason to give up — it is the recovery
+    # path. The source of truth for "updated" is the MANIFEST pointer, never the
+    # dir's mere presence. Reuse a present copy; only (re)copy when missing.
     new_cache_dir = os.path.join(plugin_dir, new_version)
-    if os.path.exists(new_cache_dir):
-        return False, old_version, new_version  # Already exists
-
-    try:
-        shutil.copytree(
-            marketplace_clone, new_cache_dir,
-            ignore=shutil.ignore_patterns('.git'),
-            symlinks=True
-        )
-    except (OSError, shutil.Error):
-        # Clean up partial copy
-        if os.path.exists(new_cache_dir):
-            shutil.rmtree(new_cache_dir, ignore_errors=True)
-        return False, old_version, None
+    if not os.path.isdir(new_cache_dir):
+        try:
+            shutil.copytree(
+                marketplace_clone, new_cache_dir,
+                ignore=shutil.ignore_patterns('.git'),
+                symlinks=True
+            )
+        except (OSError, shutil.Error):
+            # Clean up partial copy
+            if os.path.exists(new_cache_dir):
+                shutil.rmtree(new_cache_dir, ignore_errors=True)
+            return False, old_version, None
 
     # Get git commit SHA from marketplace clone
     git_sha = None
@@ -219,36 +227,60 @@ def _self_update_marketplace(plugin_root):
     except (subprocess.TimeoutExpired, FileNotFoundError):
         pass
 
-    # Orphan old cache directory (Claude Code cleans up after 7 days)
-    try:
-        with open(os.path.join(plugin_root, '.orphaned_at'), 'w') as f:
-            f.write(str(int(time.time() * 1000)))
-    except IOError:
-        pass
-
-    # Update installed_plugins.json — point all matching entries to new cache
+    # Repoint installed_plugins.json at the new cache dir. This is the
+    # AUTHORITATIVE step: until the manifest moves, the plugin loader keeps
+    # launching old_version no matter what cache dirs exist. Repoint any entry
+    # for this plugin whose installPath is NOT already new_cache_dir — matching
+    # on the target dir (not `installPath == plugin_root`) is what lets a stalled
+    # install (dir already at new_version, manifest pinned old) self-heal on the
+    # next boot. `repointed` records whether the manifest actually changed.
+    plugin_key = f"{plugin_name}@{marketplace_name}"
     installed_json = os.path.join(plugins_dir, 'installed_plugins.json')
+    repointed = False
+    manifest_ok = True
     try:
         with open(installed_json) as f:
             registry = json.load(f)
 
-        plugin_key = f"{plugin_name}@{marketplace_name}"
         now_iso = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.') + \
             f"{datetime.now(timezone.utc).microsecond // 1000:03d}Z"
 
         for entry in registry.get('plugins', {}).get(plugin_key, []):
-            if os.path.normpath(entry.get('installPath', '')) == plugin_root:
+            if os.path.normpath(entry.get('installPath', '')) != new_cache_dir:
                 entry['installPath'] = new_cache_dir
                 entry['version'] = new_version
                 entry['lastUpdated'] = now_iso
                 if git_sha:
                     entry['gitCommitSha'] = git_sha
+                repointed = True
 
-        with open(installed_json, 'w') as f:
-            json.dump(registry, f, indent=2)
-            f.write('\n')
+        if repointed:
+            with open(installed_json, 'w') as f:
+                json.dump(registry, f, indent=2)
+                f.write('\n')
     except (IOError, json.JSONDecodeError, KeyError):
-        pass
+        # A missing/corrupt manifest must NOT abort the update — the fresh cache
+        # dir is already in place. Fall through and still report the new version;
+        # a subsequent boot re-attempts the repoint via the self-heal path above.
+        manifest_ok = False
+
+    # Manifest present AND already pointed at new_cache_dir → a prior session
+    # completed the update; nothing changed this run. Report not-updated so the
+    # banner shows a clean "Running installed vNEW" without a spurious auto-update
+    # line. (A manifest we could not read/parse is NOT "already current".)
+    if manifest_ok and not repointed:
+        return False, old_version, new_version
+
+    # Orphan the OLD cache dir — ONLY now, AFTER the manifest was successfully
+    # repointed, and NEVER new_cache_dir. Writing the marker before the repoint
+    # (or into the freshly-created dir) is exactly what let a new copy orphan
+    # itself while the manifest never moved. Claude Code reaps orphans after 7d.
+    if os.path.normpath(plugin_root) != new_cache_dir:
+        try:
+            with open(os.path.join(plugin_root, '.orphaned_at'), 'w') as f:
+                f.write(str(int(time.time() * 1000)))
+        except IOError:
+            pass
 
     return True, old_version, new_version
 
