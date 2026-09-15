@@ -147,16 +147,33 @@ ADDITION_PATTERNS = [
     r'^(remove|change|update|tweak) (the|that|this)',
 ]
 
-# Patterns that suggest a completely new task
+# Unambiguous new-task openers: phrasing that only makes sense as a pivot to
+# fresh work, regardless of what task is in flight.
 NEW_TASK_PATTERNS = [
     r'^(new task|different task|change of plans|something else|switch to)',
     r'^(forget (that|the previous)|start over|start fresh|reset)',
     r'^(i want to|let\'?s? (work on|do|start))',
     r'^(help me (with|build|create|implement|add|fix|debug|review))',
     r'^(can you help|i need help|i need you to)',
-    r'^(create|build|implement|add|fix|debug|review|analyze|refactor)',
-    r'^(onboard|write|develop|make|design|setup|configure|install)',
 ]
+
+# Bare imperative verbs. A leading "fix …" / "add …" is a pivot ONLY at the
+# start of work OR when paired with a pivot cue below — otherwise mid-task
+# "fix the spacing too" / "add a border" is feedback on the CURRENT task, not
+# a new one. analyze_prompt() gates these behind NEW_TASK_CUE_RE.
+BARE_VERB_TASK_PATTERNS = [
+    r'^(create|build|implement|add|fix|debug|review|analyze|refactor)\b',
+    r'^(onboard|write|develop|make|design|setup|configure|install)\b',
+]
+
+# Cue that a bare-verb prompt is a genuine pivot rather than a refinement of
+# the current task. Presence of any of these upgrades a bare verb to new_task.
+NEW_TASK_CUE_RE = re.compile(
+    r'\b(instead|now|next|new (task|feature|thing|issue|bug)|'
+    r'switch(ing)? to|different|another (task|feature|issue|bug|thing)|'
+    r'unrelated|separate(ly)?|forget (that|this|the)|start over)\b',
+    re.IGNORECASE,
+)
 
 
 # Deploy/push/ship intent in a prompt: inject the docs-first pre-deploy gate
@@ -184,6 +201,37 @@ Push and deploy each require explicit operator permission THIS session.
 def deploy_note_for(prompt: str) -> str:
     """Return the pre-deploy context block for deploy-intent prompts, else ''."""
     return PRE_DEPLOY_NOTE if DEPLOY_INTENT_RE.search(prompt or '') else ''
+
+
+def pivot_analysis_note(current_state: str, wm_file: str, stream_info: str,
+                        cue_hint: bool) -> str:
+    """Instruction for an ACTIVE state when intent is ambiguous.
+
+    The deterministic hook cannot read meaning, so it does NOT force a
+    transition. It stays in the current state and asks the MODEL — which has
+    full conversation context — to decide pivot vs. feedback and self-transition
+    with /swe-goto WF_CLASSIFY only on a genuine pivot. Keyword cues are passed
+    as a HINT, never as the decision.
+    """
+    hint_line = (
+        "\nA new-task cue word was present, but that ALONE is not decisive — "
+        "weigh it against the actual conversation.\n" if cue_hint else "\n")
+    return f"""➡️ CURRENT STATE: {current_state}
+Working Memory: {wm_file or 'None'}{stream_info}
+
+Ambiguous intent — the workflow hook did NOT transition. Decide from the FULL
+conversation, not this message alone:
+{hint_line}
+  • Feedback, correction, refinement, or a follow-up on the CURRENT task
+    (even phrased as "fix …" / "add …" / "no, do it differently") →
+    STAY in {current_state} and apply it. Do NOT re-classify.
+  • A genuine BRAND-NEW task or COMPLETE pivot (different feature/subject with
+    no dependency on the work in flight) → run /swe-goto WF_CLASSIFY yourself,
+    then classify.
+
+Default to STAY when uncertain — re-classifying mid-task is the costly error.
+Review the current step if needed: mcp__plugin_swe_serena__read_memory(memory_name="wf/{current_state}")
+"""
 
 
 # A direct slash-command invocation. The harness wraps command runs in a
@@ -231,11 +279,27 @@ def analyze_prompt(prompt: str, current_state: str) -> str:
         if re.search(pattern, prompt_lower, re.IGNORECASE):
             return 'addition'
     
-    # Check for explicit new task patterns
+    # Unambiguous new-task openers always pivot.
     for pattern in NEW_TASK_PATTERNS:
         if re.search(pattern, prompt_lower, re.IGNORECASE):
             return 'new_task'
-    
+
+    # Bare imperative verbs ("fix …", "add …"):
+    #   - No task in flight yet → classify normally (it IS the task).
+    #   - Mid-task → NOT decided by verbiage alone. A cue ("instead", "now",
+    #     "new task", …) or a bare verb are only HINTS; the real pivot-vs-
+    #     feedback call needs full conversation context, which this
+    #     deterministic hook does not have. Return 'possible_pivot' so the
+    #     caller keeps the current state and asks the MODEL to analyze and
+    #     self-transition only on a genuine pivot.
+    for pattern in BARE_VERB_TASK_PATTERNS:
+        if re.search(pattern, prompt_lower, re.IGNORECASE):
+            not_in_active_task = current_state in ('WF_CLASSIFY', 'WF_INIT',
+                                                   'UNINITIALIZED', 'WF_DONE', None)
+            if not_in_active_task:
+                return 'new_task'
+            return 'possible_pivot'
+
     # Default: treat as unknown — do not assume intent from message length alone.
     # Short messages in active states could be new tasks, corrections, or questions.
     return 'unknown'
@@ -600,8 +664,35 @@ MANDATORY: Before responding, read and follow the {current_state} workflow instr
 Use: mcp__plugin_swe_serena__read_memory(memory_name="wf/{current_state}")
 """
         
+        elif prompt_intent == 'possible_pivot':
+            # A bare-verb prompt ("fix …", "add …") mid-task. Could be a pivot,
+            # could be feedback. NOT decided by verbiage here — stay in the
+            # current state and let the model analyze the full conversation,
+            # self-transitioning via /swe-goto WF_CLASSIFY only on a true pivot.
+            stream_info = ""
+            if session_id:
+                stream_path = get_stream_path(session_id)
+                event_count = get_event_count(stream_path)
+                if event_count > 0:
+                    stream_info = f"\nStream Events: {event_count}"
+            cue_hint = bool(NEW_TASK_CUE_RE.search(prompt_lower))
+            context = pivot_analysis_note(current_state, wm_file, stream_info,
+                                          cue_hint)
+
         else:
-            # Unknown intent - route to WF_CLASSIFY for proper classification
+            # Unknown intent. Only a VERIFIED pivot (an explicit new_task
+            # pattern) re-classifies — that path is handled above. Here the
+            # intent is genuinely unclear, which for an in-flight task is
+            # overwhelmingly mid-task feedback ("that didn't work", "no, use
+            # X instead", "the button is still off"). Re-classifying on every
+            # such message was the "too strict" bug: it dragged the model back
+            # through WF_CLASSIFY on ordinary feedback, and from WF_EXECUTE the
+            # WF_CLASSIFY transition is not even a valid matrix edge.
+            #
+            # Rule: unknown intent STAYS in the current state. A brand-new task
+            # or complete pivot is judged by the MODEL from full context (it can
+            # self-transition via /swe-goto WF_CLASSIFY) — not force-decided by
+            # this deterministic hook.
             # Get stream event count for observability
             stream_info = ""
             if session_id:
@@ -609,7 +700,8 @@ Use: mcp__plugin_swe_serena__read_memory(memory_name="wf/{current_state}")
                 event_count = get_event_count(stream_path)
                 if event_count > 0:
                     stream_info = f"\nStream Events: {event_count}"
-            if current_state == 'WF_CLASSIFY':
+            if current_state in ('WF_CLASSIFY', 'WF_INIT'):
+                # Not yet classified — genuinely need to classify.
                 context = f"""❓ INTENT UNCLEAR - WORKFLOW STATE: {current_state}
 Working Memory: {wm_file or 'None'}{stream_info}
 
@@ -617,14 +709,10 @@ MANDATORY: Classify this task using WF_CLASSIFY.
 Use: mcp__plugin_swe_serena__read_memory(memory_name="wf/WF_CLASSIFY")
 """
             else:
-                # Transition to WF_CLASSIFY for classification
-                state_mgr.transition_to('WF_CLASSIFY')
-                context = f"""❓ INTENT UNCLEAR - Routing to WF_CLASSIFY
-Working Memory: {wm_file or 'None'}{stream_info}
-
-MANDATORY: Classify this task using WF_CLASSIFY.
-Use: mcp__plugin_swe_serena__read_memory(memory_name="wf/WF_CLASSIFY")
-"""
+                # Active task state — stay put and let the model judge pivot vs.
+                # feedback from full context (no verbiage-only decision).
+                context = pivot_analysis_note(current_state, wm_file,
+                                              stream_info, cue_hint=False)
         
         output = {
             "hookSpecificOutput": {

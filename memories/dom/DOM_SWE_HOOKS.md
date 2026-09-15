@@ -124,12 +124,17 @@ Sentinels are non-blocking PostToolUse nudges driven by the append-only JSONL st
 | ------ | --------- | ------ |
 | continuation | "yes", "okay, do X", "any other issues?", "let me know if", status checks | Stay in current state; brief reminder |
 | addition | "also", "remove/change/update the", "while you're at it" | Stay in state; incorporate addition |
-| new_task | "help me build", "create", "fix", "implement"; action verb at start | Transition to WF_CLASSIFY |
-| unknown | No pattern match AND message >120 chars in non-active state | Provide full workflow instructions |
+| new_task | UNAMBIGUOUS openers only: "new task", "switch to", "let's work on", "help me build", "i need you to" (`NEW_TASK_PATTERNS`). Bare imperative verb at start ("fix", "add", "create" — `BARE_VERB_TASK_PATTERNS`) is new_task ONLY when NO task is in flight (state ∈ WF_CLASSIFY/WF_INIT/UNINITIALIZED/WF_DONE/None) | Transition to WF_CLASSIFY (the one verified-pivot path) |
+| possible_pivot | Bare imperative verb at start WHILE in an active task state | Stay in current state; inject `pivot_analysis_note` — model judges pivot vs. feedback from full context, self-runs `/swe-goto WF_CLASSIFY` only on a genuine pivot |
+| unknown | No pattern match | Active state → stay + `pivot_analysis_note`. WF_CLASSIFY/WF_INIT → emit classify instruction |
+
+`analyze_prompt(prompt, current_state)` is STATE-AWARE — the same bare-verb prompt is `new_task` before work starts but `possible_pivot` mid-task.
+
+⛔ **The deterministic hook does NOT force-decide ambiguous pivots in an active state.** Unknown- and `possible_pivot`-intent prompts in an active state STAY in the current state — the hook emits `pivot_analysis_note` and the MODEL judges pivot-vs-feedback from full conversation context (which a regex cannot), self-transitioning with `/swe-goto WF_CLASSIFY` only on a genuine brand-new task or complete pivot. Ordinary mid-task feedback ("that didn't work", "fix the spacing too", "no, do it differently") therefore keeps working in place. Only two paths auto-`transition_to('WF_CLASSIFY')` from an active state: an unambiguous `new_task` opener, and (post-completion) same-session re-entry from WF_DONE. `NEW_TASK_CUE_RE` ("instead", "now", "new task", "switch to", …) is a HINT surfaced in `pivot_analysis_note`, NEVER the decider. Default is STAY. Rationale: `WF_EXECUTE → WF_CLASSIFY` is not a valid transition-matrix edge, so an active-state re-classification is a forced bypass — reserve it for verified pivots.
 
 Pattern rules:
 - NEVER anchor continuation patterns with `$` — "okay, you should have the latest" must match, not only bare "okay".
-- Determine intent solely by pattern match. NEVER use message length as a heuristic (except the >120-char unknown fallback above).
+- Determine intent solely by pattern match + `current_state`. NEVER use message length as a heuristic. Only unambiguous openers or a no-active-task bare verb may auto-transition; everything else defers to the model.
 
 Session-reset rules:
 - Compute `should_reset` from WM filename + state-data existence. NEVER parse WM markdown for this.
@@ -139,7 +144,8 @@ State-aware responses:
 - WF_INIT → emit MANDATORY instruction to read WF_INIT (blocking gate).
 - WF_CLASSIFY + continuation → emit MANDATORY instruction to read WF_CLASSIFY.
 - Active state + continuation → emit brief "Continue with workflow".
-- new_task detected → transition to WF_CLASSIFY regardless of current state.
+- Active state + unknown/possible_pivot → STAY; emit `pivot_analysis_note` (model decides pivot vs. feedback, self-transitions only on a true pivot).
+- new_task (unambiguous opener) → transition to WF_CLASSIFY regardless of current state.
 - First transition into WF_CLASSIFY with no WM → create WM + sentinel here.
 - Valid WM but missing sentinel → recreate sentinel before routing (prevents init-gate deadlock).
 - Same-session new_task from WF_DONE → include previous feature keys for fast-path to WF_ARCH_REVIEW.
@@ -147,7 +153,7 @@ State-aware responses:
 Task-boundary stamping (sweep verification):
 - `events_since_task_start()` bounds the current task at the LAST `session_start` event or `state` event with `to_s=WF_CLASSIFY`. Emit those ONLY at genuine task starts.
 - Genuine new task (new_task intent from an active state, same-session re-entry after WF_DONE) → `append_task_boundary()` (core/stream.py) stamps the boundary after a SUCCESSFUL `transition_to('WF_CLASSIFY')`.
-- Continuation / addition / unknown-intent prompts NEVER stamp — they must not invalidate the in-flight task's docreads for sweep verification.
+- Continuation / addition / unknown / possible_pivot prompts NEVER stamp — they stay in-state (no transition), so the in-flight task's docreads must keep counting for sweep verification. A boundary is stamped only when the model itself pivots via `/swe-goto WF_CLASSIFY`.
 - Slash-command FAST TRACK: `create_wm_and_sentinel(..., stamp_session_start=False)` when the session already has a state file — a mid-task command invocation (e.g. `/swe-wm-update`) re-creates the WM WITHOUT advancing the boundary. ⛔ Re-stamping mid-task drops every prior docread and makes the sweep an unwinnable re-read loop.
 - Tests: `tests/test_sweep_gate.py::TestTaskBoundaryStamping`.
 

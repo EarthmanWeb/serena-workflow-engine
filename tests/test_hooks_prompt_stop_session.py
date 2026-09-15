@@ -71,13 +71,7 @@ class TestAnalyzePrompt(unittest.TestCase):
             "addition",
         )
 
-    # --- new_task branch ---
-    def test_new_task_action_verb_prefix(self):
-        for p in ("create a new feature", "build the login page",
-                  "implement caching", "fix the bug", "refactor this module"):
-            self.assertEqual(
-                self.mod.analyze_prompt(p, "WF_EXECUTE"), "new_task", p)
-
+    # --- new_task branch (unambiguous openers, any state) ---
     def test_new_task_help_me_prefix(self):
         self.assertEqual(
             self.mod.analyze_prompt("help me build a parser", "WF_EXECUTE"),
@@ -89,6 +83,30 @@ class TestAnalyzePrompt(unittest.TestCase):
             self.mod.analyze_prompt("new task: set up CI", "WF_EXECUTE"),
             "new_task",
         )
+
+    def test_new_task_unambiguous_openers_from_active_state(self):
+        for p in ("switch to the district theme",
+                  "let's work on the calendar", "i need you to onboard a repo"):
+            self.assertEqual(
+                self.mod.analyze_prompt(p, "WF_EXECUTE"), "new_task", p)
+
+    # --- state-aware bare-verb split ---
+    def test_bare_verb_is_new_task_when_no_active_task(self):
+        # No task in flight (classify/init/done) -> a bare verb IS the task.
+        for state in ("WF_CLASSIFY", "WF_INIT", "WF_DONE", None):
+            for p in ("create a new feature", "build the login page",
+                      "fix the bug", "refactor this module"):
+                self.assertEqual(
+                    self.mod.analyze_prompt(p, state), "new_task",
+                    f"{p!r} @ {state}")
+
+    def test_bare_verb_is_possible_pivot_mid_task(self):
+        # Mid-task a bare verb is NOT force-classified -- the model decides.
+        for p in ("create a new feature", "build the login page",
+                  "fix the bug", "refactor this module",
+                  "fix the login page instead"):
+            self.assertEqual(
+                self.mod.analyze_prompt(p, "WF_EXECUTE"), "possible_pivot", p)
 
     # --- unknown fallback ---
     def test_unknown_fallback(self):
@@ -109,8 +127,13 @@ class TestAnalyzePrompt(unittest.TestCase):
         # Uppercased continuation still classifies as continuation.
         self.assertEqual(
             self.mod.analyze_prompt("YES", "WF_EXECUTE"), "continuation")
+        # Uppercased bare verb with no active task still classifies as new_task.
         self.assertEqual(
-            self.mod.analyze_prompt("CREATE a widget", "WF_EXECUTE"),
+            self.mod.analyze_prompt("CREATE a widget", "WF_CLASSIFY"),
+            "new_task")
+        # Uppercased unambiguous opener pivots regardless of case/state.
+        self.assertEqual(
+            self.mod.analyze_prompt("NEW TASK: ship it", "WF_EXECUTE"),
             "new_task")
 
     def test_precedence_continuation_before_addition(self):
