@@ -224,6 +224,8 @@ Unlike read-created feature gates, the sweep sentinel is created ONLY by the WM 
 
 "This task" = events since the last task boundary in the stream: the last `session_start` event or `state` event with `to_s=WF_CLASSIFY` (`events_since_task_start` in `core/stream.py`). Boundaries are stamped ONLY at genuine task starts — the prompt hook's new_task / after-WF_DONE transitions (`append_task_boundary`) and first-time session creation. Continuation/unclear prompts and mid-session slash commands (FAST TRACK re-invocation) NEVER stamp, so a task's docreads keep counting across interleaved prompts. See `DOM_SWE_HOOKS` "Task-boundary stamping".
 
+Docpending window (narrower than the task window): a SUCCESSFUL sweep stamps a `sweep` marker; `_check_memory_sweep` accounts docpending links via `events_since_task_start(since_sweep=True)`, i.e. only links surfaced AFTER the last passed sweep. Consequence: once a sweep passes its links are settled — a later sweep in the same session (common when continuation/pivot prompts don't re-stamp a task boundary) never re-demands a prior task's already-handled links. Docread/`Memories loaded` verification still uses the full task window. Leaked truncated link tokens (e.g. `ref/ref_...` from a clipped hook message) are dropped by `is_valid_memory_name()` before they can be demanded.
+
 ### Adding a New Gate
 
 1. Create pre-hook `hooks/pre/swe_pre_{name}_gate.py` — check sentinel, block if missing.

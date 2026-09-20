@@ -94,6 +94,50 @@ class TestStreamHelpers(unittest.TestCase):
         self.assertEqual(
             stream.collect_values_since_task_start(self.stream_path), set())
 
+    def test_since_sweep_narrows_to_after_last_sweep(self):
+        # docpending links from before a passed sweep are settled — a later
+        # collection with since_sweep must NOT see them (cross-task accumulation).
+        _write_stream(self.stream_path, [
+            {"type": "session_start", "s": "s1"},
+            {"type": "docpending", "new": ["ref/ref_old"]},
+            {"type": "sweep", "s": "s1"},
+            {"type": "docpending", "new": ["ref/ref_new"]},
+        ])
+        # Task-wide window still sees both:
+        self.assertEqual(
+            stream.collect_values_since_task_start(
+                self.stream_path, count_type="docpending", value_key="new"),
+            {"ref/ref_old", "ref/ref_new"})
+        # since_sweep sees only the post-sweep link:
+        self.assertEqual(
+            stream.collect_values_since_task_start(
+                self.stream_path, count_type="docpending", value_key="new",
+                since_sweep=True),
+            {"ref/ref_new"})
+
+    def test_malformed_docpending_names_dropped(self):
+        # A truncated hook message can leak a garbage token (e.g. 'ref/ref_...').
+        # It names no real memory and must never enter the pending set.
+        _write_stream(self.stream_path, [
+            {"type": "docpending",
+             "new": ["ref/ref_...", "dom/dom_real", "sys/sys_stub_"]},
+        ])
+        self.assertEqual(
+            stream.collect_values_since_task_start(
+                self.stream_path, count_type="docpending", value_key="new"),
+            {"dom/dom_real"})
+
+
+class TestIsValidMemoryName(unittest.TestCase):
+    def test_accepts_real_paths(self):
+        for n in ("feature/feature_x", "ref/ref_deploy", "dom/dom_crm_journey"):
+            self.assertTrue(stream.is_valid_memory_name(n), n)
+
+    def test_rejects_garbage(self):
+        for n in ("", "no-slash", "ref/ref_...", "dom/dom…", "ref/ref_",
+                  "ref/stub-", "/", "ref/"):
+            self.assertFalse(stream.is_valid_memory_name(n), n)
+
 
 # ──────────────────────────────────────────────────────────────────
 # post/swe_post_read_state — memory-name extraction + search credit
@@ -450,6 +494,43 @@ class TestCheckMemorySweep(unittest.TestCase):
             {"type": "docpending", "new": ["ref/ref_old"]},
             {"type": "state", "from_s": "WF_DONE", "to_s": "WF_CLASSIFY"},
             {"type": "docread", "name": "feature/FEATURE_X"},
+        ])
+        content = "- **Memories loaded**: feature/FEATURE_X\n"
+        err = wm._check_memory_sweep(self.session, content)
+        self.assertIsNone(err)
+
+    def test_success_stamps_sweep_marker(self):
+        _write_stream(self.stream_path, [
+            {"type": "docread", "name": "feature/FEATURE_X"},
+        ])
+        content = "- **Memories loaded**: feature/FEATURE_X\n"
+        self.assertIsNone(wm._check_memory_sweep(self.session, content))
+        with open(self.stream_path) as f:
+            types = [json.loads(ln)["type"] for ln in f if ln.strip()]
+        self.assertIn("sweep", types)
+
+    def test_prior_sweep_links_do_not_reblock_next_sweep(self):
+        # THE cross-task accumulation bug: task A surfaced+deferred cold links
+        # and passed (sweep stamped). A later same-task-window sweep for
+        # unrelated work must NOT be forced to re-defer task A's links.
+        _write_stream(self.stream_path, [
+            {"type": "docread", "name": "feature/FEATURE_A"},
+            {"type": "docpending", "new": ["ref/ref_cold1", "ref/ref_cold2"],
+             "src": "feature/feature_paused"},
+            {"type": "sweep", "s": self.session},
+            # Second piece of work — new read, NO new pending links:
+            {"type": "docread", "name": "feature/FEATURE_B"},
+        ])
+        content = ("- **Memories loaded**: feature/FEATURE_A, "
+                   "feature/FEATURE_B\n")
+        err = wm._check_memory_sweep(self.session, content)
+        self.assertIsNone(err)
+
+    def test_truncated_docpending_token_not_demanded(self):
+        # A leaked 'ref/ref_...' garbage token must not be demanded read/defer.
+        _write_stream(self.stream_path, [
+            {"type": "docread", "name": "feature/FEATURE_X"},
+            {"type": "docpending", "new": ["ref/ref_..."]},
         ])
         content = "- **Memories loaded**: feature/FEATURE_X\n"
         err = wm._check_memory_sweep(self.session, content)

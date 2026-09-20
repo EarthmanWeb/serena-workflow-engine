@@ -98,13 +98,19 @@ def get_event_count(stream_path: str) -> int:
         return 0
 
 
-def events_since_task_start(stream_path: str) -> list:
+def events_since_task_start(stream_path: str, since_sweep: bool = False) -> list:
     """All events since the current task started, in order.
 
     Task start = the LAST 'state' event whose to_s is WF_CLASSIFY (a follow-up
     task re-entering classification), or the last 'session_start' event if no
     such re-entry exists. Events from a prior task NEVER count toward the
     current task. Full-file scan — per-session streams are small.
+
+    since_sweep=True ALSO treats the last successful 'sweep' marker as a
+    boundary (whichever is latest wins). Once a sweep has passed, its docpending
+    accounting is settled — a later sweep only reckons with links surfaced
+    AFTER it, so prior work's already-cleared links never re-block a new,
+    unrelated sweep in the same session (the cross-task accumulation bug).
     """
     if not os.path.exists(stream_path):
         return []
@@ -128,6 +134,8 @@ def events_since_task_start(stream_path: str) -> list:
             start = i
         elif etype == 'state' and event.get('to_s') == 'WF_CLASSIFY':
             start = i
+        elif since_sweep and etype == 'sweep':
+            start = i
     return events[start:]
 
 
@@ -145,26 +153,33 @@ def append_task_boundary(stream_path: str, from_state: str, session_id: str):
 
 
 def collect_values_since_task_start(stream_path: str, count_type: str = 'docread',
-                                    value_key: str = 'name') -> set:
+                                    value_key: str = 'name',
+                                    since_sweep: bool = False) -> set:
     """Collect normalized value_key values from count_type events since the
     current task started. A list-valued key contributes every element.
 
     Values are normalized lowercase with any '.md' suffix and 'mem:' prefix
-    stripped.
+    stripped; malformed/truncated names are dropped (see is_valid_memory_name).
+
+    since_sweep=True narrows the window to after the last successful sweep as
+    well as the task boundary (used for docpending accounting).
     """
     values = set()
-    for event in events_since_task_start(stream_path):
+    for event in events_since_task_start(stream_path, since_sweep=since_sweep):
         if event.get('type') != count_type:
             continue
         value = event.get(value_key)
-        if isinstance(value, list):
-            values.update(normalize_memory_name(str(v)) for v in value if v)
-        elif value:
-            values.add(normalize_memory_name(str(value)))
+        items = value if isinstance(value, list) else [value]
+        for v in items:
+            if not v:
+                continue
+            name = normalize_memory_name(str(v))
+            if is_valid_memory_name(name):
+                values.add(name)
     return values
 
 
-def collect_docpending_sources(stream_path: str) -> dict:
+def collect_docpending_sources(stream_path: str, since_sweep: bool = False) -> dict:
     """Map each docpending link surfaced this task → the set of source memories
     (`src`) that surfaced it.
 
@@ -175,16 +190,19 @@ def collect_docpending_sources(stream_path: str) -> dict:
     `src` (pre-upgrade events) map to an empty source set and are treated as
     deferrable (fail-open on legacy data, never fail-closed on an un-taggable
     link).
+
+    since_sweep matches the docpending accounting window (after the last
+    successful sweep). Malformed/truncated link tokens are dropped.
     """
     sources = {}
-    for event in events_since_task_start(stream_path):
+    for event in events_since_task_start(stream_path, since_sweep=since_sweep):
         if event.get('type') != 'docpending':
             continue
         src = event.get('src')
         src = normalize_memory_name(str(src)) if src else None
         for link in event.get('new') or []:
             key = normalize_memory_name(str(link))
-            if not key:
+            if not is_valid_memory_name(key):
                 continue
             bucket = sources.setdefault(key, set())
             if src:
@@ -201,6 +219,25 @@ def normalize_memory_name(name: str) -> str:
     if name.endswith('.md'):
         name = name[:-3]
     return name
+
+
+def is_valid_memory_name(name: str) -> bool:
+    """True when `name` (already normalized) looks like a real memory path.
+
+    Guards against truncated/garbage tokens that a truncated hook message can
+    leak into the stream (e.g. a literal 'ref/ref_...' ellipsis). Such a token
+    must NEVER become a docpending link the sweep gate then demands be read or
+    deferred — it names no real memory. Requires a 'dir/name' shape and rejects
+    a trailing ellipsis or a name ending in an underscore stub.
+    """
+    if not name or '/' not in name:
+        return False
+    if '...' in name or '…' in name:
+        return False
+    tail = name.rsplit('/', 1)[-1]
+    if not tail or tail.endswith('_') or tail.endswith('-'):
+        return False
+    return True
 
 
 def count_edits_since_checkpoint(stream_path: str) -> int:

@@ -31,6 +31,7 @@ from swe_hooks.core.session import (
     get_project_root,
 )
 from swe_hooks.core.stream import (
+    append_event,
     get_stream_path,
     get_feature_sentinel_path,
     collect_values_since_task_start,
@@ -515,10 +516,14 @@ def _check_memory_sweep(session_id: str, content: str) -> Optional[str]:
     # pivot.
     deferred = _parse_deferred_names(content)
     stream_path = get_stream_path(session_id)
+    # Docpending is accounted since the LAST successful sweep (not the whole
+    # task): once a sweep passes, its links are settled, so a later sweep in the
+    # same session only reckons with NEW links. Prevents prior work's links from
+    # re-blocking an unrelated follow-up (the cross-task accumulation bug).
     pending = collect_values_since_task_start(
-        stream_path, count_type='docpending', value_key='new')
+        stream_path, count_type='docpending', value_key='new', since_sweep=True)
     pending = {n for n in pending if not n.startswith(MACHINERY_PREFIXES)}
-    sources = collect_docpending_sources(stream_path)
+    sources = collect_docpending_sources(stream_path, since_sweep=True)
     primary_mem = _parse_primary_feature_memory(content)
 
     # Links whose source set INCLUDES the primary feature memory are not
@@ -565,6 +570,10 @@ def _check_memory_sweep(session_id: str, content: str) -> Optional[str]:
                       f, separators=(',', ':'))
     except IOError:
         pass
+    # Stamp a sweep marker so the NEXT sweep this session only accounts for
+    # docpending links surfaced after this point (see events_since_task_start
+    # since_sweep). Settles this sweep's docpending window.
+    append_event(stream_path, 'sweep', s=session_id)
     return None
 
 

@@ -210,6 +210,7 @@ mcp__plugin_swe_swe-wm__swe_wm_update(
   - e.g. `- **Memories deferred**: ref/REF_A, ref/REF_B — cold: PHP-only`
 - You can't defer a link surfaced by your **Primary** feature — read those. Deferral is for links raised by a paused/other feature during a pivot.
 - Only defer what's genuinely cold to this task. When unsure, read it.
+- You only ever deal with links surfaced since your LAST passed sweep. Once a sweep passes, its links are settled — a later sweep in the same session won't re-demand them, so you never re-defer a prior task's docs.
 
 The sweep is HARD-ENFORCED, per task (follow-up tasks re-arm it):
 
