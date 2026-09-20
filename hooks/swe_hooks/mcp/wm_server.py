@@ -350,11 +350,13 @@ MEMORIES_LOADED_RE = re.compile(
     r'\*\*Memories loaded\*\*:?[ \t]*(.*)$', re.IGNORECASE | re.MULTILINE)
 
 # "Memories deferred" line(s) inside an Affected Features write — explicit
-# deferral of docpending links the agent chose NOT to read this task. Entries
-# are "<name> — <reason>", comma-separated. MULTILINE + collected with findall
-# (NOT a single search) so several deferred lines are ALL honored, e.g.
-#   - **Memories deferred**: ref/REF_X — cold: admin UI only, dom/DOM_Y — sibling
-#   - **Memories deferred**: sys/SYS_Z — cold: paused feature
+# deferral of docpending links the agent chose NOT to read this task. Format is
+# forgiving: any memory name (a token containing '/') on a deferred line counts,
+# in any layout — one per line OR comma-separated, with or without a free-form
+# note. No '<name> — <reason>' shape is required. MULTILINE + findall (NOT a
+# single search) so several deferred lines are ALL honored, e.g.
+#   - **Memories deferred**: ref/REF_X, dom/DOM_Y
+#   - **Memories deferred**: sys/SYS_Z (only used by the admin UI, not touched)
 MEMORIES_DEFERRED_RE = re.compile(
     r'\*\*Memories deferred\*\*:?[ \t]*(.*)$', re.IGNORECASE | re.MULTILINE)
 
@@ -400,30 +402,28 @@ def _parse_memories_loaded(content: str) -> Optional[set]:
     return names
 
 
-def _parse_memories_deferred(content: str):
-    """Parse ALL '**Memories deferred**:' line(s) from an Affected Features
-    write.
+def _parse_deferred_names(content: str) -> set:
+    """Parse the deferred memory names from ALL '**Memories deferred**:' line(s).
 
-    Returns (names, reasonless): the set of normalized deferred names, and the
-    subset listed WITHOUT a reason (nothing after the name in its entry).
-    Reason fragments containing commas split into name-less fragments, which
-    are ignored (no '/' in the first token). Uses findall — multiple deferred
-    lines are all honored (a single search dropped every line but the first).
+    Forgiving by design: a memory is "deferred" if its name (any token that
+    looks like a memory path, i.e. contains a '/') appears ANYWHERE in a
+    deferred line. Separators, punctuation, and any reason text are ignored —
+    one-per-line, comma-separated, with or without a reason, colons/commas in
+    the reason: all accepted. There is NO required '<name> — <reason>' shape.
+
+    Uses findall so several deferred lines are all honored (a single search
+    dropped every line but the first).
     """
-    names, reasonless = set(), set()
+    names = set()
     for line_tail in MEMORIES_DEFERRED_RE.findall(content or ''):
-        for part in line_tail.split(','):
-            tokens = part.strip().strip('[]`').split()
-            if not tokens:
+        for token in re.split(r'[\s,]+', line_tail):
+            token = token.strip('[]`.,;:')
+            if '/' not in token:
                 continue
-            name = normalize_memory_name(tokens[0].strip('[]`'))
-            if not name or '/' not in name:
-                continue
-            names.add(name)
-            # A reason is any text after the name token ("— cold: admin UI").
-            if len(tokens) < 2 or not ''.join(tokens[1:]).strip('—-–:'):
-                reasonless.add(name)
-    return names, reasonless
+            name = normalize_memory_name(token)
+            if name and '/' in name:
+                names.add(name)
+    return names
 
 
 def _parse_primary_feature_memory(content: str):
@@ -455,10 +455,11 @@ def _check_memory_sweep(session_id: str, content: str) -> Optional[str]:
       - The list must include at least one 'feature/*' memory, or the content
         must carry the literal token 'no-feature' (both WF_CLASSIFY 4b fuzzy
         searches returned nothing).
-      - Every 'docpending' link surfaced by this task's reads must be read.
-        Deferral (with a reason, on a '**Memories deferred**:' line) is honored
-        ONLY for a link surfaced solely by a paused/sibling-feature read during
-        a task pivot; a link surfaced by the PRIMARY feature must be read.
+      - Every 'docpending' link surfaced by this task's reads must be read OR
+        deferred by naming it on a '**Memories deferred**:' line (any layout, a
+        note is optional). Deferral is honored ONLY for a link surfaced solely
+        by a paused/sibling-feature read during a task pivot; a link surfaced by
+        the PRIMARY feature must be read.
 
     On success creates the 'sweep' sentinel that unlocks the edit gate.
     Returns an error string on violation, None on pass/skip.
@@ -506,20 +507,13 @@ def _check_memory_sweep(session_id: str, content: str) -> Optional[str]:
             "count; the sweep is per-task."
         )
 
-    # Docpending enforcement (read-gated deferral): every related link surfaced
-    # by this task's reads must be read; deferral is NOT a free pass. A link
-    # surfaced by the CURRENT primary feature MUST be read — asserting it "cold"
-    # unread is the dodge this closes (a reason string costs nothing to write).
-    # Deferral-with-reason is honored ONLY for a link surfaced solely by a
-    # paused/sibling-feature read during a task pivot (its sources never include
-    # the primary feature memory).
-    deferred, reasonless = _parse_memories_deferred(content)
-    if reasonless:
-        return (
-            "'**Memories deferred**:' entries need a reason: "
-            f"{', '.join(sorted(reasonless))}. Format: <name> — <short reason> "
-            "(e.g. 'ref/REF_X — cold: paused sibling feature')."
-        )
+    # Docpending enforcement: every related link surfaced by this task's reads
+    # must be either read or named on a '**Memories deferred**:' line (format is
+    # forgiving — see _parse_deferred_names). A link surfaced by the CURRENT
+    # primary feature must be READ, not deferred (on-topic by construction);
+    # deferral is for links raised by a paused/sibling-feature read during a
+    # pivot.
+    deferred = _parse_deferred_names(content)
     stream_path = get_stream_path(session_id)
     pending = collect_values_since_task_start(
         stream_path, count_type='docpending', value_key='new')
@@ -547,14 +541,20 @@ def _check_memory_sweep(session_id: str, content: str) -> Optional[str]:
         )
     outstanding = sorted(other_pending - read_names - deferred)
     if outstanding:
+        names = ', '.join(outstanding)
         return (
             "Sweep verification FAILED — related docs surfaced this task are "
-            f"neither read nor deferred: {', '.join(outstanding)}. For each: "
-            "read_memory it if it could bear on what this task changes or "
-            "inspects, OTHERWISE add it to a '- **Memories deferred**: <name> "
-            "— <reason>' line in this section. Then re-run this update. Do "
-            "not blanket-defer: deferral asserts the doc is cold for THIS "
-            "task."
+            f"neither read nor deferred: {names}. For EACH one, do ONE of:\n"
+            "  1. read_memory it (if it could bear on what this task changes "
+            "or inspects), OR\n"
+            "  2. defer it — just add its name to a '**Memories deferred**:' "
+            "line in the Affected Features section. Put the names there however "
+            "you like: one per line or comma-separated, with or without a "
+            "note. A note is optional and free-form.\n"
+            "Example:\n"
+            f"  - **Memories deferred**: {names}\n"
+            "Then re-run this update. Don't blanket-defer everything just to "
+            "pass — deferring a doc asserts it is cold for THIS task."
         )
 
     try:

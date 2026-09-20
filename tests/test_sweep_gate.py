@@ -7,8 +7,9 @@ happened before the first edit. New surfaces under test:
   - core/stream: get_feature_sentinel_path, collect_values_since_task_start
   - post/swe_post_read_state: _extract_memory_names, _search_credit
     (search surfacing only already-read docs = credit; NEW docs = no credit)
-  - mcp/wm_server: _parse_memories_loaded, _check_memory_sweep
-    ("Memories loaded" list verified against actual docreads → sweep sentinel)
+  - mcp/wm_server: _parse_memories_loaded, _parse_deferred_names,
+    _check_memory_sweep ("Memories loaded" list verified against actual
+    docreads → sweep sentinel; deferral is format-forgiving)
   - pre/swe_pre_edit_validate: _is_test_target, sweep-sentinel deny wiring
   - core/state_manager: transition into WF_CLASSIFY clears the sweep sentinel
 
@@ -375,7 +376,9 @@ class TestCheckMemorySweep(unittest.TestCase):
         err = wm._check_memory_sweep(self.session, content)
         self.assertIsNone(err)
 
-    def test_deferred_without_reason_rejected(self):
+    def test_deferred_without_reason_passes(self):
+        # A reason is optional — naming the link on a deferred line is enough.
+        # This is the forgiving contract: no specialized entry format required.
         _write_stream(self.stream_path, [
             {"type": "docread", "name": "feature/FEATURE_X"},
             {"type": "docpending", "new": ["ref/ref_cold"],
@@ -385,9 +388,42 @@ class TestCheckMemorySweep(unittest.TestCase):
                    "- **Memories loaded**: feature/FEATURE_X\n"
                    "- **Memories deferred**: ref/REF_COLD\n")
         err = wm._check_memory_sweep(self.session, content)
-        self.assertIsNotNone(err)
-        self.assertIn("reason", err.lower())
-        self.assertFalse(os.path.exists(self._sentinel()))
+        self.assertIsNone(err)
+        with open(self._sentinel()) as f:
+            self.assertEqual(json.load(f)["deferred"], ["ref/ref_cold"])
+
+    def test_deferred_reason_with_comma_and_colon_passes(self):
+        # Commas AND colons inside a free-form reason must not break parsing —
+        # the exact failure the operator hit. No structured entry shape.
+        _write_stream(self.stream_path, [
+            {"type": "docread", "name": "feature/FEATURE_X"},
+            {"type": "docpending", "new": ["ref/ref_cold"],
+             "src": "feature/feature_paused"},
+        ])
+        content = ("- **Primary**: X - the working feature\n"
+                   "- **Memories loaded**: feature/FEATURE_X\n"
+                   "- **Memories deferred**: ref/REF_COLD: cold, admin UI only, "
+                   "not touched here\n")
+        err = wm._check_memory_sweep(self.session, content)
+        self.assertIsNone(err)
+        with open(self._sentinel()) as f:
+            self.assertEqual(json.load(f)["deferred"], ["ref/ref_cold"])
+
+    def test_multiple_deferred_entries_one_comma_separated_line(self):
+        # Several links deferred on a SINGLE comma-separated line (the layout
+        # that previously mis-parsed when reasons also contained commas).
+        _write_stream(self.stream_path, [
+            {"type": "docread", "name": "feature/FEATURE_X"},
+            {"type": "docpending", "new": ["ref/ref_a", "ref/ref_b"],
+             "src": "feature/feature_paused"},
+        ])
+        content = ("- **Primary**: X - working feature\n"
+                   "- **Memories loaded**: feature/FEATURE_X\n"
+                   "- **Memories deferred**: ref/REF_A, ref/REF_B\n")
+        err = wm._check_memory_sweep(self.session, content)
+        self.assertIsNone(err)
+        with open(self._sentinel()) as f:
+            self.assertEqual(json.load(f)["deferred"], ["ref/ref_a", "ref/ref_b"])
 
     def test_multiple_deferred_lines_all_honored(self):
         # Regression: a single re.search honored only the FIRST deferred line;
@@ -420,32 +456,35 @@ class TestCheckMemorySweep(unittest.TestCase):
         self.assertIsNone(err)
 
 
-class TestParseMemoriesDeferred(unittest.TestCase):
+class TestParseDeferredNames(unittest.TestCase):
     def test_absent_line_returns_empty(self):
-        self.assertEqual(wm._parse_memories_deferred("no line here"),
-                         (set(), set()))
+        self.assertEqual(wm._parse_deferred_names("no line here"), set())
 
-    def test_parses_names_and_flags_reasonless(self):
+    def test_names_and_free_form_reason(self):
         content = ("- **Memories deferred**: ref/REF_A — cold sibling, "
                    "dom/DOM_B\n")
-        names, reasonless = wm._parse_memories_deferred(content)
-        self.assertEqual(names, {"ref/ref_a", "dom/dom_b"})
-        self.assertEqual(reasonless, {"dom/dom_b"})
+        self.assertEqual(wm._parse_deferred_names(content),
+                         {"ref/ref_a", "dom/dom_b"})
 
-    def test_comma_inside_reason_fragments_ignored(self):
-        # "…admin UI, not touched" splits; the fragment has no dir/name token.
-        content = ("- **Memories deferred**: ref/REF_A — admin UI, "
+    def test_comma_and_colon_inside_reason_ignored(self):
+        # "…admin UI, not touched" is prose — no token contains a '/', so only
+        # the real memory name is captured. This is the operator's failure case.
+        content = ("- **Memories deferred**: ref/REF_A: admin UI, "
                    "not touched here\n")
-        names, reasonless = wm._parse_memories_deferred(content)
-        self.assertEqual(names, {"ref/ref_a"})
-        self.assertEqual(reasonless, set())
+        self.assertEqual(wm._parse_deferred_names(content), {"ref/ref_a"})
 
     def test_findall_collects_across_multiple_lines(self):
         content = ("- **Memories deferred**: ref/REF_A — cold one\n"
                    "- **Memories deferred**: dom/DOM_B — cold two\n")
-        names, reasonless = wm._parse_memories_deferred(content)
-        self.assertEqual(names, {"ref/ref_a", "dom/dom_b"})
-        self.assertEqual(reasonless, set())
+        self.assertEqual(wm._parse_deferred_names(content),
+                         {"ref/ref_a", "dom/dom_b"})
+
+    def test_reasonless_names_captured(self):
+        # No reason at all — bare names, one per line and comma-separated.
+        content = ("- **Memories deferred**: ref/REF_A\n"
+                   "- **Memories deferred**: dom/DOM_B, sys/SYS_C\n")
+        self.assertEqual(wm._parse_deferred_names(content),
+                         {"ref/ref_a", "dom/dom_b", "sys/sys_c"})
 
 
 class TestParsePrimaryFeatureMemory(unittest.TestCase):
