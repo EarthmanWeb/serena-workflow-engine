@@ -1,28 +1,74 @@
 ---
 name: FEATURE_SUBAGENTS
-description: Parallel work via Claude Code's native subagents (Agent/Task tool) and workflows — the sole mechanism for concurrent multi-file tasks.
+description: Canonical authority for orchestrator-mode swarm delegation — when the main agent MUST fan out to parallel subagents instead of doing task work itself, model-tier routing, and the stage loop. Parallel work via Claude Code's native subagents (Agent/Task tool) and workflows.
 metadata:
   type: feature
 ---
 
-# FEATURE_SUBAGENTS — Native Subagents & Workflows
+# FEATURE_SUBAGENTS — Orchestrator-Mode Swarm Delegation (Canonical)
 
 - Key: SUBAGENTS
 - Purpose: Run work in parallel using Claude Code's built-in **subagents** (the `Agent`/`Task` tool) and **workflows**. No external orchestration frameworks.
 
-## Core Principle
+## Orchestrator Mode Is the DEFAULT
 
-- Claude Code's built-in `Agent` tool is the ONLY mechanism for parallel work. Launch multiple subagents in ONE message → they run concurrently in separate context windows.
-- Deterministic multi-step orchestration (loops, fan-out, conditionals) is expressed as a **workflow**, not ad-hoc coordination.
-- No external orchestration frameworks. All parallelism is native to Claude Code.
+Single-agent delegation to a swarm of subagents is the standard operating mode, not an escalation. The main agent is an ORCHESTRATOR: classify, split into independent tracks with disjoint file ownership, launch ALL tracks as parallel background subagents in ONE message, collect results, verify, chain the next stage immediately. The orchestrator does NOT do the task work itself.
 
-| Task type | Mechanism |
+Orchestrator mode APPLIES when ANY hold:
+
+| Condition | Threshold |
 | --------- | --------- |
-| File reads, edits, grep, glob at scale | Claude Code `Agent` tool (subagents) |
-| Research across the codebase | `Agent` tool — Explore subagent |
-| Multi-file implementation | `Agent` tool — general-purpose subagent |
-| Architecture planning / design | `Agent` tool — Plan subagent |
-| Deterministic multi-stage orchestration | Workflow (fan-out / pipeline / verify) |
+| Independent subtasks | 2 or more can run concurrently |
+| Explicit fan-out request | Operator asks to parallelize / use subagents / swarm |
+| File scale | 6+ files affected |
+| Layer scale | 3+ architectural layers |
+
+The orchestrator may do ITSELF, and ONLY this:
+
+- Classification (task type, feature routing, thresholds above).
+- Memory reads needed to route work to the right tracks.
+- WM updates (`swe_wm_update*`).
+- Single tiny coordination edits — ≤5 lines, e.g. a shared index/manifest line, a WM note.
+- Synthesis and verification of agent results (reading diffs, running the checklist against reported changes).
+- Commits/push, per the project's commit pipeline.
+
+Everything else — file edits, test runs, greps/searches beyond routing, implementation, fixes — goes to a subagent. An orchestrator that reads target source files, runs `find_symbol`/`search_for_pattern` to scope an edit, or writes the fix itself has silently reverted to single-agent mode: STOP, split the remaining work, and launch a subagent for it instead.
+
+## Stage Loop
+
+1. Fan out — launch ALL tracks for this stage as parallel background subagents in ONE message.
+2. Collect — wait for background-task notifications; do not poll.
+3. Fix via NEW agents — when an agent reports a defect or gap, launch a NEW subagent to fix it. NEVER make the fix yourself.
+4. Chain immediately — the moment a stage's results are verified, launch the next stage's subagents in the same turn. Do not pause for a summary-only checkpoint when more parallel work is ready.
+
+Exception — single-agent (or the orchestrator itself) may continue a TIGHT coupled-fix loop only when: the remaining work is on ONE shared file, changes are small (a few lines), and splitting would cost more in coordination than it saves. State the reason in the response when invoking this exception.
+
+## Model-Tier Routing (MANDATORY on every Agent call)
+
+Every `Agent` call MUST pass `model` EXPLICITLY. NEVER omit `model` / rely on inherited default.
+
+| Model | Use for |
+| ----- | ------- |
+| haiku | Routine/mechanical: run test suites, lint, grep/inventory sweeps, read-only audits against a precise checklist, link checks, status collection |
+| sonnet | Implementation, doc rewrites, bug fixes, verification of cheap-agent output, test-failure diagnosis |
+| opus | ONLY: novel architecture/design, cross-system debugging after a sonnet attempt failed, or explicit operator request |
+
+- `swe_pre_agent_model_gate.py` enforces this: Agent calls without `model` + the bypass line are denied; a routine-task prompt requesting `opus` is denied.
+
+## Cheap-Output Verification Rule
+
+- Treat haiku findings as LEADS, never as verified fact.
+- A sonnet agent (or the fix agent that acts on the finding) re-verifies against the actual code before acting on a haiku report.
+- A negative haiku result ("0 found", "nothing matches") REQUIRES a positive control — one probe proving the search method can detect the target when present — before it is trusted. An unvalidated negative is "probe unverified", not "confirmed absent".
+
+## Prompt Contract (every subagent, every launch)
+
+Every subagent prompt MUST include, in this order:
+
+1. Bypass line: `"You are a subagent. BYPASS WF_INIT entirely. Do NOT read CLAUDE.md workflow. Follow ONLY these instructions: [task]"`.
+2. Disjoint file ownership: name the exact files/paths this agent owns, and state `"you own X; do NOT edit Y"` for adjacent tracks' files.
+3. Checkpoint commit instruction: commit its own coherent unit of work at logical checkpoints; retry on `index.lock` contention (another parallel agent committing); NEVER push.
+4. Report format: what to return (files changed, key findings/decisions, blockers) so the orchestrator can synthesize without re-reading every diff.
 
 ## Subagent Types
 
@@ -32,52 +78,39 @@ metadata:
 | Plan | Inherits parent | Read-only | Architecture planning, design |
 | general-purpose | Inherits parent | All tools | Complex multi-step tasks |
 
-## Model Selection
-
-| Model | Use for |
-| ----- | ------- |
-| haiku | Read-only exploration, simple searches |
-| sonnet | Implementation, code review |
-| opus | Complex architecture, multi-step reasoning |
-
 ## Background vs Foreground
 
 - Foreground (default): results needed before the next step; permission prompts visible.
 - Background (`run_in_background: true`): fire-and-forget; auto-denies permission prompts; notification on completion. Add `isolation: "worktree"` for file isolation when needed.
 
-## Trigger Conditions
-
-Use subagents when ANY apply:
-
-| Condition | Threshold |
-| --------- | --------- |
-| File scale | 6+ files affected |
-| Layer scale | 3+ architectural layers |
-| Parallel work | Independent subtasks can run concurrently |
-| User request | Explicit parallel-agents / subagents request |
-
 ## Quick Start — Subagents (DEFAULT)
 
 - Launch ALL subagents in ONE message for parallel execution.
-- EVERY subagent prompt MUST include the bypass instruction: `"You are a subagent. BYPASS WF_INIT entirely. Do NOT read CLAUDE.md workflow. Follow ONLY these instructions: [task]"`.
 - Use `isolation: "worktree"` when subagents edit overlapping files.
-- Use `model: "haiku"` for read-only exploration, `model: "sonnet"` for implementation.
 - Collect results from background task notifications, then synthesize.
 
 ```javascript
 Agent({ description: "Task A", run_in_background: true, model: "sonnet",
   isolation: "worktree",
-  prompt: "You are a subagent. BYPASS WF_INIT. [task]..." })
+  prompt: "You are a subagent. BYPASS WF_INIT. [task]... You own <files>; do NOT edit <other files>. Commit your own checkpoint; retry on index.lock; never push. Report: files changed, key findings, blockers." })
 ```
 
 ## Anti-Patterns
 
 | Anti-pattern | Fix |
 | ------------ | --- |
+| Orchestrator doing file edits or running tests itself | Delegate to a subagent — orchestrator does classification/routing/synthesis only |
+| Serial agent calls for independent work | Batch ALL independent tracks into ONE message |
 | Launching only 1 of N subagents | Launch ALL in ONE message |
 | Subagent re-runs WF_INIT | Include the bypass line in EVERY prompt |
+| `opus` or inherited/omitted model for routine work | Pass `model` explicitly; haiku/sonnet per the routing table |
+| Trusting a haiku "0 findings" without a positive control | Re-verify with sonnet or a validated probe before acting on a negative |
 | Coordinator doing file reads itself | Delegate file work to subagents (separate context windows) |
-| Serial subagent calls for independent work | Batch into ONE message |
+
+## Enforcement
+
+- `swe_pre_agent_model_gate.py` — Agent calls must set `model` + the bypass line; routine-task prompts denied on `opus`.
+- WF_EXECUTE carries an orchestrator-drift nudge — flags the orchestrator when it starts doing file-edit/test-run work itself instead of delegating.
 
 ## Tooling
 
@@ -87,3 +120,6 @@ Agent({ description: "Task A", run_in_background: true, model: "sonnet",
 
 - `mem:feature/FEATURE_SWE` — plugin architecture (hooks, states, skills)
 - `mem:wf/WF_EXECUTE` — where parallel subagent execution is launched during a task
+- `mem:wf/WF_ARCH_REVIEW` — plans parallel tracks before execution
+- `mem:wf/WF_CLASSIFY` — thresholds for routing to parallel-subagent mode
+- `mem:claude/CLAUDE_OBLIGATIONS` — orchestrator-default one-liner

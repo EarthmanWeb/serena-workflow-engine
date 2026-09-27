@@ -149,14 +149,21 @@ Revise the design when any apply. Read `REF_*` memories for correct patterns.
 
 ### 5. Parallel Execution Assessment
 
-If the task affects **6+ files OR 3+ layers**, consider parallel agents:
+Fan-out is the DEFAULT plan whenever the task has **2+ independent tracks** — not just at 6+ files / 3+ layers. Per `mem:feature/FEATURE_SUBAGENTS`, orchestrator mode also applies at 6+ files, 3+ layers, or an explicit operator fan-out request.
+
+When ANY threshold is met, the plan MUST list tracks explicitly:
+
+| Track | Owner files | Independent? | Model tier |
+| ----- | ----------- | ------------- | ---------- |
+| A | `path/a/**` | yes | sonnet (implementation) |
+| B | `path/b/**` | yes | haiku (mechanical/routine) |
 
 - Use Claude Code `Agent` tool with `run_in_background: true`.
-- Use `isolation: "worktree"` when agents may edit overlapping files.
-- Use `model: "sonnet"` for implementation, `"haiku"` for read-only.
-- Note `parallel_agents: true` in WM.
+- Use `isolation: "worktree"` when tracks may edit overlapping files.
+- Every track's model tier follows the FEATURE_SUBAGENTS routing table (haiku=routine, sonnet=implementation, opus=novel design only) — `model` is passed explicitly on every Agent call, never omitted.
+- Note `parallel_agents: true` in WM along with the tracks table.
 
-Parallel subagents launch during `WF_EXECUTE` — there is no separate orchestration state. If thresholds not met, proceed as single-agent implementation.
+Parallel subagents launch during `WF_EXECUTE` — there is no separate orchestration state. If no independent tracks exist (single coupled change), proceed as single-agent implementation and state why fan-out does not apply.
 
 ## Single Question + Consent Gate
 

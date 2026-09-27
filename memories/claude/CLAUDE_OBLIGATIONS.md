@@ -86,10 +86,7 @@ When a user instruction contradicts a memory:
 
 ## Parallel Processing
 
-- Use the Claude Code `Agent` tool for parallel tasks. Launch multiple in ONE message.
-- Use `run_in_background: true` for concurrent execution.
-- Use `isolation: "worktree"` when agents edit overlapping files.
-- See `feature/FEATURE_SUBAGENTS` for subagent types, model selection, and patterns.
+- Orchestrator mode is the DEFAULT for 2+ independent subtasks: classify, split into disjoint-file tracks, launch ALL as parallel background subagents in ONE message, collect, verify, chain the next stage — do NOT do the task work yourself. Every `Agent` call sets `model` explicitly (haiku=routine, sonnet=implementation, opus=novel design only). See `feature/FEATURE_SUBAGENTS` for the full stage loop, model-tier table, and prompt contract.
 
 ## Quality Standards
 

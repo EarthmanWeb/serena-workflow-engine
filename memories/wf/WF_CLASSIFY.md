@@ -102,7 +102,7 @@ Scan locations:
 | Debugging (test-driven) | Failing tests, behavior differs between environments, test-driven debugging | `WF_DEBUG_TDD` |
 | Operational (no code changes, execution only) | Run shell/WP-CLI, HTTP requests, check DB state, run test suites, verify deployments — needs feature context, modifies no source. Skip arch review | `WF_EXECUTE` (after Step 4) |
 | Code change | Bug fix, feature addition, refactor, doc update — modifies source | `WF_ARCH_REVIEW` or `WF_EXECUTE` per Step 3b (after Step 4) |
-| Parallel subagents (6+ files OR 3+ architectural layers) | Reads/edits at scale with independent concurrent subtasks. Note `parallel_agents: true`; use `Agent` tool with `run_in_background: true` and optionally `isolation: "worktree"` for edit conflicts | `WF_ARCH_REVIEW` |
+| Parallel subagents (2+ independent subtasks, OR explicit operator fan-out request, OR 6+ files, OR 3+ architectural layers) | Independent concurrent subtasks with disjoint file ownership — orchestrator mode per `feature/FEATURE_SUBAGENTS` is the DEFAULT, not an escalation. Note `parallel_agents: true`; use `Agent` tool with `run_in_background: true`, explicit `model` per tier, and optionally `isolation: "worktree"` for edit conflicts | `WF_ARCH_REVIEW` |
 
 ### 3b. Architecture Review Necessity Check (Code Changes Only)
 

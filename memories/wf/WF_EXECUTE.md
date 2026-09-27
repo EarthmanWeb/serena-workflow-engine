@@ -134,20 +134,20 @@ mcp__plugin_swe_serena__replace_content(
 
 **Tool choice:** code symbols → `replace_symbol_body` / `insert_*`; Markdown/config/prose or sub-symbol text → `replace_content` (or `Edit`). Fall back to `Edit`/`Read` ONLY when symbols cannot be resolved (per `CLAUDE_OBLIGATIONS`).
 
-## Parallel Execution
+## Parallel Execution — Orchestrator Mode
 
-For tasks with independent subtasks, use the Claude Code Agent tool:
+Parallel subagents launch here. Orchestrator mode is MANDATORY per `mem:feature/FEATURE_SUBAGENTS` whenever ≥2 independent subtasks exist, `parallel_agents: true` is noted in WM, or the task crosses 6+ files / 3+ layers — read that memory for the full stage loop, model-tier routing, prompt contract, and anti-patterns before launching. Do NOT do the file-edit/test-run work yourself when that memory's conditions apply.
 
 ```javascript
-Agent({ description: "Task A", run_in_background: true, model: "sonnet",
+Agent({ description: "Task A", run_in_background: true, model: "sonnet",  // haiku=routine/mechanical, sonnet=implementation/fixes, opus=novel design only — see FEATURE_SUBAGENTS
   isolation: "worktree",
-  prompt: "You are a subagent. BYPASS WF_INIT. [task]..." })
+  prompt: "You are a subagent. BYPASS WF_INIT. [task]... You own <files>; do NOT edit <other agent's files>. Commit your own checkpoint; retry on index.lock; never push. Report: files changed, findings, blockers." })
 ```
 
 - Launch ALL agents in ONE message for parallel execution.
 - Use `isolation: "worktree"` when agents edit overlapping files.
-- Use `model: "haiku"` for read-only tasks, `"sonnet"` for implementation.
-- Collect results from background task notifications, then synthesize.
+- Collect results from background task notifications, then chain the next stage's agents immediately — do not do the next stage's work yourself.
+- `swe_pre_agent_model_gate.py` enforces explicit `model` + bypass line on every Agent call; an orchestrator-drift nudge here flags self-performed file/test work that should have been delegated.
 
 ## Rules
 
