@@ -1,0 +1,339 @@
+"""Tests for orchestrator + swarm delegation enforcement:
+
+  - pre/swe_pre_agent_model_gate: missing_model_reason, missing_bypass_marker_reason,
+    opus_on_routine_reason (allow/deny paths for the Agent/Task model-tier gate)
+  - core/stream: count_task_work_since_delegation (drift counter + reset)
+  - post/swe_post_orchestrator_drift: main() end-to-end via stdin, threshold nudge
+
+Stdlib unittest only. Deterministic + offline; IO via tempfile, path resolution
+via monkeypatching the exact symbol each module imported (mirrors
+test_sweep_gate.py / test_hooks_pre.py conventions).
+"""
+import io
+import json
+import os
+import sys
+import tempfile
+import unittest
+from unittest import mock
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from _hookutil import import_hook, import_core, reset_caches  # noqa: E402
+
+stream = import_core("swe_hooks.core.stream")
+agent_gate = import_hook("pre/swe_pre_agent_model_gate")
+drift_hook = import_hook("post/swe_post_orchestrator_drift")
+
+
+def _write_stream(path, events):
+    with open(path, "w") as f:
+        for e in events:
+            f.write(json.dumps(e) + "\n")
+
+
+# ──────────────────────────────────────────────────────────────────
+# pre/swe_pre_agent_model_gate — missing_model_reason
+# ──────────────────────────────────────────────────────────────────
+
+class TestMissingModelReason(unittest.TestCase):
+    def test_missing_model_on_general_purpose_denies(self):
+        reason = agent_gate.missing_model_reason(
+            {"subagent_type": "general-purpose", "prompt": "do stuff"})
+        self.assertTrue(reason)
+        self.assertIn("model tier", reason)
+
+    def test_missing_model_unspecified_subagent_type_denies(self):
+        reason = agent_gate.missing_model_reason({"prompt": "do stuff"})
+        self.assertTrue(reason)
+
+    def test_model_present_allows(self):
+        reason = agent_gate.missing_model_reason(
+            {"subagent_type": "general-purpose", "model": "sonnet"})
+        self.assertEqual(reason, "")
+
+    def test_blank_model_string_denies(self):
+        reason = agent_gate.missing_model_reason(
+            {"subagent_type": "general-purpose", "model": "   "})
+        self.assertTrue(reason)
+
+    def test_builtin_fixed_model_type_exempt(self):
+        reason = agent_gate.missing_model_reason(
+            {"subagent_type": "claude-code-guide"})
+        self.assertEqual(reason, "")
+
+    def test_statusline_setup_exempt(self):
+        reason = agent_gate.missing_model_reason(
+            {"subagent_type": "statusline-setup"})
+        self.assertEqual(reason, "")
+
+    def test_explore_type_still_requires_model(self):
+        reason = agent_gate.missing_model_reason({"subagent_type": "Explore"})
+        self.assertTrue(reason)
+
+
+# ──────────────────────────────────────────────────────────────────
+# pre/swe_pre_agent_model_gate — missing_bypass_marker_reason
+# ──────────────────────────────────────────────────────────────────
+
+class TestMissingBypassMarkerReason(unittest.TestCase):
+    def test_no_marker_denies(self):
+        reason = agent_gate.missing_bypass_marker_reason("Please fix the bug.")
+        self.assertTrue(reason)
+        self.assertIn("bypass marker", reason)
+
+    def test_standard_marker_allows(self):
+        reason = agent_gate.missing_bypass_marker_reason(
+            "You are a subagent. BYPASS WF_INIT. Do the task.")
+        self.assertEqual(reason, "")
+
+    def test_case_insensitive_marker_allows(self):
+        reason = agent_gate.missing_bypass_marker_reason(
+            "you are a SUBAGENT and should bypass wf_init")
+        self.assertEqual(reason, "")
+
+    def test_swarm_agent_marker_allows(self):
+        reason = agent_gate.missing_bypass_marker_reason(
+            "You are a swarm agent handling task X.")
+        self.assertEqual(reason, "")
+
+    def test_empty_prompt_denies(self):
+        reason = agent_gate.missing_bypass_marker_reason("")
+        self.assertTrue(reason)
+
+
+# ──────────────────────────────────────────────────────────────────
+# pre/swe_pre_agent_model_gate — opus_on_routine_reason
+# ──────────────────────────────────────────────────────────────────
+
+class TestOpusOnRoutineReason(unittest.TestCase):
+    def test_opus_plus_run_tests_denies(self):
+        reason = agent_gate.opus_on_routine_reason(
+            "opus", "Run the test suite and report failures.")
+        self.assertTrue(reason)
+        self.assertIn("ROUTINE", reason)
+
+    def test_opus_plus_grep_denies(self):
+        reason = agent_gate.opus_on_routine_reason(
+            "opus", "Grep the codebase for TODO markers and list files.")
+        self.assertTrue(reason)
+
+    def test_opus_plus_lint_denies(self):
+        reason = agent_gate.opus_on_routine_reason(
+            "opus", "Run phpcbf and lint the plugin directory.")
+        self.assertTrue(reason)
+
+    def test_sonnet_plus_routine_allows(self):
+        reason = agent_gate.opus_on_routine_reason(
+            "sonnet", "Run the test suite and report failures.")
+        self.assertEqual(reason, "")
+
+    def test_opus_plus_design_keyword_allows(self):
+        reason = agent_gate.opus_on_routine_reason(
+            "opus", "Design the new caching architecture from scratch.")
+        self.assertEqual(reason, "")
+
+    def test_opus_with_justification_tag_allows(self):
+        reason = agent_gate.opus_on_routine_reason(
+            "opus",
+            "Run the test suite. [opus-justified: needs deep multi-file "
+            "reasoning across the whole test matrix]")
+        self.assertEqual(reason, "")
+
+    def test_opus_plus_non_routine_prompt_allows(self):
+        reason = agent_gate.opus_on_routine_reason(
+            "opus", "Implement the new checkout flow end to end.")
+        self.assertEqual(reason, "")
+
+    def test_haiku_never_denied(self):
+        reason = agent_gate.opus_on_routine_reason(
+            "haiku", "Run the test suite and report failures.")
+        self.assertEqual(reason, "")
+
+
+# ──────────────────────────────────────────────────────────────────
+# pre/swe_pre_agent_model_gate — main() end-to-end via stdin
+# ──────────────────────────────────────────────────────────────────
+
+class TestAgentModelGateMain(unittest.TestCase):
+    def _run_main(self, input_data):
+        stdin_json = json.dumps(input_data)
+        captured = io.StringIO()
+        with mock.patch("sys.stdin", io.StringIO(stdin_json)), \
+             mock.patch("select.select", return_value=([sys.stdin], [], [])), \
+             mock.patch("sys.stdout", captured):
+            try:
+                agent_gate.main()
+            except SystemExit:
+                pass
+        return json.loads(captured.getvalue() or "{}")
+
+    def test_non_agent_tool_passes_through_empty(self):
+        result = self._run_main({"tool_name": "Read", "tool_input": {}})
+        self.assertEqual(result, {})
+
+    def test_agent_call_missing_model_denied(self):
+        result = self._run_main({
+            "tool_name": "Agent",
+            "tool_input": {
+                "subagent_type": "general-purpose",
+                "prompt": "You are a subagent. BYPASS WF_INIT. Do X.",
+            },
+        })
+        self.assertEqual(
+            result.get("hookSpecificOutput", {}).get("permissionDecision"), "deny")
+
+    def test_agent_call_fully_valid_allows(self):
+        result = self._run_main({
+            "tool_name": "Agent",
+            "tool_input": {
+                "subagent_type": "general-purpose",
+                "model": "sonnet",
+                "prompt": "You are a subagent. BYPASS WF_INIT. Implement X.",
+            },
+        })
+        self.assertEqual(result, {})
+
+    def test_task_tool_alias_also_gated(self):
+        result = self._run_main({
+            "tool_name": "Task",
+            "tool_input": {"subagent_type": "general-purpose"},
+        })
+        self.assertEqual(
+            result.get("hookSpecificOutput", {}).get("permissionDecision"), "deny")
+
+
+# ──────────────────────────────────────────────────────────────────
+# core/stream — count_task_work_since_delegation
+# ──────────────────────────────────────────────────────────────────
+
+class TestCountTaskWorkSinceDelegation(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.stream_path = os.path.join(self.tmp.name, "s1.jsonl")
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_counts_task_work_since_last_delegation(self):
+        _write_stream(self.stream_path, [
+            {"type": "delegation", "tool": "Agent"},
+            {"type": "task_work", "tool": "Edit"},
+            {"type": "task_work", "tool": "Bash"},
+            {"type": "task_work", "tool": "Write"},
+        ])
+        self.assertEqual(stream.count_task_work_since_delegation(self.stream_path), 3)
+
+    def test_resets_on_delegation_event(self):
+        _write_stream(self.stream_path, [
+            {"type": "task_work", "tool": "Edit"},
+            {"type": "task_work", "tool": "Edit"},
+            {"type": "delegation", "tool": "Workflow"},
+            {"type": "task_work", "tool": "Bash"},
+        ])
+        self.assertEqual(stream.count_task_work_since_delegation(self.stream_path), 1)
+
+    def test_resets_on_state_event(self):
+        _write_stream(self.stream_path, [
+            {"type": "task_work", "tool": "Edit"},
+            {"type": "task_work", "tool": "Edit"},
+            {"type": "state", "to_s": "WF_EXECUTE"},
+            {"type": "task_work", "tool": "Bash"},
+        ])
+        self.assertEqual(stream.count_task_work_since_delegation(self.stream_path), 1)
+
+    def test_no_stream_file_returns_zero(self):
+        missing = os.path.join(self.tmp.name, "missing.jsonl")
+        self.assertEqual(stream.count_task_work_since_delegation(missing), 0)
+
+
+# ──────────────────────────────────────────────────────────────────
+# post/swe_post_orchestrator_drift — main() end-to-end via stdin
+# ──────────────────────────────────────────────────────────────────
+
+class TestOrchestratorDriftMain(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        reset_caches()
+        # Point the stream dir helper at our tempdir for isolation.
+        self._config_patch = mock.patch(
+            "swe_hooks.core.config.get_project_root", return_value=self.tmp.name)
+        self._config_patch.start()
+        self.addCleanup(self._config_patch.stop)
+
+    def _run_main(self, input_data):
+        stdin_json = json.dumps(input_data)
+        captured = io.StringIO()
+        with mock.patch("sys.stdin", io.StringIO(stdin_json)), \
+             mock.patch("select.select", return_value=([sys.stdin], [], [])), \
+             mock.patch("sys.stdout", captured):
+            try:
+                drift_hook.main()
+            except SystemExit:
+                pass
+        return json.loads(captured.getvalue() or "{}")
+
+    def _transcript(self, session_id):
+        return f"/x/{session_id}0000-0000-0000-0000-000000000000.jsonl"
+
+    def test_edit_below_threshold_no_nudge(self):
+        result = self._run_main({
+            "tool_name": "Edit",
+            "transcript_path": self._transcript("abcd1234"),
+            "tool_input": {},
+        })
+        ctx = result.get("hookSpecificOutput", {}).get("additionalContext", "")
+        self.assertNotIn("Orchestrator drift", ctx)
+
+    def test_drift_nudge_at_threshold(self):
+        session_id = "abcd1234"
+        for _ in range(drift_hook.DRIFT_THRESHOLD - 1):
+            self._run_main({
+                "tool_name": "Edit",
+                "transcript_path": self._transcript(session_id),
+                "tool_input": {},
+            })
+        result = self._run_main({
+            "tool_name": "Bash",
+            "transcript_path": self._transcript(session_id),
+            "tool_input": {},
+        })
+        ctx = result.get("hookSpecificOutput", {}).get("additionalContext", "")
+        self.assertIn("Orchestrator drift", ctx)
+        self.assertIn(str(drift_hook.DRIFT_THRESHOLD), ctx)
+
+    def test_agent_call_resets_counter(self):
+        session_id = "efgh5678"
+        for _ in range(drift_hook.DRIFT_THRESHOLD - 1):
+            self._run_main({
+                "tool_name": "Edit",
+                "transcript_path": self._transcript(session_id),
+                "tool_input": {},
+            })
+        # Delegate — resets the streak.
+        self._run_main({
+            "tool_name": "Agent",
+            "transcript_path": self._transcript(session_id),
+            "tool_input": {},
+        })
+        result = self._run_main({
+            "tool_name": "Bash",
+            "transcript_path": self._transcript(session_id),
+            "tool_input": {},
+        })
+        ctx = result.get("hookSpecificOutput", {}).get("additionalContext", "")
+        self.assertNotIn("Orchestrator drift", ctx)
+
+    def test_spawned_agent_call_is_not_tracked(self):
+        result = self._run_main({
+            "tool_name": "Edit",
+            "transcript_path": self._transcript("ijkl9012"),
+            "tool_input": {},
+            "agent_id": "sub-1",
+            "agent_type": "general-purpose",
+        })
+        self.assertEqual(result, {})
+
+
+if __name__ == "__main__":
+    unittest.main()

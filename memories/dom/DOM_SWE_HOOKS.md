@@ -38,7 +38,7 @@ hooks/
 └── hooks.json
 ```
 
-## Hook Inventory (18 scripts)
+## Hook Inventory (20 scripts)
 
 ### Session (`session/`)
 
@@ -64,6 +64,7 @@ hooks/
 | `swe_pre_bash_test_gate.py` | PreToolUse (Bash) | Validate test commands against WF_DEBUG_TDD |
 | `swe_pre_search_docs_gate.py` | PreToolUse (Grep/Glob/search_for_pattern/Bash-inspection; `Read` is matched in hooks.json but NEVER gated — opening a known file is not surfing) | DOCS-FIRST blocking gate. Bash classification is by the PRIMARY (first pipe stage) command of each `;`/`&&`/newline group: work commands (test runners, builds, formatters, git commit) are NOT gated even when piped through head/tail/grep output filters; a sequenced `cat`/`grep` after a build IS gated (standalone recon). BUDGET model: one docs consult (`docread`) clears the next 5 gated calls (`GATED_CALL_BUDGET`); each allowed call appends a `gated` event; deny when the budget is spent or no `docread` exists. Clearance survives turn boundaries. Budget refill requires a FRESH docread (re-reads don't refill; credited memory searches always do). Deny message: budget refill ≠ completed research; lists pending related docs (docpending) as designated next reads; instructs write_memory backfill when discovery was required. Spawned agents are NEVER gated: the gate exempts them BEFORE any sentinel/budget check. PRIMARY signal `core.session.is_spawned_agent(input)` — a non-empty `agent_id`/`agent_type` in the hook payload (Claude Code stamps these ONLY on subagent tool calls; `session_id` is the SAME parent id for main + subagent, so it cannot discriminate). FALLBACK `core.session.is_subagent_transcript(transcript_path)` — the `<session>/subagents/agent-*.jsonl` shape, used when the payload carries the subagent's own path. The transcript-shape check ALONE was insufficient: in practice the hook receives the PARENT transcript path for a subagent tool call, so `is_subagent_transcript` missed it and the subagent got gated on the parent's spent budget — hence the agent_id-first check. Undocumented area (no reasonable feature memories from both searches): deny message routes to a FOREGROUND Agent running /swe-feature-onboard (new area) or /swe-feature-update (stale docs) — no run_in_background, WAIT for completion, then read the memories it wrote to clear the gate; continued manual grepping is explicitly NOT the remedy |
 | `swe_pre_question_consent_gate.py` | PreToolUse (AskUserQuestion) | Deny questions while `auto_approve`/`blanket_consent` is set in WM (override tag for destructive/scope changes) |
+| `swe_pre_agent_model_gate.py` | PreToolUse (Agent/Task) | Enforces orchestrator + swarm delegation with complexity-based model tiers. Three independent DENY checks: (1) missing `model` param — required for every subagent_type except fixed-model built-ins (`claude-code-guide`, `statusline-setup`); (2) prompt lacks the subagent bypass marker ("BYPASS WF_INIT" / "you are a subagent" / "swarm agent") — without it the spawned agent re-runs the init chain; (3) `model: "opus"` on a routine-keyword prompt (tests/lint/grep/inventory/read-only audit) with no design/architecture keyword — override via literal `[opus-justified: <reason>]` tag in the prompt. Pure functions `missing_model_reason`/`missing_bypass_marker_reason`/`opus_on_routine_reason` are independently unit-tested |
 
 ### Post-Tool (`post/`) — observers/learners
 
@@ -77,6 +78,7 @@ hooks/
 | `swe_post_memory_index.py` | PostToolUse (write_memory) | Enforce MEMORY.md index update |
 | `swe_post_memory_style.py` | PostToolUse (write_memory/edit_memory) | Enforce terse-imperative memory style (REF_MEMORY_STYLE) |
 | `swe_post_tool_failure.py` | PostToolUseFailure | Flailing detection, failure logging |
+| `swe_post_orchestrator_drift.py` | PostToolUse (Edit/Write/NotebookEdit/Bash/Serena edit tools/Agent/Task/Workflow) | Orchestrator-drift nudge: counts consecutive main-agent task-work calls since the last Agent/Workflow delegation (`task_work` events, reset by a `delegation` event this same hook appends on Agent/Task/Workflow calls). At `DRIFT_THRESHOLD` (6) emits "split remaining work into parallel subagents (see FEATURE_SUBAGENTS)". Advisory only — never blocks. Exempt for spawned-agent tool calls (subagents are expected to do direct work, not delegate further) |
 
 > **Reads do NOT transition.** Reading a `WF_*` memory NEVER advances the FSM. `swe_post_read_state.py` only logs "ON STEP" and emits a continuation for the CURRENT state. Transition ONLY via explicit `set_state` — the dedicated tool or the prompt-intent hook (`swe_user_prompt_workflow.py`).
 
@@ -88,6 +90,7 @@ Sentinels are non-blocking PostToolUse nudges driven by the append-only JSONL st
 | -------- | ------ | --------- | ------------- | -------- |
 | Edit checkpoint (`swe_post_edit_checkpoint.py`) | `edit` events | 10 (`CHECKPOINT_THRESHOLD`) | `state`, `checkpoint` | Update Working Memory progress |
 | Docs-first search (`swe_post_search_docs_hint.py`) | `search` events | 3 (`SEARCH_HINT_THRESHOLD`) | `state`, `checkpoint`, `docread` | Check memories/docs before grepping again |
+| Orchestrator drift (`swe_post_orchestrator_drift.py`) | `task_work` events | 6 (`DRIFT_THRESHOLD`) | `state`, `checkpoint`, `delegation` | Split remaining work into parallel subagents |
 
 ### Mechanism (shared)
 

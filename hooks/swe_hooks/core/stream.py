@@ -257,3 +257,19 @@ def count_searches_since_docread(stream_path: str) -> int:
         marker_types=('state', 'checkpoint', 'docread'),
         count_type='search',
     )
+
+
+def count_task_work_since_delegation(stream_path: str) -> int:
+    """Count consecutive main-agent task-work events since the last delegation.
+
+    A 'delegation' event (appended when the main agent launches an Agent or
+    Workflow tool) resets the streak, so this counts only direct task work
+    (Edit/Write/NotebookEdit/Serena edit tools/Bash) done in the main
+    orchestrator thread WITHOUT fanning work out to subagents — the
+    orchestrator-drift signal.
+    """
+    return count_events_since_last(
+        stream_path,
+        marker_types=('state', 'checkpoint', 'delegation'),
+        count_type='task_work',
+    )
