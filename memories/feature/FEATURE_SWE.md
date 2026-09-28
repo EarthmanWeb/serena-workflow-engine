@@ -102,7 +102,7 @@ WF_INIT → WF_CLASSIFY → WF_ARCH_REVIEW → WF_EXECUTE
 
 | Hook                   | Trigger      | Purpose                              |
 | ---------------------- | ------------ | ------------------------------------ |
-| `swe_session_start.py` | SessionStart | Initialize workflow state, create WM |
+| `swe_session_start.py` | SessionStart | Initialize workflow state, create WM. Also reaps outdated-version daemons and orphaned VS-Code-extension Claude sessions (ppid==1, survived a VS Code crash/restart) via `core/orphan_reaper.py` — see DOM_SWE_HOOKS |
 | `swe_session_end.py`   | SessionEnd   | Clean up sentinels, mark WM abandoned |
 
 ### User Prompt Hooks (`hooks/prompt/`)

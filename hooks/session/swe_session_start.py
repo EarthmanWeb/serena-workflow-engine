@@ -30,6 +30,7 @@ try:
     )
     from swe_hooks.core.state_manager import StateManager
     from swe_hooks.core.stream import get_stream_path, append_event
+    from swe_hooks.core.orphan_reaper import reap_orphans
 except ImportError as e:
     swe_hooks.bootstrap.import_error_exit(e, "SessionStart")
 
@@ -356,6 +357,26 @@ def _reap_outdated_daemons():
     return reaped
 
 
+def _reap_orphaned_vscode_sessions():
+    """Kill orphaned VS-Code-extension Claude sessions (ppid==1, survived a
+    VS Code restart/crash, stdio parent gone). Each orphan keeps its whole
+    MCP/LSP stack alive (several GB); left running they can re-OOM the
+    machine. Best-effort, never blocks session start. Errors are surfaced as
+    a one-line warning (stderr) rather than swallowed silently.
+
+    Returns the list of reaped PIDs (for the banner).
+    """
+    try:
+        result = reap_orphans(dry_run=False)
+        if result.get("error"):
+            print(f"orphan_reaper: WARNING: {result['error']}", file=sys.stderr)
+            return []
+        return result.get("reaped", [])
+    except Exception as e:
+        print(f"orphan_reaper: WARNING: unexpected error: {e}", file=sys.stderr)
+        return []
+
+
 def _log_boot(stream_path, session_id, source):
     """Forensic marker: SessionStart FIRED — appended before the self-update so
     a timeout-killed update still leaves evidence ('session_boot' with no
@@ -417,6 +438,11 @@ def main():
         # stuck WF_CLASSIFY). Kill outdated daemons so only the installed version
         # owns the state. Best-effort; never blocks session start.
         reaped_daemons = _reap_outdated_daemons()
+
+        # Reap orphaned VS-Code-extension Claude sessions left behind by a
+        # VS Code restart/crash (ppid==1, whole MCP/LSP stack still alive).
+        # Cheap (one ps call), best-effort, never blocks session start.
+        reaped_orphans = _reap_orphaned_vscode_sessions()
 
         # Check bypass FIRST. Bypass lives as "bypass": true inside
         # swe-setup-complete.json (the same file used for init). When set, SWE
@@ -526,6 +552,9 @@ The workflow will not block you while you decide."""
                             f"(restart session to load)")
         if reaped_daemons:
             update_line += f"\n🧹 Reaped {len(reaped_daemons)} outdated daemon(s): {', '.join(str(p) for p in reaped_daemons)}"
+        if reaped_orphans:
+            update_line += (f"\n🧹 Reaped {len(reaped_orphans)} orphaned Claude session(s) "
+                             f"(pids {', '.join(str(p) for p in reaped_orphans)})")
 
         context = f"""🚀 SERENA WORKFLOW ENGINE v{plugin_version} - Session {session_id}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━{update_line}

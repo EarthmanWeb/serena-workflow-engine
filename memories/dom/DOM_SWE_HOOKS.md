@@ -29,6 +29,7 @@ hooks/
 │   │   ├── session.py            # Session ID, WM management
 │   │   ├── state_manager.py      # State machine logic
 │   │   ├── stream.py             # Append-only JSONL event log
+│   │   ├── orphan_reaper.py      # Kills orphaned VS-Code-extension Claude sessions (ppid==1)
 │   │   └── wm_validator.py       # Working Memory validation
 │   ├── mcp/
 │   │   └── wm_server.py          # swe-wm MCP server
@@ -44,7 +45,7 @@ hooks/
 
 | Hook | Event | Purpose |
 | ---- | ----- | ------- |
-| `swe_session_start.py` | SessionStart | Initialize workflow state, auto-update. Appends `session_boot` (with `src`: startup/resume/clear/compact) BEFORE the self-update and `selfupdate` (ok/old/new or err) after it — a `session_boot` with no following `selfupdate` = update killed by the hook timeout (30s) |
+| `swe_session_start.py` | SessionStart | Initialize workflow state, auto-update. Appends `session_boot` (with `src`: startup/resume/clear/compact) BEFORE the self-update and `selfupdate` (ok/old/new or err) after it — a `session_boot` with no following `selfupdate` = update killed by the hook timeout (30s). Also reaps outdated-version daemons AND orphaned VS-Code-extension Claude sessions (see `orphan_reaper.py` below) — both best-effort, never block boot |
 | `swe_session_end.py` | SessionEnd | Clean up sentinels, mark WM abandoned |
 
 ### Prompt (`prompt/`)
@@ -281,6 +282,32 @@ from swe_hooks.core.wm_validator import validate_wm_structure, get_wm_section
 is_valid, errors = validate_wm_structure(wm_content)
 section_content = get_wm_section(wm_content, "Workflow Context")
 ```
+
+### Orphan Reaper (`swe_hooks.core.orphan_reaper`)
+
+- Problem: a VS Code (or Cursor / VS Code Insiders) restart/crash can leave its
+  Claude Code native-binary child alive, reparented to launchd (`ppid == 1`).
+  Nothing in the UI can reach it — its whole MCP/LSP stack (Serena, tsserver,
+  pyright, etc., several GB) keeps running; multiple orphans can re-OOM the
+  machine.
+- Match criteria (ALL required): executable path matches
+  `/\.(vscode(-insiders)?|cursor)/extensions/anthropic\.claude-code-.*/resources/native-binary/claude`,
+  `ppid == 1`, owned by the current user, not this session's own pid. A
+  terminal `claude` CLI session is NEVER matched (parent is a shell; the
+  path check alone excludes it even if its ppid happened to be 1).
+- `find_orphaned_vscode_claude_sessions(ps_output, my_uid, exclude_pids=None)` —
+  pure parser over `ps -axo pid=,ppid=,uid=,command=` text.
+- `kill_matches(matches, kill_fn=os.kill, grace_seconds=3, is_alive_fn=None)` —
+  SIGTERM every match; escalate to SIGKILL only if still alive after the grace
+  period. Injectable `kill_fn`/`is_alive_fn`/`sleep_fn` for tests.
+- `reap_orphans(dry_run, ...)` — wires ps-fetch + match + kill; NEVER raises —
+  a fetch/parse/kill failure is returned as `{"error": ...}` instead. Wired
+  into `swe_session_start.py` (best-effort, one `ps` call, never blocks
+  boot; a reap error prints a one-line warning to stderr, never swallowed
+  silently); reaped pids are surfaced in the SessionStart banner.
+- Standalone CLI: `python3 hooks/swe_hooks/core/orphan_reaper.py --dry-run`
+  (list matches, kill nothing) or `--apply` (SIGTERM/SIGKILL them);
+  `--grace-seconds N` to tune the escalation wait.
 
 ## Hook Loading
 

@@ -13,7 +13,7 @@ claude plugin install swe@EarthmanWeb --scope local
 
 Install with `--scope local` for a single project, or `--scope user` to make it available globally across all projects. When installed globally, hooks are inert in projects that haven't been initialized -- they won't interfere until you run `/swe-init`.
 
-Auto-update is built in: the plugin checks for the latest version on session start via the marketplace hook.
+Auto-update is built in: the plugin checks for the latest version on session start via the marketplace hook. Session start also reaps orphaned VS-Code-extension Claude sessions left behind by a VS Code crash/restart (`hooks/swe_hooks/core/orphan_reaper.py`; standalone: `python3 hooks/swe_hooks/core/orphan_reaper.py --dry-run`).
 
 ### 2. Initialize
 
