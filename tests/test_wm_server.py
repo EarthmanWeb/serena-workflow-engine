@@ -187,15 +187,72 @@ class TestHandleToolsCall(unittest.TestCase):
         self.assertIn("\n", result["content"][0]["text"])
 
     def test_error_result_keeps_json_even_with_summary(self):
-        # If the result dict has an 'error' key, JSON is emitted even when a
-        # summary is present (the summary branch requires NOT result.get('error')).
+        # If the result dict has an 'error' key, the readable ❌ headline is
+        # prepended but the JSON body (after the blank-line separator) is
+        # UNCHANGED — the summary branch requires NOT result.get('error').
         wm.TOOL_REGISTRY = {
             "fake": lambda **kw: {"summary": "should be ignored", "error": "boom"}
         }
         result = wm.handle_tools_call({"name": "fake", "arguments": {}})
         self.assertNotIn("isError", result)
-        parsed = json.loads(result["content"][0]["text"])
+        text = result["content"][0]["text"]
+        headline, _, json_body = text.partition("\n\n")
+        self.assertTrue(headline.startswith("❌ WM[—] fake: boom"))
+        parsed = json.loads(json_body)
         self.assertEqual(parsed["error"], "boom")
+        self.assertEqual(parsed["summary"], "should be ignored")
+
+    def test_error_headline_uses_result_session_id(self):
+        wm.TOOL_REGISTRY = {
+            "fake": lambda **kw: {"error": "sweep failed", "session_id": "b1c866da"}
+        }
+        result = wm.handle_tools_call({"name": "fake", "arguments": {}})
+        text = result["content"][0]["text"]
+        first_line = text.split("\n")[0]
+        self.assertEqual(first_line, "❌ WM[b1c866da] fake: sweep failed")
+
+    def test_error_headline_falls_back_to_argument_session_id(self):
+        wm.TOOL_REGISTRY = {"fake": lambda **kw: {"error": "boom"}}
+        result = wm.handle_tools_call(
+            {"name": "fake", "arguments": {"session_id": "aaaaaaaa"}}
+        )
+        first_line = result["content"][0]["text"].split("\n")[0]
+        self.assertEqual(first_line, "❌ WM[aaaaaaaa] fake: boom")
+
+    def test_error_headline_includes_section_context(self):
+        wm.TOOL_REGISTRY = {"fake": lambda **kw: {"error": "not allowed"}}
+        result = wm.handle_tools_call(
+            {
+                "name": "fake",
+                "arguments": {"session_id": "b1c866da", "section": "Notes"},
+            }
+        )
+        first_line = result["content"][0]["text"].split("\n")[0]
+        self.assertEqual(
+            first_line, "❌ WM[b1c866da] fake (Notes): not allowed"
+        )
+
+    def test_error_headline_truncates_long_cause(self):
+        long_cause = "x" * 300
+        wm.TOOL_REGISTRY = {
+            "fake": lambda **kw: {"error": long_cause, "session_id": "b1c866da"}
+        }
+        result = wm.handle_tools_call({"name": "fake", "arguments": {}})
+        first_line = result["content"][0]["text"].split("\n")[0]
+        self.assertLessEqual(len(first_line), 121)
+        self.assertTrue(first_line.endswith("…"))
+
+    def test_error_headline_body_json_unaffected_by_truncation(self):
+        # Truncation only affects the headline; the JSON error string is full.
+        long_cause = "y" * 300
+        wm.TOOL_REGISTRY = {
+            "fake": lambda **kw: {"error": long_cause, "session_id": "b1c866da"}
+        }
+        result = wm.handle_tools_call({"name": "fake", "arguments": {}})
+        text = result["content"][0]["text"]
+        _, _, json_body = text.partition("\n\n")
+        parsed = json.loads(json_body)
+        self.assertEqual(parsed["error"], long_cause)
 
     def test_non_dict_result_formats_as_json(self):
         wm.TOOL_REGISTRY = {"fake": lambda **kw: ["a", "b"]}
@@ -736,3 +793,125 @@ class TestToolSweWmUpdate(_FSBase):
     def test_registered_in_tool_registry(self):
         self.assertIn("swe_wm_update", wm.TOOL_REGISTRY)
         self.assertIs(wm.TOOL_REGISTRY["swe_wm_update"], wm.tool_swe_wm_update)
+
+
+# ──────────────────────────────────────────────────────────────────
+# End-to-end ❌ headline — real TOOL_REGISTRY through handle_tools_call
+# ──────────────────────────────────────────────────────────────────
+
+class TestErrorHeadlineEndToEnd(_FSBase):
+    """Representative error cases through the REAL registry (not a fake),
+    proving the ❌ WM[<session>] headline renders as line 1 of tools/call
+    output for every swe-wm tool that can fail, with the JSON body intact
+    after the blank-line separator.
+    """
+
+    def _first_line_and_body(self, result):
+        text = result["content"][0]["text"]
+        headline, _, json_body = text.partition("\n\n")
+        return headline, json.loads(json_body)
+
+    def test_sweep_verification_failure(self):
+        self._write_wm(
+            "# WM\n\n## Current Task\n\n**[IN_PROGRESS]**:\n\n"
+            "## Affected Features\n\nold\n\n## Previous Task\n\n-\n"
+        )
+        stream_path = wm.get_stream_path(self.SID)
+        # Surface a docpending link from the primary feature (never read),
+        # then attempt an Affected Features write that lists no memories at
+        # all read for it — reproduces the "Sweep verification FAILED" error.
+        wm.append_event(
+            stream_path, 'docpending',
+            new=['ref/REF_RELATED'], source='feature/feature_swe',
+        )
+        content = (
+            "- **Primary**: SWE - fix the thing\n"
+            "- **Memories loaded**: feature/feature_swe\n"
+        )
+        result = wm.handle_tools_call({
+            "name": "swe_wm_update_section",
+            "arguments": {
+                "session_id": self.SID,
+                "section": "Affected Features",
+                "content": content,
+            },
+        })
+        headline, body = self._first_line_and_body(result)
+        self.assertTrue(
+            headline.startswith(f"❌ WM[{self.SID}] swe_wm_update_section (Affected Features): "),
+            headline,
+        )
+        self.assertIn("Sweep verification FAILED", headline)
+        self.assertIn("Sweep verification FAILED", body["error"])
+        self.assertLessEqual(len(headline), 121)
+
+    def test_bad_status_rejected(self):
+        self._write_wm("# WM\n\n## Current Task\n\n**[IN_PROGRESS]**:\n")
+        result = wm.handle_tools_call({
+            "name": "swe_wm_update_status",
+            "arguments": {"session_id": self.SID, "status": "NOT_A_REAL_STATUS"},
+        })
+        headline, body = self._first_line_and_body(result)
+        self.assertTrue(
+            headline.startswith(
+                f"❌ WM[{self.SID}] swe_wm_update_status "
+                "(NOT_A_REAL_STATUS): Invalid status "
+            ),
+            headline,
+        )
+        self.assertIn("Invalid status", body["error"])
+
+    def test_missing_wm_file(self):
+        # No WM written for this session at all.
+        result = wm.handle_tools_call({
+            "name": "swe_wm_update_section",
+            "arguments": {
+                "session_id": self.SID,
+                "section": "Notes",
+                "content": "hi",
+            },
+        })
+        headline, body = self._first_line_and_body(result)
+        self.assertEqual(
+            headline,
+            f"❌ WM[{self.SID}] swe_wm_update_section (Notes): "
+            f"No WM file found for session {self.SID}",
+        )
+        self.assertIn("No WM file", body["error"])
+
+    def test_protected_section_rejected(self):
+        self._write_wm("# WM\n\n## Transitions\n\nx\n")
+        result = wm.handle_tools_call({
+            "name": "swe_wm_update_section",
+            "arguments": {
+                "session_id": self.SID,
+                "section": "Transitions",
+                "content": "hack",
+            },
+        })
+        headline, body = self._first_line_and_body(result)
+        self.assertTrue(
+            headline.startswith(
+                f"❌ WM[{self.SID}] swe_wm_update_section (Transitions): "
+            ),
+            headline,
+        )
+        self.assertIn("daemon-managed", headline)
+        self.assertIn("daemon-managed", body["error"])
+
+    def test_no_session_id_available(self):
+        # No explicit id, no env, no WM -> resolver yields None inside the tool.
+        result = wm.handle_tools_call({
+            "name": "swe_wm_read", "arguments": {},
+        })
+        headline, body = self._first_line_and_body(result)
+        # The real "no session_id" error message is long — the headline
+        # truncates it with an ellipsis to stay under the ~120-char budget.
+        self.assertTrue(
+            headline.startswith("❌ WM[—] swe_wm_read: No session_id "
+                                 "provided and no SWE_SESSION_ID env var set"),
+            headline,
+        )
+        self.assertTrue(headline.endswith("…"))
+        self.assertLessEqual(len(headline), 121)
+        self.assertIn("No session_id", body["error"])

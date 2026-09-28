@@ -832,6 +832,34 @@ def handle_tools_list(params: dict) -> dict:
     return {"tools": TOOL_DEFINITIONS}
 
 
+def _error_headline(name: str, arguments: dict, result: dict) -> str:
+    """Build the ❌ WM[<session>] <tool/section>: <short cause> first line.
+
+    Mirrors the ✅ success-line style (same WM[<id>] bracket) so both render
+    identically in a renderer that only shows the first line of output. The
+    session id comes from the result (tools that resolved one echo it back)
+    or falls back to the request's own session_id argument, then '—' when
+    neither is available (e.g. "no session_id" errors). Cause is the raw
+    error string, truncated so the whole line stays under ~120 chars.
+    """
+    session_id = result.get("session_id") or arguments.get("session_id") or "—"
+    # Section-scoped errors (from swe_wm_update's "sections[i] (Section): ...")
+    # already name their section; otherwise fall back to the tool name and any
+    # explicit `section`/`status` argument for context.
+    label = name
+    if "section" in arguments and name != "swe_wm_update":
+        label = f"{name} ({arguments['section']})"
+    elif "status" in arguments and name == "swe_wm_update_status":
+        label = f"{name} ({arguments['status']})"
+
+    cause = str(result.get("error", "")).strip()
+    prefix = f"❌ WM[{session_id}] {label}: "
+    budget = max(20, 120 - len(prefix))
+    if len(cause) > budget:
+        cause = cause[: budget - 1].rstrip() + "…"
+    return prefix + cause
+
+
 def handle_tools_call(params: dict) -> dict:
     name = params.get("name", "")
     arguments = params.get("arguments", {})
@@ -845,9 +873,15 @@ def handle_tools_call(params: dict) -> dict:
         result = tool_fn(**arguments)
         # Prefer a one-line human-readable summary when the tool provides one
         # (mutating tools do). Read/list tools return structured data with no
-        # summary — those still emit full JSON. Errors keep JSON too, for detail.
+        # summary — those still emit full JSON.
         if isinstance(result, dict) and result.get("summary") and not result.get("error"):
             text = result["summary"]
+        elif isinstance(result, dict) and result.get("error"):
+            # Error results: readable ❌ headline first (renderer shows only the
+            # first ~3 lines), blank line, then the existing JSON UNCHANGED so
+            # callers that parse the JSON body keep working.
+            headline = _error_headline(name, arguments, result)
+            text = headline + "\n\n" + json.dumps(result, indent=2)
         else:
             text = json.dumps(result, indent=2)
         return {"content": [{"type": "text", "text": text}]}
