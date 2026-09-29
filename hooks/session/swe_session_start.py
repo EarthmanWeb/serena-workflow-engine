@@ -286,6 +286,134 @@ def _self_update_marketplace(plugin_root):
     return True, old_version, new_version
 
 
+_VERSIONED_DAEMON_PATTERN = re.compile(
+    r'/cache/[^/]+/[^/]+/([0-9]+\.[0-9]+\.[0-9]+)/(?:scripts|hooks)/'
+)
+_SHELL_BASENAMES = frozenset(('sh', 'bash', 'zsh', 'dash', 'env'))
+
+
+def _vtuple(v):
+    """Parse a dotted version string into a comparable int tuple. Malformed
+    or non-string input maps to (0,) so it always sorts as "oldest"."""
+    try:
+        return tuple(int(p) for p in v.split('.'))
+    except (ValueError, AttributeError):
+        return (0,)
+
+
+def _parse_ps(out):
+    """Parse `ps -axww -o pid=,ppid=,command=` output into {pid: (ppid, command)}.
+
+    Lines that don't parse (blank, malformed pid/ppid) are skipped. Best-effort:
+    callers treat a partially-populated map as normal.
+    """
+    procs = {}
+    for line in out.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        parts = line.split(None, 2)
+        if len(parts) < 2:
+            continue
+        try:
+            pid = int(parts[0])
+            ppid = int(parts[1])
+        except ValueError:
+            continue
+        command = parts[2] if len(parts) > 2 else ''
+        procs[pid] = (ppid, command)
+    return procs
+
+
+def _command_basename(command):
+    """Best-effort executable basename from a ps command-line string (first
+    whitespace-separated token, path stripped)."""
+    if not command:
+        return ''
+    first = command.split(None, 1)[0]
+    return os.path.basename(first)
+
+
+def _find_session_root(procs, start_pid):
+    """Walk up the ppid chain from start_pid to find "the Claude process" —
+    the first ancestor whose command is not a shell wrapper (sh/bash/zsh/
+    dash/env) or a python/python3* interpreter. Those wrappers sit between a
+    hook/MCP-server child and the actual Claude Code process, so skipping
+    them is what lets us identify the true session root.
+
+    Falls back to start_pid itself if the chain is exhausted (pid<=1) or hits
+    a pid missing from procs before finding a non-wrapper ancestor.
+    """
+    pid = start_pid
+    seen = set()
+    while pid > 1 and pid not in seen and pid in procs:
+        seen.add(pid)
+        ppid, _command = procs[pid]
+        if ppid <= 1 or ppid not in procs:
+            return start_pid
+        parent_command = procs[ppid][1]
+        base = _command_basename(parent_command)
+        is_wrapper = base in _SHELL_BASENAMES or base.startswith('python')
+        if not is_wrapper:
+            return ppid
+        pid = ppid
+    return start_pid
+
+
+def _is_descendant(procs, pid, root):
+    """True if walking pid's ppid chain (cycle-guarded, stopping at pid<=1)
+    reaches root. A pid equal to root counts as a descendant of itself."""
+    current = pid
+    seen = set()
+    while current > 0 and current not in seen:
+        if current == root:
+            return True
+        seen.add(current)
+        entry = procs.get(current)
+        if not entry:
+            return False
+        ppid = entry[0]
+        if ppid == current:
+            return False  # self-referential ppid — treat as a cycle, not root
+        current = ppid
+    return False
+
+
+def _select_outdated_pids(procs, installed_version, session_root, my_pid):
+    """Select PIDs of SWE daemons running an older version than installed.
+
+    Excludes:
+      - any process descended from session_root (this session's own freshly
+        launched MCP servers — see module docstring below for why this
+        exemption exists)
+      - my own pid
+      - non-swe processes, and processes whose command doesn't match the
+        versioned cache-path pattern
+      - processes at the current or a newer version
+    """
+    installed_t = _vtuple(installed_version)
+    selected = []
+    for pid, (_ppid, command) in procs.items():
+        if pid == my_pid:
+            continue
+        if 'swe' not in command:
+            continue
+        if not any(tok in command for tok in (
+            'serena_memory_patch.py', 'wm_server.py',
+            'wp_cli_server.py', 'swe_hooks',
+        )):
+            continue
+        m = _VERSIONED_DAEMON_PATTERN.search(command)
+        if not m:
+            continue
+        if _vtuple(m.group(1)) >= installed_t:
+            continue  # current or newer — leave it
+        if _is_descendant(procs, pid, session_root):
+            continue  # this session's own daemon — never kill it
+        selected.append(pid)
+    return selected
+
+
 def _reap_outdated_daemons():
     """Kill SWE MCP daemons running from an OLDER plugin version than installed.
 
@@ -300,6 +428,18 @@ def _reap_outdated_daemons():
     Kills any whose VERSION < installed version. Never kills equal/newer, never
     kills non-swe processes, and never kills self. Best-effort and POSIX-only.
 
+    SESSION EXEMPTION: on the first session after a plugin update, Claude Code
+    can launch this session's own Serena/swe-wm MCP servers from the OLD
+    versioned cache path (they were spawned before the self-update ran), racing
+    this hook. Without an exemption, those freshly-launched servers ARE the
+    "outdated daemons" this function targets, and it killed its own session's
+    MCP servers seconds after they started ("Connection closed" ~1s in, then a
+    15-minute cached-failure window with no relaunch). We exempt any candidate
+    process descended from THIS session's root (found by walking up from our
+    own parent pid, skipping shell/python wrapper processes) while still
+    reaping outdated daemons belonging to OTHER sessions — the function's
+    original purpose.
+
     Returns the list of reaped PIDs (for logging).
     """
     reaped = []
@@ -309,44 +449,19 @@ def _reap_outdated_daemons():
         if not installed:
             return reaped  # no manifest — cannot establish "outdated"
 
-        def vtuple(v):
-            try:
-                return tuple(int(p) for p in v.split('.'))
-            except (ValueError, AttributeError):
-                return (0,)
-
-        installed_t = vtuple(installed)
         my_pid = os.getpid()
 
-        # List processes + command lines (POSIX ps). Best-effort.
+        # List processes + parent pids + command lines (POSIX ps). Best-effort.
         out = subprocess.run(
-            ['ps', '-axww', '-o', 'pid=,command='],
+            ['ps', '-axww', '-o', 'pid=,ppid=,command='],
             capture_output=True, text=True, timeout=5
         ).stdout
 
-        pat = re.compile(r'/cache/[^/]+/[^/]+/([0-9]+\.[0-9]+\.[0-9]+)/(?:scripts|hooks)/')
-        for line in out.splitlines():
-            line = line.strip()
-            if not line or 'swe' not in line:
-                continue
-            # Only target THIS plugin's daemons (serena/wm/wp-cli servers + patch).
-            if not any(tok in line for tok in (
-                'serena_memory_patch.py', 'wm_server.py',
-                'wp_cli_server.py', 'swe_hooks',
-            )):
-                continue
-            m = pat.search(line)
-            if not m:
-                continue
-            ver = m.group(1)
-            if vtuple(ver) >= installed_t:
-                continue  # current or newer — leave it
-            try:
-                pid = int(line.split(None, 1)[0])
-            except (ValueError, IndexError):
-                continue
-            if pid == my_pid:
-                continue
+        procs = _parse_ps(out)
+        session_root = _find_session_root(procs, os.getppid())
+        pids_to_kill = _select_outdated_pids(procs, installed, session_root, my_pid)
+
+        for pid in pids_to_kill:
             try:
                 os.kill(pid, signal.SIGTERM)
                 reaped.append(pid)
