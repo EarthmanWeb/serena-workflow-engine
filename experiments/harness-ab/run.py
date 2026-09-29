@@ -45,6 +45,15 @@ HOOK_DENIAL_RE = re.compile(
 )
 STOP_HOOK_RE = re.compile(r"Stop hook", re.IGNORECASE)
 
+# Serena memory-consultation tool names (exact match on tool_use `name`).
+MEMORY_TOOL_NAMES = frozenset({
+    "mcp__plugin_swe_serena__read_memory",
+    "mcp__plugin_swe_serena__list_memories",
+    "mcp__plugin_swe_serena__search_memories_by_name",
+    "mcp__plugin_swe_serena__search_memories_by_front_matter",
+})
+MEMORY_PATH_RE = re.compile(r"\.serena/memory")
+
 
 # --------------------------------------------------------------------------
 # Pure functions (unit tested)
@@ -159,6 +168,7 @@ def parse_transcript(lines):
         "assistant_turns_incl_subagents": 0,
         "tool_calls_by_name": {},
         "total_tool_calls": 0,
+        "memory_file_reads": 0,
         "subagent_launches": 0,
         "subagent_messages": 0,
         "tool_result_errors": 0,
@@ -206,6 +216,14 @@ def parse_transcript(lines):
                             metrics["tool_calls_by_name"].get(name, 0) + 1
                         )
                         metrics["total_tool_calls"] += 1
+                        if name in MEMORY_TOOL_NAMES:
+                            metrics["memory_file_reads"] += 1
+                        elif name == "Read":
+                            tool_input = block.get("input") or {}
+                            if isinstance(tool_input, dict):
+                                path = tool_input.get("file_path") or tool_input.get("path") or ""
+                                if isinstance(path, str) and MEMORY_PATH_RE.search(path):
+                                    metrics["memory_file_reads"] += 1
                         if name in ("Agent", "Task") and not is_subagent_event:
                             # Only the main agent's own Agent/Task tool_use
                             # blocks count as a "launch" — a subagent that
@@ -659,6 +677,24 @@ def _kill_process_group(proc):
         pass
 
 
+FAILED_TEST_LINE_RE = re.compile(r"^(?:FAIL|ERROR): (.+)$", re.MULTILINE)
+
+
+def parse_failed_test_ids(text):
+    """Extract short test ids from unittest's `FAIL: <id>` / `ERROR: <id>`
+    summary lines. Pure. Returns a list (dedup, order-preserving) of the
+    raw id text after the marker, e.g. "test_foo (tests.test_bar.MyTest)".
+    Empty/no-match input returns []."""
+    if not text:
+        return []
+    seen = []
+    for m in FAILED_TEST_LINE_RE.finditer(text):
+        ident = m.group(1).strip()
+        if ident and ident not in seen:
+            seen.append(ident)
+    return seen
+
+
 def run_unittest_dir(run_root, test_dir_rel, top_level, timeout_s=300):
     """Run `python3 -m unittest discover` and return (rc, stdout, stderr)."""
     cmd = [sys.executable, "-m", "unittest", "discover", "-s", test_dir_rel,
@@ -671,8 +707,27 @@ def run_unittest_dir(run_root, test_dir_rel, top_level, timeout_s=300):
         return -1, e.stdout or "", (e.stderr or "") + "\nTIMEOUT"
 
 
-def score_run(work_dir):
-    """Copy hidden tests -> _acceptance/, run acceptance + regression tests."""
+def _write_score_log(run_dir, filename, cmd_label, rc, out, err):
+    """Best-effort write of a scoring pass's stdout+stderr to
+    <run_dir>/<filename>. Never raises (run_dir may be None or not writable,
+    e.g. in tests / dry-run paths that don't set up a real run dir)."""
+    if not run_dir:
+        return
+    try:
+        os.makedirs(run_dir, exist_ok=True)
+        with open(os.path.join(run_dir, filename), "w") as f:
+            f.write(f"exit_code: {rc}\n\n--- stdout ---\n{out}\n\n--- stderr ---\n{err}\n")
+    except OSError:
+        pass
+
+
+def score_run(work_dir, run_dir=None):
+    """Copy hidden tests -> _acceptance/, run acceptance + regression tests.
+
+    When run_dir is given, also persists the raw stdout/stderr of each pass
+    to <run_dir>/acceptance.txt and <run_dir>/regression.txt, and populates
+    acceptance["failed_tests"] / regression["failed_tests"] (short test ids
+    parsed from FAIL:/ERROR: summary lines)."""
     acceptance_dir = os.path.join(work_dir, "_acceptance")
     if os.path.isdir(HIDDEN_TESTS_DIR):
         if os.path.exists(acceptance_dir):
@@ -683,15 +738,21 @@ def score_run(work_dir):
         rc, out, err = (-1, "", "hidden_tests/ not present")
     acceptance = parse_unittest_output(out + "\n" + err)
     acceptance["exit_code"] = rc
+    acceptance["failed_tests"] = parse_failed_test_ids(out + "\n" + err)
+    _write_score_log(run_dir, "acceptance.txt", "acceptance", rc, out, err)
 
     reg_test_dir = os.path.join(work_dir, "tests")
     if os.path.isdir(reg_test_dir):
         rrc, rout, rerr = run_unittest_dir(work_dir, "tests", ".")
         regression = parse_unittest_output(rout + "\n" + rerr)
         regression["exit_code"] = rrc
+        regression["failed_tests"] = parse_failed_test_ids(rout + "\n" + rerr)
+        _write_score_log(run_dir, "regression.txt", "regression", rrc, rout, rerr)
     else:
         regression = {"total": 0, "passed": 0, "failures": 0, "errors": 0,
-                      "skipped": 0, "ok": True, "exit_code": 0}
+                      "skipped": 0, "ok": True, "exit_code": 0, "failed_tests": []}
+        _write_score_log(run_dir, "regression.txt", "regression", 0, "",
+                          "tests/ not present")
 
     return acceptance, regression
 
@@ -768,7 +829,7 @@ def run_one(stamp_dir, arm, arms_prepared, trial, model, effort, budget_usd,
         lines = f.readlines()
     metrics = parse_transcript(lines)
 
-    acceptance, regression = score_run(work_dir)
+    acceptance, regression = score_run(work_dir, run_dir=run_dir)
     stream_metrics = read_stream_metrics(work_dir) if arm.get("plugin") else \
         {"stream_event_counts": {}, "final_workflow_state": None}
     isolation = isolation_check(arm, metrics)
@@ -1120,16 +1181,30 @@ def cmd_reparse(stamp, out_dir=DEFAULT_OUT):
         # Recompute isolation from the freshly-parsed transcript metrics.
         row["isolation"] = isolation_check(arm, row.get("metrics") or {})
 
-        # Only re-run acceptance if it's missing outright; never re-run the
-        # agent itself, and never touch a present acceptance/regression
-        # result even if it looks suspicious — --reparse only fixes metrics
-        # extraction, not scoring.
+        # Re-run acceptance if it's missing outright, OR present but missing
+        # `failed_tests` (an older stamp written before that field existed —
+        # the work/ dir is intact and re-scoring is local/fast, so --reparse
+        # backfills it rather than leaving failed_tests absent forever).
+        # Never re-run the agent itself, and never touch a present
+        # acceptance/regression *result* (passed/total/ok) even if it looks
+        # suspicious — --reparse only fixes metrics extraction, not scoring
+        # outcomes.
         acceptance = row.get("acceptance")
-        if (not acceptance or "total" not in acceptance) and os.path.isdir(work_dir):
-            new_acceptance, new_regression = score_run(work_dir)
-            row["acceptance"] = new_acceptance
-            if not row.get("regression"):
-                row["regression"] = new_regression
+        needs_rescore = (not acceptance or "total" not in acceptance or
+                          "failed_tests" not in acceptance)
+        if needs_rescore and os.path.isdir(work_dir):
+            new_acceptance, new_regression = score_run(work_dir, run_dir=run_dir)
+            if not acceptance or "total" not in acceptance:
+                row["acceptance"] = new_acceptance
+                if not row.get("regression"):
+                    row["regression"] = new_regression
+            else:
+                # Backfill failed_tests only; keep the recorded pass/fail
+                # result untouched.
+                acceptance["failed_tests"] = new_acceptance.get("failed_tests", [])
+                reg = row.get("regression")
+                if isinstance(reg, dict) and "failed_tests" not in reg:
+                    reg["failed_tests"] = new_regression.get("failed_tests", [])
 
         reparsed += 1
 

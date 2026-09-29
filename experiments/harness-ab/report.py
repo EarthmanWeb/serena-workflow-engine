@@ -20,6 +20,7 @@ import html as html_mod
 import importlib.util
 import json
 import os
+import re
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -230,12 +231,28 @@ def g(d, *path, default=None):
     return cur if cur is not None else default
 
 
+def _tool_calls(r):
+    """total_tool_calls is current; fall back to the old ambiguous
+    `tool_calls` key for pre-fix rows."""
+    m = g(r, "metrics", default={}) or {}
+    if "total_tool_calls" in m:
+        return m.get("total_tool_calls")
+    return m.get("tool_calls")
+
+
 METRIC_DOT_SPECS = [
-    ("num_turns", "Turns", lambda r: g(r, "metrics", "num_turns")),
+    # Primary turns metric: assistant_turns_incl_subagents (main + every
+    # subagent). num_turns (main-agent only) is kept as a secondary/
+    # diagnostic dot chart right after it — see run.parse_transcript's
+    # docstring for why num_turns alone can be misleadingly low on a
+    # subagent-delegating run.
+    ("assistant_turns_incl_subagents", "Turns (all agents)", lambda r: g(r, "metrics", "assistant_turns_incl_subagents")),
+    ("num_turns", "Turns (main-agent only)", lambda r: g(r, "metrics", "num_turns")),
     ("total_tokens", "Total tokens", lambda r: g(r, "metrics", "total_tokens")),
     ("output_tokens", "Output tokens", lambda r: g(r, "metrics", "usage", "output_tokens")),
     ("wall_s", "Wall time (s)", lambda r: r.get("wall_s")),
-    ("tool_calls", "Tool calls", lambda r: g(r, "metrics", "total_tool_calls")),
+    ("tool_calls", "Tool calls", _tool_calls),
+    ("memory_file_reads", "Memory consultations", lambda r: g(r, "metrics", "memory_file_reads")),
 ]
 
 
@@ -392,13 +409,16 @@ def compute_verdict(agg):
             if a == "baseline":
                 continue
             deltas = arms[a].get("vs_baseline_pct") or {}
-            turns_d = deltas.get("num_turns")
+            # All-agent turns and all-model tokens only — never the
+            # main-agent-only num_turns/main_tokens figures, which can be
+            # misleadingly low on a run that delegated heavily to subagents.
+            turns_d = deltas.get("assistant_turns_incl_subagents")
             tok_d = deltas.get("total_tokens")
             bits = []
             if turns_d is not None:
-                bits.append(f"{turns_d:+.0f}% turns")
+                bits.append(f"{turns_d:+.0f}% turns (all agents)")
             if tok_d is not None:
-                bits.append(f"{tok_d:+.0f}% tokens")
+                bits.append(f"{tok_d:+.0f}% tokens (all models)")
             if bits:
                 parts.append(f"{ARM_LABELS.get(a, a)} vs baseline: {', '.join(bits)} (median).")
     return " ".join(parts)
@@ -768,13 +788,49 @@ def stream_event_heatmap(table):
 # --------------------------------------------------------------------------
 
 
+def short_test_name(test_id):
+    """Shorten a unittest test id to 'Class.method'. Pure.
+
+    Handles both observed shapes of the parenthesized part:
+      - 'test_foo (tests.test_bar.MyTest)'            (older Python)
+      - 'test_foo (tests.test_bar.MyTest.test_foo)'    (3.11+: full dotted
+        path incl. the method name again)
+    Falls back to the raw id when it doesn't match the expected shape."""
+    m = re.match(r"^(\S+)\s+\(([\w.]+)\)$", test_id or "")
+    if not m:
+        return test_id
+    method, path = m.group(1), m.group(2)
+    segments = path.split(".")
+    if segments and segments[-1] == method:
+        segments = segments[:-1]
+    cls = segments[-1] if segments else path
+    return f"{cls}.{method}"
+
+
+def failed_tests_cell_text(acc, reg):
+    """Combine acceptance + regression failed_tests into one short display
+    string for the per-run table cell (acceptance first, prefixed 'A:' /
+    'R:' when both have failures). Empty string when neither has any."""
+    acc_failed = [short_test_name(t) for t in (acc.get("failed_tests") or [])]
+    reg_failed = [short_test_name(t) for t in (reg.get("failed_tests") or [])]
+    parts = []
+    if acc_failed:
+        parts.append("A: " + ", ".join(acc_failed))
+    if reg_failed:
+        parts.append("R: " + ", ".join(reg_failed))
+    return "; ".join(parts)
+
+
 def per_run_table(rows):
     ordered = sorted(rows, key=lambda r: (ARM_ORDER.index(r.get("arm")) if r.get("arm") in ARM_ORDER else 99, r.get("trial") if r.get("trial") is not None else 0))
     head_cols = [
         ("arm", "Arm"), ("trial", "Trial"), ("success", "Success"),
-        ("acc", "Acceptance"), ("reg", "Regression"), ("turns", "Turns"),
+        ("acc", "Acceptance"), ("reg", "Regression"),
+        ("failed_tests", "Failed tests"),
+        ("turns", "Turns (all agents)"), ("turns_main", "Turns (main)"),
         ("total_tokens", "Total tokens"), ("output_tokens", "Output tokens"),
         ("cache_read", "Cache read"), ("tool_calls", "Tool calls"),
+        ("memory_reads", "Memory consultations"),
         ("denials", "Denials"), ("stop_blocks", "Stop blocks"),
         ("wall_s", "Wall (s)"), ("cost", "Est. cost"), ("exit", "Exit/timeout"),
         ("state", "Final state"),
@@ -799,17 +855,23 @@ def per_run_table(rows):
             sv = sort_val if sort_val is not None else val
             return f'<td data-sort="{esc(sv)}" class="{cls}">{esc(val)}</td>'
 
+        tool_calls_val = m.get("total_tool_calls") if "total_tool_calls" in m else m.get("tool_calls")
+        failed_str = failed_tests_cell_text(acc, reg)
+
         row_cells = [
             cell(ARM_LABELS.get(arm, arm), sort_val=arm),
             cell(r.get("trial")),
             cell("yes" if success else ("no" if success is False else "—"), sort_val=1 if success else 0, cls="success-yes" if success else ("success-no" if success is False else "")),
             cell(f'{acc.get("passed", "—")}/{acc.get("total", "—")}', sort_val=acc.get("passed") or 0),
             cell("ok" if reg.get("ok") else ("fail" if reg.get("ok") is False else "—"), sort_val=1 if reg.get("ok") else 0),
+            cell(failed_str or "—", sort_val=failed_str),
+            cell(fmt_num(m.get("assistant_turns_incl_subagents")), sort_val=m.get("assistant_turns_incl_subagents") or 0),
             cell(fmt_num(m.get("num_turns")), sort_val=m.get("num_turns") or 0),
             cell(fmt_num(m.get("total_tokens")), sort_val=m.get("total_tokens") or 0),
             cell(fmt_num(usage.get("output_tokens")), sort_val=usage.get("output_tokens") or 0),
             cell(fmt_num(usage.get("cache_read_input_tokens")), sort_val=usage.get("cache_read_input_tokens") or 0),
-            cell(fmt_num(m.get("total_tool_calls")), sort_val=m.get("total_tool_calls") or 0),
+            cell(fmt_num(tool_calls_val), sort_val=tool_calls_val or 0),
+            cell(fmt_num(m.get("memory_file_reads")), sort_val=m.get("memory_file_reads") or 0),
             cell(fmt_num(m.get("hook_denials")), sort_val=m.get("hook_denials") or 0),
             cell(fmt_num(m.get("stop_hook_blocks")), sort_val=m.get("stop_hook_blocks") or 0),
             cell(fmt_num(r.get("wall_s"), 1), sort_val=r.get("wall_s") or 0),
@@ -840,7 +902,8 @@ def kpi_row(agg):
           <div class="kpi-arm"><span class="chip" style="background:var(--arm-{arm})"></span>{esc(ARM_LABELS.get(arm, arm))}</div>
           <dl class="kpi-list">
             <div><dt>success rate</dt><dd>{fmt_pct((s.get('success_rate') or 0) * 100)}</dd></div>
-            <div><dt>median turns</dt><dd>{fmt_num(stats.get('num_turns', {}).get('median'), 1)}</dd></div>
+            <div><dt>median turns (all agents)</dt><dd>{fmt_num(stats.get('assistant_turns_incl_subagents', {}).get('median'), 1)}</dd></div>
+            <div><dt>median turns (main-agent)</dt><dd>{fmt_num(stats.get('num_turns', {}).get('median'), 1)}</dd></div>
             <div><dt>median total tokens</dt><dd>{fmt_num(stats.get('total_tokens', {}).get('median'))}</dd></div>
             <div><dt>median wall time</dt><dd>{fmt_num(stats.get('wall_s', {}).get('median'), 0)}s</dd></div>
             <div><dt>median est. cost <span class="muted">(notional)</span></dt><dd>{fmt_cost(stats.get('est_cost_usd', {}).get('median'))}</dd></div>
@@ -1074,7 +1137,7 @@ def build_fallback_table(rows_2d, headers):
     return f'<div class="fallback-table-wrap"><table class="fallback-table"><thead><tr>{ths}</tr></thead><tbody>{"".join(trs)}</tbody></table></div>'
 
 
-def render_report(rows, meta, title="Harness A/B Results"):
+def render_report(rows, meta, title="Harness A/B Results", notes_html=None):
     analyze = get_analyze()
     agg = analyze.aggregate(rows)
     arms_present = agg.get("arms", {})
@@ -1204,6 +1267,8 @@ body {{ font-family: 'Inter', system-ui, -apple-system, "Segoe UI", sans-serif; 
     <p class="verdict">{esc(verdict)}</p>
   </header>
 
+  {f'<section class="chart-section findings-section"><h2>Findings</h2>{notes_html}</section>' if notes_html else ''}
+
   <section class="kpi-row">
     {kpi_html}
   </section>
@@ -1271,12 +1336,22 @@ def main(argv=None):
     p.add_argument("stamp_dir", help="path to <results>/<stamp> directory (containing runs.jsonl, meta.json)")
     p.add_argument("--out", default="report.html", help="output HTML path (default report.html)")
     p.add_argument("--title", default="Harness A/B Results", help="report title (default: 'Harness A/B Results')")
+    p.add_argument("--notes", default=None, metavar="FILE.html",
+                    help="path to a trusted HTML fragment injected verbatim as a "
+                         "'Findings' section right after the header, before the "
+                         "KPI row. Not escaped — the file's content is the "
+                         "author's own write-up, not untrusted data.")
     args = p.parse_args(argv)
 
     rows = load_rows(args.stamp_dir)
     meta = load_meta(args.stamp_dir)
 
-    doc = render_report(rows, meta, title=args.title)
+    notes_html = None
+    if args.notes:
+        with open(args.notes) as f:
+            notes_html = f.read()
+
+    doc = render_report(rows, meta, title=args.title, notes_html=notes_html)
 
     with open(args.out, "w") as f:
         f.write(doc)

@@ -19,7 +19,25 @@ def _est_cost_usd(r):
     return m.get("total_cost_usd")
 
 
+def _tool_calls(r):
+    """`total_tool_calls` is the current field name; a small number of very
+    old runs.jsonl rows (written before parse_transcript computed it) only
+    have the ambiguous `tool_calls` key. Read either, preferring the new
+    name."""
+    m = r.get("metrics") or {}
+    if "total_tool_calls" in m:
+        return m.get("total_tool_calls")
+    return m.get("tool_calls")
+
+
 METRIC_FIELDS = [
+    # assistant_turns_incl_subagents is the PRIMARY "turns" metric: total
+    # assistant-message events across the main agent + every subagent
+    # combined. num_turns (the stream-json result event's own counter) is
+    # main-agent-only and can be misleadingly low on a run that fanned out
+    # into subagents (see run.parse_transcript's docstring) — kept as a
+    # secondary/diagnostic field, never used alone for cross-arm comparison.
+    ("assistant_turns_incl_subagents", lambda r: (r.get("metrics") or {}).get("assistant_turns_incl_subagents")),
     ("num_turns", lambda r: (r.get("metrics") or {}).get("num_turns")),
     # total_tokens == all_model_tokens: the authoritative total summed over
     # the result event's modelUsage (camelCase per-model dict), which
@@ -31,10 +49,10 @@ METRIC_FIELDS = [
     ("cache_read_tokens", lambda r: (r.get("metrics") or {}).get("usage", {}).get("cache_read_input_tokens")),
     ("est_cost_usd", _est_cost_usd),
     ("wall_s", lambda r: r.get("wall_s")),
-    ("tool_calls", lambda r: (r.get("metrics") or {}).get("total_tool_calls")),
+    ("tool_calls", _tool_calls),
+    ("memory_file_reads", lambda r: (r.get("metrics") or {}).get("memory_file_reads")),
     ("subagent_launches", lambda r: (r.get("metrics") or {}).get("subagent_launches")),
     ("subagent_messages", lambda r: (r.get("metrics") or {}).get("subagent_messages")),
-    ("assistant_turns_incl_subagents", lambda r: (r.get("metrics") or {}).get("assistant_turns_incl_subagents")),
     ("hook_denials", lambda r: (r.get("metrics") or {}).get("hook_denials")),
     ("stop_hook_blocks", lambda r: (r.get("metrics") or {}).get("stop_hook_blocks")),
 ]
@@ -43,6 +61,8 @@ METRIC_LABELS = {
     "est_cost_usd": "est. cost (notional)",
     "total_tokens": "total tokens (all models, incl. subagents)",
     "main_tokens": "main-agent tokens only",
+    "assistant_turns_incl_subagents": "turns (all agents)",
+    "num_turns": "main-agent turns",
 }
 
 
@@ -241,8 +261,10 @@ def per_run_lines(rows):
         lines.append(
             f"{r['arm']}\tt{r['trial']}\t"
             f"success={acc.get('ok')}\t"
-            f"turns={m.get('num_turns')}\t"
+            f"turns(all/main)={m.get('assistant_turns_incl_subagents')}/{m.get('num_turns')}\t"
             f"tokens(all/main)={m.get('total_tokens')}/{m.get('main_tokens')}\t"
+            f"tool_calls={_tool_calls(r)}\t"
+            f"memory_reads={m.get('memory_file_reads')}\t"
             f"subagents={m.get('subagent_launches')}\t"
             f"est_cost={_est_cost_usd(r)}\t"
             f"wall_s={r.get('wall_s')}\t"
@@ -257,7 +279,7 @@ def write_csv(rows, agg, out_dir):
     runs_csv = os.path.join(out_dir, "runs.csv")
     fieldnames = ["run_id", "arm", "trial", "seed", "model", "exit_code", "timed_out",
                   "wall_s", "num_turns", "total_tokens", "main_tokens", "output_tokens",
-                  "cache_read_tokens", "est_cost_usd", "tool_calls",
+                  "cache_read_tokens", "est_cost_usd", "tool_calls", "memory_file_reads",
                   "subagent_launches", "subagent_messages",
                   "assistant_turns_incl_subagents", "hook_denials",
                   "stop_hook_blocks", "swe_gated_events", "acceptance_ok",
@@ -284,7 +306,8 @@ def write_csv(rows, agg, out_dir):
                 "output_tokens": m.get("usage", {}).get("output_tokens"),
                 "cache_read_tokens": m.get("usage", {}).get("cache_read_input_tokens"),
                 "est_cost_usd": _est_cost_usd(r),
-                "tool_calls": m.get("total_tool_calls"),
+                "tool_calls": _tool_calls(r),
+                "memory_file_reads": m.get("memory_file_reads"),
                 "subagent_launches": m.get("subagent_launches"),
                 "subagent_messages": m.get("subagent_messages"),
                 "assistant_turns_incl_subagents": m.get("assistant_turns_incl_subagents"),

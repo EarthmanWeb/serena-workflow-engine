@@ -261,6 +261,142 @@ class ParseTranscriptTest(unittest.TestCase):
         self.assertEqual(m["subagent_messages"], 2)  # 1 assistant + 1 user
 
 
+class ParseTranscriptMemoryFileReadsTest(unittest.TestCase):
+    def test_counts_memory_mcp_tools_and_serena_memory_reads(self):
+        events = [
+            {"type": "assistant", "message": {"content": [
+                {"type": "tool_use", "name": "mcp__plugin_swe_serena__read_memory",
+                 "input": {"memory_name": "wf/WF_INIT"}},
+                {"type": "tool_use", "name": "mcp__plugin_swe_serena__list_memories", "input": {}},
+                {"type": "tool_use", "name": "mcp__plugin_swe_serena__search_memories_by_name",
+                 "input": {"query": "x"}},
+                {"type": "tool_use", "name": "mcp__plugin_swe_serena__search_memories_by_front_matter",
+                 "input": {"query": "x"}},
+                # A Read of a memory file (file_path variant).
+                {"type": "tool_use", "name": "Read",
+                 "input": {"file_path": "/repo/.serena/memory/feature/FOO.md"}},
+                # A Read of a memory file (path variant).
+                {"type": "tool_use", "name": "Read", "input": {"path": ".serena/memory/ref/BAR.md"}},
+                # A Read that is NOT a memory file -> not counted.
+                {"type": "tool_use", "name": "Read", "input": {"file_path": "/repo/src/main.py"}},
+                # Some other tool entirely -> not counted.
+                {"type": "tool_use", "name": "Bash", "input": {"command": "ls"}},
+            ]}},
+        ]
+        m = run.parse_transcript([json.dumps(e) for e in events])
+        self.assertEqual(m["memory_file_reads"], 6)
+        self.assertEqual(m["total_tool_calls"], 8)
+
+    def test_zero_when_no_memory_activity(self):
+        events = [
+            {"type": "assistant", "message": {"content": [
+                {"type": "tool_use", "name": "Bash", "input": {"command": "ls"}},
+                {"type": "tool_use", "name": "Read", "input": {"file_path": "/repo/README.md"}},
+            ]}},
+        ]
+        m = run.parse_transcript([json.dumps(e) for e in events])
+        self.assertEqual(m["memory_file_reads"], 0)
+
+    def test_read_with_missing_or_non_dict_input(self):
+        events = [
+            {"type": "assistant", "message": {"content": [
+                {"type": "tool_use", "name": "Read"},  # no "input" key at all
+                {"type": "tool_use", "name": "Read", "input": "not-a-dict"},
+            ]}},
+        ]
+        m = run.parse_transcript([json.dumps(e) for e in events])
+        self.assertEqual(m["memory_file_reads"], 0)
+        self.assertEqual(m["total_tool_calls"], 2)
+
+
+class ParseFailedTestIdsTest(unittest.TestCase):
+    def test_extracts_fail_and_error_lines(self):
+        text = (
+            "FF.E\n"
+            "======================================================================\n"
+            "FAIL: test_foo (tests.test_bar.MyTest)\n"
+            "----------------------------------------------------------------------\n"
+            "AssertionError\n"
+            "======================================================================\n"
+            "ERROR: test_baz (tests.test_bar.MyTest)\n"
+            "----------------------------------------------------------------------\n"
+            "ValueError\n"
+            "----------------------------------------------------------------------\n"
+            "Ran 4 tests in 0.01s\n\nFAILED (failures=1, errors=1)\n"
+        )
+        ids = run.parse_failed_test_ids(text)
+        self.assertEqual(ids, [
+            "test_foo (tests.test_bar.MyTest)",
+            "test_baz (tests.test_bar.MyTest)",
+        ])
+
+    def test_empty_text(self):
+        self.assertEqual(run.parse_failed_test_ids(""), [])
+        self.assertEqual(run.parse_failed_test_ids(None), [])
+
+    def test_no_failures(self):
+        text = "....\n----------------------------------------------------------------------\nRan 4 tests in 0.01s\n\nOK\n"
+        self.assertEqual(run.parse_failed_test_ids(text), [])
+
+    def test_dedup_preserves_order(self):
+        text = "FAIL: test_a (m.T)\nFAIL: test_a (m.T)\nFAIL: test_b (m.T)\n"
+        self.assertEqual(run.parse_failed_test_ids(text), ["test_a (m.T)", "test_b (m.T)"])
+
+
+class ScoreRunPersistenceTest(unittest.TestCase):
+    """score_run() with a run_dir: writes acceptance.txt/regression.txt and
+    populates failed_tests on both result dicts. Uses a synthetic work_dir
+    (not a real reference_solution/) so this exercises the FAILED path."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp(prefix="harness_score_test_")
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+        self.work_dir = os.path.join(self.tmp, "work")
+        os.makedirs(self.work_dir)
+        self.run_dir = os.path.join(self.tmp, "run")
+
+        # A regression tests/ dir with one failing test (no hidden_tests/
+        # dir on disk in the real fixture path, so acceptance takes the
+        # "hidden_tests/ not present" branch — still exercises log writing).
+        tests_dir = os.path.join(self.work_dir, "tests")
+        os.makedirs(tests_dir)
+        with open(os.path.join(tests_dir, "__init__.py"), "w") as f:
+            f.write("")
+        with open(os.path.join(tests_dir, "test_sample.py"), "w") as f:
+            f.write(
+                "import unittest\n"
+                "class T(unittest.TestCase):\n"
+                "    def test_fails(self):\n"
+                "        self.fail('boom')\n"
+                "    def test_passes(self):\n"
+                "        pass\n"
+            )
+
+    def test_writes_log_files_and_failed_tests(self):
+        acceptance, regression = run.score_run(self.work_dir, run_dir=self.run_dir)
+
+        self.assertIn("failed_tests", acceptance)
+        self.assertIn("failed_tests", regression)
+        self.assertEqual(regression["failed_tests"], ["test_fails (tests.test_sample.T.test_fails)"])
+        self.assertFalse(regression["ok"])
+
+        acc_log = os.path.join(self.run_dir, "acceptance.txt")
+        reg_log = os.path.join(self.run_dir, "regression.txt")
+        self.assertTrue(os.path.exists(acc_log))
+        self.assertTrue(os.path.exists(reg_log))
+        with open(reg_log) as f:
+            reg_content = f.read()
+        self.assertIn("test_fails", reg_content)
+        self.assertIn("exit_code:", reg_content)
+
+    def test_run_dir_none_does_not_raise(self):
+        # Default (no run_dir) must behave exactly as before: no files
+        # written, no exception.
+        acceptance, regression = run.score_run(self.work_dir)
+        self.assertIn("failed_tests", acceptance)
+        self.assertIn("failed_tests", regression)
+
+
 class CleanEnvTest(unittest.TestCase):
     def test_strips_claude_and_swe_prefixed_keys(self):
         src = {
@@ -683,6 +819,42 @@ class AggregateTest(unittest.TestCase):
         md = analyze.format_markdown(agg)
         self.assertIn("est. cost (notional)", md)
 
+    def test_turns_all_agents_label_in_markdown(self):
+        rows = [self._row("baseline", 0)]
+        agg = analyze.aggregate(rows)
+        md = analyze.format_markdown(agg)
+        self.assertIn("turns (all agents)", md)
+        self.assertIn("main-agent turns", md)
+
+    def test_assistant_turns_incl_subagents_is_aggregated(self):
+        rows = [self._row("baseline", 0), self._row("baseline", 1)]
+        rows[0]["metrics"]["assistant_turns_incl_subagents"] = 40
+        rows[1]["metrics"]["assistant_turns_incl_subagents"] = 60
+        agg = analyze.aggregate(rows)
+        self.assertEqual(
+            agg["arms"]["baseline"]["stats"]["assistant_turns_incl_subagents"]["median"], 50
+        )
+
+    def test_memory_file_reads_aggregated(self):
+        rows = [self._row("baseline", 0), self._row("baseline", 1)]
+        rows[0]["metrics"]["memory_file_reads"] = 4
+        rows[1]["metrics"]["memory_file_reads"] = 8
+        agg = analyze.aggregate(rows)
+        self.assertEqual(agg["arms"]["baseline"]["stats"]["memory_file_reads"]["median"], 6)
+
+    def test_tool_calls_field_reads_total_tool_calls(self):
+        rows = [self._row("baseline", 0, tool_calls=17)]
+        agg = analyze.aggregate(rows)
+        self.assertEqual(agg["arms"]["baseline"]["stats"]["tool_calls"]["median"], 17)
+
+    def test_tool_calls_falls_back_to_old_field_name(self):
+        # Pre-fix rows only had the ambiguous `tool_calls` key in metrics.
+        row = self._row("baseline", 0)
+        del row["metrics"]["total_tool_calls"]
+        row["metrics"]["tool_calls"] = 9
+        agg = analyze.aggregate([row])
+        self.assertEqual(agg["arms"]["baseline"]["stats"]["tool_calls"]["median"], 9)
+
 
 class PyCompileTest(unittest.TestCase):
     def test_run_py_compiles(self):
@@ -837,6 +1009,68 @@ class CmdReparseTest(unittest.TestCase):
         with open(orig_path) as f:
             second_backup = f.read()
         self.assertEqual(first_backup, second_backup)
+
+
+class CmdReparseBackfillsFailedTestsTest(unittest.TestCase):
+    """--reparse must backfill `failed_tests` onto an existing (present,
+    'total' key intact) acceptance/regression dict that predates the field,
+    by re-scoring the saved work/ dir -- without touching the recorded
+    passed/total/ok result."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp(prefix="harness_reparse_backfill_test_")
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+        self.stamp_dir = os.path.join(self.tmp, "20990101-000000")
+        self.run_dir = os.path.join(self.stamp_dir, "runs", "v5-t0")
+        os.makedirs(self.run_dir, exist_ok=True)
+
+        with open(os.path.join(self.run_dir, "transcript.jsonl"), "w") as f:
+            f.write(json.dumps({"type": "result", "subtype": "success", "num_turns": 1}) + "\n")
+
+        work_dir = os.path.join(self.run_dir, "work")
+        tests_dir = os.path.join(work_dir, "tests")
+        os.makedirs(tests_dir)
+        with open(os.path.join(tests_dir, "__init__.py"), "w") as f:
+            f.write("")
+        with open(os.path.join(tests_dir, "test_sample.py"), "w") as f:
+            f.write(
+                "import unittest\n"
+                "class T(unittest.TestCase):\n"
+                "    def test_fails(self):\n"
+                "        self.fail('boom')\n"
+            )
+
+        # Old-shape row: acceptance/regression present with a real result
+        # (passed/total/ok) but no failed_tests key at all (pre-fix stamp).
+        stale_row = {
+            "run_id": "v5-t0", "arm": "v5", "trial": 0,
+            "exit_code": 0, "timed_out": False, "wall_s": 10.0,
+            "metrics": {},
+            "stream_metrics": {},
+            "acceptance": {"total": 0, "passed": 0, "ok": True, "exit_code": 0},
+            "regression": {"total": 5, "passed": 5, "ok": True, "exit_code": 0},
+            "isolation": {"ok": True},
+        }
+        self.runs_jsonl = os.path.join(self.stamp_dir, "runs.jsonl")
+        with open(self.runs_jsonl, "w") as f:
+            f.write(json.dumps(stale_row) + "\n")
+
+    def test_backfills_failed_tests_without_changing_recorded_result(self):
+        rc = run.cmd_reparse(self.stamp_dir)
+        self.assertEqual(rc, 0)
+
+        with open(self.runs_jsonl) as f:
+            new_row = json.loads(f.readline())
+
+        # Recorded pass/total/ok result is untouched (still says 5/5 ok, the
+        # ORIGINAL scoring outcome) even though re-scoring the work/ dir now
+        # would show a failure -- reparse only backfills failed_tests, it
+        # never overwrites a recorded result.
+        self.assertEqual(new_row["regression"]["passed"], 5)
+        self.assertEqual(new_row["regression"]["total"], 5)
+        self.assertTrue(new_row["regression"]["ok"])
+        self.assertIn("failed_tests", new_row["regression"])
+        self.assertIn("failed_tests", new_row["acceptance"])
 
 
 if __name__ == "__main__":

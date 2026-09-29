@@ -183,9 +183,11 @@ def _synthetic_rows():
                         "Grep": 3, "Glob": 1, "Agent": 1, "TodoWrite": 1,
                         "WeirdTool": 1,
                     },
+                    "assistant_turns_incl_subagents": 35 + trial + (4 if arm == "control" else 0),
+                    "memory_file_reads": 3 + trial + (2 if arm != "control" else 0),
                 },
-                "acceptance": {"passed": 4, "total": 5, "ok": False},
-                "regression": {"passed": 10, "total": 10, "ok": True},
+                "acceptance": {"passed": 4, "total": 5, "ok": False, "failed_tests": ["test_x (tests.test_y.Z)"]},
+                "regression": {"passed": 10, "total": 10, "ok": True, "failed_tests": []},
                 "stream_metrics": {
                     "stream_event_counts": {"tool_call": 12, "state_transition": 3} if arm != "control" else {},
                     "final_workflow_state": "WF_VERIFY" if arm != "control" else None,
@@ -298,6 +300,77 @@ class TestRenderReport(unittest.TestCase):
 
     def test_method_section_present(self):
         self.assertIn("Method &amp; caveats", self.html)
+
+    def test_memory_consultations_chart_present(self):
+        self.assertIn("Memory consultations", self.html)
+
+    def test_turns_all_agents_label_present(self):
+        self.assertIn("Turns (all agents)", self.html)
+        self.assertIn("Turns (main-agent only)", self.html)
+
+    def test_failed_tests_column_present(self):
+        self.assertIn("Failed tests", self.html)
+        self.assertIn("test_x", self.html)
+
+    def test_verdict_uses_all_agent_language_not_bare_turns(self):
+        # The verdict sentence must talk about "turns (all agents)" /
+        # "tokens (all models)", never a bare "turns"/"tokens" that could be
+        # misread as the main-agent-only figures.
+        agg = report.get_analyze().aggregate(self.rows)
+        verdict = report.compute_verdict(agg)
+        if "vs baseline" in verdict:
+            self.assertIn("turns (all agents)", verdict)
+            self.assertIn("tokens (all models)", verdict)
+
+    def test_notes_injects_findings_section(self):
+        html = report.render_report(self.rows, self.meta, title="Harness A/B Results",
+                                     notes_html="<p>Custom finding text ABC123.</p>")
+        self.assertIn("Findings", html)
+        self.assertIn("Custom finding text ABC123.", html)
+        # Findings section must appear before the KPI row section in the
+        # document body (the .kpi-card CSS class appears earlier still, in
+        # the <style> block, so anchor on the body-only kpi-row section tag).
+        self.assertLess(html.index("Custom finding text ABC123."), html.index('<section class="kpi-row">'))
+
+    def test_no_notes_omits_findings_section(self):
+        self.assertNotIn("Custom finding text", self.html)
+
+
+class ShortTestNameTest(unittest.TestCase):
+    def test_typical_unittest_id(self):
+        self.assertEqual(
+            report.short_test_name("test_foo (tests.test_bar.MyTest)"),
+            "MyTest.test_foo",
+        )
+
+    def test_unrecognized_format_returned_as_is(self):
+        self.assertEqual(report.short_test_name("weird-id"), "weird-id")
+
+    def test_python311plus_dotted_method_shape(self):
+        # Python 3.11+ repeats the method name at the end of the dotted path.
+        self.assertEqual(
+            report.short_test_name("test_fails (tests.test_sample.T.test_fails)"),
+            "T.test_fails",
+        )
+
+    def test_none_and_empty(self):
+        self.assertIsNone(report.short_test_name(None))
+        self.assertEqual(report.short_test_name(""), "")
+
+
+class FailedTestsCellTextTest(unittest.TestCase):
+    def test_both_acceptance_and_regression_failures(self):
+        acc = {"failed_tests": ["test_a (m.A)"]}
+        reg = {"failed_tests": ["test_b (m.B)"]}
+        text = report.failed_tests_cell_text(acc, reg)
+        self.assertIn("A: A.test_a", text)
+        self.assertIn("R: B.test_b", text)
+
+    def test_no_failures_empty_string(self):
+        self.assertEqual(report.failed_tests_cell_text({}, {}), "")
+        self.assertEqual(
+            report.failed_tests_cell_text({"failed_tests": []}, {"failed_tests": []}), ""
+        )
 
 
 class TestCLI(unittest.TestCase):
