@@ -322,17 +322,25 @@ class TestRenderReport(unittest.TestCase):
             self.assertIn("turns (all agents)", verdict)
             self.assertIn("tokens (all models)", verdict)
 
-    def test_notes_injects_findings_section(self):
+    def test_notes_html_fragment_backward_compat(self):
+        # An HTML fragment with no '- text' bullet lines falls back to the
+        # legacy verbatim Findings section (backward compat with the old
+        # --notes contract), rendered before the scorecard section.
         html = report.render_report(self.rows, self.meta, title="Harness A/B Results",
                                      notes_html="<p>Custom finding text ABC123.</p>")
         self.assertIn("Findings", html)
         self.assertIn("Custom finding text ABC123.", html)
-        # Findings section must appear before the KPI row section in the
-        # document body (the .kpi-card CSS class appears earlier still, in
-        # the <style> block, so anchor on the body-only kpi-row section tag).
-        self.assertLess(html.index("Custom finding text ABC123."), html.index('<section class="kpi-row">'))
+        self.assertLess(html.index("Custom finding text ABC123."), html.index('id="scorecard"'))
 
-    def test_no_notes_omits_findings_section(self):
+    def test_notes_line_format_renders_finding_cards(self):
+        notes = "- Baseline used fewer tokens than control.\n- v5 passed more doc-rule tests.\n"
+        html = report.render_report(self.rows, self.meta, title="Harness A/B Results",
+                                     notes_html=notes, notes_text=notes)
+        self.assertIn("finding-card", html)
+        self.assertIn("Baseline used fewer tokens than control.", html)
+        self.assertIn("v5 passed more doc-rule tests.", html)
+
+    def test_no_notes_omits_legacy_findings_section(self):
         self.assertNotIn("Custom finding text", self.html)
 
 
@@ -394,6 +402,260 @@ class TestCLI(unittest.TestCase):
             with open(out_path) as f:
                 content = f.read()
             self.assertIn("<title>Test Title</title>", content)
+
+
+# --------------------------------------------------------------------------
+# Scorecard (redesign): values + deltas vs control.
+# --------------------------------------------------------------------------
+
+class ScorecardDataTest(unittest.TestCase):
+    def setUp(self):
+        self.rows = _synthetic_rows()
+        self.agg = report.get_analyze().aggregate(self.rows)
+
+    def test_rows_cover_the_six_key_metrics(self):
+        sc = report.scorecard_data(self.agg)
+        keys = [r["key"] for r in sc["rows"]]
+        self.assertEqual(keys, [
+            "doc_pass_pct_mean", "spec_pass_pct_mean", "success_rate",
+            "total_tokens_median", "turns_median", "wall_s_median",
+        ])
+
+    def test_control_is_reference_no_self_delta(self):
+        sc = report.scorecard_data(self.agg)
+        row = next(r for r in sc["rows"] if r["key"] == "total_tokens_median")
+        self.assertIsNone(row["cells"]["control"]["delta_pct"])
+
+    def test_delta_computed_vs_control_not_baseline(self):
+        # total_tokens medians in the synthetic fixture have no arm-specific
+        # offset (only a trial*1000 term, same for every arm), so the delta
+        # vs control must be small (well under the ~20% arm-effect band
+        # used elsewhere in this fixture for wall_s), not None, for every
+        # non-control arm — proving the delta is computed against control's
+        # value, not baseline's.
+        sc = report.scorecard_data(self.agg)
+        row = next(r for r in sc["rows"] if r["key"] == "total_tokens_median")
+        for arm in ("baseline", "v5"):
+            d = row["cells"][arm]["delta_pct"]
+            self.assertIsNotNone(d)
+            self.assertLess(abs(d), 2.0)
+
+    def test_wall_s_delta_nonzero_for_v5(self):
+        # synthetic wall_s adds +5s for v5 relative to baseline/control at
+        # every trial, so v5's median wall_s must read a positive delta vs
+        # control.
+        sc = report.scorecard_data(self.agg)
+        row = next(r for r in sc["rows"] if r["key"] == "wall_s_median")
+        d = row["cells"]["v5"]["delta_pct"]
+        self.assertIsNotNone(d)
+        self.assertGreater(d, 0)
+
+    def test_best_arm_marked_per_row_respects_direction(self):
+        sc = report.scorecard_data(self.agg)
+        tokens_row = next(r for r in sc["rows"] if r["key"] == "total_tokens_median")
+        # lower is better for tokens; best_arm must hold the minimum value
+        vals = {a: c["value"] for a, c in tokens_row["cells"].items() if c["value"] is not None}
+        self.assertEqual(tokens_row["best_arm"], min(vals, key=vals.get))
+
+    def test_success_rate_cell_has_fraction_extra(self):
+        sc = report.scorecard_data(self.agg)
+        row = next(r for r in sc["rows"] if r["key"] == "success_rate")
+        for arm in report.ARM_ORDER:
+            extra = row["cells"][arm]["extra"]
+            self.assertIsNotNone(extra)
+            self.assertIn("/", extra)
+
+    def test_empty_rows_all_none_no_crash(self):
+        agg = report.get_analyze().aggregate([])
+        sc = report.scorecard_data(agg)
+        self.assertEqual(sc["arms_present"], [])
+        for row in sc["rows"]:
+            self.assertEqual(row["cells"], {})
+
+
+class ScorecardHtmlTest(unittest.TestCase):
+    def test_renders_best_tag_and_delta_arrow(self):
+        rows = _synthetic_rows()
+        agg = report.get_analyze().aggregate(rows)
+        html = report.scorecard_html(agg)
+        self.assertIn("scorecard-table", html)
+        self.assertIn("best-tag", html)
+        self.assertIn("vs no harness", html)
+
+    def test_v1_shaped_rows_render_not_measured_compactly(self):
+        # v1 rows: no acceptance.spec/doc, no gates at all.
+        rows = []
+        for arm in report.ARM_ORDER:
+            rows.append({
+                "run_id": f"{arm}-t0", "arm": arm, "trial": 0,
+                "metrics": {"total_tokens": 1000, "assistant_turns_incl_subagents": 10},
+                "wall_s": 50.0,
+                "acceptance": {"passed": 1, "total": 1, "ok": True},
+                "regression": {"passed": 1, "total": 1, "ok": True},
+            })
+        agg = report.get_analyze().aggregate(rows)
+        html = report.scorecard_html(agg)
+        self.assertIn("not measured", html)
+        self.assertNotIn(">None<", html)
+        self.assertNotIn(">NaN<", html)
+
+    def test_no_runs_renders_muted_message_not_crash(self):
+        agg = report.get_analyze().aggregate([])
+        html = report.scorecard_html(agg)
+        self.assertIn("No runs to report", html)
+
+
+# --------------------------------------------------------------------------
+# Notes line-format parsing + key findings.
+# --------------------------------------------------------------------------
+
+class ParseNotesLinesTest(unittest.TestCase):
+    def test_parses_dash_bullet_lines(self):
+        text = "- First finding here.\n- Second finding here.\n"
+        self.assertEqual(
+            report.parse_notes_lines(text),
+            ["First finding here.", "Second finding here."],
+        )
+
+    def test_parses_star_bullet_lines(self):
+        text = "* One\n* Two\n"
+        self.assertEqual(report.parse_notes_lines(text), ["One", "Two"])
+
+    def test_ignores_blank_lines(self):
+        text = "- A\n\n\n- B\n"
+        self.assertEqual(report.parse_notes_lines(text), ["A", "B"])
+
+    def test_non_bullet_text_returns_empty_for_html_fallback(self):
+        text = "<p>Some HTML fragment, no bullets here.</p>"
+        self.assertEqual(report.parse_notes_lines(text), [])
+
+    def test_empty_and_none(self):
+        self.assertEqual(report.parse_notes_lines(""), [])
+        self.assertEqual(report.parse_notes_lines(None), [])
+
+    def test_strips_surrounding_whitespace(self):
+        text = "-    padded finding text   \n"
+        self.assertEqual(report.parse_notes_lines(text), ["padded finding text"])
+
+
+class KeyFindingsTest(unittest.TestCase):
+    def test_prefers_notes_findings_when_given(self):
+        rows = _synthetic_rows()
+        agg = report.get_analyze().aggregate(rows)
+        findings = report.key_findings(agg, notes_findings=["Custom note A", "Custom note B"])
+        self.assertEqual(findings, ["Custom note A", "Custom note B"])
+
+    def test_caps_at_max_findings(self):
+        rows = _synthetic_rows()
+        agg = report.get_analyze().aggregate(rows)
+        findings = report.key_findings(agg, notes_findings=[f"N{i}" for i in range(10)], max_findings=5)
+        self.assertEqual(len(findings), 5)
+
+    def test_derives_findings_when_no_notes(self):
+        rows = _synthetic_rows()
+        agg = report.get_analyze().aggregate(rows)
+        findings = report.key_findings(agg, notes_findings=None)
+        self.assertGreater(len(findings), 0)
+        self.assertLessEqual(len(findings), 5)
+
+    def test_empty_agg_returns_placeholder_not_crash(self):
+        agg = report.get_analyze().aggregate([])
+        findings = report.key_findings(agg, notes_findings=None)
+        self.assertEqual(len(findings), 1)
+
+
+# --------------------------------------------------------------------------
+# Section presence/order + v1/v2 backward compat on the full render.
+# --------------------------------------------------------------------------
+
+class SectionStructureTest(unittest.TestCase):
+    def setUp(self):
+        self.rows = _synthetic_rows()
+        self.meta = {
+            "args": {"model": "claude-sonnet-5", "trials": 3}, "arms": [], "prepared": {},
+            "auth": {}, "claude_version": "",
+        }
+        self.html = report.render_report(self.rows, self.meta, title="Section Order Test")
+
+    def test_sticky_nav_present_with_all_sections(self):
+        self.assertIn('class="section-nav"', self.html)
+        for label in ("Scorecard", "Documentation use", "Gates", "Cost", "Tools", "Runs", "Method"):
+            self.assertIn(f">{label}<", self.html)
+
+    def test_section_ids_present_in_order(self):
+        ids = ["scorecard", "doc-use", "gates", "cost", "tools", "runs", "method"]
+        positions = [self.html.index(f'id="{i}"') for i in ids]
+        self.assertEqual(positions, sorted(positions))
+
+    def test_nav_respects_safe_area_inset(self):
+        self.assertIn("safe-area-inset-top", self.html)
+
+    def test_section_takeaways_present(self):
+        self.assertIn("section-takeaway", self.html)
+
+    def test_runs_table_collapsed_by_default(self):
+        # the per-run table must be inside a <details> that is not "open"
+        idx = self.html.index('id="runs"')
+        runs_section = self.html[idx:self.html.index("</section>", idx)]
+        self.assertIn("<details", runs_section)
+        self.assertNotRegex(runs_section.split("<details", 1)[1].split(">", 1)[0], r"\bopen\b")
+
+    def test_chart_cards_have_title_and_subtitle(self):
+        self.assertIn("chart-card-title", self.html)
+        self.assertIn("chart-card-subtitle", self.html)
+
+    def test_data_table_fallback_present(self):
+        self.assertIn(">Data<", self.html)
+
+
+class V1BackwardCompatTest(unittest.TestCase):
+    """A v1-shaped stamp (no spec/doc/gates/doc_rules fields anywhere) must
+    still render cleanly: 'not measured' framing, no None/NaN leakage."""
+
+    def setUp(self):
+        rows = []
+        for arm in report.ARM_ORDER:
+            for trial in range(2):
+                rows.append({
+                    "run_id": f"{arm}-t{trial}", "arm": arm, "trial": trial,
+                    "exit_code": 0, "timed_out": False,
+                    "wall_s": 100.0 + trial,
+                    "metrics": {
+                        "num_turns": 10 + trial,
+                        "total_tokens": 20000 + trial * 500,
+                        "total_tool_calls": 15,
+                        "assistant_turns_incl_subagents": 18 + trial,
+                        "usage": {"input_tokens": 1000, "output_tokens": 500,
+                                  "cache_creation_input_tokens": 0, "cache_read_input_tokens": 0},
+                    },
+                    "acceptance": {"passed": 3, "total": 4, "ok": False},
+                    "regression": {"passed": 5, "total": 5, "ok": True},
+                })
+        self.rows = rows
+        self.meta = {"args": {"model": "m", "trials": 2}, "arms": [], "prepared": {},
+                     "auth": {}, "claude_version": ""}
+        self.html = report.render_report(self.rows, self.meta, title="V1 Compat")
+
+    def test_renders_without_none_or_nan(self):
+        self.assertNotIn(">None<", self.html)
+        self.assertNotIn(">NaN<", self.html)
+        self.assertNotIn(" NaN ", self.html)
+
+    def test_scorecard_shows_not_measured_for_missing_doc_spec(self):
+        idx = self.html.index('id="scorecard"')
+        scorecard_section = self.html[idx:self.html.index("</section>", idx)]
+        self.assertIn("not measured", scorecard_section)
+
+    def test_gates_section_present_and_does_not_crash(self):
+        self.assertIn('id="gates"', self.html)
+
+    def test_doc_use_section_present_and_does_not_crash(self):
+        self.assertIn('id="doc-use"', self.html)
+
+    def test_success_rate_and_tokens_still_populate(self):
+        idx = self.html.index('id="scorecard"')
+        scorecard_section = self.html[idx:self.html.index("</section>", idx)]
+        self.assertIn("/2", scorecard_section)  # success x/n fraction
 
 
 if __name__ == "__main__":

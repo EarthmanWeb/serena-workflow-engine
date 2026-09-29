@@ -538,6 +538,165 @@ def compute_verdict(agg):
 
 
 # --------------------------------------------------------------------------
+# Scorecard (top-of-report 3-column comparison).
+# --------------------------------------------------------------------------
+
+# (row key, label, unit, "higher_is_better") — unit and direction drive
+# fmt + the delta arrow/wording. All values pulled from aggregate() output.
+SCORECARD_ROWS = [
+    ("doc_pass_pct_mean", "Doc-rule pass %", "pct", True),
+    ("spec_pass_pct_mean", "Spec pass %", "pct", True),
+    ("success_rate", "Full success (x/n)", "frac", True),
+    ("total_tokens_median", "Median total tokens", "num", False),
+    ("turns_median", "Median turns (all agents)", "num", False),
+    ("wall_s_median", "Median wall time", "wall", False),
+]
+
+
+def scorecard_data(agg):
+    """Per-arm scorecard values + delta vs control (the no-harness
+    reference), for the top scorecard. Pure.
+
+    Returns {"rows": [{"key", "label", "unit", "higher_is_better",
+    "cells": {arm: {"value": float|None, "n": int|None, "delta_pct":
+    float|None}}, "best_arm": str|None}], "arms_present": [...]}.
+
+    delta_pct is None for the control column itself (it IS the reference)
+    and for any arm/row where either value is missing or control's value is
+    0/None (divide-by-zero guard). "best" is picked per row among arms with
+    a non-None value, respecting higher_is_better; ties keep the first arm
+    in ARM_ORDER."""
+    arms = agg.get("arms", {})
+    present = [a for a in ARM_ORDER if a in arms]
+    control_arm = "control" if "control" in present else None
+
+    def _raw(arm, key):
+        s = arms.get(arm, {})
+        if key == "success_rate":
+            n = s.get("n")
+            rate = s.get("success_rate")
+            passed = round(rate * n) if (rate is not None and n) else None
+            return rate, (f"{passed}/{n}" if n else None)
+        if key == "total_tokens_median":
+            return s.get("stats", {}).get("total_tokens", {}).get("median"), None
+        if key == "turns_median":
+            return s.get("stats", {}).get("assistant_turns_incl_subagents", {}).get("median"), None
+        if key == "wall_s_median":
+            return s.get("stats", {}).get("wall_s", {}).get("median"), None
+        return s.get(key), None
+
+    out_rows = []
+    for key, label, unit, higher_is_better in SCORECARD_ROWS:
+        cells = {}
+        for arm in present:
+            val, extra = _raw(arm, key)
+            cells[arm] = {"value": val, "extra": extra, "delta_pct": None}
+        ctrl_val = cells.get(control_arm, {}).get("value") if control_arm else None
+        for arm in present:
+            if arm == control_arm:
+                continue
+            v = cells[arm]["value"]
+            if v is None or ctrl_val is None or ctrl_val == 0:
+                continue
+            cells[arm]["delta_pct"] = 100.0 * (v - ctrl_val) / ctrl_val
+
+        best_arm = None
+        best_val = None
+        for arm in present:
+            v = cells[arm]["value"]
+            if v is None:
+                continue
+            if best_val is None or (v > best_val if higher_is_better else v < best_val):
+                best_val, best_arm = v, arm
+
+        out_rows.append({
+            "key": key, "label": label, "unit": unit,
+            "higher_is_better": higher_is_better,
+            "cells": cells, "best_arm": best_arm,
+        })
+
+    return {"rows": out_rows, "arms_present": present, "control_arm": control_arm}
+
+
+def parse_notes_lines(text):
+    """Parse the simple notes line-format: one finding per line, each
+    starting with '- ' (markdown-bullet style); blank lines ignored. Returns
+    a list of finding strings (bullet marker + surrounding whitespace
+    stripped). Pure.
+
+    Backward compat: if NO line matches the '- text' shape (e.g. the file is
+    an HTML fragment, the pre-existing --notes contract), returns an empty
+    list so the caller falls back to rendering the raw text as an HTML
+    fragment instead."""
+    if not text:
+        return []
+    findings = []
+    for line in text.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        m = re.match(r"^[-*]\s+(.*\S)\s*$", line)
+        if m:
+            findings.append(m.group(1))
+    return findings
+
+
+def key_findings(agg, notes_findings=None, max_findings=5):
+    """3-5 short one-sentence findings for the scorecard's findings-card
+    row. Pure. Prefers author-supplied notes_findings (parsed via
+    parse_notes_lines) when given; otherwise derives up to max_findings
+    generic findings from aggregate() output (doc pass rate leader, success
+    rate leader, cost/turns deltas vs control)."""
+    if notes_findings:
+        return list(notes_findings[:max_findings])
+
+    arms = agg.get("arms", {})
+    present = [a for a in ARM_ORDER if a in arms]
+    findings = []
+
+    sc = scorecard_data(agg)
+    for row in sc["rows"]:
+        if len(findings) >= max_findings:
+            break
+        if row["key"] not in ("doc_pass_pct_mean", "success_rate"):
+            continue
+        best = row["best_arm"]
+        if best is None:
+            continue
+        cell = row["cells"][best]
+        if row["unit"] == "pct" and cell["value"] is not None:
+            findings.append(f"{ARM_LABELS.get(best, best)} led {row['label'].lower()} at {cell['value']:.0f}%.")
+        elif row["unit"] == "frac" and cell["extra"]:
+            findings.append(f"{ARM_LABELS.get(best, best)} had the best full-success rate ({cell['extra']}).")
+
+    control_arm = sc["control_arm"]
+    if control_arm and len(findings) < max_findings:
+        for arm in present:
+            if arm == control_arm or len(findings) >= max_findings:
+                continue
+            deltas = arms[arm].get("vs_baseline_pct") or {}
+            tok_d = deltas.get("total_tokens") if "baseline" != control_arm else None
+        # Prefer a direct vs-control token/turns comparison when both sides
+        # have data (vs_baseline_pct is baseline-relative, not
+        # control-relative, so recompute directly from the scorecard).
+        for row in sc["rows"]:
+            if row["key"] != "total_tokens_median" or len(findings) >= max_findings:
+                continue
+            for arm in present:
+                if arm == control_arm:
+                    continue
+                d = row["cells"].get(arm, {}).get("delta_pct")
+                if d is not None:
+                    direction = "more" if d > 0 else "fewer"
+                    findings.append(f"{ARM_LABELS.get(arm, arm)} used {abs(d):.0f}% {direction} tokens than no harness.")
+                    break
+
+    if not findings:
+        findings.append("Not enough comparable data across arms to summarize yet.")
+    return findings[:max_findings]
+
+
+# --------------------------------------------------------------------------
 # SVG helpers.
 # --------------------------------------------------------------------------
 
@@ -1167,6 +1326,9 @@ def per_run_table(rows):
 
 
 def kpi_row(agg):
+    """Legacy per-arm KPI cards. Still used as the "Data" fallback under the
+    new scorecard (kept + tested for backward compat with existing markup
+    expectations: '.kpi-card' must appear somewhere in the document)."""
     arms = agg.get("arms", {})
     cells = []
     for arm in ARM_ORDER:
@@ -1187,6 +1349,96 @@ def kpi_row(agg):
           </dl>
         </div>""")
     return "".join(cells)
+
+
+def _scorecard_cell_html(row, arm, control_arm):
+    """One scorecard body cell: big value + small delta-vs-control line.
+    control_arm's own cell shows just the value (it IS the reference, so no
+    self-delta) labeled 'reference'."""
+    cell = row["cells"].get(arm, {})
+    val = cell.get("value")
+    unit = row["unit"]
+    extra = cell.get("extra")
+
+    if unit == "pct":
+        value_str = fmt_pct(val)
+    elif unit == "frac":
+        value_str = extra or "—"
+    elif unit == "wall":
+        value_str = f"{fmt_num(val, 0)}s" if val is not None else "—"
+    else:
+        value_str = fmt_num(val)
+
+    is_best = row.get("best_arm") == arm and val is not None
+    best_tag = ' <span class="best-tag">best</span>' if is_best else ""
+    value_cls = "scorecard-value best" if is_best else "scorecard-value"
+
+    if arm == control_arm:
+        delta_html = '<div class="scorecard-delta muted">reference</div>'
+    else:
+        d = cell.get("delta_pct")
+        if d is None:
+            delta_html = '<div class="scorecard-delta muted">—</div>'
+        else:
+            arrow = "▲" if d > 0 else ("▼" if d < 0 else "–")
+            delta_html = (
+                f'<div class="scorecard-delta" data-tip="{esc(ARM_LABELS.get(arm, arm))} vs no harness: {d:+.0f}%">'
+                f'{arrow} {abs(d):.0f}% <span class="muted">vs no harness</span></div>'
+            )
+
+    return (
+        f'<td class="scorecard-cell" data-sort="{val if val is not None else ""}">'
+        f'<div class="{value_cls}">{value_str}{best_tag}</div>{delta_html}</td>'
+    )
+
+
+def scorecard_html(agg):
+    """Top scorecard: 3-column arm comparison, 6 key rows, each cell a big
+    number + small delta-vs-control line. Control column itself reads
+    'reference' instead of a self-delta. Falls back to an em-dash row when a
+    metric has no data for any arm (v1 rows: doc/spec pct are None for
+    every arm) rather than hiding the row, so the row count stays fixed and
+    the 'not measured in this run' framing is explicit."""
+    sc = scorecard_data(agg)
+    present = sc["arms_present"]
+    control_arm = sc["control_arm"]
+    if not present:
+        return '<p class="muted">No runs to report.</p>'
+
+    head_cells = []
+    for arm in present:
+        chip = f'<span class="chip" style="background:var(--arm-{arm})"></span>'
+        sub = "no harness" if arm == control_arm else esc(ARM_LABELS.get(arm, arm).split(" (")[-1].rstrip(")"))
+        head_cells.append(
+            f'<th scope="col" class="scorecard-head"><div class="scorecard-head-arm">{chip}{esc(ARM_LABELS.get(arm, arm).split(" (")[0])}</div>'
+            f'<div class="scorecard-head-ver muted">{sub}</div></th>'
+        )
+
+    body_rows = []
+    any_data = {row["key"]: any(row["cells"].get(a, {}).get("value") is not None for a in present) for row in sc["rows"]}
+    for row in sc["rows"]:
+        if not any_data[row["key"]]:
+            cells_html = "".join(
+                f'<td class="scorecard-cell"><div class="scorecard-value muted">not measured</div></td>' for _a in present
+            )
+        else:
+            cells_html = "".join(_scorecard_cell_html(row, a, control_arm) for a in present)
+        body_rows.append(f'<tr><th scope="row" class="scorecard-row-label">{esc(row["label"])}</th>{cells_html}</tr>')
+
+    return (
+        '<div class="scorecard-wrap"><table class="scorecard-table">'
+        f'<thead><tr><th scope="col" class="scorecard-corner"></th>{"".join(head_cells)}</tr></thead>'
+        f'<tbody>{"".join(body_rows)}</tbody></table></div>'
+    )
+
+
+def findings_cards_html(findings):
+    """3-5 short finding cards (one sentence each). Pure rendering of a list
+    of pre-computed finding strings (see key_findings)."""
+    if not findings:
+        return ""
+    cards = "".join(f'<div class="finding-card">{esc(f)}</div>' for f in findings)
+    return f'<div class="findings-grid">{cards}</div>'
 
 
 # --------------------------------------------------------------------------
@@ -1253,29 +1505,116 @@ html, body {
   background: var(--page-plane);
   color: var(--text-primary);
   font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  max-width: 100%;
+  overflow-x: hidden;
 }
-body { padding: 16px; }
-main { max-width: 1100px; margin: 0 auto; min-width: 0; }
+body { padding: 0 0 48px; }
+main { max-width: 1100px; margin: 0 auto; min-width: 0; padding: 0 16px; }
+
+/* Type scale: 28/20/16/14/12, tabular numbers on anything that must align. */
 h1, h2, h3 { font-weight: 600; }
-h1 { font-size: 1.5rem; margin: 0 0 4px; }
-h2 { font-size: 1.1rem; margin: 28px 0 10px; border-bottom: 1px solid var(--border); padding-bottom: 6px; }
-p { line-height: 1.5; color: var(--text-secondary); }
+h1 { font-size: 1.75rem; margin: 0 0 4px; line-height: 1.2; }
+h2 { font-size: 1.25rem; margin: 0 0 4px; }
+h3 { font-size: 1rem; margin: 0 0 6px; }
+p { line-height: 1.5; color: var(--text-secondary); font-size: 1rem; max-width: 70ch; }
+p + p { margin-top: 8px; }
 .muted { color: var(--text-muted); }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); }
+.eyebrow {
+  font-size: 0.72rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--text-muted); margin: 0 0 6px;
+}
+.tabular-nums { font-variant-numeric: tabular-nums; }
 
 header.report-header {
   border-bottom: 1px solid var(--border);
-  padding-bottom: 14px;
-  margin-bottom: 12px;
+  padding: 20px 16px 16px;
+  margin-bottom: 8px;
+  max-width: 1100px;
+  margin-left: auto;
+  margin-right: auto;
+  box-sizing: border-box;
 }
-.meta-line { font-size: 0.85rem; color: var(--text-muted); }
-.verdict { font-size: 0.95rem; color: var(--text-primary); margin-top: 8px; }
+.meta-line { font-size: 0.8rem; color: var(--text-muted); margin-top: 4px; overflow-wrap: break-word; }
+.verdict { font-size: 0.95rem; color: var(--text-primary); margin-top: 10px; max-width: 70ch; }
+
+/* Sticky section nav */
+nav.section-nav {
+  position: sticky; top: 0; z-index: 40;
+  padding-top: env(safe-area-inset-top, 0px);
+  background: color-mix(in oklab, var(--surface-1) 92%, transparent);
+  backdrop-filter: blur(6px);
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 16px;
+}
+nav.section-nav ul {
+  list-style: none; margin: 0; padding: 0 16px;
+  max-width: 1100px; width: 100%; box-sizing: border-box;
+  margin-left: auto; margin-right: auto;
+  display: flex; gap: 4px; overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+nav.section-nav li { flex: 0 0 auto; }
+nav.section-nav a {
+  display: block; padding: 10px 10px; font-size: 0.82rem; font-weight: 600;
+  color: var(--text-secondary); text-decoration: none; white-space: nowrap;
+  border-bottom: 2px solid transparent;
+}
+nav.section-nav a:hover, nav.section-nav a:focus-visible { color: var(--text-primary); border-bottom-color: var(--gridline); }
+
+/* Section takeaway headline */
+section.report-section { margin: 0 0 48px; scroll-margin-top: 56px; }
+section.report-section > h2 { margin-bottom: 2px; }
+.section-takeaway {
+  font-size: 1rem; color: var(--text-primary); font-weight: 600;
+  margin: 2px 0 16px; max-width: 70ch;
+}
+.section-subtitle { font-size: 0.85rem; color: var(--text-muted); margin: 0 0 14px; max-width: 70ch; }
+
+/* Scorecard */
+.scorecard-wrap { overflow-x: auto; }
+table.scorecard-table {
+  border-collapse: separate; border-spacing: 0; width: 100%;
+  font-variant-numeric: tabular-nums;
+}
+.scorecard-corner { width: 30%; }
+th.scorecard-head {
+  text-align: left; padding: 8px 14px; border-bottom: 2px solid var(--border);
+  vertical-align: bottom;
+}
+.scorecard-head-arm { display: flex; align-items: center; gap: 7px; font-size: 0.95rem; font-weight: 700; }
+.scorecard-head-ver { font-size: 0.72rem; margin-top: 2px; }
+th.scorecard-row-label {
+  text-align: left; padding: 10px 14px 10px 4px; font-size: 0.82rem; font-weight: 600;
+  color: var(--text-secondary); border-bottom: 1px solid var(--border); white-space: nowrap;
+}
+td.scorecard-cell {
+  padding: 10px 14px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top;
+}
+.scorecard-value { font-size: 1.3rem; font-weight: 700; display: flex; align-items: baseline; gap: 6px; }
+.scorecard-value.best { color: var(--text-primary); }
+.best-tag {
+  font-size: 0.62rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase;
+  color: var(--text-muted); border: 1px solid var(--border); border-radius: 3px; padding: 1px 4px;
+}
+.scorecard-delta { font-size: 0.78rem; color: var(--text-secondary); margin-top: 3px; }
+.scorecard-delta .muted { font-size: 0.78rem; }
+tr:last-child .scorecard-cell, tr:last-child th.scorecard-row-label { border-bottom: none; }
+
+/* Findings cards */
+.findings-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr));
+  gap: 10px; margin-top: 12px;
+}
+.finding-card {
+  border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px;
+  background: var(--surface-1); font-size: 0.88rem; line-height: 1.45; color: var(--text-primary);
+}
 
 .kpi-row {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr));
   gap: 10px;
-  margin: 14px 0;
 }
 .kpi-card {
   border: 1px solid var(--border);
@@ -1285,16 +1624,26 @@ header.report-header {
   background: var(--surface-1);
 }
 .kpi-arm { font-weight: 600; font-size: 0.9rem; display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
-.chip { display: inline-block; width: 10px; height: 10px; border-radius: 2px; }
+.chip { display: inline-block; width: 10px; height: 10px; border-radius: 2px; flex: 0 0 auto; }
 .kpi-list { margin: 0; display: grid; gap: 3px; }
 .kpi-list > div { display: flex; justify-content: space-between; gap: 8px; font-size: 0.82rem; }
 .kpi-list dt { color: var(--text-muted); }
 .kpi-list dd { margin: 0; font-variant-numeric: tabular-nums; font-weight: 600; }
 
-.chart-section { margin-bottom: 22px; }
+/* Chart cards: one chart per card, generous whitespace */
+.chart-card {
+  border: 1px solid var(--border); border-radius: 10px; padding: 16px;
+  background: var(--surface-1); min-width: 0; margin-bottom: 14px;
+}
+.chart-card:last-child { margin-bottom: 0; }
+.chart-card-title { font-size: 0.95rem; font-weight: 700; margin: 0 0 2px; }
+.chart-card-subtitle { font-size: 0.78rem; color: var(--text-muted); margin: 0 0 12px; }
+.chart-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(340px, 100%), 1fr)); gap: 14px; min-width: 0; }
+.chart-grid > .chart-card { margin-bottom: 0; }
+
 .small-multiples { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr)); gap: 8px 16px; min-width: 0; }
 .small-multiples > .chart-card { min-width: 0; }
-.chart-svg { display: block; background: var(--surface-1); border: 1px solid var(--border); border-radius: 6px; max-width: 100%; height: auto; }
+.chart-svg { display: block; background: var(--surface-1); max-width: 100%; height: auto; }
 .chart-title { fill: var(--text-primary); font-weight: 600; }
 .tick-label, .legend-label { fill: var(--text-muted); }
 .row-label { fill: var(--text-secondary); }
@@ -1302,21 +1651,23 @@ header.report-header {
 .mark-dot, .mark-bar, .comp-seg, .tool-seg { cursor: pointer; }
 .mark-dot:hover, .mark-bar:hover, .comp-seg:hover, .tool-seg:hover { opacity: 0.8; }
 
-details.table-fallback { margin-top: 6px; font-size: 0.82rem; }
-details.table-fallback summary { cursor: pointer; color: var(--text-secondary); }
+details.table-fallback { margin-top: 10px; font-size: 0.82rem; }
+details.table-fallback summary { cursor: pointer; color: var(--text-secondary); font-weight: 600; }
+details.table-fallback summary:hover { color: var(--text-primary); }
 .fallback-table-wrap { overflow-x: auto; }
 .fallback-table { border-collapse: collapse; width: 100%; margin-top: 6px; font-variant-numeric: tabular-nums; font-size: 0.8rem; }
 .fallback-table th, .fallback-table td { text-align: left; padding: 3px 8px; border-bottom: 1px solid var(--border); }
 
-.heatmap-table { border-collapse: collapse; font-size: 0.82rem; font-variant-numeric: tabular-nums; }
-.heatmap-table th, .heatmap-table td { padding: 4px 10px; text-align: right; border-bottom: 1px solid var(--border); }
+.heatmap-table { border-collapse: collapse; font-size: 0.8rem; font-variant-numeric: tabular-nums; }
+.heatmap-table th, .heatmap-table td { padding: 4px 9px; text-align: right; border-bottom: 1px solid var(--border); }
 .heatmap-table th:first-child, .heatmap-table td:first-child { text-align: left; }
 .heat-cell { background: color-mix(in oklab, var(--arm-baseline) calc(var(--heat-t) * 70%), var(--surface-1)); }
 
 .table-wrap { overflow-x: auto; }
-table.run-table { border-collapse: collapse; width: 100%; font-size: 0.82rem; font-variant-numeric: tabular-nums; min-width: 900px; }
+table.run-table { border-collapse: collapse; width: 100%; font-size: 0.8rem; font-variant-numeric: tabular-nums; min-width: 900px; }
 table.run-table th, table.run-table td { padding: 5px 9px; border-bottom: 1px solid var(--border); text-align: right; white-space: nowrap; }
 table.run-table th:first-child, table.run-table td:first-child { text-align: left; }
+table.run-table tbody tr:nth-child(even) { background: color-mix(in oklab, var(--surface-1) 92%, var(--text-primary) 3%); }
 table.run-table thead th { cursor: pointer; color: var(--text-secondary); font-weight: 600; user-select: none; position: sticky; top: 0; background: var(--surface-1); }
 table.run-table thead th:hover { color: var(--text-primary); }
 .sort-indicator::after { content: ""; }
@@ -1327,7 +1678,10 @@ table.run-table thead th:hover { color: var(--text-primary); }
 .gate-ok { color: var(--success-good); font-weight: 600; }
 .gate-fail { color: var(--status-critical); font-weight: 600; }
 
-.method-section ul { padding-left: 18px; color: var(--text-secondary); font-size: 0.88rem; line-height: 1.5; }
+.method-section ul { padding-left: 18px; color: var(--text-secondary); font-size: 0.85rem; line-height: 1.55; margin: 0; }
+.method-section li { margin-bottom: 4px; }
+details.method-full { margin-top: 12px; font-size: 0.82rem; }
+details.method-full summary { cursor: pointer; color: var(--text-secondary); font-weight: 600; }
 
 /* Tooltip */
 #viz-tooltip {
@@ -1338,8 +1692,29 @@ table.run-table thead th:hover { color: var(--text-primary); }
   display: none; white-space: nowrap;
 }
 
+@media (max-width: 720px) {
+  main { padding: 0 16px; }
+  .scorecard-wrap table.scorecard-table,
+  .scorecard-wrap thead,
+  .scorecard-wrap tbody,
+  .scorecard-wrap tr { display: block; width: 100%; }
+  .scorecard-wrap thead { display: none; }
+  .scorecard-wrap tr {
+    border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; margin-bottom: 12px;
+  }
+  .scorecard-wrap th.scorecard-row-label {
+    display: block; border-bottom: none; padding: 8px 0 2px; white-space: normal;
+  }
+  .scorecard-wrap td.scorecard-cell { display: block; border-bottom: none; padding: 2px 0 8px; }
+  .scorecard-wrap td.scorecard-cell::before {
+    content: attr(data-arm-label); display: block; font-size: 0.7rem; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); margin-bottom: 2px;
+  }
+}
+
 @media (max-width: 480px) {
-  h1 { font-size: 1.2rem; }
+  h1 { font-size: 1.4rem; }
+  h2 { font-size: 1.1rem; }
   .kpi-row { grid-template-columns: 1fr; }
   table.run-table { font-size: 0.75rem; }
 }
@@ -1416,7 +1791,74 @@ def build_fallback_table(rows_2d, headers):
     return f'<div class="fallback-table-wrap"><table class="fallback-table"><thead><tr>{ths}</tr></thead><tbody>{"".join(trs)}</tbody></table></div>'
 
 
-def render_report(rows, meta, title="Harness A/B Results", notes_html=None):
+def _takeaway_doc_use(agg):
+    """One-line takeaway headline for the Documentation use section. Falls
+    back to a compact 'not measured' line when no arm has spec/doc data
+    (v1-shaped rows)."""
+    arms = agg.get("arms", {})
+    present = [a for a in ARM_ORDER if a in arms]
+    control = "control" if "control" in present else None
+    doc_vals = {a: arms[a].get("doc_pass_pct_mean") for a in present}
+    if all(v is None for v in doc_vals.values()):
+        return "Doc-rule and spec pass rates not measured in this run."
+    best_arm, best_v = None, -1
+    for a in present:
+        v = doc_vals.get(a)
+        if v is not None and v > best_v:
+            best_v, best_arm = v, a
+    if best_arm is None:
+        return "Doc-rule and spec pass rates not measured in this run."
+    ctrl_v = doc_vals.get(control) if control else None
+    if control and best_arm != control and ctrl_v is not None:
+        return f"Harness arms passed {best_v:.0f}% of doc-rule tests vs {ctrl_v:.0f}% without."
+    return f"{ARM_LABELS.get(best_arm, best_arm)} passed {best_v:.0f}% of doc-rule tests."
+
+
+def _takeaway_gates(agg):
+    arms = agg.get("arms", {})
+    present = [a for a in ARM_ORDER if a in arms and a != "control"]
+    rates = [arms[a].get("gate_conformance", {}).get("init_chain_complete_rate") for a in present]
+    rates = [r for r in rates if r is not None]
+    if not rates:
+        return "Gate conformance not measured in this run."
+    avg = 100.0 * sum(rates) / len(rates)
+    return f"Harness arms completed the init chain in {avg:.0f}% of runs; the control arm has no gates (no harness)."
+
+
+def _takeaway_cost(agg):
+    arms = agg.get("arms", {})
+    if "baseline" not in arms:
+        present = [a for a in ARM_ORDER if a in arms]
+        if not present:
+            return "No cost/turns data to report."
+        a = present[0]
+        tok = arms[a].get("stats", {}).get("total_tokens", {}).get("median")
+        return f"Median total tokens: {fmt_num(tok)}." if tok is not None else "No cost/turns data to report."
+    bits = []
+    for a in ARM_ORDER:
+        if a == "baseline" or a not in arms:
+            continue
+        d = (arms[a].get("vs_baseline_pct") or {}).get("total_tokens")
+        if d is not None:
+            bits.append(f"{ARM_LABELS.get(a, a)} {d:+.0f}% tokens vs baseline")
+    if not bits:
+        return "Token/turn deltas vs baseline not available."
+    return "; ".join(bits) + " (median)."
+
+
+def _takeaway_tools(rows):
+    tool_order, per_arm = tool_mix_rows(rows)
+    if not tool_order:
+        return "No tool-call data recorded."
+    top_tool = tool_order[0]
+    totals = {a: per_arm.get(a, {}).get(top_tool, 0) for a in ARM_ORDER}
+    leader = max(totals, key=lambda a: totals[a]) if totals else None
+    if leader is None or totals.get(leader, 0) == 0:
+        return "No tool-call data recorded."
+    return f"{esc(top_tool)} was the most-used tool overall, led by {ARM_LABELS.get(leader, leader)}."
+
+
+def render_report(rows, meta, title="Harness A/B Results", notes_html=None, notes_text=None):
     analyze = get_analyze()
     agg = analyze.aggregate(rows)
     arms_present = agg.get("arms", {})
@@ -1436,11 +1878,27 @@ def render_report(rows, meta, title="Harness A/B Results", notes_html=None):
     import datetime
     date_str = datetime.date.today().isoformat()
 
-    # --- KPI row ---
+    # --- scorecard + findings ---
+    scorecard_table_html = scorecard_html(agg)
+    notes_findings = parse_notes_lines(notes_text) if notes_text else []
+    # Backward compat: an HTML-fragment --notes file (no '- text' lines
+    # matched) still renders verbatim as its own Findings section, exactly
+    # as the previous report did.
+    legacy_notes_html = notes_html if (notes_html and not notes_findings) else None
+    findings = key_findings(agg, notes_findings)
+    findings_html = findings_cards_html(findings)
+
+    # --- KPI row (kept as the scorecard's "Data" fallback) ---
     kpi_html = kpi_row(agg)
 
-    # --- dot/strip small multiples ---
-    dot_charts = []
+    # --- dot/strip small multiples (split: cost-relevant metrics render in
+    # the Cost section; the rest — memory consultations — in Documentation
+    # use) ---
+    COST_METRIC_KEYS = {
+        "assistant_turns_incl_subagents", "num_turns", "total_tokens",
+        "output_tokens", "wall_s", "tool_calls",
+    }
+    dot_chart_cards = {}
     for key, label, getter in METRIC_DOT_SPECS:
         mrows = rows_for_metric(rows, getter)
         svg = dot_strip_chart(mrows, key, label)
@@ -1452,11 +1910,15 @@ def render_report(rows, meta, title="Harness A/B Results", notes_html=None):
             for trial, v in sorted(by_arm_vals.get(arm, [])):
                 table_rows.append((ARM_LABELS.get(arm, arm), trial, fmt_num(v, 1)))
         fallback = build_fallback_table(table_rows, ["arm", "trial", label])
-        dot_charts.append(f"""
+        dot_chart_cards[key] = f"""
         <div class="chart-card">
+          <div class="chart-card-title">{esc(label)}</div>
+          <div class="chart-card-subtitle">Per run, dot per trial, median tick per arm.</div>
           {svg}
-          <details class="table-fallback"><summary>Data table</summary>{fallback}</details>
-        </div>""")
+          <details class="table-fallback"><summary>Data</summary>{fallback}</details>
+        </div>"""
+    cost_dot_cards = "".join(dot_chart_cards[k] for k, _l, _g in METRIC_DOT_SPECS if k in COST_METRIC_KEYS)
+    other_dot_cards = "".join(dot_chart_cards[k] for k, _l, _g in METRIC_DOT_SPECS if k not in COST_METRIC_KEYS)
 
     # --- token composition ---
     comp_rows = token_composition_rows(rows)
@@ -1468,6 +1930,13 @@ def render_report(rows, meta, title="Harness A/B Results", notes_html=None):
             fmt_num(parts.get("cache_creation")), fmt_num(parts.get("cache_read"))
         ))
     comp_fallback = build_fallback_table(comp_fallback_rows, ["arm", "trial", "input", "output", "cache creation", "cache read"])
+    comp_card = f"""
+    <div class="chart-card">
+      <div class="chart-card-title">Token composition per run</div>
+      <div class="chart-card-subtitle">Input / output / cache creation / cache read, tokens, stacked per run.</div>
+      {comp_svg}
+      <details class="table-fallback" open><summary>Data</summary>{comp_fallback}</details>
+    </div>"""
 
     # --- acceptance ---
     acc_rows = acceptance_rows(rows)
@@ -1476,6 +1945,13 @@ def render_report(rows, meta, title="Harness A/B Results", notes_html=None):
         [(ARM_LABELS.get(r["arm"], r["arm"]), r["trial"], f'{r["passed"]}/{r["total"]}', fmt_pct(r["pct"]), r["reg_ok"]) for r in sorted(acc_rows, key=lambda r: (ARM_ORDER.index(r["arm"]) if r["arm"] in ARM_ORDER else 99, r["trial"] or 0))],
         ["arm", "trial", "passed/total", "pct", "regression ok"]
     )
+    acc_card = f"""
+    <div class="chart-card">
+      <div class="chart-card-title">Acceptance pass rate per run</div>
+      <div class="chart-card-subtitle">Percent of acceptance tests passed, 0-100%, per run.</div>
+      {acc_svg}
+      <details class="table-fallback"><summary>Data</summary>{acc_fallback}</details>
+    </div>"""
 
     # --- friction ---
     fric_rows = friction_rows(rows)
@@ -1485,6 +1961,18 @@ def render_report(rows, meta, title="Harness A/B Results", notes_html=None):
         ["arm", "trial", "hook denials", "stop-hook blocks"]
     )
     stream_table_html = stream_event_heatmap(stream_event_table(rows))
+    fric_card = f"""
+    <div class="chart-card">
+      <div class="chart-card-title">Harness friction per run</div>
+      <div class="chart-card-subtitle">Hook denials and stop-hook blocks, count per run.</div>
+      {fric_svg}
+      <details class="table-fallback"><summary>Data</summary>{fric_fallback}</details>
+    </div>
+    <div class="chart-card">
+      <div class="chart-card-title">Top stream event types by arm</div>
+      <div class="chart-card-subtitle">Plugin arms only (control has no SWE stream).</div>
+      {stream_table_html}
+    </div>"""
 
     # --- tool mix ---
     tool_order, per_arm_tools = tool_mix_rows(rows)
@@ -1494,8 +1982,15 @@ def render_report(rows, meta, title="Harness A/B Results", notes_html=None):
         row = per_arm_tools.get(arm, {})
         tool_fallback_rows.append([ARM_LABELS.get(arm, arm)] + [fmt_num(row.get(t, 0)) for t in tool_order])
     tool_fallback = build_fallback_table(tool_fallback_rows, ["arm"] + tool_order)
+    tool_card = f"""
+    <div class="chart-card">
+      <div class="chart-card-title">Tool mix by arm</div>
+      <div class="chart-card-subtitle">Top {TOOL_TOP_N} tools + Other, call count, stacked per arm.</div>
+      {tool_svg}
+      <details class="table-fallback"><summary>Data</summary>{tool_fallback}</details>
+    </div>"""
 
-    # --- spec vs doc pass % (section 5, chart a) ---
+    # --- spec vs doc pass % ---
     spec_doc_by_arm = spec_doc_bar_rows(rows)
     spec_doc_svg, _spec_doc_h = spec_doc_grouped_bar_chart(spec_doc_by_arm)
     spec_doc_fallback = build_fallback_table(
@@ -1503,16 +1998,25 @@ def render_report(rows, meta, title="Harness A/B Results", notes_html=None):
          for a in ARM_ORDER if a in spec_doc_by_arm],
         ["arm", "spec pass %", "doc pass %"]
     )
+    spec_doc_card = f"""
+    <div class="chart-card">
+      <div class="chart-card-title">Spec vs doc-rule pass rate</div>
+      <div class="chart-card-subtitle">Mean pass % across runs, per arm; spec (full color) vs doc-rule (lightened).</div>
+      {spec_doc_svg}
+      <details class="table-fallback" open><summary>Data</summary>{spec_doc_fallback}</details>
+    </div>"""
 
-    # --- doc-rule heatmap (chart b) ---
+    # --- doc-rule heatmap ---
     rule_ids, per_cell = doc_rule_heatmap_rows(rows)
     doc_rule_heatmap_html = doc_rule_heatmap_table(rule_ids, per_cell)
+    doc_rule_card = f"""
+    <div class="chart-card">
+      <div class="chart-card-title">Doc-rule pass/fail by run</div>
+      <div class="chart-card-subtitle">Runs &times; rules; hover a column header for the source memory.</div>
+      <div class="table-wrap">{doc_rule_heatmap_html}</div>
+    </div>"""
 
-    # --- gate conformance table (chart c) ---
-    gate_rows_data = gate_conformance_rows(rows)
-    gate_table_html = gate_conformance_table(gate_rows_data)
-
-    # --- memory coverage dot plot (chart d) ---
+    # --- memory coverage dot plot ---
     mem_rows_data = memory_coverage_rows(rows)
     mem_coverage_svg = memory_coverage_dot_chart(mem_rows_data)
     mem_coverage_fallback = build_fallback_table(
@@ -1522,6 +2026,28 @@ def render_report(rows, meta, title="Harness A/B Results", notes_html=None):
          for r in sorted(mem_rows_data, key=lambda r: (ARM_ORDER.index(r["arm"]) if r["arm"] in ARM_ORDER else 99, r["trial"] or 0))],
         ["arm", "trial", "memories read (n)", "doc-rule coverage", "channel"]
     )
+    mem_coverage_card = f"""
+    <div class="chart-card">
+      <div class="chart-card-title">Memory consultation coverage</div>
+      <div class="chart-card-subtitle">% of task doc_rules memories read, per run, 0-100%.</div>
+      {mem_coverage_svg}
+      <details class="table-fallback"><summary>Data</summary>{mem_coverage_fallback}</details>
+    </div>"""
+
+    # --- gate conformance table ---
+    gate_rows_data = gate_conformance_rows(rows)
+    gate_table_html = gate_conformance_table(gate_rows_data)
+    gate_card = f"""
+    <div class="chart-card">
+      <div class="chart-card-title">Gate conformance per run</div>
+      <div class="chart-card-subtitle">Init chain, sweep verification, edits-before-sweep, doc-rule coverage; control is n/a (no harness).</div>
+      <div class="table-wrap">{gate_table_html}</div>
+    </div>"""
+
+    doc_use_takeaway = _takeaway_doc_use(agg)
+    gates_takeaway = _takeaway_gates(agg)
+    cost_takeaway = _takeaway_cost(agg)
+    tools_takeaway = _takeaway_tools(rows)
 
     # --- per-run table ---
     run_table_html = per_run_table(rows)
@@ -1542,16 +2068,46 @@ def render_report(rows, meta, title="Harness A/B Results", notes_html=None):
             + "</li>"
         )
 
-    method_html = f"""
+    method_items_html = ''.join(arm_method_items) if arm_method_items else '<li>Arm metadata not recorded in meta.json.</li>'
+    method_summary_html = f"""
     <ul>
-      {''.join(arm_method_items) if arm_method_items else '<li>Arm metadata not recorded in meta.json.</li>'}
-      <li>Isolation: each plugin arm runs from a full <code>git clone --no-hardlinks</code> (never a worktree) with <code>origin</code> removed; runs use <code>--setting-sources project,local</code> so operator user settings never load; the subprocess environment is scrubbed of <code>CLAUDE*</code>/<code>SWE_*</code>/<code>ANTHROPIC_*</code> vars.</li>
-      <li>Auth: subscription (<code>claude.ai</code>) auth is required before any run; recorded auth mode for this experiment: <strong>{esc(auth_mode)}</strong>.</li>
-      <li>n is small ({esc(trials_str) or 'see KPI row'}) &mdash; treat deltas as directional hypotheses, not statistically powered conclusions.</li>
-      <li>The <code>control</code> arm has no SWE plugin or MCP servers loaded, but can still read <code>.serena/memory/</code> files as plain text if present in the fixture &mdash; &quot;no plugin&quot; is not the same guarantee as &quot;no visible workflow artifacts.&quot;</li>
-      <li>Cost figures are Claude Code's own <strong>notional</strong> cost estimate on a subscription plan, not an actual charge.</li>
+      {method_items_html}
+      <li>Task: see the fixture under <code>experiments/harness-ab/tasks/</code> for this stamp.</li>
+      <li>Isolation: each plugin arm runs from a full <code>git clone --no-hardlinks</code> (never a worktree); each CLAUDE.md is content-addressed by its sha256 prefix.</li>
+      <li>n is small ({esc(trials_str) or 'see scorecard'}) &mdash; treat deltas as directional hypotheses, not statistically powered conclusions.</li>
     </ul>
     """
+    method_full_html = f"""
+    <ul>
+      {method_items_html}
+      <li>Isolation: each plugin arm runs from a full <code>git clone --no-hardlinks</code> (never a worktree) with <code>origin</code> removed; runs use <code>--setting-sources project,local</code> so operator user settings never load; the subprocess environment is scrubbed of <code>CLAUDE*</code>/<code>SWE_*</code>/<code>ANTHROPIC_*</code> vars.</li>
+      <li>Auth: subscription (<code>claude.ai</code>) auth is required before any run; recorded auth mode for this experiment: <strong>{esc(auth_mode)}</strong>.</li>
+      <li>n is small ({esc(trials_str) or 'see scorecard'}) &mdash; treat deltas as directional hypotheses, not statistically powered conclusions.</li>
+      <li>The <code>control</code> arm has no SWE plugin or MCP servers loaded, but can still read <code>.serena/memory/</code> files as plain text if present in the fixture &mdash; &quot;no plugin&quot; is not the same guarantee as &quot;no visible workflow artifacts.&quot;</li>
+      <li>Cost figures are Claude Code's own <strong>notional</strong> cost estimate on a subscription plan, not an actual charge.</li>
+      <li>Model: {esc(model)} &middot; Claude Code {esc(claude_version)} &middot; auth: {esc(auth_mode)}.</li>
+    </ul>
+    """
+
+    nav_items = [
+        ("scorecard", "Scorecard"),
+        ("doc-use", "Documentation use"),
+        ("gates", "Gates"),
+        ("cost", "Cost"),
+        ("tools", "Tools"),
+        ("runs", "Runs"),
+        ("method", "Method"),
+    ]
+    nav_html = "".join(f'<li><a href="#{sid}">{esc(label)}</a></li>' for sid, label in nav_items)
+
+    findings_section_html = (
+        f'<section class="report-section findings-section"><div class="eyebrow">Key findings</div>{findings_html}</section>'
+        if findings_html else ""
+    )
+    legacy_findings_section_html = (
+        f'<section class="report-section findings-section"><h2>Findings</h2>{legacy_notes_html}</section>'
+        if legacy_notes_html else ""
+    )
 
     doc = f"""<!DOCTYPE html>
 <html lang="en">
@@ -1567,84 +2123,91 @@ body {{ font-family: 'Inter', system-ui, -apple-system, "Segoe UI", sans-serif; 
 </style>
 </head>
 <body>
-<main>
   <header class="report-header">
     <h1>{esc(title)}</h1>
     <div class="meta-line">{esc(date_str)} &middot; model {esc(model)} &middot; trials/arm: {esc(trials_str) if trials_str else esc(str(trials))} &middot; claude {esc(claude_version)} &middot; auth: {esc(auth_mode)}</div>
     <p class="verdict">{esc(verdict)}</p>
   </header>
 
-  {f'<section class="chart-section findings-section"><h2>Findings</h2>{notes_html}</section>' if notes_html else ''}
+  <nav class="section-nav" aria-label="Report sections">
+    <ul>{nav_html}</ul>
+  </nav>
 
-  <section class="kpi-row">
-    {kpi_html}
+<main>
+  {legacy_findings_section_html}
+
+  <section class="report-section" id="scorecard">
+    <div class="eyebrow">At a glance</div>
+    <h2>Scorecard</h2>
+    <p class="section-subtitle">One column per arm; delta is vs control (no harness). Best value per row is bold with a "best" tag.</p>
+    {scorecard_table_html}
+    {findings_section_html}
+    <details class="table-fallback"><summary>Data (per-arm KPI cards)</summary>
+      <div class="kpi-row">{kpi_html}</div>
+    </details>
   </section>
 
-  <section class="chart-section">
-    <h2>Run metrics (dot/strip plots, per arm, with median tick)</h2>
-    <div class="small-multiples">
-      {''.join(dot_charts)}
+  <section class="report-section" id="doc-use">
+    <div class="eyebrow">Documentation use</div>
+    <h2>Spec &amp; doc-rule compliance</h2>
+    <p class="section-takeaway">{esc(doc_use_takeaway)}</p>
+    <div class="chart-grid">
+      {spec_doc_card}
+      {other_dot_cards}
+    </div>
+    {doc_rule_card}
+  </section>
+
+  <section class="report-section" id="gates">
+    <div class="eyebrow">Gates</div>
+    <h2>Gate conformance</h2>
+    <p class="section-takeaway">{esc(gates_takeaway)}</p>
+    <div class="chart-grid">
+      {gate_card}
+      {mem_coverage_card}
     </div>
   </section>
 
-  <section class="chart-section">
-    <h2>Token composition per run</h2>
-    {comp_svg}
-    <details class="table-fallback"><summary>Data table</summary>{comp_fallback}</details>
+  <section class="report-section" id="cost">
+    <div class="eyebrow">Cost</div>
+    <h2>Tokens, turns &amp; wall time</h2>
+    <p class="section-takeaway">{esc(cost_takeaway)}</p>
+    <div class="chart-grid">
+      {cost_dot_cards}
+    </div>
+    <details class="table-fallback"><summary>Token composition (main + subagent split)</summary>
+      {comp_card}
+    </details>
   </section>
 
-  <section class="chart-section">
-    <h2>Acceptance pass rate</h2>
-    {acc_svg}
-    <details class="table-fallback"><summary>Data table</summary>{acc_fallback}</details>
+  <section class="report-section" id="tools">
+    <div class="eyebrow">Tools</div>
+    <h2>Tool mix &amp; friction</h2>
+    <p class="section-takeaway">{esc(tools_takeaway)}</p>
+    <div class="chart-grid">
+      {tool_card}
+      {acc_card}
+      {fric_card}
+    </div>
   </section>
 
-  <section class="chart-section">
-    <h2>Harness friction</h2>
-    {fric_svg}
-    <details class="table-fallback"><summary>Data table</summary>{fric_fallback}</details>
-    <h3>Top stream event types by arm (plugin arms only)</h3>
-    {stream_table_html}
-  </section>
-
-  <section class="chart-section">
-    <h2>Tool mix</h2>
-    {tool_svg}
-    <details class="table-fallback"><summary>Data table</summary>{tool_fallback}</details>
-  </section>
-
-  <section class="chart-section">
-    <h2>Spec vs doc-rule pass rate</h2>
-    {spec_doc_svg}
-    <details class="table-fallback"><summary>Data table</summary>{spec_doc_fallback}</details>
-  </section>
-
-  <section class="chart-section">
-    <h2>Doc-rule pass/fail by run</h2>
-    <div class="table-wrap">{doc_rule_heatmap_html}</div>
-  </section>
-
-  <section class="chart-section">
-    <h2>Gate conformance per run</h2>
-    <div class="table-wrap">{gate_table_html}</div>
-  </section>
-
-  <section class="chart-section">
-    <h2>Memory consultation coverage</h2>
-    {mem_coverage_svg}
-    <details class="table-fallback"><summary>Data table</summary>{mem_coverage_fallback}</details>
-  </section>
-
-  <section class="chart-section">
+  <section class="report-section" id="runs">
+    <div class="eyebrow">Detail</div>
     <h2>Per-run detail</h2>
-    <div class="table-wrap">
-      {run_table_html}
-    </div>
+    <p class="section-takeaway">{len(rows)} runs across {len([a for a in ARM_ORDER if a in arms_present])} arms. Sortable; click a column header.</p>
+    <details class="table-fallback">
+      <summary>Per-run table ({len(rows)} rows)</summary>
+      <div class="table-wrap">
+        {run_table_html}
+      </div>
+    </details>
   </section>
 
-  <section class="method-section">
+  <section class="report-section method-section" id="method">
+    <div class="eyebrow">Method</div>
     <h2>Method &amp; caveats</h2>
-    {method_html}
+    {method_summary_html}
+    <details class="method-full"><summary>Full method &amp; caveats</summary>{method_full_html}</details>
   </section>
 </main>
 <div id="viz-tooltip"></div>
@@ -1665,22 +2228,28 @@ def main(argv=None):
     p.add_argument("stamp_dir", help="path to <results>/<stamp> directory (containing runs.jsonl, meta.json)")
     p.add_argument("--out", default="report.html", help="output HTML path (default report.html)")
     p.add_argument("--title", default="Harness A/B Results", help="report title (default: 'Harness A/B Results')")
-    p.add_argument("--notes", default=None, metavar="FILE.html",
-                    help="path to a trusted HTML fragment injected verbatim as a "
-                         "'Findings' section right after the header, before the "
-                         "KPI row. Not escaped — the file's content is the "
-                         "author's own write-up, not untrusted data.")
+    p.add_argument("--notes", default=None, metavar="FILE",
+                    help="path to a findings file: either the simple line "
+                         "format (one finding per line, '- text') rendered "
+                         "as individual key-finding cards, or (backward "
+                         "compat) a trusted HTML fragment injected verbatim "
+                         "as a 'Findings' section when no '- text' line "
+                         "matches. Not escaped in the HTML-fragment case — "
+                         "the file's content is the author's own write-up, "
+                         "not untrusted data.")
     args = p.parse_args(argv)
 
     rows = load_rows(args.stamp_dir)
     meta = load_meta(args.stamp_dir)
 
     notes_html = None
+    notes_text = None
     if args.notes:
         with open(args.notes) as f:
-            notes_html = f.read()
+            notes_text = f.read()
+        notes_html = notes_text
 
-    doc = render_report(rows, meta, title=args.title, notes_html=notes_html)
+    doc = render_report(rows, meta, title=args.title, notes_html=notes_html, notes_text=notes_text)
 
     with open(args.out, "w") as f:
         f.write(doc)
