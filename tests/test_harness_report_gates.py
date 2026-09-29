@@ -469,8 +469,14 @@ class TwoPhaseFullRenderTest(unittest.TestCase):
         control_rows = [r for r in matrix_rows if r["arm"] == "control"]
         self.assertTrue(control_rows)
 
-    def test_verdict_mentions_pivot_benchmarks(self):
-        self.assertIn("pivot benchmarks", self.html.lower())
+    def test_overall_review_covers_pivot_benchmarks(self):
+        # The Overall review's comparison table (the report's top,
+        # replacing the old compute_verdict() paragraph) must surface
+        # pivot-benchmark results, not just task-1 ones.
+        idx = self.html.index('id="overall"')
+        overall_section = self.html[idx:self.html.index("</section>", idx)]
+        self.assertIn("Pivot doc rules", overall_section)
+        self.assertIn("Pivot spec", overall_section)
 
 
 class TwoPhaseSinglePhaseCompatTest(unittest.TestCase):

@@ -25,6 +25,8 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ANALYZE_PATH = os.path.join(HERE, "analyze.py")
+FAILURE_DETAIL_PATH = os.path.join(HERE, "failure_detail.py")
+CODE_METRICS_PATH = os.path.join(HERE, "code_metrics.py")
 
 # --------------------------------------------------------------------------
 # Import analyze.py by path (read-only use of aggregate()).
@@ -39,6 +41,31 @@ def _load_analyze():
 
 
 _analyze = None
+
+
+def _load_module(path, name):
+    spec = importlib.util.spec_from_file_location(name, path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+_failure_detail = None
+_code_metrics = None
+
+
+def get_failure_detail():
+    global _failure_detail
+    if _failure_detail is None:
+        _failure_detail = _load_module(FAILURE_DETAIL_PATH, "harness_ab_failure_detail")
+    return _failure_detail
+
+
+def get_code_metrics():
+    global _code_metrics
+    if _code_metrics is None:
+        _code_metrics = _load_module(CODE_METRICS_PATH, "harness_ab_code_metrics")
+    return _code_metrics
 
 
 def get_analyze():
@@ -613,9 +640,60 @@ def pivot_gate_matrix_rows(rows):
     return out
 
 
-def phase_cost_stack_rows(rows):
+def _load_run_module():
+    """Import run.py by path (read-only use of parse_transcript()), same
+    pattern as _load_analyze(). Never invokes `claude -p` or any subprocess
+    -- parse_transcript is a pure lines-in/dict-out parser."""
+    run_path = os.path.join(HERE, "run.py")
+    spec = importlib.util.spec_from_file_location("harness_ab_run", run_path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+_run_mod = None
+
+
+def _get_run_mod():
+    global _run_mod
+    if _run_mod is None:
+        _run_mod = _load_run_module()
+    return _run_mod
+
+
+def _phase_tokens_from_transcript(stamp_dir, run_id, phase):
+    """Fallback for a pivot row whose phases.<phase>.metrics is missing/
+    empty (e.g. a stamp that was --rescore'd, which only recomputes
+    acceptance, not per-phase metrics -- see run.py's _reparse_pivot_row
+    docstring for the --reparse path that would normally populate this).
+    Re-derives total_tokens for one phase by parsing
+    <stamp_dir>/runs/<run_id>/transcript.<phase>.jsonl with run.py's own
+    parse_transcript(), the same authoritative all-models-incl-subagents
+    total used everywhere else in this report. Returns None (not 0) when
+    stamp_dir is unavailable or the transcript file doesn't exist, so the
+    caller can distinguish "couldn't recover" from "genuinely zero"."""
+    if not stamp_dir or not run_id:
+        return None
+    path = os.path.join(stamp_dir, "runs", run_id, f"transcript.{phase}.jsonl")
+    if not os.path.exists(path):
+        return None
+    try:
+        with open(path) as f:
+            lines = f.readlines()
+        run_mod = _get_run_mod()
+        metrics = run_mod.parse_transcript(lines)
+        return metrics.get("total_tokens")
+    except Exception:
+        return None
+
+
+def phase_cost_stack_rows(rows, stamp_dir=None):
     """Per two-phase run: (run_id, arm, trial, {"task1": tokens, "pivot":
-    tokens}) for the phase-stacked token cost chart. Pure. Non-pivot rows
+    tokens}) for the phase-stacked token cost chart. Pure w.r.t. `rows`;
+    `stamp_dir`, when given, is used ONLY as a fallback to recover tokens
+    by re-parsing the phase transcripts when phases.<phase>.metrics.
+    total_tokens is missing (see _phase_tokens_from_transcript) -- a stamp
+    with populated phase metrics never touches disk here. Non-pivot rows
     excluded."""
     out = []
     for r in rows:
@@ -625,10 +703,15 @@ def phase_cost_stack_rows(rows):
         phases = r.get("phases")
         if not isinstance(phases, dict) or "task1" not in phases or "pivot" not in phases:
             continue
-        t1_tok = g(phases, "task1", "metrics", "total_tokens") or 0
-        pv_tok = g(phases, "pivot", "metrics", "total_tokens") or 0
+        run_id = r.get("run_id") or f"{arm}-t{r.get('trial')}"
+        t1_tok = g(phases, "task1", "metrics", "total_tokens")
+        if not t1_tok:
+            t1_tok = _phase_tokens_from_transcript(stamp_dir, run_id, "task1") or 0
+        pv_tok = g(phases, "pivot", "metrics", "total_tokens")
+        if not pv_tok:
+            pv_tok = _phase_tokens_from_transcript(stamp_dir, run_id, "pivot") or 0
         out.append((
-            r.get("run_id") or f"{arm}-t{r.get('trial')}", arm, r.get("trial"),
+            run_id, arm, r.get("trial"),
             {"task1": t1_tok, "pivot": pv_tok},
         ))
     return out
@@ -652,6 +735,547 @@ def two_phase_doc_rule_heatmap_rows(rows, phase, benchmark_key="doc_rules"):
             rule_ids.add(rule_id)
             cell[rule_id] = rule_result.get("ok")
     return sorted(rule_ids), per_cell
+
+
+# --------------------------------------------------------------------------
+# Overall review (top-of-report single comparison block).
+#
+# Replaces the old auto-generated multi-sentence verdict paragraph: one
+# plain non-contradictory sentence + one comparison table with raw x/y
+# counts, grouped under Correctness / Process / Efficiency. Reads only
+# `rows` (per-run dicts) plus a couple of aggregate() fields (gate rates),
+# never phases.*.metrics directly for tokens -- those go through
+# phase_cost_stack_rows() so the transcript-fallback recovery (see
+# _phase_tokens_from_transcript) benefits this table too.
+# --------------------------------------------------------------------------
+
+
+def _xy(passed, total):
+    """('x/y', pct|None) for a passed/total pair. None total -> ('—', None)."""
+    if not total:
+        return "—", None
+    return f"{passed}/{total}", 100.0 * passed / total
+
+
+def strict_best_arm(values, higher_is_better=True):
+    """Pick the single strict-winner arm from {arm: value|None}, or None
+    when there is no data, a tie among the best values, or every present
+    value is zero (a 0/1 "success" tie across every arm is not a winner —
+    see the Overall review's 'never tag ties/all-zero rows' rule). Pure.
+
+    values with None are ignored entirely (not counted as 0, not counted
+    as a candidate)."""
+    present = {a: v for a, v in values.items() if v is not None}
+    if not present:
+        return None
+    if all(v == 0 for v in present.values()):
+        return None
+    best_val = max(present.values()) if higher_is_better else min(present.values())
+    winners = [a for a, v in present.items() if v == best_val]
+    if len(winners) != 1:
+        return None
+    return winners[0]
+
+
+def overall_review_rows(rows, agg, stamp_dir=None):
+    """Per-arm data for the Overall review comparison table + its one-line
+    verdict. Pure w.r.t. `rows`/`agg`; `stamp_dir` only feeds the phase
+    token fallback (see phase_cost_stack_rows). Returns:
+
+    {"arms_present": [...], "n_per_arm": {arm: n}, "has_pivot": bool,
+     "cells": {arm: {
+        "t1_spec": (x/y str, pct|None), "t1_doc": (...), "pv_spec": (...),
+        "pv_doc": (...), "all_doc": (...), "t1_retention": (...),
+        "read_all_memories_pct": float|None,
+        "gates": {"t1_init": bool|None, "t1_sweep": bool|None,
+                  "pv_resweep": bool|None},
+        "total_tokens": float|None, "turns": float|None, "wall_s": float|None,
+        "tool_calls": float|None, "memory_reads": float|None,
+        "vs_no_harness": {"tokens_pct": float|None, "turns_pct": float|None,
+                           "wall_pct": float|None},
+     }}}
+
+    Values are summed (not averaged) across an arm's runs, matching the
+    "show raw counts x/y everywhere" requirement -- with n=1/arm in the
+    current data this is identical to that one run's numbers, but stays
+    correct if n grows."""
+    by_arm = {}
+    for r in rows:
+        arm = r.get("arm")
+        if arm not in ARM_ORDER:
+            continue
+        by_arm.setdefault(arm, []).append(r)
+    present = [a for a in ARM_ORDER if a in by_arm]
+    has_pivot = has_phase_rows(rows)
+
+    phase_tok_by_run = {}
+    if has_pivot:
+        for (run_id, arm, trial, parts) in phase_cost_stack_rows(rows, stamp_dir=stamp_dir):
+            phase_tok_by_run[run_id] = parts
+
+    cells = {}
+    for arm in present:
+        arm_rows = by_arm[arm]
+        n = len(arm_rows)
+
+        t1_spec_p = t1_spec_t = t1_doc_p = t1_doc_t = 0
+        pv_spec_p = pv_spec_t = pv_doc_p = pv_doc_t = 0
+        ret_p = ret_t = 0
+        any_phase = False
+        for r in arm_rows:
+            phases = r.get("phases")
+            if not isinstance(phases, dict) or "task1" not in phases or "pivot" not in phases:
+                continue
+            any_phase = True
+            b1 = (phases.get("task1") or {}).get("benchmark") or {}
+            b2 = (phases.get("pivot") or {}).get("benchmark") or {}
+            ret = (phases.get("pivot") or {}).get("task1_retention") or {}
+            t1_spec_p += (b1.get("spec") or {}).get("passed") or 0
+            t1_spec_t += (b1.get("spec") or {}).get("total") or 0
+            t1_doc_p += (b1.get("doc") or {}).get("passed") or 0
+            t1_doc_t += (b1.get("doc") or {}).get("total") or 0
+            pv_spec_p += (b2.get("spec") or {}).get("passed") or 0
+            pv_spec_t += (b2.get("spec") or {}).get("total") or 0
+            pv_doc_p += (b2.get("doc") or {}).get("passed") or 0
+            pv_doc_t += (b2.get("doc") or {}).get("total") or 0
+            ret_p += ret.get("passed") or 0
+            ret_t += ret.get("total") or 0
+
+        # gate rates: strict boolean AND across an arm's runs (all must
+        # pass for the arm-level glyph to read yes); None when no run in
+        # this arm carries that gate at all (e.g. control has no phases).
+        def _gate_all(getter):
+            vals = [getter(r) for r in arm_rows if any_phase]
+            vals = [v for v in vals if isinstance(v, bool)]
+            if not vals:
+                return None
+            return all(vals)
+
+        t1_init = _gate_all(lambda r: g(r, "phases", "task1", "gates", "init_chain_complete"))
+        t1_sweep = _gate_all(lambda r: g(r, "phases", "task1", "gates", "sweep_verified"))
+        pv_resweep = _gate_all(lambda r: g(r, "phases", "pivot", "gates", "pivot_resweep_verified"))
+
+        # read-all-rule-memories coverage: mean of doc_rule_memories_coverage
+        # (pivot-phase gates, i.e. the run's final/combined coverage) across
+        # this arm's runs; None when not recorded for any run.
+        cov_vals = [g(r, "gates", "doc_rule_memories_coverage") for r in arm_rows]
+        cov_vals = [v for v in cov_vals if isinstance(v, (int, float))]
+        read_all_pct = (100.0 * sum(cov_vals) / len(cov_vals)) if cov_vals else None
+
+        total_tokens = sum(g(r, "metrics", "total_tokens") or 0 for r in arm_rows) or None
+        turns = sum(g(r, "metrics", "assistant_turns_incl_subagents") or 0 for r in arm_rows) or None
+        wall_s = sum(r.get("wall_s") or 0 for r in arm_rows) or None
+        tool_calls = sum(_tool_calls(r) or 0 for r in arm_rows) or None
+        memory_reads = sum(g(r, "metrics", "memory_file_reads") or 0 for r in arm_rows) or None
+
+        cells[arm] = {
+            "n": n,
+            "t1_spec": _xy(t1_spec_p, t1_spec_t),
+            "t1_doc": _xy(t1_doc_p, t1_doc_t),
+            "pv_spec": _xy(pv_spec_p, pv_spec_t),
+            "pv_doc": _xy(pv_doc_p, pv_doc_t),
+            "all_doc": _xy(t1_doc_p + pv_doc_p, t1_doc_t + pv_doc_t),
+            "t1_retention": _xy(ret_p, ret_t),
+            "has_pivot_rows": any_phase,
+            "read_all_memories_pct": read_all_pct,
+            "gates": {"t1_init": t1_init, "t1_sweep": t1_sweep, "pv_resweep": pv_resweep},
+            "total_tokens": total_tokens,
+            "turns": turns,
+            "wall_s": wall_s,
+            "tool_calls": tool_calls,
+            "memory_reads": memory_reads,
+        }
+
+    control_arm = "control" if "control" in present else None
+    ctrl = cells.get(control_arm) if control_arm else None
+    for arm in present:
+        c = cells[arm]
+        vs = {"tokens_pct": None, "turns_pct": None, "wall_pct": None}
+        if ctrl and arm != control_arm:
+            for key, ck in (("tokens_pct", "total_tokens"), ("turns_pct", "turns"), ("wall_pct", "wall_s")):
+                v, cv = c.get(ck), ctrl.get(ck)
+                if v is not None and cv:
+                    vs[key] = 100.0 * (v - cv) / cv
+        c["vs_no_harness"] = vs
+
+    n_per_arm = {a: cells[a]["n"] for a in present}
+    return {"arms_present": present, "n_per_arm": n_per_arm, "has_pivot": has_pivot,
+            "cells": cells, "control_arm": control_arm}
+
+
+def overall_review_verdict(review):
+    """One plain, non-contradictory sentence (<=25 words): which arm scored
+    best on documented rules overall (all doc-rule tests, task1+pivot, by
+    pct) and that arm's token cost relative to the no-harness control.
+    Pure. This is the short headline; cost_vs_benefit_verdict() below
+    answers the "is the harness worth it" question this sentence doesn't
+    have room for."""
+    present = review["arms_present"]
+    cells = review["cells"]
+    if not present:
+        return "No runs to report."
+
+    doc_vals = {a: cells[a]["all_doc"][1] for a in present}
+    best_arm = strict_best_arm(doc_vals, higher_is_better=True)
+
+    if best_arm is None:
+        return "No documented-rule test results recorded for any arm yet (directional, n=1/arm)."
+
+    best_xy, best_pct = cells[best_arm]["all_doc"]
+    label = ARM_LABELS.get(best_arm, best_arm).split(" (")[0]
+    sentence = f"{label} scored best on documented rules overall ({best_xy}, {best_pct:.0f}%)"
+
+    control_arm = review["control_arm"]
+    if control_arm and best_arm != control_arm:
+        vs = cells[best_arm]["vs_no_harness"].get("tokens_pct")
+        if vs is not None:
+            direction = "more" if vs > 0 else "fewer"
+            sentence += f", using {abs(vs):.0f}% {direction} tokens than no harness"
+    elif control_arm and best_arm == control_arm:
+        sentence += " — with no harness running at all"
+
+    return sentence + "."
+
+
+def cost_vs_benefit_lines(review):
+    """Per-harness-arm cost-vs-benefit line answering "is using a harness
+    worth the extra turns and tokens?" — e.g. "baseline: 1.9x tokens, 1.5x
+    turns vs no harness -> task-1 doc compliance LOWER (33/58 vs 47/58),
+    pivot equal (16/34)."
+
+    Returns [{"arm": str, "label": str, "tokens_x": float|None,
+    "turns_x": float|None, "t1_doc_cmp": "LOWER"|"HIGHER"|"EQUAL"|None,
+    "t1_doc_xy": str, "t1_doc_ctrl_xy": str, "pv_doc_cmp": ...,
+    "pv_doc_xy": str, "pv_doc_ctrl_xy": str}] for every present arm other
+    than control, ordered by ARM_ORDER. Pure."""
+    present = review["arms_present"]
+    cells = review["cells"]
+    control_arm = review["control_arm"]
+    if not control_arm or control_arm not in cells:
+        return []
+    ctrl = cells[control_arm]
+
+    def _cmp(arm_pct, ctrl_pct):
+        if arm_pct is None or ctrl_pct is None:
+            return None
+        if arm_pct > ctrl_pct:
+            return "HIGHER"
+        if arm_pct < ctrl_pct:
+            return "LOWER"
+        return "EQUAL"
+
+    out = []
+    for arm in present:
+        if arm == control_arm:
+            continue
+        c = cells[arm]
+        vs = c.get("vs_no_harness") or {}
+        tokens_pct = vs.get("tokens_pct")
+        turns_pct = vs.get("turns_pct")
+        tokens_x = (1.0 + tokens_pct / 100.0) if tokens_pct is not None else None
+        turns_x = (1.0 + turns_pct / 100.0) if turns_pct is not None else None
+
+        t1_xy, t1_pct = c["t1_doc"]
+        t1_ctrl_xy, t1_ctrl_pct = ctrl["t1_doc"]
+        pv_xy, pv_pct = c["pv_doc"]
+        pv_ctrl_xy, pv_ctrl_pct = ctrl["pv_doc"]
+
+        out.append({
+            "arm": arm,
+            "label": ARM_LABELS.get(arm, arm).split(" (")[0],
+            "tokens_x": tokens_x,
+            "turns_x": turns_x,
+            "t1_doc_cmp": _cmp(t1_pct, t1_ctrl_pct),
+            "t1_doc_xy": t1_xy,
+            "t1_doc_ctrl_xy": t1_ctrl_xy,
+            "pv_doc_cmp": _cmp(pv_pct, pv_ctrl_pct),
+            "pv_doc_xy": pv_xy,
+            "pv_doc_ctrl_xy": pv_ctrl_xy,
+        })
+    return out
+
+
+def _cost_vs_benefit_line_text(line):
+    """Render one cost_vs_benefit_lines() entry as plain text, e.g.
+    'baseline: 1.9x tokens, 1.5x turns vs no harness -> task-1 doc
+    compliance LOWER (33/58 vs 47/58), pivot equal (16/34).' Pure."""
+    bits = []
+    if line["tokens_x"] is not None:
+        bits.append(f'{line["tokens_x"]:.1f}× tokens')
+    if line["turns_x"] is not None:
+        bits.append(f'{line["turns_x"]:.1f}× turns')
+    cost_str = ", ".join(bits) if bits else "cost not recorded"
+
+    def _phase_bit(cmp_, xy, ctrl_xy, phase_label):
+        if cmp_ is None:
+            return f"{phase_label} not recorded"
+        if cmp_ == "EQUAL":
+            return f"{phase_label} equal ({xy})"
+        return f"{phase_label} compliance {cmp_} ({xy} vs {ctrl_xy})"
+
+    t1_bit = _phase_bit(line["t1_doc_cmp"], line["t1_doc_xy"], line["t1_doc_ctrl_xy"], "task-1 doc")
+    pv_bit = _phase_bit(line["pv_doc_cmp"], line["pv_doc_xy"], line["pv_doc_ctrl_xy"], "pivot doc")
+
+    return f'{line["label"]}: {cost_str} vs no harness → {t1_bit}, {pv_bit}.'
+
+
+def cost_vs_benefit_verdict(review):
+    """Answer "Is using a harness worth the extra turns and tokens?"
+    plainly, from the data, with the n=1 caveat. Pure.
+
+    A harness arm "wins" the cost-vs-benefit question only if it beats
+    control on BOTH task-1 and pivot doc-rule pct while costing no more
+    than control (strict, symmetric with strict_best_arm's no-ties rule).
+    Otherwise the answer is "no" (cost paid without matching gain) unless
+    every harness arm ties or is unmeasured, in which case it's
+    "inconclusive"."""
+    lines = cost_vs_benefit_lines(review)
+    if not lines:
+        return {"question": "Is using a harness worth the extra turns and tokens?",
+                "answer": "No control arm to compare against.", "lines": []}
+
+    any_win = any(
+        (l["t1_doc_cmp"] in ("HIGHER", "EQUAL") and l["pv_doc_cmp"] in ("HIGHER", "EQUAL")
+         and (l["t1_doc_cmp"] == "HIGHER" or l["pv_doc_cmp"] == "HIGHER"))
+        for l in lines
+    )
+    pv_gain_bits = [
+        f'{l["label"]}’s only gain was {l["pv_doc_xy"]} pivot doc tests vs {l["pv_doc_ctrl_xy"]} for no harness'
+        for l in lines if l["pv_doc_cmp"] == "HIGHER" and l["t1_doc_cmp"] != "HIGHER"
+    ]
+
+    if any_win:
+        answer = "On this run, yes for at least one arm — it matched or beat no-harness documented-rule compliance without costing more."
+    else:
+        answer = "On this run, no — the harness cost more tokens/turns and did not improve documented-rule compliance over no harness."
+        if pv_gain_bits:
+            answer += " " + "; ".join(pv_gain_bits) + "."
+    answer += " n=1 per arm — directional, not statistically powered."
+
+    return {
+        "question": "Is using a harness worth the extra turns and tokens?",
+        "answer": answer,
+        "lines": lines,
+    }
+
+
+# --------------------------------------------------------------------------
+# Delegation: did an arm use subagents to cut time/cost? Top-level metrics
+# only (subagent_launches/messages/main_tokens/total_tokens) -- no
+# per-phase subagent breakdown exists in runs.jsonl, so phase columns
+# always read "—".
+# --------------------------------------------------------------------------
+
+
+def delegation_rows(rows):
+    """Per-run delegation data: subagent launches/messages, main-vs-
+    subagent token split, wall time. Pure.
+
+    Returns [{"run_id", "arm", "trial", "subagent_launches",
+    "subagent_messages", "main_tokens", "subagent_tokens", "total_tokens",
+    "wall_s"}], ordered by ARM_ORDER then trial. subagent_tokens is
+    total_tokens - main_tokens when both are present, else None. No
+    per-phase subagent fields exist in this experiment's runs.jsonl, so
+    this is top-level-metrics-only (report.py's rendering shows '—' for
+    any phase-level ask)."""
+    out = []
+    for r in rows:
+        arm = r.get("arm")
+        if arm not in ARM_ORDER:
+            continue
+        main_tok = g(r, "metrics", "main_tokens")
+        total_tok = g(r, "metrics", "total_tokens")
+        subagent_tok = (total_tok - main_tok) if (isinstance(main_tok, (int, float)) and isinstance(total_tok, (int, float))) else None
+        out.append({
+            "run_id": r.get("run_id") or f"{arm}-t{r.get('trial')}",
+            "arm": arm,
+            "trial": r.get("trial"),
+            "subagent_launches": g(r, "metrics", "subagent_launches"),
+            "subagent_messages": g(r, "metrics", "subagent_messages"),
+            "main_tokens": main_tok,
+            "subagent_tokens": subagent_tok,
+            "total_tokens": total_tok,
+            "wall_s": r.get("wall_s"),
+        })
+    out.sort(key=lambda r: (ARM_ORDER.index(r["arm"]) if r["arm"] in ARM_ORDER else 99, r["trial"] or 0))
+    return out
+
+
+def delegation_takeaway(deleg_rows):
+    """One-line takeaway computed from delegation_rows(): which arms
+    launched subagents, and whether the fastest/cheapest arm did so.
+    States only what the data supports (no launches recorded for any arm
+    -> a plain 'no arm parallelized meaningfully' sentence; some launches
+    -> names which arm(s) and whether the arm with the lowest wall_s/
+    total_tokens was among them). Pure."""
+    if not deleg_rows:
+        return "No delegation data recorded."
+
+    launches_by_arm = {}
+    for r in deleg_rows:
+        n = r.get("subagent_launches") or 0
+        launches_by_arm[r["arm"]] = launches_by_arm.get(r["arm"], 0) + n
+
+    any_launches = any(v > 0 for v in launches_by_arm.values())
+
+    fastest = min(
+        (r for r in deleg_rows if r.get("wall_s") is not None),
+        key=lambda r: r["wall_s"], default=None,
+    )
+    cheapest = min(
+        (r for r in deleg_rows if r.get("total_tokens") is not None),
+        key=lambda r: r["total_tokens"], default=None,
+    )
+
+    launch_bits = ", ".join(
+        f'{ARM_LABELS.get(a, a).split(" (")[0]} launched {n}'
+        for a, n in launches_by_arm.items()
+    )
+
+    if not any_launches:
+        sentence = f"This trial: {launch_bits} subagent(s) — no arm parallelized meaningfully."
+        if fastest:
+            fastest_label = ARM_LABELS.get(fastest["arm"], fastest["arm"]).split(" (")[0]
+            sentence += f" {fastest_label} was still fastest ({fmt_num(fastest['wall_s'], 0)}s) without delegating."
+        return sentence
+
+    sentence = f"This trial: {launch_bits} subagent(s)."
+    if fastest and cheapest:
+        fastest_label = ARM_LABELS.get(fastest["arm"], fastest["arm"]).split(" (")[0]
+        fastest_launched = (launches_by_arm.get(fastest["arm"]) or 0) > 0
+        if not fastest_launched:
+            sentence += f" {fastest_label} was fastest without delegating — the arm(s) that did delegate weren't faster or cheaper."
+    return sentence
+
+
+# --------------------------------------------------------------------------
+# Code metrics: size/shape of the code the agent wrote, vs the reference
+# solution. Proxies, not quality judgments (see code_metrics.py).
+# --------------------------------------------------------------------------
+
+
+def code_metrics_task_paths(stamp_dir, meta):
+    """Resolve {"reference_solution", "pivot_reference_solution"} paths for
+    code_metrics.collect_code_metrics()'s size-vs-reference figure, from
+    this experiment's fixed tasks/v2 layout (read-only path convention
+    shared with acceptance.py's task-path resolution, never that module's
+    behavior). Falls back to None (skip the figure) if the task dir can't
+    be located."""
+    task_dir = os.path.join(HERE, "tasks", "v2")
+    if not os.path.isdir(task_dir):
+        return None
+    return {
+        "reference_solution": os.path.join(task_dir, "reference_solution"),
+        "pivot_reference_solution": os.path.join(task_dir, "pivot", "reference_solution"),
+    }
+
+
+def code_metrics_rows(rows, stamp_dir):
+    """Per-run code metrics (collect_code_metrics() on each run's work/
+    git repo), for the Code section's table + charts. Reads from disk
+    (git + file reads under stamp_dir/runs/<run_id>/work) -- NOT pure, but
+    isolated here so report.py's other data functions stay pure. Returns
+    [] if stamp_dir is falsy or a run's work/ dir doesn't exist (skips
+    that run rather than raising)."""
+    if not stamp_dir:
+        return []
+    cm = get_code_metrics()
+    task_paths = code_metrics_task_paths(stamp_dir, {})
+    out = []
+    for r in rows:
+        arm = r.get("arm")
+        if arm not in ARM_ORDER:
+            continue
+        run_id = r.get("run_id") or f"{arm}-t{r.get('trial')}"
+        work_dir = os.path.join(stamp_dir, "runs", run_id, "work")
+        if not os.path.isdir(work_dir):
+            continue
+        m = cm.collect_code_metrics(work_dir, task_paths)
+        out.append({
+            "run_id": run_id, "arm": arm, "trial": r.get("trial"),
+            "metrics": m,
+        })
+    out.sort(key=lambda r: (ARM_ORDER.index(r["arm"]) if r["arm"] in ARM_ORDER else 99, r["trial"] or 0))
+    return out
+
+
+# --------------------------------------------------------------------------
+# Explain failures: per-arm doc-rule failures grouped by rule, with a
+# short expected-vs-actual snippet per failing test, plus the shared-vs-
+# harness-only split.
+# --------------------------------------------------------------------------
+
+
+def _task_doc_rules_paths():
+    """Fixed doc_rules.json paths for this experiment's tasks/v2 layout.
+    Pure (no I/O -- callers pass these to failure_detail's json-loading,
+    or json.load them directly; missing files are handled by the caller)."""
+    task_dir = os.path.join(HERE, "tasks", "v2")
+    return {
+        "task1": os.path.join(task_dir, "doc_rules.json"),
+        "pivot": os.path.join(task_dir, "pivot", "doc_rules.json"),
+    }
+
+
+def _load_doc_rules_json(path):
+    if not path or not os.path.exists(path):
+        return []
+    try:
+        with open(path) as f:
+            data = json.load(f)
+    except (ValueError, OSError):
+        return []
+    return data if isinstance(data, list) else []
+
+
+def failure_report_rows(rows, stamp_dir):
+    """Per-arm failure-detail data for the Explain failures section, plus
+    the shared-vs-harness-only rule split. Reads doc_rules.json (this
+    module's own tasks/v2 fixtures) and each run's acceptance.*.txt log
+    from disk -- not pure, isolated here like code_metrics_rows().
+
+    Returns {"by_arm": {arm: {"task1": [failure_detail entries],
+    "pivot": [...]}}, "split": {"shared": [...], "harness_only": [...]}}.
+    harness_arms is every present arm except 'control'."""
+    fd = get_failure_detail()
+    doc_rules_paths = _task_doc_rules_paths()
+    doc_rules_t1 = _load_doc_rules_json(doc_rules_paths["task1"])
+    doc_rules_pv = _load_doc_rules_json(doc_rules_paths["pivot"])
+
+    by_arm = {}
+    per_arm_failed_rules = {}
+    all_arms = []
+    for r in rows:
+        arm = r.get("arm")
+        if arm not in ARM_ORDER:
+            continue
+        phases = r.get("phases")
+        if not isinstance(phases, dict) or "task1" not in phases or "pivot" not in phases:
+            continue
+        if arm not in all_arms:
+            all_arms.append(arm)
+        run_id = r.get("run_id") or f"{arm}-t{r.get('trial')}"
+        run_dir = os.path.join(stamp_dir, "runs", run_id) if stamp_dir else None
+
+        by_id_t1 = g(phases, "task1", "benchmark", "by_id") or {}
+        by_id_pv = g(phases, "pivot", "benchmark", "by_id") or {}
+        text_t1 = fd.load_acceptance_text(run_dir, "acceptance.task1.b1.txt") if run_dir else ""
+        text_pv = fd.load_acceptance_text(run_dir, "acceptance.pivot.b2.txt") if run_dir else ""
+
+        rep_t1 = fd.build_failure_report(by_id_t1, doc_rules_t1, text_t1)
+        rep_pv = fd.build_failure_report(by_id_pv, doc_rules_pv, text_pv)
+
+        entry = by_arm.setdefault(arm, {"task1": [], "pivot": []})
+        entry["task1"].extend(rep_t1)
+        entry["pivot"].extend(rep_pv)
+
+        failed_ids = {e["rule_id"] for e in rep_t1} | {e["rule_id"] for e in rep_pv}
+        per_arm_failed_rules.setdefault(arm, set()).update(failed_ids)
+
+    harness_arms = [a for a in all_arms if a != "control"]
+    split = fd.shared_vs_harness_only(per_arm_failed_rules, harness_arms, all_arms) if all_arms else {"shared": [], "harness_only": []}
+
+    return {"by_arm": by_arm, "split": split, "arms_present": [a for a in ARM_ORDER if a in by_arm]}
 
 
 def compute_verdict(agg):
@@ -988,7 +1612,7 @@ def dot_strip_chart(rows, metric_key, metric_label, width=560, height=170):
 
     parts = [svg_open(width, height)]
     parts.append(
-        f'<text x="{pad_left}" y="10" class="chart-title" font-size="11">{esc(metric_label)}</text>'
+        f'<text x="{pad_left}" y="10" class="chart-title" font-size="13">{esc(metric_label)}</text>'
     )
 
     # gridlines + tick labels
@@ -1000,7 +1624,7 @@ def dot_strip_chart(rows, metric_key, metric_label, width=560, height=170):
         )
         parts.append(
             f'<text x="{x:.1f}" y="{height - pad_bottom + 14}" class="tick-label" '
-            f'font-size="9" text-anchor="middle">{fmt_num(tv)}</text>'
+            f'font-size="12" text-anchor="middle">{fmt_num(tv)}</text>'
         )
 
     by_arm = {a: [] for a in ARM_ORDER}
@@ -1011,7 +1635,7 @@ def dot_strip_chart(rows, metric_key, metric_label, width=560, height=170):
         cy = pad_top + row_h * i + row_h / 2
         parts.append(
             f'<text x="{pad_left - 10}" y="{cy + 3:.1f}" text-anchor="end" '
-            f'class="row-label" font-size="10">{esc(ARM_LABELS[arm])}</text>'
+            f'class="row-label" font-size="12">{esc(ARM_LABELS[arm])}</text>'
         )
         avals = [v for (_t, v) in by_arm.get(arm, [])]
         med = median(avals)
@@ -1061,14 +1685,14 @@ def token_composition_chart(comp_rows, width=640, row_h=22, gap=6):
 
     parts_html = [svg_open(width, height)]
     parts_html.append(
-        f'<text x="0" y="12" class="chart-title" font-size="11">Token composition per run</text>'
+        f'<text x="0" y="12" class="chart-title" font-size="13">Token composition per run</text>'
     )
     # legend (sequential ramp swatches), on its own row below the title
     lx = 0
     ly = 32
     for k in keys:
         parts_html.append(f'<rect x="{lx}" y="{ly - 8}" width="10" height="10" fill="{COMPOSITION_LIGHT[k]}" class="legend-swatch" data-key="{k}" />')
-        parts_html.append(f'<text x="{lx + 14}" y="{ly}" class="legend-label" font-size="9">{esc(key_labels[k])}</text>')
+        parts_html.append(f'<text x="{lx + 14}" y="{ly}" class="legend-label" font-size="12">{esc(key_labels[k])}</text>')
         lx += 14 + len(key_labels[k]) * 6 + 16
 
     y = pad_top + 8
@@ -1079,7 +1703,7 @@ def token_composition_chart(comp_rows, width=640, row_h=22, gap=6):
             f'<rect x="{pad_left - 178}" y="{cy - 9}" width="9" height="9" fill="{color}" rx="2" />'
         )
         parts_html.append(
-            f'<text x="{pad_left - 165}" y="{cy}" class="row-label" font-size="9.5">'
+            f'<text x="{pad_left - 165}" y="{cy}" class="row-label" font-size="12">'
             f'{esc(ARM_LABELS.get(arm, arm))} t{esc(trial)}</text>'
         )
         x = pad_left
@@ -1100,7 +1724,7 @@ def token_composition_chart(comp_rows, width=640, row_h=22, gap=6):
             x += w
         parts_html.append(
             f'<text x="{x + 6:.1f}" y="{cy - row_h / 2 + 4:.1f}" class="tick-label" '
-            f'font-size="9">{fmt_num(total)}</text>'
+            f'font-size="12">{fmt_num(total)}</text>'
         )
         y += row_h + gap
 
@@ -1135,23 +1759,23 @@ def phase_cost_stack_chart(stack_rows, width=640, row_h=22, gap=6):
     xscale = linear_scale((0, max_total), (0, plot_w))
 
     parts_html = [svg_open(width, height)]
-    parts_html.append('<text x="0" y="12" class="chart-title" font-size="11">Tokens by phase per run</text>')
+    parts_html.append('<text x="0" y="12" class="chart-title" font-size="13">Tokens by phase per run</text>')
     lx = 0
     ly = 32
     for k in PHASE_KEYS:
         parts_html.append(f'<rect x="{lx}" y="{ly - 8}" width="10" height="10" fill="{PHASE_LIGHT[k]}" class="legend-swatch" data-key="{k}" />')
-        parts_html.append(f'<text x="{lx + 14}" y="{ly}" class="legend-label" font-size="9">{esc(PHASE_LABELS[k])}</text>')
+        parts_html.append(f'<text x="{lx + 14}" y="{ly}" class="legend-label" font-size="12">{esc(PHASE_LABELS[k])}</text>')
         lx += 14 + len(PHASE_LABELS[k]) * 6 + 16
 
     y = pad_top + 8
     if not ordered:
-        parts_html.append('<text x="0" y="60" class="tick-label" font-size="10">No two-phase (pivot) runs.</text>')
+        parts_html.append('<text x="0" y="60" class="tick-label" font-size="12">No two-phase (pivot) runs.</text>')
     for (run_id, arm, trial, phase_parts) in ordered:
         cy = y
         color = f'var(--arm-{arm})'
         parts_html.append(f'<rect x="{pad_left - 178}" y="{cy - 9}" width="9" height="9" fill="{color}" rx="2" />')
         parts_html.append(
-            f'<text x="{pad_left - 165}" y="{cy}" class="row-label" font-size="9.5">'
+            f'<text x="{pad_left - 165}" y="{cy}" class="row-label" font-size="12">'
             f'{esc(ARM_LABELS.get(arm, arm))} t{esc(trial)}</text>'
         )
         x = pad_left
@@ -1172,7 +1796,7 @@ def phase_cost_stack_chart(stack_rows, width=640, row_h=22, gap=6):
             x += w
         parts_html.append(
             f'<text x="{x + 6:.1f}" y="{cy - row_h / 2 + 4:.1f}" class="tick-label" '
-            f'font-size="9">{fmt_num(total)}</text>'
+            f'font-size="12">{fmt_num(total)}</text>'
         )
         y += row_h + gap
 
@@ -1192,13 +1816,13 @@ def acceptance_bar_chart(acc_rows, width=640, row_h=20, gap=6):
     xscale = linear_scale((0, 100), (0, plot_w))
 
     parts = [svg_open(width, height)]
-    parts.append(f'<text x="0" y="12" class="chart-title" font-size="11">Acceptance pass rate per run (0-100%)</text>')
+    parts.append(f'<text x="0" y="12" class="chart-title" font-size="13">Acceptance pass rate per run (0-100%)</text>')
 
     y = pad_top + 8
     for r in ordered:
         cy = y
         color = f'var(--arm-{r["arm"]})'
-        parts.append(f'<text x="{pad_left - 8}" y="{cy}" text-anchor="end" class="row-label" font-size="9.5">{esc(ARM_LABELS.get(r["arm"], r["arm"]))} t{esc(r["trial"])}</text>')
+        parts.append(f'<text x="{pad_left - 8}" y="{cy}" text-anchor="end" class="row-label" font-size="12">{esc(ARM_LABELS.get(r["arm"], r["arm"]))} t{esc(r["trial"])}</text>')
         w = xscale(r["pct"])
         parts.append(
             f'<rect x="{pad_left}" y="{cy - row_h + 4:.1f}" width="{max(w, 0):.1f}" height="{row_h - 8}" '
@@ -1207,7 +1831,7 @@ def acceptance_bar_chart(acc_rows, width=640, row_h=20, gap=6):
             f'<title>{esc(ARM_LABELS.get(r["arm"], r["arm"]))} t{esc(r["trial"])}: {fmt_pct(r["pct"])} '
             f'({r["passed"]}/{r["total"]}) regression_ok={r["reg_ok"]}</title></rect>'
         )
-        parts.append(f'<text x="{pad_left + w + 6:.1f}" y="{cy - row_h/2 + 4:.1f}" class="tick-label" font-size="9">{fmt_pct(r["pct"])}</text>')
+        parts.append(f'<text x="{pad_left + w + 6:.1f}" y="{cy - row_h/2 + 4:.1f}" class="tick-label" font-size="12">{fmt_pct(r["pct"])}</text>')
         if r["reg_ok"] is False:
             parts.append(
                 f'<circle cx="{pad_left - 130:.1f}" cy="{cy - row_h/2:.1f}" r="3.5" fill="var(--status-critical)">'
@@ -1234,15 +1858,15 @@ def friction_chart(fric_rows, width=640, row_h=20, gap=6):
     xscale = linear_scale((0, max_v), (0, plot_w / 2 - 10))
 
     parts = [svg_open(width, height)]
-    parts.append(f'<text x="0" y="12" class="chart-title" font-size="11">Harness friction per run (hook denials / stop-hook blocks)</text>')
-    parts.append(f'<text x="{pad_left}" y="26" class="legend-label" font-size="9">denials</text>')
-    parts.append(f'<text x="{pad_left + plot_w/2 + 10:.1f}" y="26" class="legend-label" font-size="9">stop blocks</text>')
+    parts.append(f'<text x="0" y="12" class="chart-title" font-size="13">Harness friction per run (hook denials / stop-hook blocks)</text>')
+    parts.append(f'<text x="{pad_left}" y="26" class="legend-label" font-size="12">denials</text>')
+    parts.append(f'<text x="{pad_left + plot_w/2 + 10:.1f}" y="26" class="legend-label" font-size="12">stop blocks</text>')
 
     y = pad_top + 10
     for r in ordered:
         cy = y
         color = f'var(--arm-{r["arm"]})'
-        parts.append(f'<text x="{pad_left - 8}" y="{cy}" text-anchor="end" class="row-label" font-size="9.5">{esc(ARM_LABELS.get(r["arm"], r["arm"]))} t{esc(r["trial"])}</text>')
+        parts.append(f'<text x="{pad_left - 8}" y="{cy}" text-anchor="end" class="row-label" font-size="12">{esc(ARM_LABELS.get(r["arm"], r["arm"]))} t{esc(r["trial"])}</text>')
         w1 = xscale(r["hook_denials"])
         parts.append(
             f'<rect x="{pad_left}" y="{cy - row_h + 4:.1f}" width="{max(w1,0):.1f}" height="{row_h - 8}" fill="{color}" '
@@ -1280,11 +1904,11 @@ def tool_mix_chart(tool_order, per_arm, width=640, height=220):
     ramp = ["#cde2fb", "#9ec5f4", "#6da7ec", "#3987e5", "#256abf", "#184f95", "#104281", "#0d366b", "#898781"]
 
     parts = [svg_open(width, height)]
-    parts.append(f'<text x="0" y="12" class="chart-title" font-size="11">Tool mix by arm (top {TOOL_TOP_N} + Other)</text>')
+    parts.append(f'<text x="0" y="12" class="chart-title" font-size="13">Tool mix by arm (top {TOOL_TOP_N} + Other)</text>')
 
     for i, arm in enumerate(ARM_ORDER):
         cy = pad_top + row_h * i + row_h / 2
-        parts.append(f'<text x="{pad_left - 10}" y="{cy + 3:.1f}" text-anchor="end" class="row-label" font-size="10">{esc(ARM_LABELS[arm])}</text>')
+        parts.append(f'<text x="{pad_left - 10}" y="{cy + 3:.1f}" text-anchor="end" class="row-label" font-size="12">{esc(ARM_LABELS[arm])}</text>')
         row = per_arm.get(arm, {})
         x = pad_left
         for j, tool in enumerate(tool_order):
@@ -1307,7 +1931,7 @@ def tool_mix_chart(tool_order, per_arm, width=640, height=220):
         fill = ramp[min(j, len(ramp) - 1)]
         parts.append(f'<rect x="{lx}" y="{ly - 8}" width="9" height="9" fill="{fill}" />')
         label = tool if len(tool) <= 12 else tool[:11] + "…"
-        parts.append(f'<text x="{lx + 12}" y="{ly}" class="legend-label" font-size="8.5">{esc(label)}</text>')
+        parts.append(f'<text x="{lx + 12}" y="{ly}" class="legend-label" font-size="12">{esc(label)}</text>')
         lx += 12 + len(label) * 5.5 + 10
         if lx > width - 60:
             lx = pad_left
@@ -1368,23 +1992,23 @@ def spec_doc_grouped_bar_chart(spec_doc_by_arm, width=640, row_h=20, gap=8, pair
     xscale = linear_scale((0, 100), (0, plot_w))
 
     parts = [svg_open(width, height)]
-    parts.append('<text x="0" y="12" class="chart-title" font-size="11">Spec vs doc-rule pass % per arm (mean across runs)</text>')
+    parts.append('<text x="0" y="12" class="chart-title" font-size="13">Spec vs doc-rule pass % per arm (mean across runs)</text>')
     # legend
     parts.append(f'<rect x="{pad_left - 178}" y="18" width="10" height="10" fill="var(--arm-baseline)" />')
-    parts.append(f'<text x="{pad_left - 164}" y="27" class="legend-label" font-size="9">spec</text>')
+    parts.append(f'<text x="{pad_left - 164}" y="27" class="legend-label" font-size="12">spec</text>')
     parts.append(f'<rect x="{pad_left - 130}" y="18" width="10" height="10" fill="var(--arm-baseline)" opacity="0.45" />')
-    parts.append(f'<text x="{pad_left - 116}" y="27" class="legend-label" font-size="9">doc</text>')
+    parts.append(f'<text x="{pad_left - 116}" y="27" class="legend-label" font-size="12">doc</text>')
 
     y = pad_top + 6
     for arm in arms_present:
         vals = spec_doc_by_arm[arm]
         color = f'var(--arm-{arm})'
-        parts.append(f'<text x="{pad_left - 8}" y="{y + row_h - 4:.1f}" text-anchor="end" class="row-label" font-size="9.5">{esc(ARM_LABELS.get(arm, arm))}</text>')
+        parts.append(f'<text x="{pad_left - 8}" y="{y + row_h - 4:.1f}" text-anchor="end" class="row-label" font-size="12">{esc(ARM_LABELS.get(arm, arm))}</text>')
         for key, opacity, label in (("spec", 1.0, "spec"), ("doc", 0.45, "doc")):
             v = vals.get(key)
             cy = y
             if v is None:
-                parts.append(f'<text x="{pad_left}" y="{cy + row_h/2:.1f}" class="tick-label" font-size="9">no {label} tests</text>')
+                parts.append(f'<text x="{pad_left}" y="{cy + row_h/2:.1f}" class="tick-label" font-size="12">no {label} tests</text>')
             else:
                 w = max(xscale(v), 0)
                 parts.append(
@@ -1393,7 +2017,7 @@ def spec_doc_grouped_bar_chart(spec_doc_by_arm, width=640, row_h=20, gap=8, pair
                     f'data-tip="{esc(ARM_LABELS.get(arm, arm))} {label}: {fmt_pct(v)}">'
                     f'<title>{esc(ARM_LABELS.get(arm, arm))} {label}: {fmt_pct(v)}</title></rect>'
                 )
-                parts.append(f'<text x="{pad_left + w + 6:.1f}" y="{cy + row_h/2 + 3:.1f}" class="tick-label" font-size="9">{label} {fmt_pct(v)}</text>')
+                parts.append(f'<text x="{pad_left + w + 6:.1f}" y="{cy + row_h/2 + 3:.1f}" class="tick-label" font-size="12">{label} {fmt_pct(v)}</text>')
             y += row_h
         y += pair_gap + gap
 
@@ -1478,7 +2102,13 @@ def pivot_gate_matrix_table(pivot_gate_rows):
     pivot_gate_matrix_rows), for two-phase runs only. Same
     checkmark/cross-plus-text-label convention as gate_conformance_table.
     Empty input renders an explanatory muted message rather than an empty
-    table, matching doc_rule_heatmap_table's empty-state convention."""
+    table, matching doc_rule_heatmap_table's empty-state convention.
+
+    Column groups (Task 1 | Pivot) are marked with a spanning header row
+    so the table stays readable when horizontally scrolled inside its
+    card (see .table-wrap's overflow-x); a footnote flags the task-1
+    sweep-verified value as unconfirmed pending phase-windowing (see the
+    interim findings note on this)."""
     if not pivot_gate_rows:
         return '<p class="muted">No two-phase (pivot) runs in this stamp.</p>'
 
@@ -1516,12 +2146,19 @@ def pivot_gate_matrix_table(pivot_gate_rows):
         )
 
     return (
-        '<table class="fallback-table"><thead><tr><th>arm</th><th>trial</th>'
-        '<th>T1 init chain</th><th>T1 sweep verified</th><th>T1 edits before sweep</th>'
+        '<div class="table-wrap"><table class="fallback-table gate-matrix-table">'
+        '<thead>'
+        '<tr class="gate-group-row"><th></th><th></th>'
+        '<th colspan="3" class="gate-group-head">Task 1</th>'
+        '<th colspan="5" class="gate-group-head">Pivot</th></tr>'
+        '<tr><th>arm</th><th>trial</th>'
+        '<th>init chain</th><th>sweep verified&#8224;</th><th>edits before sweep</th>'
         '<th>reclassify attempted</th><th>reclassify succeeded</th>'
         '<th>resweep verified</th><th>edits before resweep</th>'
-        '<th>pivot doc-rule coverage</th></tr></thead>'
-        f'<tbody>{"".join(rows_html)}</tbody></table>'
+        '<th>pivot doc-rule coverage</th></tr>'
+        '</thead>'
+        f'<tbody>{"".join(rows_html)}</tbody></table></div>'
+        '<p class="section-subtitle" style="margin-top:6px">&#8224; task-1 sweep-verified value is unconfirmed pending phase-windowing.</p>'
     )
 
 
@@ -1538,11 +2175,11 @@ def memory_coverage_dot_chart(mem_rows, width=640, height=170):
     xscale = linear_scale((0, 100), (pad_left, width - pad_right))
 
     parts = [svg_open(width, height)]
-    parts.append('<text x="0" y="10" class="chart-title" font-size="11">Doc-rule memory coverage per run (% of task doc_rules memories read)</text>')
+    parts.append('<text x="0" y="10" class="chart-title" font-size="13">Doc-rule memory coverage per run (% of task doc_rules memories read)</text>')
     for tv in (0, 25, 50, 75, 100):
         x = xscale(tv)
         parts.append(f'<line x1="{x:.1f}" y1="{pad_top}" x2="{x:.1f}" y2="{height - pad_bottom}" class="grid-line" />')
-        parts.append(f'<text x="{x:.1f}" y="{height - pad_bottom + 14}" class="tick-label" font-size="9" text-anchor="middle">{tv}%</text>')
+        parts.append(f'<text x="{x:.1f}" y="{height - pad_bottom + 14}" class="tick-label" font-size="12" text-anchor="middle">{tv}%</text>')
 
     by_arm = {a: [] for a in arms_present}
     for r in mem_rows:
@@ -1551,7 +2188,7 @@ def memory_coverage_dot_chart(mem_rows, width=640, height=170):
 
     for i, arm in enumerate(arms_present):
         cy = pad_top + row_h * i + row_h / 2
-        parts.append(f'<text x="{pad_left - 10}" y="{cy + 3:.1f}" text-anchor="end" class="row-label" font-size="10">{esc(ARM_LABELS.get(arm, arm))}</text>')
+        parts.append(f'<text x="{pad_left - 10}" y="{cy + 3:.1f}" text-anchor="end" class="row-label" font-size="12">{esc(ARM_LABELS.get(arm, arm))}</text>')
         for r in by_arm.get(arm, []):
             cov = r.get("doc_rule_memories_coverage")
             if cov is None:
@@ -1923,6 +2560,510 @@ def two_phase_scorecard_html(agg):
     return f'<div class="two-phase-scorecard-grid">{b1_html}{b2_html}</div>'
 
 
+# --------------------------------------------------------------------------
+# Overall review: the top-of-report single comparison block.
+# --------------------------------------------------------------------------
+
+_OVERALL_ROW_DEFS = [
+    ("t1_spec", "Task 1 spec", True),
+    ("t1_doc", "Task 1 doc rules", True),
+    ("pv_spec", "Pivot spec", True),
+    ("pv_doc", "Pivot doc rules", True),
+    ("all_doc", "All doc rules combined", True),
+    ("t1_retention", "Task-1 retention after pivot", True),
+]
+
+
+def _overall_cell_html(xy, pct, is_best):
+    best_tag = ' <span class="best-tag">best</span>' if is_best else ""
+    pct_str = f' <span class="muted">({pct:.0f}%)</span>' if pct is not None else ""
+    cls = "overall-value best" if is_best else "overall-value"
+    return f'<td class="overall-cell"><div class="{cls}">{esc(xy)}{pct_str}{best_tag}</div></td>'
+
+
+def overall_review_table_html(review):
+    """Full Overall review comparison table: Correctness / Process / Code /
+    Efficiency row groups, one column per arm. "best" is tagged only on
+    strict per-row winners (see strict_best_arm -- never on ties or
+    all-zero rows)."""
+    present = review["arms_present"]
+    cells = review["cells"]
+    control_arm = review["control_arm"]
+    if not present:
+        return '<p class="muted">No runs to report.</p>'
+
+    head_cells = []
+    for arm in present:
+        chip = f'<span class="chip" style="background:var(--arm-{arm})"></span>'
+        ver = ARM_LABELS.get(arm, arm).split(" (")[-1].rstrip(")")
+        head_cells.append(
+            f'<th scope="col" class="overall-head"><div class="overall-head-arm">{chip}'
+            f'{esc(ARM_LABELS.get(arm, arm).split(" (")[0])}</div>'
+            f'<div class="overall-head-ver muted">{esc(ver)}</div></th>'
+        )
+
+    def _group_header(label):
+        return f'<tr class="overall-group-row"><th colspan="{len(present) + 1}">{esc(label)}</th></tr>'
+
+    body = ['<thead><tr><th scope="col" class="overall-corner"></th>' + "".join(head_cells) + "</tr></thead><tbody>"]
+
+    body.append(_group_header("Correctness"))
+    body.append('<tr class="overall-note-row"><td colspan="' + str(len(present) + 1) + '" class="overall-note">strict convention-compliance tests; a failed rule means the documented convention was not applied, not broken code (spec tests all passed everywhere)</td></tr>')
+    for key, label, higher in _OVERALL_ROW_DEFS:
+        vals = {a: cells[a][key][1] for a in present}
+        best = strict_best_arm(vals, higher_is_better=higher)
+        row_cells = "".join(_overall_cell_html(cells[a][key][0], cells[a][key][1], a == best) for a in present)
+        body.append(f'<tr><th scope="row" class="overall-row-label">{esc(label)}</th>{row_cells}</tr>')
+
+    body.append(_group_header("Process"))
+    cov_vals = {a: cells[a]["read_all_memories_pct"] for a in present}
+    cov_best = strict_best_arm(cov_vals, higher_is_better=True)
+    cov_cells = "".join(
+        f'<td class="overall-cell"><div class="{"overall-value best" if a == cov_best else "overall-value"}">{fmt_pct(cells[a]["read_all_memories_pct"])}{" <span class=\"best-tag\">best</span>" if a == cov_best else ""}</div></td>'
+        for a in present
+    )
+    body.append(f'<tr><th scope="row" class="overall-row-label">Rule-memory coverage</th>{cov_cells}</tr>')
+
+    def _gate_glyph(arm, gate_key):
+        c = cells[arm]
+        if not c.get("has_pivot_rows") and arm == control_arm:
+            return '<td class="overall-cell"><span class="muted">n/a &mdash; no harness</span></td>'
+        v = c["gates"].get(gate_key)
+        if v is True:
+            return '<td class="overall-cell"><span class="gate-ok">&#10003;</span></td>'
+        if v is False:
+            return '<td class="overall-cell"><span class="gate-fail">&#10007;</span></td>'
+        return '<td class="overall-cell"><span class="muted">&mdash;</span></td>'
+
+    for gate_key, gate_label in (("t1_init", "Init chain complete"), ("t1_sweep", "Sweep verified"), ("pv_resweep", "Pivot resweep verified")):
+        row_cells = "".join(_gate_glyph(a, gate_key) for a in present)
+        body.append(f'<tr><th scope="row" class="overall-row-label">{esc(gate_label)}</th>{row_cells}</tr>')
+
+    body.append(_group_header("Code"))
+    body.append('<tr class="overall-note-row"><td colspan="' + str(len(present) + 1) + '" class="overall-note">size/shape proxies, not quality judgments</td></tr>')
+    code = review.get("code_cells") or {}
+    for key, label, higher in (
+        ("loc_added", "LOC added", None), ("files_added", "Files added", None),
+        ("agent_test_count", "Tests the agent wrote", True),
+        ("avg_function_length", "Avg function length", False),
+        ("docstring_coverage", "Docstring coverage", True),
+        ("size_vs_reference_pct", "Size vs reference", None),
+    ):
+        vals = {a: (code.get(a) or {}).get(key) for a in present}
+        best = strict_best_arm(vals, higher_is_better=higher) if higher is not None else None
+        row_cells = []
+        for a in present:
+            v = vals.get(a)
+            if key == "docstring_coverage":
+                vs = fmt_pct(v * 100) if v is not None else "—"
+            elif key == "size_vs_reference_pct":
+                vs = fmt_pct(v) if v is not None else "—"
+            elif key == "avg_function_length":
+                vs = f"{v:.1f}" if v is not None else "—"
+            else:
+                vs = fmt_num(v) if v is not None else "—"
+            is_best = (a == best)
+            best_tag = ' <span class="best-tag">best</span>' if is_best else ""
+            cls = "overall-value best" if is_best else "overall-value"
+            row_cells.append(f'<td class="overall-cell"><div class="{cls}">{vs}{best_tag}</div></td>')
+        body.append(f'<tr><th scope="row" class="overall-row-label">{esc(label)}</th>{"".join(row_cells)}</tr>')
+
+    body.append(_group_header("Efficiency"))
+    ctrl_vals = cells.get(control_arm) if control_arm else None
+    for key, label, unit in (
+        ("total_tokens", "Tokens (M)", "M"), ("turns", "Turns", "num"),
+        ("wall_s", "Wall time", "wall"), ("tool_calls", "Tool calls", "num"),
+        ("memory_reads", "Memory reads", "num"),
+    ):
+        vals = {a: cells[a].get(key) for a in present}
+        best = strict_best_arm(vals, higher_is_better=False)
+        row_cells = []
+        for a in present:
+            v = vals.get(a)
+            if v is None:
+                vs = "—"
+            elif unit == "M":
+                vs = f"{v / 1e6:.1f}M"
+            elif unit == "wall":
+                m, s = divmod(int(v), 60)
+                vs = f"{m}:{s:02d}"
+            else:
+                vs = fmt_num(v)
+            is_best = (a == best)
+            best_tag = ' <span class="best-tag">best</span>' if is_best else ""
+            cls = "overall-value best" if is_best else "overall-value"
+            delta = ""
+            if ctrl_vals and a != control_arm and v is not None:
+                cv = ctrl_vals.get(key)
+                if cv:
+                    d = 100.0 * (v - cv) / cv
+                    delta = f'<div class="overall-delta muted">{d:+.0f}% vs no harness</div>'
+            row_cells.append(f'<td class="overall-cell"><div class="{cls}">{vs}{best_tag}</div>{delta}</td>')
+        body.append(f'<tr><th scope="row" class="overall-row-label">{esc(label)}</th>{"".join(row_cells)}</tr>')
+
+    body.append("</tbody>")
+    return f'<div class="overall-wrap"><table class="overall-table">{"".join(body)}</table></div>'
+
+
+def cost_vs_benefit_html(review):
+    """Renders the "Is using a harness worth it?" heading + answer +
+    per-arm cost-vs-benefit lines, as the Overall review's lead block."""
+    cv = cost_vs_benefit_verdict(review)
+    lines_html = "".join(f'<li>{esc(_cost_vs_benefit_line_text(l))}</li>' for l in cv["lines"])
+    lines_block = f'<ul class="cost-benefit-lines">{lines_html}</ul>' if lines_html else ""
+    return f"""
+    <div class="cost-benefit-block">
+      <h3>{esc(cv["question"])}</h3>
+      <p class="cost-benefit-answer">{esc(cv["answer"])}</p>
+      {lines_block}
+    </div>"""
+
+
+def quadrant_chart(review, width=560, height=360):
+    """Cost-vs-compliance scatter/quadrant: x = tokens (M), y = combined
+    doc-rule pass % (task1+pivot), one dot per arm, direct labels."""
+    present = review["arms_present"]
+    cells = review["cells"]
+    points = []
+    for arm in present:
+        c = cells[arm]
+        tok = c.get("total_tokens")
+        _xy_str, pct = c["all_doc"]
+        if tok is None or pct is None:
+            continue
+        points.append((arm, tok / 1e6, pct))
+
+    pad_left, pad_right, pad_top, pad_bottom = 56, 24, 42, 40
+    plot_w = width - pad_left - pad_right
+    plot_h = height - pad_top - pad_bottom
+
+    xs = [p[1] for p in points] or [0, 1]
+    ys = [p[2] for p in points] or [0, 100]
+    x_lo, x_hi = min(0, min(xs)), max(xs) * 1.15 if xs else 1
+    y_lo, y_hi = 0, 100
+
+    x_ticks = nice_ticks(x_lo, x_hi, 5)
+    xscale = linear_scale((min(x_ticks[0], x_lo), max(x_ticks[-1], x_hi)), (pad_left, width - pad_right))
+    y_ticks = [0, 25, 50, 75, 100]
+    yscale = linear_scale((y_lo, y_hi), (height - pad_bottom, pad_top))
+
+    parts = [svg_open(width, height)]
+    parts.append(f'<text x="0" y="12" class="chart-title" font-size="13">Cost vs. documented-rule compliance</text>')
+    parts.append(f'<text x="0" y="30" class="legend-label" font-size="12">doc-rule pass % &#8593; (y) &middot; tokens (M) &#8594; (x)</text>')
+
+    for tv in x_ticks:
+        x = xscale(tv)
+        parts.append(f'<line x1="{x:.1f}" y1="{pad_top}" x2="{x:.1f}" y2="{height - pad_bottom}" class="grid-line" />')
+        parts.append(f'<text x="{x:.1f}" y="{height - pad_bottom + 16}" class="tick-label" font-size="12" text-anchor="middle">{tv:g}M</text>')
+    for tv in y_ticks:
+        y = yscale(tv)
+        parts.append(f'<line x1="{pad_left}" y1="{y:.1f}" x2="{width - pad_right}" y2="{y:.1f}" class="grid-line" />')
+        parts.append(f'<text x="{pad_left - 8}" y="{y + 4:.1f}" class="tick-label" font-size="12" text-anchor="end">{tv}%</text>')
+
+    for arm, tok_m, pct in points:
+        cx, cy = xscale(tok_m), yscale(pct)
+        color = f'var(--arm-{arm})'
+        label = ARM_LABELS.get(arm, arm).split(" (")[0]
+        parts.append(
+            f'<circle cx="{cx:.1f}" cy="{cy:.1f}" r="7" fill="{color}" stroke="var(--surface-1)" '
+            f'stroke-width="2" class="mark-dot" data-tip="{esc(label)}: {tok_m:.1f}M tokens, {pct:.0f}% doc-rule pass">'
+            f'<title>{esc(label)}: {tok_m:.1f}M tokens, {pct:.0f}% doc-rule pass</title></circle>'
+        )
+        parts.append(
+            f'<text x="{cx + 10:.1f}" y="{cy + 4:.1f}" class="row-label" font-size="12">{esc(label)}</text>'
+        )
+
+    parts.append("</svg>")
+    return "".join(parts), height
+
+
+# --------------------------------------------------------------------------
+# Delegation: subagent usage per arm.
+# --------------------------------------------------------------------------
+
+
+def delegation_table_html(deleg_rows):
+    if not deleg_rows:
+        return '<p class="muted">No delegation data recorded.</p>'
+    rows_html = []
+    for r in deleg_rows:
+        main_pct = (
+            f'{100.0 * r["main_tokens"] / r["total_tokens"]:.0f}%'
+            if (r.get("main_tokens") is not None and r.get("total_tokens")) else "—"
+        )
+        rows_html.append(
+            f'<tr><td>{esc(ARM_LABELS.get(r["arm"], r["arm"]))}</td><td>{esc(r["trial"])}</td>'
+            f'<td>{fmt_num(r.get("subagent_launches"))}</td><td>{fmt_num(r.get("subagent_messages"))}</td>'
+            f'<td>{fmt_num(r.get("main_tokens"))}</td><td>{fmt_num(r.get("subagent_tokens"))}</td>'
+            f'<td>{main_pct}</td><td>{fmt_num(r.get("wall_s"), 0)}s</td>'
+            f'<td class="muted">—</td><td class="muted">—</td></tr>'
+        )
+    return (
+        '<table class="fallback-table"><thead><tr><th>arm</th><th>trial</th>'
+        '<th>subagent launches</th><th>subagent messages</th>'
+        '<th>main tokens</th><th>subagent tokens</th><th>main %</th><th>wall time</th>'
+        '<th>task1-phase launches</th><th>pivot-phase launches</th></tr></thead>'
+        f'<tbody>{"".join(rows_html)}</tbody></table>'
+    )
+
+
+def delegation_chart(deleg_rows, width=560, row_h=26, gap=8):
+    """Paired horizontal bar per arm: main tokens vs subagent tokens."""
+    by_arm = {}
+    for r in deleg_rows:
+        by_arm.setdefault(r["arm"], {"main": 0, "sub": 0})
+        by_arm[r["arm"]]["main"] += r.get("main_tokens") or 0
+        by_arm[r["arm"]]["sub"] += r.get("subagent_tokens") or 0
+
+    arms = [a for a in ARM_ORDER if a in by_arm]
+    pad_left, pad_right, pad_top = 130, 130, 20
+    plot_w = width - pad_left - pad_right
+    height = pad_top + len(arms) * (2 * row_h + gap) + 16
+
+    max_v = max([v for d in by_arm.values() for v in d.values()] + [1])
+    # Bars scale to at most 78% of plot_w, leaving headroom in pad_right
+    # for the "main 17,204,795" label text after the bar's end.
+    xscale = linear_scale((0, max_v / 0.78), (0, plot_w))
+
+    parts = [svg_open(width, height)]
+    parts.append(f'<text x="0" y="12" class="chart-title" font-size="13">Main vs. subagent tokens per arm</text>')
+
+    y = pad_top + 14
+    for arm in arms:
+        d = by_arm[arm]
+        label = ARM_LABELS.get(arm, arm).split(" (")[0]
+        parts.append(f'<text x="{pad_left - 10}" y="{y + row_h:.1f}" text-anchor="end" class="row-label" font-size="12">{esc(label)}</text>')
+        for key, dy, cls in (("main", 0, "main"), ("sub", row_h, "sub")):
+            w = xscale(d[key])
+            color = f'var(--arm-{arm})' if key == "main" else f'color-mix(in oklab, var(--arm-{arm}) 55%, var(--surface-1))'
+            parts.append(
+                f'<rect x="{pad_left}" y="{y + dy:.1f}" width="{w:.1f}" height="{row_h - 4}" fill="{color}" '
+                f'class="mark-bar" data-tip="{esc(label)} {key} tokens: {fmt_num(d[key])}">'
+                f'<title>{esc(label)} {key} tokens: {fmt_num(d[key])}</title></rect>'
+            )
+            parts.append(f'<text x="{pad_left + w + 6:.1f}" y="{y + dy + row_h/2:.1f}" class="tick-label" font-size="12">{"main" if key=="main" else "sub"} {fmt_num(d[key])}</text>')
+        y += 2 * row_h + gap
+
+    parts.append("</svg>")
+    return "".join(parts), height
+
+
+# --------------------------------------------------------------------------
+# Code metrics section.
+# --------------------------------------------------------------------------
+
+
+def code_metrics_summary_by_arm(cmr_rows):
+    """Aggregate code_metrics_rows() (per-run) into per-arm summary cells
+    for the Overall review's Code group + the Code section's table. Sums
+    LOC/files/tests across an arm's runs; averages the ast shape metrics.
+    Pure."""
+    by_arm = {}
+    for r in cmr_rows:
+        arm = r["arm"]
+        m = r["metrics"]
+        entry = by_arm.setdefault(arm, {
+            "loc_added": 0, "files_added": 0, "agent_test_count": 0,
+            "avg_function_length_vals": [], "docstring_coverage_vals": [],
+            "size_vs_reference_pct_vals": [], "n": 0,
+        })
+        ft = m["fixture_to_final"]
+        entry["loc_added"] += ft["loc_added"]
+        entry["files_added"] += ft["files_added"]
+        entry["agent_test_count"] += m["agent_test_count"]
+        if m["ast"]["avg_function_length"] is not None:
+            entry["avg_function_length_vals"].append(m["ast"]["avg_function_length"])
+        if m["ast"]["docstring_coverage"] is not None:
+            entry["docstring_coverage_vals"].append(m["ast"]["docstring_coverage"])
+        if m["size_vs_reference_pct"] is not None:
+            entry["size_vs_reference_pct_vals"].append(m["size_vs_reference_pct"])
+        entry["n"] += 1
+
+    out = {}
+    for arm, e in by_arm.items():
+        out[arm] = {
+            "loc_added": e["loc_added"],
+            "files_added": e["files_added"],
+            "agent_test_count": e["agent_test_count"],
+            "avg_function_length": (sum(e["avg_function_length_vals"]) / len(e["avg_function_length_vals"])) if e["avg_function_length_vals"] else None,
+            "docstring_coverage": (sum(e["docstring_coverage_vals"]) / len(e["docstring_coverage_vals"])) if e["docstring_coverage_vals"] else None,
+            "size_vs_reference_pct": (sum(e["size_vs_reference_pct_vals"]) / len(e["size_vs_reference_pct_vals"])) if e["size_vs_reference_pct_vals"] else None,
+        }
+    return out
+
+
+def code_metrics_table_html(cmr_rows):
+    if not cmr_rows:
+        return '<p class="muted">No code-metrics data (work/ git repo not found for any run).</p>'
+    rows_html = []
+    for r in cmr_rows:
+        m = r["metrics"]
+        ft = m["fixture_to_final"]
+        ast_m = m["ast"]
+        avg_len = f'{ast_m["avg_function_length"]:.1f}' if ast_m["avg_function_length"] is not None else "—"
+        docstring_cov = fmt_pct(ast_m["docstring_coverage"] * 100) if ast_m["docstring_coverage"] is not None else "—"
+        complexity = f'{ast_m["avg_complexity"]:.1f}' if ast_m["avg_complexity"] is not None else "—"
+        longest = esc(ast_m["longest_file"][0]) if ast_m["longest_file"] else "—"
+        size_vs_ref = fmt_pct(m["size_vs_reference_pct"]) if m["size_vs_reference_pct"] is not None else "—"
+        rows_html.append(
+            f'<tr><td>{esc(ARM_LABELS.get(r["arm"], r["arm"]))}</td><td>{esc(r["trial"])}</td>'
+            f'<td>{fmt_num(ft["loc_added"])}</td><td>{fmt_num(ft["loc_deleted"])}</td>'
+            f'<td>{fmt_num(ft["files_added"])}</td><td>{fmt_num(ft["files_modified"])}</td>'
+            f'<td>{fmt_num(m["agent_test_count"])}</td>'
+            f'<td>{avg_len}</td><td>{docstring_cov}</td><td>{complexity}</td>'
+            f'<td>{longest}</td><td>{size_vs_ref}</td></tr>'
+        )
+    return (
+        '<table class="fallback-table"><thead><tr><th>arm</th><th>trial</th>'
+        '<th>LOC added</th><th>LOC deleted</th><th>files added</th><th>files modified</th>'
+        '<th>tests written</th><th>avg fn length</th><th>docstring coverage</th>'
+        '<th>avg complexity</th><th>longest file</th><th>size vs reference</th></tr></thead>'
+        f'<tbody>{"".join(rows_html)}</tbody></table>'
+    )
+
+
+def code_metrics_loc_chart(cmr_summary, width=520, row_h=28, gap=10):
+    """Small bar chart: LOC added per arm (fixture->final, agent-added +
+    modified, non-excluded paths)."""
+    arms = [a for a in ARM_ORDER if a in cmr_summary]
+    pad_left, pad_right, pad_top = 100, 60, 20
+    plot_w = width - pad_left - pad_right
+    height = pad_top + len(arms) * (row_h + gap) + 10
+    max_v = max([cmr_summary[a]["loc_added"] for a in arms] + [1])
+    xscale = linear_scale((0, max_v * 1.1), (0, plot_w))
+
+    parts = [svg_open(width, height)]
+    parts.append(f'<text x="0" y="12" class="chart-title" font-size="13">LOC added per arm</text>')
+    y = pad_top
+    for arm in arms:
+        v = cmr_summary[arm]["loc_added"]
+        w = xscale(v)
+        label = ARM_LABELS.get(arm, arm).split(" (")[0]
+        parts.append(f'<text x="{pad_left - 10}" y="{y + row_h/2 + 4:.1f}" text-anchor="end" class="row-label" font-size="12">{esc(label)}</text>')
+        parts.append(
+            f'<rect x="{pad_left}" y="{y:.1f}" width="{w:.1f}" height="{row_h - 4}" fill="var(--arm-{arm})" '
+            f'class="mark-bar" data-tip="{esc(label)}: {fmt_num(v)} LOC added"><title>{esc(label)}: {fmt_num(v)} LOC added</title></rect>'
+        )
+        parts.append(f'<text x="{pad_left + w + 6:.1f}" y="{y + row_h/2 + 4:.1f}" class="tick-label" font-size="12">{fmt_num(v)}</text>')
+        y += row_h + gap
+    parts.append("</svg>")
+    return "".join(parts), height
+
+
+def code_metrics_shape_dot_chart(cmr_summary, width=520, height=170):
+    """Dot chart: avg function length (x, lines) vs docstring coverage
+    (color intensity via position on a 0-100% secondary track), one dot
+    per arm. Simple two-row layout: length dots on one scale, coverage %
+    on a second row for direct comparability."""
+    arms = [a for a in ARM_ORDER if a in cmr_summary]
+    pad_left, pad_right, pad_top, pad_bottom = 150, 24, 14, 30
+    plot_w = width - pad_left - pad_right
+
+    lengths = [cmr_summary[a]["avg_function_length"] for a in arms if cmr_summary[a]["avg_function_length"] is not None]
+    lo, hi = (min(lengths), max(lengths)) if lengths else (0, 1)
+    if lo == hi:
+        lo, hi = max(0, lo - 5), hi + 5
+    ticks = nice_ticks(lo, hi, 4)
+    t_lo, t_hi = min(ticks[0], lo), max(ticks[-1], hi)
+    # Dots occupy only the left ~55% of the plot area (extend the domain's
+    # upper bound well past t_hi) so the "N.N lines, NN% docstrings" label
+    # after each dot has room before the card's right edge.
+    xscale = linear_scale((t_lo, t_lo + (t_hi - t_lo) / 0.55), (pad_left, width - pad_right))
+
+    row_h = (height - pad_top - pad_bottom) / max(len(arms), 1)
+    parts = [svg_open(width, height)]
+    parts.append(f'<text x="{pad_left}" y="10" class="chart-title" font-size="13">Avg function length (dot) &amp; docstring coverage (label)</text>')
+    for tv in ticks:
+        x = xscale(tv)
+        parts.append(f'<line x1="{x:.1f}" y1="{pad_top}" x2="{x:.1f}" y2="{height - pad_bottom}" class="grid-line" />')
+        parts.append(f'<text x="{x:.1f}" y="{height - pad_bottom + 14}" class="tick-label" font-size="12" text-anchor="middle">{tv:g}</text>')
+
+    for i, arm in enumerate(arms):
+        cy = pad_top + row_h * i + row_h / 2
+        label = ARM_LABELS.get(arm, arm).split(" (")[0]
+        parts.append(f'<text x="{pad_left - 10}" y="{cy + 4:.1f}" text-anchor="end" class="row-label" font-size="12">{esc(label)}</text>')
+        v = cmr_summary[arm]["avg_function_length"]
+        cov = cmr_summary[arm]["docstring_coverage"]
+        if v is not None:
+            cx = xscale(v)
+            parts.append(
+                f'<circle cx="{cx:.1f}" cy="{cy:.1f}" r="6" fill="var(--arm-{arm})" stroke="var(--surface-1)" stroke-width="2" '
+                f'class="mark-dot" data-tip="{esc(label)}: {v:.1f} lines avg, {fmt_pct(cov*100) if cov is not None else "—"} docstring coverage">'
+                f'<title>{esc(label)}: {v:.1f} lines avg, {fmt_pct(cov*100) if cov is not None else "—"} docstring coverage</title></circle>'
+            )
+            cov_str = fmt_pct(cov * 100) if cov is not None else "—"
+            parts.append(f'<text x="{cx + 10:.1f}" y="{cy + 4:.1f}" class="tick-label" font-size="12">{v:.1f} lines, {cov_str} docstrings</text>')
+    parts.append("</svg>")
+    return "".join(parts), height
+
+
+# --------------------------------------------------------------------------
+# Explain failures section.
+# --------------------------------------------------------------------------
+
+
+def _failure_rule_block_html(entry):
+    tests_html = "".join(
+        f'<li><code>{esc(t["label"])}</code> ({esc(t["kind"])})'
+        + (f'<div class="failure-snippet">{"".join(f"<div>{esc(s)}</div>" for s in t["snippet"])}</div>' if t["snippet"] else "")
+        + "</li>"
+        for t in entry["tests"]
+    )
+    return f"""
+    <div class="failure-rule-block">
+      <div class="failure-rule-head">
+        <strong>{esc(entry["rule_id"])}</strong> <span class="muted">{esc(entry["memory"] or "")}</span>
+        <span class="failure-rule-count">{entry["failed_count"]}/{entry["total_count"]} tests failed</span>
+      </div>
+      <p class="failure-rule-summary">{esc(entry["summary"] or "")}</p>
+      <details class="table-fallback"><summary>{len(entry["tests"])} failing test(s)</summary>
+        <ul class="failure-test-list">{tests_html}</ul>
+      </details>
+    </div>"""
+
+
+def failure_detail_html(fr, review):
+    """Full Explain failures section body: per-arm rule-grouped failures
+    (task1 then pivot) + the shared-vs-harness-only note."""
+    present = fr["arms_present"]
+    if not present:
+        return '<p class="muted">No two-phase (pivot) runs with doc-rule data to explain.</p>'
+
+    arm_blocks = []
+    for arm in present:
+        entry = fr["by_arm"].get(arm, {"task1": [], "pivot": []})
+        t1_blocks = "".join(_failure_rule_block_html(e) for e in entry["task1"])
+        pv_blocks = "".join(_failure_rule_block_html(e) for e in entry["pivot"])
+        if not t1_blocks and not pv_blocks:
+            body = '<p class="muted">No failing doc-rule tests for this arm.</p>'
+        else:
+            body = (
+                (f'<h4>Task 1</h4>{t1_blocks}' if t1_blocks else '<h4>Task 1</h4><p class="muted">No failing doc-rule tests.</p>')
+                + (f'<h4>Pivot</h4>{pv_blocks}' if pv_blocks else '<h4>Pivot</h4><p class="muted">No failing doc-rule tests.</p>')
+            )
+        chip = f'<span class="chip" style="background:var(--arm-{arm})"></span>'
+        arm_blocks.append(f"""
+        <div class="chart-card failure-arm-card">
+          <div class="chart-card-title">{chip}{esc(ARM_LABELS.get(arm, arm))}</div>
+          {body}
+        </div>""")
+
+    split = fr["split"]
+    shared = split.get("shared") or []
+    harness_only = split.get("harness_only") or []
+    split_bits = []
+    if shared:
+        split_bits.append(f'<strong>Shared failures</strong> (every arm, including no harness): {", ".join(esc(r) for r in shared)}.')
+    if harness_only:
+        split_bits.append(f'<strong>Harness-only failures</strong> (every harness arm failed it, no-harness control passed it): {", ".join(esc(r) for r in harness_only)} &mdash; this asymmetry is the key story: the harness introduced its own convention misses that the no-harness run avoided.')
+    split_html = (
+        "".join(f'<p class="section-takeaway">{bit}</p>' for bit in split_bits)
+        if split_bits else ""
+    )
+
+    return f'{split_html}<div class="chart-grid">{"".join(arm_blocks)}</div>'
+
+
 def findings_cards_html(findings):
     """3-5 short finding cards (one sentence each). Pure rendering of a list
     of pre-computed finding strings (see key_findings)."""
@@ -2099,14 +3240,72 @@ tr:last-child .scorecard-cell, tr:last-child th.scorecard-row-label { border-bot
 }
 .two-phase-block h3 { margin-bottom: 2px; }
 
-/* Findings cards */
+/* Findings cards: auto-fit equal-height grid */
 .findings-grid {
   display: grid; grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr));
+  grid-auto-rows: 1fr;
   gap: 10px; margin-top: 12px;
 }
 .finding-card {
   border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px;
   background: var(--surface-1); font-size: 0.88rem; line-height: 1.45; color: var(--text-primary);
+  height: 100%; box-sizing: border-box;
+}
+
+/* Overall review */
+.run-count-tag {
+  display: inline-block; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.03em;
+  text-transform: uppercase; color: var(--text-muted); border: 1px solid var(--border);
+  border-radius: 3px; padding: 1px 6px; margin-left: 6px; vertical-align: middle;
+}
+.cost-benefit-block {
+  border: 1px solid var(--border); border-radius: 10px; padding: 16px 18px;
+  background: var(--surface-1); margin-bottom: 18px;
+}
+.cost-benefit-block h3 { margin: 0 0 8px; font-size: 1.05rem; }
+.cost-benefit-answer { font-size: 0.95rem; color: var(--text-primary); font-weight: 600; margin: 0 0 8px; max-width: 72ch; }
+.cost-benefit-lines { margin: 8px 0 0; padding-left: 18px; font-size: 0.85rem; color: var(--text-secondary); line-height: 1.6; }
+.overall-wrap { overflow-x: auto; }
+table.overall-table { border-collapse: separate; border-spacing: 0; width: 100%; font-variant-numeric: tabular-nums; }
+.overall-corner { width: 22%; }
+th.overall-head { text-align: left; padding: 8px 12px; border-bottom: 2px solid var(--border); vertical-align: bottom; }
+.overall-head-arm { display: flex; align-items: center; gap: 7px; font-size: 0.9rem; font-weight: 700; }
+.overall-head-ver { font-size: 0.7rem; margin-top: 2px; }
+tr.overall-group-row th {
+  text-align: left; padding: 14px 12px 4px 4px; font-size: 0.72rem; font-weight: 700;
+  letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-muted);
+  border-bottom: 1px solid var(--border);
+}
+tr.overall-note-row .overall-note {
+  font-size: 0.76rem; color: var(--text-muted); padding: 2px 4px 8px; font-style: italic;
+}
+th.overall-row-label {
+  text-align: left; padding: 8px 12px 8px 4px; font-size: 0.82rem; font-weight: 600;
+  color: var(--text-secondary); border-bottom: 1px solid var(--border); white-space: nowrap;
+}
+td.overall-cell { padding: 8px 12px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }
+.overall-value { font-size: 1.05rem; font-weight: 700; display: flex; align-items: baseline; gap: 6px; }
+.overall-value.best { color: var(--text-primary); }
+.overall-delta { font-size: 0.74rem; margin-top: 2px; }
+
+/* Explain failures */
+.failure-arm-card { min-width: 0; }
+.failure-rule-block { border-top: 1px solid var(--border); padding: 10px 0; }
+.failure-rule-block:first-of-type { border-top: none; padding-top: 4px; }
+.failure-rule-head { font-size: 0.85rem; display: flex; flex-wrap: wrap; gap: 8px; align-items: baseline; }
+.failure-rule-count { font-size: 0.76rem; color: var(--status-critical); font-weight: 600; margin-left: auto; }
+.failure-rule-summary { font-size: 0.8rem; margin: 4px 0 6px; }
+.failure-test-list { margin: 6px 0 0; padding-left: 16px; font-size: 0.8rem; }
+.failure-test-list li { margin-bottom: 8px; }
+.failure-snippet {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.74rem;
+  background: color-mix(in oklab, var(--surface-1) 88%, var(--text-primary) 6%);
+  border-radius: 4px; padding: 4px 8px; margin-top: 4px; overflow-x: auto; white-space: pre;
+}
+
+/* Gate matrix column groups */
+table.gate-matrix-table th.gate-group-head {
+  text-align: center; background: color-mix(in oklab, var(--surface-1) 85%, var(--text-primary) 6%);
 }
 
 .kpi-row {
@@ -2356,7 +3555,7 @@ def _takeaway_tools(rows):
     return f"{esc(top_tool)} was the most-used tool overall, led by {ARM_LABELS.get(leader, leader)}."
 
 
-def render_report(rows, meta, title="Harness A/B Results", notes_html=None, notes_text=None):
+def render_report(rows, meta, title="Harness A/B Results", notes_html=None, notes_text=None, stamp_dir=None):
     analyze = get_analyze()
     agg = analyze.aggregate(rows)
     arms_present = agg.get("arms", {})
@@ -2371,7 +3570,23 @@ def render_report(rows, meta, title="Harness A/B Results", notes_html=None, note
     n_per_arm = {a: arms_present.get(a, {}).get("n", 0) for a in ARM_ORDER}
     trials_str = ", ".join(f"{ARM_LABELS.get(a, a)}: n={n_per_arm[a]}" for a in ARM_ORDER if a in arms_present)
 
-    verdict = compute_verdict(agg)
+    # --- Overall review: one-sentence verdict + full comparison table,
+    # first block on the page (replaces the old multi-sentence
+    # compute_verdict() paragraph, which could read as self-contradictory
+    # across its independently-computed sentences). ---
+    overall_review = overall_review_rows(rows, agg, stamp_dir=stamp_dir)
+    code_metrics_data = code_metrics_rows(rows, stamp_dir) if stamp_dir else []
+    overall_review["code_cells"] = code_metrics_summary_by_arm(code_metrics_data)
+    verdict = overall_review_verdict(overall_review)
+    n_run_note = "1 run per arm — directional" if all(v <= 1 for v in n_per_arm.values() if v) else f"n={n_per_arm}"
+    overall_table_html = overall_review_table_html(overall_review)
+    cost_benefit_html = cost_vs_benefit_html(overall_review)
+    quadrant_svg, _quadrant_h = quadrant_chart(overall_review)
+    quadrant_card = f"""
+    <div class="chart-card">
+      <div class="chart-card-subtitle">Tokens (M) vs. combined doc-rule pass % (task1+pivot), one dot per arm.</div>
+      {quadrant_svg}
+    </div>"""
 
     import datetime
     date_str = datetime.date.today().isoformat()
@@ -2566,15 +3781,19 @@ def render_report(rows, meta, title="Harness A/B Results", notes_html=None, note
     </div>"""
 
     pivot_gate_rows_data = pivot_gate_matrix_rows(rows) if has_pivot_data else []
+    # pivot_gate_matrix_table() already wraps its own table in .table-wrap
+    # (9 columns -- too wide for a 2-up chart-grid cell without horizontal
+    # scroll) -- this card is rendered full-width below, outside
+    # chart-grid, rather than nested a second time.
     pivot_gate_matrix_html = pivot_gate_matrix_table(pivot_gate_rows_data)
     pivot_gate_card = f"""
     <div class="chart-card">
       <div class="chart-card-title">Task-1 + pivot gate conformance per run</div>
       <div class="chart-card-subtitle">Task-1 init/sweep, then pivot-phase reclassify/resweep/edits/doc-memory coverage; control is n/a (no harness).</div>
-      <div class="table-wrap">{pivot_gate_matrix_html}</div>
+      {pivot_gate_matrix_html}
     </div>"""
 
-    phase_cost_rows_data = phase_cost_stack_rows(rows) if has_pivot_data else []
+    phase_cost_rows_data = phase_cost_stack_rows(rows, stamp_dir=stamp_dir) if has_pivot_data else []
     phase_cost_svg, _phase_cost_h = phase_cost_stack_chart(phase_cost_rows_data)
     phase_cost_fallback_rows = []
     for (run_id, arm, trial, parts) in sorted(phase_cost_rows_data, key=lambda r: (ARM_ORDER.index(r[1]) if r[1] in ARM_ORDER else 99, r[2] or 0)):
@@ -2602,6 +3821,47 @@ def render_report(rows, meta, title="Harness A/B Results", notes_html=None, note
     gates_takeaway = _takeaway_gates(agg)
     cost_takeaway = _takeaway_cost(agg)
     tools_takeaway = _takeaway_tools(rows)
+
+    # --- delegation (subagent usage) ---
+    deleg_rows_data = delegation_rows(rows)
+    deleg_takeaway = delegation_takeaway(deleg_rows_data)
+    deleg_table_html = delegation_table_html(deleg_rows_data)
+    deleg_svg, _deleg_h = delegation_chart(deleg_rows_data)
+    delegation_card = f"""
+    <div class="chart-card">
+      <div class="chart-card-title">Main vs. subagent tokens</div>
+      <div class="chart-card-subtitle">Per arm, summed across runs; phase-level subagent fields are not recorded (shown as &mdash;).</div>
+      {deleg_svg}
+      <details class="table-fallback"><summary>Data</summary>{deleg_table_html}</details>
+    </div>"""
+
+    # --- code metrics ---
+    code_table_html = code_metrics_table_html(code_metrics_data)
+    code_loc_svg, _code_loc_h = code_metrics_loc_chart(overall_review["code_cells"])
+    code_shape_svg, _code_shape_h = code_metrics_shape_dot_chart(overall_review["code_cells"])
+    code_loc_card = f"""
+    <div class="chart-card">
+      <div class="chart-card-title">LOC added per arm</div>
+      <div class="chart-card-subtitle">Agent-added/modified non-excluded LOC, fixture &rarr; final tree. Proxy for size, not quality.</div>
+      {code_loc_svg}
+    </div>"""
+    code_shape_card = f"""
+    <div class="chart-card">
+      <div class="chart-card-title">Function length &amp; docstring coverage</div>
+      <div class="chart-card-subtitle">Avg length (lines) and docstring coverage, per arm. Proxies for shape, not quality.</div>
+      {code_shape_svg}
+    </div>"""
+    code_metrics_section_html = f"""
+    <div class="chart-grid">{code_loc_card}{code_shape_card}</div>
+    <div class="chart-card" style="margin-top:14px">
+      <div class="chart-card-title">Code metrics by run</div>
+      <div class="chart-card-subtitle">Proxies for size/shape, not quality judgments.</div>
+      <div class="table-wrap">{code_table_html}</div>
+    </div>"""
+
+    # --- explain failures ---
+    failure_rows_data = failure_report_rows(rows, stamp_dir) if stamp_dir else {"by_arm": {}, "split": {"shared": [], "harness_only": []}, "arms_present": []}
+    explain_failures_html = failure_detail_html(failure_rows_data, overall_review)
 
     # --- per-run table ---
     run_table_html = per_run_table(rows)
@@ -2644,16 +3904,19 @@ def render_report(rows, meta, title="Harness A/B Results", notes_html=None, note
     """
 
     nav_items = [
+        ("overall", "Overall"),
+        ("explain-failures", "Explain failures"),
         ("scorecard", "Scorecard"),
         ("doc-use", "Documentation use"),
         ("gates", "Gates"),
         ("cost", "Cost"),
+        ("code", "Code"),
         ("tools", "Tools"),
         ("runs", "Runs"),
         ("method", "Method"),
     ]
     if has_pivot_data:
-        nav_items.insert(1, ("pivot", "Pivot"))
+        nav_items.insert(3, ("pivot", "Pivot"))
     nav_html = "".join(f'<li><a href="#{sid}">{esc(label)}</a></li>' for sid, label in nav_items)
 
     findings_section_html = (
@@ -2682,7 +3945,7 @@ body {{ font-family: 'Inter', system-ui, -apple-system, "Segoe UI", sans-serif; 
   <header class="report-header">
     <h1>{esc(title)}</h1>
     <div class="meta-line">{esc(date_str)} &middot; model {esc(model)} &middot; trials/arm: {esc(trials_str) if trials_str else esc(str(trials))} &middot; claude {esc(claude_version)} &middot; auth: {esc(auth_mode)}</div>
-    <p class="verdict">{esc(verdict)}</p>
+    <p class="verdict">{esc(verdict)} <span class="run-count-tag">{esc(n_run_note)}</span></p>
   </header>
 
   <nav class="section-nav" aria-label="Report sections">
@@ -2692,14 +3955,32 @@ body {{ font-family: 'Inter', system-ui, -apple-system, "Segoe UI", sans-serif; 
 <main>
   {legacy_findings_section_html}
 
+  <section class="report-section" id="overall">
+    <div class="eyebrow">Overall review</div>
+    {cost_benefit_html}
+    <h2 style="margin-top:20px">Arm comparison</h2>
+    <p class="section-subtitle">One column per arm; "best" is tagged only on strict per-row winners &mdash; never on ties or all-zero rows.</p>
+    {overall_table_html}
+    <div class="chart-grid" style="margin-top:14px">
+      {quadrant_card}
+    </div>
+    {findings_section_html}
+  </section>
+
+  <section class="report-section" id="explain-failures">
+    <div class="eyebrow">Where and why it failed</div>
+    <h2>Explain failures</h2>
+    <p class="section-subtitle">Every failed/errored doc-rule test, grouped by the memory rule it belongs to, with an expected-vs-actual snippet.</p>
+    {explain_failures_html}
+  </section>
+
   <section class="report-section" id="scorecard">
     <div class="eyebrow">At a glance</div>
     <h2>Scorecard</h2>
-    <p class="section-subtitle">One column per arm; delta is vs control (no harness). Best value per row is bold with a "best" tag.</p>
-    {scorecard_table_html}
-    {findings_section_html}
-    <details class="table-fallback"><summary>Data (per-arm KPI cards)</summary>
-      <div class="kpi-row">{kpi_html}</div>
+    <p class="section-subtitle">Legacy per-metric scorecard, kept as supporting detail under the Overall review above. One column per arm; delta is vs control (no harness).</p>
+    <details class="table-fallback"><summary>Data</summary>
+      {scorecard_table_html}
+      <div class="kpi-row" style="margin-top:14px">{kpi_html}</div>
     </details>
   </section>
 
@@ -2710,6 +3991,8 @@ body {{ font-family: 'Inter', system-ui, -apple-system, "Segoe UI", sans-serif; 
     {two_phase_scorecard_table_html}
     <div class="chart-grid" style="margin-top:16px">
       {phase_cost_card}
+    </div>
+    <div style="margin-top:14px">
       {pivot_gate_card}
     </div>
     <details class="table-fallback"><summary>Phase token/turn medians by arm</summary>{phase_cost_median_fallback}</details>
@@ -2749,6 +4032,19 @@ body {{ font-family: 'Inter', system-ui, -apple-system, "Segoe UI", sans-serif; 
       {comp_card}
     </details>
     {f'<p class="section-subtitle" style="margin-top:8px">Per-phase token breakdown (task1 | pivot) is in the <a href="#pivot">Pivot</a> section above.</p>' if has_pivot_data else ""}
+
+    <h3 style="margin-top:24px">Delegation</h3>
+    <p class="section-takeaway">{esc(deleg_takeaway)}</p>
+    <div class="chart-grid">
+      {delegation_card}
+    </div>
+  </section>
+
+  <section class="report-section" id="code">
+    <div class="eyebrow">Code</div>
+    <h2>Code metrics</h2>
+    <p class="section-subtitle">Size/shape proxies (LOC, function length, docstring coverage, tests written, size vs. reference solution) &mdash; not quality judgments.</p>
+    {code_metrics_section_html}
   </section>
 
   <section class="report-section" id="tools">
@@ -2820,7 +4116,8 @@ def main(argv=None):
             notes_text = f.read()
         notes_html = notes_text
 
-    doc = render_report(rows, meta, title=args.title, notes_html=notes_html, notes_text=notes_text)
+    doc = render_report(rows, meta, title=args.title, notes_html=notes_html, notes_text=notes_text,
+                         stamp_dir=args.stamp_dir)
 
     with open(args.out, "w") as f:
         f.write(doc)
