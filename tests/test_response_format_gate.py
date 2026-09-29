@@ -6,12 +6,19 @@ Targets:
   - core.config.get_response_format_config : CLAUDE_PLUGIN_OPTION_* env parsing,
     defaults, and malformed-value fallback.
 
-Stdlib unittest only; deterministic and fully offline. No transcript IO — every
-tested surface is a pure function fed explicit args.
+Stdlib unittest only; deterministic and fully offline. Most tested surfaces
+are pure functions fed explicit args; TestMainStopHookActive drives main()
+end-to-end against a real transcript file to cover the stop_hook_active
+never-block behavior main() itself is responsible for.
 """
+import io
+import json
 import os
 import sys
+import tempfile
 import unittest
+from contextlib import redirect_stdout
+from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from _hookutil import import_hook, import_core, reset_caches  # noqa: E402
@@ -86,6 +93,44 @@ class TestProseWords(unittest.TestCase):
 
     def test_blank_lines_ignored(self):
         self.assertEqual(gate.prose_words("\n\nword\n\n"), 1)
+
+    def test_file_reference_line_excluded(self):
+        text = "Fixed the bug.\n/Users/dev/project/hooks/pre/swe_pre_tool_init_gate.py"
+        self.assertEqual(gate.prose_words(text), 3)  # "Fixed the bug." only
+
+    def test_bulleted_file_reference_list_excluded(self):
+        text = (
+            "Changed:\n"
+            "- hooks/pre/swe_pre_tool_init_gate.py\n"
+            "- hooks/post/swe_post_tool_failure.py: added a check\n"
+        )
+        self.assertEqual(gate.prose_words(text), 1)  # only "Changed:"
+
+    def test_relative_file_reference_line_excluded(self):
+        text = "tests/test_response_format_gate.py"
+        self.assertEqual(gate.prose_words(text), 0)
+
+    def test_prose_mentioning_a_word_that_looks_like_extension_still_counts(self):
+        # A genuine prose sentence (no leading path-like token) still counts.
+        self.assertEqual(gate.prose_words("The fix touches three files today"), 6)
+
+
+class TestEndsWithQuestion(unittest.TestCase):
+    def test_question_mark_ending_true(self):
+        self.assertTrue(gate.ends_with_question("Should I proceed with the deploy?"))
+
+    def test_question_with_trailing_punctuation_true(self):
+        self.assertTrue(gate.ends_with_question('Should I proceed?"'))
+
+    def test_statement_ending_false(self):
+        self.assertFalse(gate.ends_with_question("Fixed the bug."))
+
+    def test_question_mark_mid_reply_not_last_paragraph_false(self):
+        self.assertFalse(gate.ends_with_question("Why did this happen? Anyway, fixed it."))
+
+    def test_empty_text_false(self):
+        self.assertFalse(gate.ends_with_question(""))
+        self.assertFalse(gate.ends_with_question(None))
 
 
 # ---------------------------------------------------------------------------
@@ -174,6 +219,27 @@ class TestEvaluate(unittest.TestCase):
     def test_empty_reply_passes(self):
         reason, _, _ = gate.evaluate([], "ok", 40, 600, False)
         self.assertIsNone(reason)
+
+    def test_over_budget_reply_ending_in_question_passes(self):
+        # Must-not-fire: a long reply whose final paragraph asks a question
+        # is not forced into a rewrite by the length budget.
+        essay = " ".join(["word"] * 60) + "\n\nWhich database migration applies first?"
+        reason, _, _ = gate.evaluate([essay], "fix it", 40, 600, False)
+        self.assertIsNone(reason)
+
+    def test_over_budget_reply_not_ending_in_question_still_blocks(self):
+        # Must-fire: a mid-reply question mark does not exempt an over-budget
+        # reply whose final paragraph is a statement.
+        essay = " ".join(["word"] * 60) + "\n\nWhy did this happen? Anyway, fixed it."
+        reason, _, _ = gate.evaluate([essay], "fix it", 40, 600, False)
+        self.assertIsNotNone(reason)
+
+    def test_banned_pattern_still_blocks_even_ending_in_question(self):
+        # Must-fire: the question exemption only covers the length budget, not
+        # recap/scaffolding violations.
+        reason, _, _ = gate.evaluate(
+            ["## Summary\nall done\n\nWant me to continue?"], "ok", 40, 600, False)
+        self.assertIsNotNone(reason)
 
     def test_duplicate_answer_blocks(self):
         # Long original + a condensed near-duplicate restatement -> block.
@@ -315,6 +381,62 @@ class TestResponseFormatConfig(unittest.TestCase):
     def test_malformed_bool_falls_back_to_default(self):
         os.environ["CLAUDE_PLUGIN_OPTION_RESPONSE_FORMAT_ENABLED"] = "maybe"
         self.assertTrue(self.config.get_response_format_config()["enabled"])
+
+
+# ---------------------------------------------------------------------------
+# main() — stop_hook_active must never block (deadlock/ping-pong prevention)
+# ---------------------------------------------------------------------------
+class TestMainStopHookActive(unittest.TestCase):
+    def setUp(self):
+        reset_caches()
+        self.tmp = tempfile.TemporaryDirectory()
+        self.transcript_path = os.path.join(self.tmp.name, "session.jsonl")
+
+    def tearDown(self):
+        self.tmp.cleanup()
+        reset_caches()
+
+    def _write_transcript(self, assistant_text):
+        lines = [
+            {"type": "user", "message": {"content": "fix it"}},
+            {"type": "assistant", "message": {"content": assistant_text}},
+        ]
+        with open(self.transcript_path, "w") as f:
+            for rec in lines:
+                f.write(json.dumps(rec) + "\n")
+
+    def _run_main(self, stop_hook_active):
+        payload = {
+            "transcript_path": self.transcript_path,
+            "stop_hook_active": stop_hook_active,
+        }
+        buf = io.StringIO()
+        with mock.patch.object(sys, "stdin", io.StringIO(json.dumps(payload))), \
+             mock.patch.object(gate, "get_project_root", return_value=self.tmp.name), \
+             mock.patch.object(gate, "resolve_setup_state",
+                                return_value={"bypassed": False, "initialized": True}), \
+             mock.patch.object(gate, "get_response_format_config",
+                                return_value={"enabled": True, "terse_limit": 5,
+                                               "detail_limit": 600}), \
+             redirect_stdout(buf):
+            try:
+                gate.main()
+            except SystemExit:
+                pass
+        return buf.getvalue()
+
+    def test_stop_hook_active_never_blocks_even_on_violation(self):
+        # A response with a banned recap heading would normally block; with
+        # stop_hook_active=True, main() must exit clean with no output.
+        self._write_transcript("## Summary\nAll done and verified.")
+        out = self._run_main(stop_hook_active=True)
+        self.assertEqual(out.strip(), "")
+
+    def test_fresh_turn_still_blocks_on_violation(self):
+        # Same content, but stop_hook_active=False (a fresh turn) -> blocks.
+        self._write_transcript("## Summary\nAll done and verified.")
+        out = self._run_main(stop_hook_active=False)
+        self.assertIn('"decision": "block"', out)
 
 
 if __name__ == "__main__":

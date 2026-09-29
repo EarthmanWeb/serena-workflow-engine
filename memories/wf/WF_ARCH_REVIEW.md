@@ -51,7 +51,7 @@ Normally loaded by the WF_CLASSIFY Step 4d sweep (check WM `Memories loaded`). G
 ```
 mcp__plugin_swe_serena__read_memory("index/INDEX_FEATURES")   # active feature
 mcp__plugin_swe_serena__read_memory("feature/FEATURE_[KEY]")  # feature config with layers
-mcp__plugin_swe_serena__read_memory("arch/ARCH_INDEX")        # architecture overview (if exists)
+mcp__plugin_swe_serena__read_memory("arch/ARCH_SWE")           # architecture overview (if exists)
 ```
 
 ### 2. Read Layer Documentation

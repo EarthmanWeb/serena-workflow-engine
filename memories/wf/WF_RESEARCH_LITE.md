@@ -9,6 +9,8 @@ metadata:
 
 > **On step WF_RESEARCH_LITE**
 
+Subflow — not an FSM state; do not set_state to it.
+
 Enter ONLY when the user explicitly requests lite/quick research. Route anything larger to `WF_CLASSIFY`.
 
 ## Qualifying Tasks

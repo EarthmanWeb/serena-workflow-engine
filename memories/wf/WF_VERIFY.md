@@ -23,7 +23,7 @@ Check for violations:
 
 Read via `mcp__plugin_swe_serena__read_memory`:
 
-- `arch/ARCH_INDEX`
+- `arch/ARCH_SWE`
 - `feature/FEATURE_DEV_STANDARDS`
 
 ### 2a. Generic Layer Verification

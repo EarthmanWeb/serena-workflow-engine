@@ -7,6 +7,9 @@ Responsibilities:
   1. Log failed tool calls to the JSONL stream
   2. Detect flailing: 2+ consecutive failures of the same tool
   3. After flailing threshold, inject CLAUDE_OBLIGATIONS reminder
+  4. Detect a Serena MCP connection failure and append 'mcp_unavailable' —
+     the init gate's degraded-mode circuit breaker reads this to unlock
+     read-only tools immediately, without waiting for 3 init-gate denials
 """
 
 import os
@@ -19,7 +22,7 @@ try:
     from swe_hooks.core.input import read_stdin_safe, get_input_field
     from swe_hooks.core.output import output_empty, output_message
     from swe_hooks.core.session import extract_session_id
-    from swe_hooks.core.stream import get_stream_path, append_event, get_stream_dir
+    from swe_hooks.core.stream import get_stream_path, append_event, get_stream_dir, is_degraded
 except ImportError as e:
     swe_hooks.bootstrap.import_error_exit(e, "PostToolUseFailure")
 
@@ -102,6 +105,33 @@ _UNRESOLVED_NAME_MARKERS = (
     'is not available',
 )
 
+# Substrings that mark an actual MCP CONNECTION failure (the server process is
+# down/unreachable), as opposed to a merely-deferred/unloaded tool schema. A
+# connection failure means the init-gate's read_memory("wf/WF_INIT") chain
+# cannot succeed no matter how the tool is called, so it triggers degraded
+# mode immediately instead of waiting for 3 init-gate denials.
+_MCP_CONNECTION_ERROR_MARKERS = (
+    'mcp server',
+    'connection closed',
+    'connection refused',
+    'econnrefused',
+    'server disconnected',
+    'failed to connect',
+    'mcp error',
+    'transport closed',
+)
+
+
+def is_mcp_unavailable_error(tool_name: str, tool_error: str) -> bool:
+    """True when a Serena MCP tool call failed because the SERVER is
+    unreachable (connection-level), not merely because its schema was
+    unloaded (that is unresolved_serena_correction's case)."""
+    if not str(tool_name).startswith(SERENA_TOOL_PREFIX) and \
+            str(tool_name).strip() not in _BARE_SERENA_NAMES:
+        return False
+    err = str(tool_error).lower()
+    return any(marker in err for marker in _MCP_CONNECTION_ERROR_MARKERS)
+
 
 def unresolved_serena_correction(tool_name: str, tool_error: str) -> str:
     """Return a correction when a BARE (unqualified) Serena tool name failed to
@@ -110,14 +140,14 @@ def unresolved_serena_correction(tool_name: str, tool_error: str) -> str:
     This is the exact trap behind the "No such tool available: read_memory"
     class of first-move errors: the assistant calls `read_memory` instead of
     `mcp__plugin_swe_serena__read_memory`, and in a deferred-tools session the
-    bare name resolves to nothing. We tell it to ToolSearch the fully-qualified
-    tool first, then re-call by that name.
+    bare name resolves to nothing. The correction tells it to load the
+    fully-qualified tool's schema first, then re-call by that name.
 
     NOTE: whether this fires depends on the harness delivering a tool-failure
     event for an unresolved name — some harnesses reject the call before any
-    PostToolUse hook runs. It is a best-effort safety net; the durable fix is the
-    instruction strings (SessionStart / workflow-gate / init-gate) that mandate
-    ToolSearch-first and the fully-qualified name.
+    PostToolUse hook runs. It is a best-effort safety net alongside the
+    instruction strings (SessionStart / workflow-gate / init-gate) that
+    mandate loading the schema first and using the fully-qualified name.
     """
     bare = str(tool_name).strip()
     err = str(tool_error).lower()
@@ -131,9 +161,9 @@ def unresolved_serena_correction(tool_name: str, tool_error: str) -> str:
     return (
         f"🔧 UNRESOLVED TOOL: `{bare}` is not callable — you used the BARE name.\n"
         f"The Serena MCP tools are DEFERRED (schema not loaded) and MUST be "
-        f"called by their FULLY-QUALIFIED name. Load the schema, then re-call:\n"
-        f"  ToolSearch(\"select:{fq}\")\n"
-        f"Then call {fq}(...) — NEVER the bare {bare}."
+        f"called by their FULLY-QUALIFIED name. If the tool is deferred, load "
+        f"its schema first (e.g. via ToolSearch when available), then call:\n"
+        f"  {fq}(...) — NEVER the bare {bare}."
     )
 
 
@@ -162,9 +192,9 @@ def schema_correction(tool_name: str, tool_error: str) -> str:
         detail = ""
     return (
         f"🔧 WRONG PARAMS for {tool_name} (schema validation failed).\n{detail}"
-        f"Do NOT guess param names — fetch the authoritative schema and re-call:\n"
-        f"  ToolSearch(\"select:{tool_name}\")\n"
-        f"Then call {tool_name} with the EXACT params from that schema."
+        f"Do NOT guess param names. If the tool is deferred, load its schema "
+        f"first (e.g. via ToolSearch when available), then call {tool_name} "
+        f"with the EXACT params from that schema."
     )
 
 
@@ -217,6 +247,17 @@ def main():
         error_summary = str(tool_error)[:200] if tool_error else ''
         append_event(stream_path, 'tool_failure',
                      name=tool_name, s=session_id, err=error_summary)
+
+        # A Serena MCP CONNECTION failure (server unreachable) means the
+        # init-gate's read_memory chain cannot succeed regardless of retries —
+        # trigger degraded mode immediately rather than waiting for 3 plain
+        # init-gate denials (which would only accumulate if the agent can even
+        # get past the pre-init gate to try the call).
+        if is_mcp_unavailable_error(tool_name, tool_error):
+            was_degraded = is_degraded(stream_path)
+            append_event(stream_path, 'mcp_unavailable', name=tool_name, s=session_id)
+            if not was_degraded:
+                append_event(stream_path, 'degraded', s=session_id, trigger='mcp_unavailable')
 
         # Bare/unqualified Serena name that failed to resolve (deferred schema not
         # loaded): tell the assistant to ToolSearch the fully-qualified tool and

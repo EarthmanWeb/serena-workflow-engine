@@ -334,6 +334,108 @@ class TestOrchestratorDriftMain(unittest.TestCase):
         })
         self.assertEqual(result, {})
 
+    def test_verification_bash_never_reaches_threshold(self):
+        # Must-not-fire: repeated git/test-runner Bash calls never nudge, no
+        # matter how many — they are checking state, not doing task work.
+        session_id = "mnop3456"
+        for _ in range(drift_hook.DRIFT_THRESHOLD + 5):
+            result = self._run_main({
+                "tool_name": "Bash",
+                "transcript_path": self._transcript(session_id),
+                "tool_input": {"command": "git status"},
+            })
+        ctx = result.get("hookSpecificOutput", {}).get("additionalContext", "")
+        self.assertNotIn("Orchestrator drift", ctx)
+
+    def test_mixed_verification_and_edit_still_counts(self):
+        # Must-fire: verification Bash calls interleaved with real edits still
+        # accumulate drift from the edits.
+        session_id = "qrst7890"
+        for _ in range(drift_hook.DRIFT_THRESHOLD - 1):
+            self._run_main({
+                "tool_name": "Edit",
+                "transcript_path": self._transcript(session_id),
+                "tool_input": {},
+            })
+            self._run_main({
+                "tool_name": "Bash",
+                "transcript_path": self._transcript(session_id),
+                "tool_input": {"command": "git diff"},
+            })
+        result = self._run_main({
+            "tool_name": "Bash",
+            "transcript_path": self._transcript(session_id),
+            "tool_input": {"command": "rm -rf build"},
+        })
+        ctx = result.get("hookSpecificOutput", {}).get("additionalContext", "")
+        self.assertIn("Orchestrator drift", ctx)
+
+
+# ──────────────────────────────────────────────────────────────────
+# post/swe_post_orchestrator_drift — bash_is_verification / is_task_work
+# ──────────────────────────────────────────────────────────────────
+
+class TestBashIsVerification(unittest.TestCase):
+    def test_git_status_is_verification(self):
+        self.assertTrue(drift_hook.bash_is_verification("git status"))
+
+    def test_git_diff_is_verification(self):
+        self.assertTrue(drift_hook.bash_is_verification("git diff HEAD~1"))
+
+    def test_git_commit_is_verification(self):
+        self.assertTrue(drift_hook.bash_is_verification('git commit -m "x"'))
+
+    def test_unittest_runner_is_verification(self):
+        self.assertTrue(drift_hook.bash_is_verification(
+            "python3 -m unittest discover -s tests -p 'test_*.py'"))
+
+    def test_pytest_is_verification(self):
+        self.assertTrue(drift_hook.bash_is_verification("pytest tests/"))
+
+    def test_npm_test_is_verification(self):
+        self.assertTrue(drift_hook.bash_is_verification("npm test"))
+
+    def test_py_compile_is_verification(self):
+        self.assertTrue(drift_hook.bash_is_verification("python3 -m py_compile foo.py"))
+
+    def test_jq_filter_is_verification(self):
+        self.assertTrue(drift_hook.bash_is_verification("jq . out.json"))
+
+    def test_validate_script_is_verification(self):
+        self.assertTrue(drift_hook.bash_is_verification(
+            "python3 scripts/validate-state-machine.py"))
+
+    def test_chained_verification_groups_all_verification(self):
+        self.assertTrue(drift_hook.bash_is_verification(
+            "git status && python3 -m unittest discover -s tests"))
+
+    def test_mutation_command_is_not_verification(self):
+        self.assertFalse(drift_hook.bash_is_verification("rm -rf build"))
+
+    def test_chained_with_one_mutation_is_not_verification(self):
+        self.assertFalse(drift_hook.bash_is_verification("git status && rm file.txt"))
+
+    def test_empty_command_is_not_verification(self):
+        self.assertFalse(drift_hook.bash_is_verification(""))
+
+    def test_git_push_is_not_verification(self):
+        self.assertFalse(drift_hook.bash_is_verification("git push origin main"))
+
+
+class TestIsTaskWork(unittest.TestCase):
+    def test_edit_is_task_work(self):
+        self.assertTrue(drift_hook.is_task_work("Edit", {}))
+
+    def test_verification_bash_is_not_task_work(self):
+        self.assertFalse(drift_hook.is_task_work("Bash", {"command": "git log"}))
+
+    def test_mutating_bash_is_task_work(self):
+        self.assertTrue(drift_hook.is_task_work("Bash", {"command": "echo x > f"}))
+
+    def test_serena_edit_tool_is_task_work(self):
+        self.assertTrue(drift_hook.is_task_work(
+            "mcp__plugin_swe_serena__replace_content", {}))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "version": "4.0.0",
-  "description": "Serena Workflow Engine v4 - read≠transition (reads never advance the FSM), no WF_START hop; init chain routes directly to WF_CLASSIFY",
+  "version": "4.1.0",
+  "description": "Serena Workflow Engine v4.1 - single declarative graph source. Reading a WF_* memory CAN advance the FSM: see readAdvance. A read only ever moves the FSM along a matrix edge, and only forward per `rank` (never backward/same-into-CLARIFY) — it never jumps to an arbitrary state. Explicit set_state/--force is still required for anything readAdvance would not do on its own.",
 
   "complexityThresholds": {
     "simple": { "files": [1, 2], "layers": 1, "expectedTransitions": 7 },
@@ -9,11 +9,27 @@
     "large": { "files": [6, 999], "layers": [3, 999], "expectedTransitions": 10 }
   },
 
+  "readAdvance": {
+    "enabled": true,
+    "description": "Reading a WF_* memory whose rank is higher than the current state's advances the FSM along a valid matrix edge; backward/same-rank reads and reads into WF_CLARIFY never transition."
+  },
+
+  "subflows": ["WF_INIT", "WF_CLEANUP", "WF_RESEARCH_LITE", "WF_UPDATE_MEMORY"],
+
+  "loopCaps": {
+    "description": "Bounds on repeated traversal of a cyclic edge within one session, keyed as 'A->B' for a directed edge or 'A<->B' for either direction counted together. transition_to() refuses (without --force) once the cap is hit; oscillation (A->B->A->B...) is allowed but returns a warning.",
+    "WF_EXECUTE<->WF_CHECKPOINT": 20,
+    "WF_ARCH_REVIEW->WF_ARCH_REVIEW": 3,
+    "WF_VERIFY->WF_EXECUTE": 3,
+    "WF_CLASSIFY->WF_CLARIFY": 3
+  },
+
   "states": {
     "WF_INITIAL_SETUP": {
       "id": "WF_INITIAL_SETUP",
       "category": "setup",
       "icon": "🔧",
+      "rank": 0,
       "description": "First-time plugin setup - install MCPs, configure environment",
       "planMode": "never",
       "allowEdit": false,
@@ -25,6 +41,7 @@
       "id": "WF_ONBOARD",
       "category": "setup",
       "icon": "📝",
+      "rank": 0,
       "description": "Feature onboarding wizard",
       "planMode": "never",
       "allowEdit": true,
@@ -36,6 +53,7 @@
       "id": "WF_CLASSIFY",
       "category": "entry",
       "icon": "🔍",
+      "rank": 1,
       "description": "Classify task, detect requirements, load features, validate & route",
       "planMode": "conditional",
       "allowEdit": false,
@@ -46,7 +64,8 @@
         "operational": "WF_EXECUTE",
         "research_needed": "WF_RESEARCH",
         "debug_needed": "WF_DEBUG_TDD",
-        "needs_clarification": "WF_CLARIFY"
+        "needs_clarification": "WF_CLARIFY",
+        "onboard": "WF_ONBOARD"
       }
     },
 
@@ -54,6 +73,7 @@
       "id": "WF_CONTINUE",
       "category": "entry",
       "icon": "▶️",
+      "rank": 1,
       "description": "Resume from existing WORKING_MEMORY",
       "planMode": "never",
       "allowEdit": false,
@@ -62,7 +82,8 @@
         "arch_review": "WF_ARCH_REVIEW",
         "execute": "WF_EXECUTE",
         "needs_clarification": "WF_CLARIFY",
-        "reclassify": "WF_CLASSIFY"
+        "reclassify": "WF_CLASSIFY",
+        "pivot": "WF_CLASSIFY"
       }
     },
 
@@ -70,13 +91,15 @@
       "id": "WF_RESEARCH",
       "category": "analysis",
       "icon": "🔬",
+      "rank": 2,
       "description": "Code exploration without changes",
       "planMode": "never",
       "allowEdit": false,
       "allowWrite": false,
       "transitions": {
         "needs_implementation": "WF_CLASSIFY",
-        "complete": "WF_DONE"
+        "complete": "WF_DONE",
+        "pivot": "WF_CLASSIFY"
       }
     },
 
@@ -84,6 +107,7 @@
       "id": "WF_ARCH_REVIEW",
       "category": "planning",
       "icon": "🔎",
+      "rank": 3,
       "description": "Design implementation, review architecture compliance, get approval",
       "planMode": "always",
       "allowEdit": false,
@@ -91,7 +115,8 @@
       "transitions": {
         "approved": "WF_EXECUTE",
         "needs_revision": "WF_ARCH_REVIEW",
-        "needs_clarification": "WF_CLARIFY"
+        "needs_clarification": "WF_CLARIFY",
+        "pivot": "WF_CLASSIFY"
       }
     },
 
@@ -99,6 +124,7 @@
       "id": "WF_CLARIFY",
       "category": "gates",
       "icon": "❓",
+      "rank": -1,
       "description": "Request clarification from user",
       "planMode": "never",
       "allowEdit": false,
@@ -110,13 +136,15 @@
       "id": "WF_EXECUTE",
       "category": "execution",
       "icon": "⚡",
+      "rank": 4,
       "description": "Execute implementation changes",
       "planMode": "never",
       "allowEdit": true,
       "allowWrite": true,
       "transitions": {
         "checkpoint_needed": "WF_CHECKPOINT",
-        "complete": "WF_VERIFY"
+        "complete": "WF_VERIFY",
+        "pivot": "WF_CLASSIFY"
       }
     },
 
@@ -124,13 +152,15 @@
       "id": "WF_CHECKPOINT",
       "category": "execution",
       "icon": "💾",
+      "rank": 4,
       "description": "Save progress checkpoint and update working memory",
       "planMode": "never",
       "allowEdit": true,
       "allowWrite": true,
       "transitions": {
         "continue": "WF_EXECUTE",
-        "complete": "WF_VERIFY"
+        "complete": "WF_VERIFY",
+        "pivot": "WF_CLASSIFY"
       }
     },
 
@@ -138,13 +168,15 @@
       "id": "WF_DEBUG_TDD",
       "category": "execution",
       "icon": "🐛",
+      "rank": 4,
       "description": "Test-driven debugging workflow",
       "planMode": "never",
       "allowEdit": true,
       "allowWrite": true,
       "transitions": {
         "fixed": "WF_EXECUTE",
-        "needs_help": "WF_CLARIFY"
+        "needs_help": "WF_CLARIFY",
+        "pivot": "WF_CLASSIFY"
       }
     },
 
@@ -152,6 +184,7 @@
       "id": "WF_VERIFY",
       "category": "completion",
       "icon": "✔️",
+      "rank": 5,
       "description": "Verify implementation against requirements",
       "planMode": "never",
       "allowEdit": true,
@@ -167,6 +200,7 @@
       "id": "WF_DONE",
       "category": "completion",
       "icon": "✅",
+      "rank": 6,
       "description": "Task complete - archive and summarize",
       "planMode": "never",
       "allowEdit": false,
@@ -177,17 +211,17 @@
   },
 
   "transitionMatrix": {
-    "SessionStart": ["WF_INITIAL_SETUP", "WF_CLASSIFY"],
+    "SessionStart": ["WF_INITIAL_SETUP", "WF_CLASSIFY", "WF_CONTINUE"],
     "WF_INITIAL_SETUP": ["WF_CLASSIFY", "WF_CLARIFY"],
-    "WF_CLASSIFY": ["WF_ARCH_REVIEW", "WF_EXECUTE", "WF_RESEARCH", "WF_DEBUG_TDD", "WF_CLARIFY"],
+    "WF_CLASSIFY": ["WF_ARCH_REVIEW", "WF_EXECUTE", "WF_RESEARCH", "WF_DEBUG_TDD", "WF_CLARIFY", "WF_ONBOARD"],
     "WF_CONTINUE": ["WF_ARCH_REVIEW", "WF_EXECUTE", "WF_CLARIFY", "WF_CLASSIFY"],
     "WF_RESEARCH": ["WF_CLASSIFY", "WF_DONE"],
-    "WF_ARCH_REVIEW": ["WF_EXECUTE", "WF_ARCH_REVIEW", "WF_CLARIFY"],
+    "WF_ARCH_REVIEW": ["WF_EXECUTE", "WF_ARCH_REVIEW", "WF_CLARIFY", "WF_CLASSIFY"],
     "WF_CLARIFY": ["(return_to_caller)"],
 
-    "WF_EXECUTE": ["WF_CHECKPOINT", "WF_VERIFY"],
-    "WF_CHECKPOINT": ["WF_EXECUTE", "WF_VERIFY"],
-    "WF_DEBUG_TDD": ["WF_EXECUTE", "WF_CLARIFY"],
+    "WF_EXECUTE": ["WF_CHECKPOINT", "WF_VERIFY", "WF_CLASSIFY"],
+    "WF_CHECKPOINT": ["WF_EXECUTE", "WF_VERIFY", "WF_CLASSIFY"],
+    "WF_DEBUG_TDD": ["WF_EXECUTE", "WF_CLARIFY", "WF_CLASSIFY"],
     "WF_VERIFY": ["WF_DONE", "WF_EXECUTE", "WF_CLASSIFY"],
     "WF_DONE": ["WF_CLASSIFY"],
     "WF_ONBOARD": ["WF_CLASSIFY"]

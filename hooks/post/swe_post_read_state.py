@@ -20,6 +20,7 @@ try:
     from swe_hooks.core.stream import (
         get_stream_path, append_event, get_sentinel_path,
         collect_values_since_task_start, normalize_memory_name,
+        get_last_continuation,
     )
     from datetime import datetime
     import re
@@ -174,6 +175,27 @@ def _get_continuation(current_state: str, session_id: str = None) -> str:
     }
     d = directives.get(current_state)
     return f"⏩ CONTINUE ({current_state}): {d}" if d else ""
+
+
+def _continuation_directive(current_state: str, session_id: str) -> str:
+    """Deduped continuation directive: only returns non-empty when the
+    directive's state differs from the last one actually emitted this
+    session. A read/list/search call for a state the agent has already been
+    shown a directive for gets no directive — it carries no new information.
+    Records a 'continuation' stream event on each NEW emission so later calls
+    can compare against it.
+    """
+    directive = _get_continuation(current_state, session_id)
+    if not directive or not session_id:
+        return directive
+    stream_path = get_stream_path(session_id)
+    if get_last_continuation(stream_path) == current_state:
+        return ""
+    try:
+        append_event(stream_path, 'continuation', s=session_id, state=current_state)
+    except Exception:
+        pass
+    return directive
 
 
 def _bootstrap_session_at_classify(cwd, session_id):
@@ -343,7 +365,7 @@ def main():
         if 'list_memories' in tool_name:
             state_mgr = StateManager(cwd, session_id=session_id)
             current = state_mgr.get_current_state()
-            directive = _get_continuation(current, session_id)
+            directive = _continuation_directive(current, session_id)
             if directive:
                 output = HookOutput(event_name="PostToolUse")
                 output.add_message("📋 Memories listed")
@@ -367,7 +389,7 @@ def main():
         if not bare_name or not bare_name.startswith('WF_'):
             state_mgr = StateManager(cwd, session_id=session_id)
             current = state_mgr.get_current_state()
-            directive = _get_continuation(current, session_id)
+            directive = _continuation_directive(current, session_id)
 
             if directive or pending_msg:
                 output = HookOutput(event_name="PostToolUse")
@@ -438,7 +460,7 @@ def main():
         if not labelled:
             output.add_message(label)
 
-        directive = _get_continuation(current, session_id)
+        directive = _continuation_directive(current, session_id)
         if directive:
             output.add_message("")
             output.add_message(directive)

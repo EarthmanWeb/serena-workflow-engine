@@ -24,7 +24,7 @@ from swe_hooks.core.config import (
     read_state_file, write_state_file,
     get_most_recent_working_memory, write_working_memory_state
 )
-from swe_hooks.core.state_manager import load_transition_matrix, is_valid_transition
+from swe_hooks.core.state_manager import load_transition_matrix, is_valid_transition, load_subflows
 
 
 def main():
@@ -33,6 +33,23 @@ def main():
     parser.add_argument('target_state', help='Target state (e.g., WF_EXECUTE)')
     parser.add_argument('--force', action='store_true', help='Skip transition validation')
     args = parser.parse_args()
+
+    # Subflows (WF_INIT, WF_CLEANUP, ...) are documented procedures, not FSM
+    # states — set_state must never target one, force or not, since there is
+    # no FSM node to land on. Checked first so this gets its own clear reason
+    # rather than falling through to "Unknown state".
+    subflows = load_subflows()
+    if args.target_state in subflows:
+        result = {
+            'success': False,
+            'error': (
+                f'{args.target_state} is a subflow, not an FSM state — it is a documented '
+                f'procedure entered by reading its memory, not by set_state.'
+            ),
+            'subflows': sorted(subflows),
+        }
+        print(json.dumps(result, indent=2))
+        sys.exit(1)
 
     # Validate target state exists in states.json
     matrix = load_transition_matrix()
@@ -69,8 +86,18 @@ def main():
             print(json.dumps(result, indent=2))
             sys.exit(1)
 
+    # clarify_entered_from: stamp the caller state on entry into WF_CLARIFY so
+    # a later exit (in this or another process — every hook rebuilds state
+    # from disk) can allow returning to it; clear it on exit from WF_CLARIFY.
+    clarify_entered_from = "__unset__"
+    if args.target_state == "WF_CLARIFY":
+        clarify_entered_from = current_state
+    elif current_state == "WF_CLARIFY":
+        clarify_entered_from = None
+
     # Write state file
-    if not write_state_file(args.session_id, args.target_state, prev_state=current_state):
+    if not write_state_file(args.session_id, args.target_state, prev_state=current_state,
+                             clarify_entered_from=clarify_entered_from):
         result = {'success': False, 'error': 'Failed to write state file'}
         print(json.dumps(result, indent=2))
         sys.exit(1)
@@ -91,6 +118,37 @@ def main():
         'wm_updated': wm_updated,
         'forced': args.force
     }
+
+    # Best-effort loop-guard advisory — set_state is itself the escape hatch
+    # for a capped/oscillating loop, so this never blocks here, only informs.
+    try:
+        from swe_hooks.core import loop_guard
+        from swe_hooks.core.state_manager import load_loop_caps
+        from swe_hooks.core.stream import get_stream_path
+        stream_path = get_stream_path(args.session_id)
+        events = []
+        if os.path.exists(stream_path):
+            with open(stream_path, 'r') as f:
+                for line in f:
+                    line = line.strip()
+                    if line:
+                        try:
+                            events.append(json.loads(line))
+                        except (json.JSONDecodeError, ValueError):
+                            pass
+        caps = load_loop_caps()
+        if events and caps:
+            ok, count, cap, message = loop_guard.check_loop_cap(events, current_state, args.target_state, caps)
+            if not ok:
+                result['loop_guard'] = message
+            osc = loop_guard.detect_oscillation(
+                events + [{"type": "state", "from_s": current_state, "to_s": args.target_state}]
+            )
+            if osc:
+                result['oscillation_warning'] = osc
+    except Exception:
+        pass
+
     print(json.dumps(result, indent=2))
 
 

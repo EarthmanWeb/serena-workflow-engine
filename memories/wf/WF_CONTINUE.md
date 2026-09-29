@@ -36,7 +36,7 @@ Read WM for: what was in progress, blockers noted, next step.
 
 ## Step 4: Determine Resume Point
 
-- Detect layers from WM `Layers:` field or infer from files being modified. Layers are defined in `FEATURE_[KEY]` and `ARCH_INDEX`.
+- Detect layers from WM `Layers:` field or infer from files being modified. Layers are defined in `feature/FEATURE_[KEY]` and `arch/ARCH_SWE`.
 - Route via the table below.
 
 ## Routing

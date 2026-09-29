@@ -20,7 +20,12 @@ try:
     from swe_hooks.core.config import (
         get_project_root, resolve_setup_state, migrate_legacy_setup_file,
     )
-    from swe_hooks.core.stream import get_sentinel_path, get_stream_path, append_event
+    from swe_hooks.core.stream import (
+        get_sentinel_path, get_stream_path, append_event,
+        is_degraded_tier1, is_degraded_tier2,
+        degraded_tool_allowed, recovery_tool_allowed,
+        DEGRADED_NOTICE, RECOVERY_NOTICE,
+    )
     from swe_hooks.core.input import read_stdin_safe
     _STREAM_AVAILABLE = True
 except ImportError:
@@ -392,6 +397,49 @@ def main():
                 print(json.dumps({}))
                 sys.exit(0)
 
+            # TWO-TIER CIRCUIT BREAKER: if the Serena MCP server is
+            # unreachable, read_memory("wf/WF_INIT") can never succeed, so the
+            # blanket deny below would deadlock the session with NO escape.
+            #
+            # Tier 2 "degraded" — a genuine Serena CONNECTION failure was
+            # recorded (mcp_unavailable, from swe_post_tool_failure.py).
+            # Unambiguous: unlock read-only tools broadly (Read/Grep/Glob/LS/
+            # ToolSearch + hardened read-only Bash).
+            #
+            # Tier 1 "recovery" — bare denial count reached threshold with NO
+            # mcp_unavailable recorded. Ambiguous: Serena may be fully up and
+            # the model is simply calling the wrong tools. Unlock ONLY
+            # recovery/diagnostic Bash (claude mcp list/get, ps/pgrep,
+            # restricted log reads) — never general Read/Grep/Glob of the
+            # codebase, which would let 3 denied Bash/Grep calls silently
+            # bypass the mandated init chain while Serena works fine.
+            #
+            # Both tiers clear on the next docread.
+            if session_id and _STREAM_AVAILABLE:
+                stream_path = get_stream_path(session_id)
+                command = str(tool_input.get('command', '')) if tool_name == 'Bash' else ''
+
+                if is_degraded_tier2(stream_path):
+                    if degraded_tool_allowed(tool_name, command):
+                        print(json.dumps({
+                            "systemMessage": DEGRADED_NOTICE,
+                            "hookSpecificOutput": {
+                                "hookEventName": "PreToolUse",
+                                "permissionDecision": "allow",
+                            },
+                        }))
+                        sys.exit(0)
+                elif is_degraded_tier1(stream_path):
+                    if recovery_tool_allowed(tool_name, command, project_root):
+                        print(json.dumps({
+                            "systemMessage": RECOVERY_NOTICE,
+                            "hookSpecificOutput": {
+                                "hookEventName": "PreToolUse",
+                                "permissionDecision": "allow",
+                            },
+                        }))
+                        sys.exit(0)
+
             # read_memory: only allow init-chain memories
             if tool_name in ('mcp__plugin_swe_serena__read_memory', 'mcp__serena__read_memory'):
                 memory_name = tool_input.get('memory_name', '')
@@ -399,6 +447,8 @@ def main():
                     print(json.dumps({}))
                     sys.exit(0)
                 else:
+                    if session_id and _STREAM_AVAILABLE:
+                        append_event(get_stream_path(session_id), 'init_deny', s=session_id)
                     output = {
                         "hookSpecificOutput": {
                             "hookEventName": "PreToolUse",
@@ -450,6 +500,8 @@ DO NOT read task-specific memories before initialization is complete."""
             # BLANKET DENY: Everything not explicitly allowed above is blocked pre-init
             # This catches Bash, Grep, Glob, Edit, Write (non-WM),
             # find_symbol, get_symbols_overview, and ANY other tool
+            if session_id and _STREAM_AVAILABLE:
+                append_event(get_stream_path(session_id), 'init_deny', s=session_id)
             output = {
                 "hookSpecificOutput": {
                     "hookEventName": "PreToolUse",
@@ -459,10 +511,9 @@ DO NOT read task-specific memories before initialization is complete."""
 This tool is NOT allowed before initialization.
 Only read_memory and list_memories (init-chain) are permitted.
 
-NOTE: The Serena MCP tools may be DEFERRED (schema not loaded). If so, calling
-read_memory fails with "No such tool available". Load the schema FIRST, then
-read — and ALWAYS use the fully-qualified name, never the bare read_memory:
-   ToolSearch(query="select:mcp__plugin_swe_serena__read_memory,mcp__plugin_swe_serena__list_memories")
+NOTE: If read_memory is deferred (schema not loaded), load its schema first
+(e.g. via ToolSearch when available), then call
+mcp__plugin_swe_serena__read_memory(...) — always the fully-qualified name.
 
 MANDATORY ACTION — Complete the full init chain:
    1. mcp__plugin_swe_serena__read_memory(memory_name="wf/WF_INIT")
@@ -528,10 +579,9 @@ You must complete the WF_INIT workflow before using other tools.
 - "But it's just a simple edit" → NO. Initialize first.
 DO NOT RATIONALIZE. DO NOT NEGOTIATE. INITIALIZE.
 
-NOTE: The Serena MCP tools may be DEFERRED (schema not loaded). If so, calling
-read_memory fails with "No such tool available". Load the schema FIRST, then
-read — and ALWAYS use the fully-qualified name, never the bare read_memory:
-   ToolSearch(query="select:mcp__plugin_swe_serena__read_memory,mcp__plugin_swe_serena__list_memories")
+NOTE: If read_memory is deferred (schema not loaded), load its schema first
+(e.g. via ToolSearch when available), then call
+mcp__plugin_swe_serena__read_memory(...) — always the fully-qualified name.
 
 MANDATORY ACTION — Complete the full init chain:
    1. mcp__plugin_swe_serena__read_memory(memory_name="wf/WF_INIT")

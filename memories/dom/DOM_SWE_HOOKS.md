@@ -59,7 +59,7 @@ hooks/
 
 | Hook | Event | Purpose |
 | ---- | ----- | ------- |
-| `swe_pre_tool_init_gate.py` | PreToolUse | Block ALL tools until WF_INIT chain complete |
+| `swe_pre_tool_init_gate.py` | PreToolUse | Block ALL tools until WF_INIT chain complete. TWO-TIER circuit breaker, both clearing on the next docread. Tier 1 "recovery" (3+ consecutive init denies with no docread, no `mcp_unavailable`): Serena may still be reachable — unlocks ONLY recovery/diagnostic Bash (`claude mcp list`/`get`, `ps`/`pgrep`, restricted log reads under `~/Library/Caches/claude-cli-nodejs/`, `~/.cache/claude-cli-nodejs/`, `~/.serena/logs/`, project `.serena/`, plus `--reset-sentinel`) — never Read/Grep/Glob of the codebase. Tier 2 "degraded" (an `mcp_unavailable` event from `PostToolUseFailure` on a genuine Serena connection failure): unlocks Read/Grep/Glob/LS/ToolSearch + hardened read-only Bash. Edits/Write/NotebookEdit/mutating Bash stay denied in both tiers. Hardened Bash classifier rejects backtick/`$()`/`<()`/`>()`/redirection-other-than-`2>/dev/null`-or-`2>&1`/`tee`/`xargs`/`-exec`/`-execdir`/`-delete`/`sed -i`/`perl -i` outright; requires every `;`/`&&`/`\|\|`/`&`/pipe-separated stage's primary command in the allowlist; `python3 -m unittest`/`pytest` excluded (they execute code); git limited to `status`/`log`/`diff`/`show`/`branch`/`rev-parse` without `-c`/`--output`/`-o`. Events: `init_deny`, `degraded`, `mcp_unavailable` |
 | `swe_pre_edit_validate.py` | PreToolUse (Edit/Write/Serena) | Block edits in planning states (WF_VERIFY is edit-allowed); in execution states DENY until the per-task sweep sentinel exists (WF_CLASSIFY 4d/4e verified); test-artifact edits additionally require dev/DEV_TESTS + feature/FEATURE_TESTS docreads when those memories exist |
 | `swe_pre_memory_index_gate.py` | PreToolUse (Edit/Write/write_memory/edit_memory) | HARD-DENY spec/report/research/project links entering MEMORY.md (state-independent; the post-hook only advises) |
 | `swe_pre_bash_test_gate.py` | PreToolUse (Bash) | Validate test commands against WF_DEBUG_TDD |
@@ -71,7 +71,7 @@ hooks/
 
 | Hook | Event | Purpose |
 | ---- | ----- | ------- |
-| `swe_post_read_state.py` | PostToolUse (read_memory/list_memories/search_memories_by_name/search_memories_by_front_matter) | Pure read/display: log "ON STEP" + continuation for CURRENT state — NO transition. Appends a `docread` event WITH the memory name (resets the wide-search streak, refills the docs-first gate budget, feeds sweep verification). Memory searches get credit ONLY when they surface no unread names; new names → `docsearch` event + instruction to read them first. Reads surface their own `mem:`/`[[…]]` links: unread linked docs → `docpending` event + read-these instruction (wf/claude/spec/report/research/project/templates excluded) |
+| `swe_post_read_state.py` | PostToolUse (read_memory/list_memories/search_memories_by_name/search_memories_by_front_matter) | Log "ON STEP" for the resulting state. Under `readAdvance`, reading a `WF_*` memory whose `rank` is higher than the current state's `rank` ADVANCES the FSM along a valid `transitionMatrix` edge (backward/same-rank reads and reads into `WF_CLARIFY`, or of a `subflow`, do NOT transition). Appends a `docread` event WITH the memory name (resets the wide-search streak, refills the docs-first gate budget, feeds sweep verification). Memory searches get credit ONLY when they surface no unread names; new names → `docsearch` event + instruction to read them first. Reads surface their own `mem:`/`[[…]]` links: unread linked docs → `docpending` event + read-these instruction (wf/claude/spec/report/research/project/templates excluded) |
 | `swe_post_edit_checkpoint.py` | PostToolUse (Edit/Write/Serena) | Edit counting, checkpoint at 10 edits (`CHECKPOINT_THRESHOLD`) |
 | `swe_post_search_docs_hint.py` | PostToolUse (Grep/Glob/search_for_pattern) | Counts CONSECUTIVE wide searches; at 3 in a row (`SEARCH_HINT_THRESHOLD`) reminds to check memories/docs first. `docread`/`state`/`checkpoint` events reset the streak |
 | `swe_post_write_continue.py` | PostToolUse (write_memory) | Post-write continuation |
@@ -79,9 +79,9 @@ hooks/
 | `swe_post_memory_index.py` | PostToolUse (write_memory) | Enforce MEMORY.md index update |
 | `swe_post_memory_style.py` | PostToolUse (write_memory/edit_memory) | Enforce terse-imperative memory style (REF_MEMORY_STYLE) |
 | `swe_post_tool_failure.py` | PostToolUseFailure | Flailing detection, failure logging |
-| `swe_post_orchestrator_drift.py` | PostToolUse (Edit/Write/NotebookEdit/Bash/Serena edit tools/Agent/Task/Workflow) | Orchestrator-drift nudge: counts consecutive main-agent task-work calls since the last Agent/Workflow delegation (`task_work` events, reset by a `delegation` event this same hook appends on Agent/Task/Workflow calls). At `DRIFT_THRESHOLD` (6) emits "split remaining work into parallel subagents (see FEATURE_SUBAGENTS)". Advisory only — never blocks. Exempt for spawned-agent tool calls (subagents are expected to do direct work, not delegate further) |
+| `swe_post_orchestrator_drift.py` | PostToolUse (Edit/Write/NotebookEdit/Bash/Serena edit tools/Agent/Task/Workflow) | Orchestrator-drift nudge: counts consecutive main-agent task-work calls since the last Agent/Workflow delegation (`task_work` events, reset by a `delegation` event this same hook appends on Agent/Task/Workflow calls). At `DRIFT_THRESHOLD` (6) emits "split remaining work into parallel subagents (see FEATURE_SUBAGENTS)". Advisory only — never blocks. Exempt for spawned-agent tool calls (subagents are expected to do direct work, not delegate further), and exempt for verification Bash (`git diff`/`status`/`log`/`show`/`add`/`commit`, test runners, `py_compile`, `jq`, validate scripts) and `Read` — these are checking work, not doing it, and should not count toward drift |
 
-> **Reads do NOT transition.** Reading a `WF_*` memory NEVER advances the FSM. `swe_post_read_state.py` only logs "ON STEP" and emits a continuation for the CURRENT state. Transition ONLY via explicit `set_state` — the dedicated tool or the prompt-intent hook (`swe_user_prompt_workflow.py`).
+> **Read-advance, not read-and-stay.** `readAdvance` is enabled in `state-machine/states.json`: reading a `WF_*` memory ranked higher than the current state advances the FSM along a valid edge — `swe_post_read_state.py` performs this transition and then logs "ON STEP" for the new state. Backward/same-rank reads, reads into `WF_CLARIFY`, and reads of a `subflow` (`WF_INIT`, `WF_CLEANUP`, `WF_RESEARCH_LITE`, `WF_UPDATE_MEMORY`) never transition. Explicit `set_state` (the dedicated tool or the prompt-intent hook, `swe_user_prompt_workflow.py`) remains the only way to make a pivot, backward, or subflow move. See `mem:dom/DOM_SWE_STATE_MACHINE` "Transition Model (readAdvance)".
 
 ## Sentinel Pattern (stream-counted nudges)
 
@@ -118,7 +118,7 @@ Sentinels are non-blocking PostToolUse nudges driven by the append-only JSONL st
 | Hook | Event | Purpose |
 | ---- | ----- | ------- |
 | `swe_stop_continue_working.py` | Stop | Block unnecessary stops, continue-working |
-| `swe_stop_response_format.py` | Stop | Terse-format gate: block replies over the word budget or emitting recap/summary/self-congratulation scaffolding. ON by default; config from `CLAUDE_PLUGIN_OPTION_RESPONSE_FORMAT_*` env (`core.config.get_response_format_config`). Silent when SWE bypassed / project uninitialized / disabled. Writes a per-session `.format-gate-block-<session>` sentinel (read by `swe_prompt_format_reminder.py`) + a `response-format-offenders.log`, both under `.serena/streams/` |
+| `swe_stop_response_format.py` | Stop | Terse-format gate: block replies over the word budget or emitting recap/summary/self-congratulation scaffolding. ON by default; config from `CLAUDE_PLUGIN_OPTION_RESPONSE_FORMAT_*` env (`core.config.get_response_format_config`). Silent when SWE bypassed / project uninitialized / disabled. NEVER blocks when `stop_hook_active` is set (at most 1 forced rewrite per turn — no infinite rewrite loop) and NEVER blocks a reply ending with a question. Excludes code blocks, tables, and path lists from the word count. Writes a per-session `.format-gate-block-<session>` sentinel (read by `swe_prompt_format_reminder.py`) + a `response-format-offenders.log`, both under `.serena/streams/` |
 
 ## Prompt Intent Routing (`swe_user_prompt_workflow.py`)
 
@@ -126,7 +126,7 @@ Sentinels are non-blocking PostToolUse nudges driven by the append-only JSONL st
 
 | Intent | Detection | Action |
 | ------ | --------- | ------ |
-| continuation | "yes", "okay, do X", "any other issues?", "let me know if", status checks | Stay in current state; brief reminder |
+| continuation | "yes", "okay, do X", "any other issues?", "let me know if", status checks | Stay in current state; brief reminder. The CONTINUE directive is emitted ONLY on an actual state change (`continuation` event) — a same-state continuation prompt gets the brief reminder without re-emitting CONTINUE |
 | addition | "also", "remove/change/update the", "while you're at it" | Stay in state; incorporate addition |
 | new_task | UNAMBIGUOUS openers only: "new task", "switch to", "let's work on", "help me build", "i need you to" (`NEW_TASK_PATTERNS`). Bare imperative verb at start ("fix", "add", "create" — `BARE_VERB_TASK_PATTERNS`) is new_task ONLY when NO task is in flight (state ∈ WF_CLASSIFY/WF_INIT/UNINITIALIZED/WF_DONE/None) | Transition to WF_CLASSIFY (the one verified-pivot path) |
 | possible_pivot | Bare imperative verb at start WHILE in an active task state | Stay in current state; inject `pivot_analysis_note` — model judges pivot vs. feedback from full context, self-runs `/swe-goto WF_CLASSIFY` only on a genuine pivot |
@@ -250,7 +250,7 @@ state_mgr.get_current_state()      # "WF_CLASSIFY" — read from WM
 state_mgr.transition_to("WF_EXECUTE")  # updates WM file
 state_mgr.get_working_memory()     # WM filename
 state_mgr.increment_edits()        # in-memory only (session-local)
-state_mgr.should_checkpoint()      # True if >= 3 edits
+state_mgr.should_checkpoint()      # True if >= 10 edits (CHECKPOINT_THRESHOLD)
 ```
 
 State storage in WM:
@@ -319,6 +319,17 @@ Verify loading:
 jq '.hooks | keys' .claude/plugins/serena-workflow-engine/hooks/hooks.json
 # Expected: ["PostToolUse","PostToolUseFailure","PreToolUse","SessionEnd","SessionStart","Stop","UserPromptSubmit"]
 ```
+
+## Other Behavior Notes
+
+- Background task notifications receive NO workflow injection (no step-report, no CONTINUE directive, no gate prompts) — they are informational only.
+- ToolSearch instructions in hook output are CONDITIONAL — surfaced only when a deferred-tool call is actually pending, not on every turn.
+
+## New Modules & Scripts
+
+- `hooks/swe_hooks/core/loop_guard.py` — implements `loopCaps` enforcement (refuse-with-escape-message on cap exceeded, warn on A→B→A→B oscillation) for `readAdvance` transitions. See `mem:dom/DOM_SWE_STATE_MACHINE`.
+- `scripts/validate-graph.py` — validates `state-machine/states.json` (transitions, `transitionMatrix` edges, `rank` ordering, `loopCaps`, `subflows`).
+- `scripts/validate-memory-graph.py` — validates the memory link graph (dangling/orphan refs, per-file word counts, CAPS hard-stop counts). See `mem:feature/FEATURE_SWE` for usage.
 
 ## Diagnostic Checklist
 

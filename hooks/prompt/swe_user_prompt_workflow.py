@@ -242,6 +242,26 @@ COMMAND_MARKER_RE = re.compile(r'<command-name>\s*(/?[^<\s]+)', re.IGNORECASE)
 SLASH_COMMAND_RE = re.compile(r'^/[a-zA-Z0-9][\w:-]*')
 
 
+# A background-task/agent-completion notification, not genuine user input.
+# These land in the transcript as a "user" turn (the harness's delivery
+# mechanism) but carry no task intent to classify — routing them through
+# WF_CLASSIFY / "INTENT UNCLEAR" produces pure noise on every subagent or
+# background-Bash completion. Matches:
+#   - the <task-notification> wrapper tag
+#   - a prompt starting with "[SYSTEM NOTIFICATION"
+#   - `Agent "<name>" finished` (the Agent-tool completion phrasing)
+BACKGROUND_NOTIFICATION_RE = re.compile(
+    r'<task-notification>|^\s*\[SYSTEM NOTIFICATION|Agent\s+"[^"]*"\s+finished',
+    re.IGNORECASE,
+)
+
+
+def is_background_notification(prompt: str) -> bool:
+    """True when `prompt` is a background task/agent-completion notification
+    rather than genuine user input requiring classification."""
+    return bool(BACKGROUND_NOTIFICATION_RE.search(prompt or ''))
+
+
 def detect_slash_command(prompt: str):
     """Return the invoked command token (e.g. '/gherkin-dev') for a direct
     slash-command prompt, else None.
@@ -377,6 +397,24 @@ def main():
         transcript_path = input_data.get('transcript_path', '')
         session_id = extract_session_id(transcript_path)
 
+        # Background task / agent-completion notification: not genuine user
+        # intent, so no classification, no transition, no boundary stamp.
+        # Emit nothing (or a minimal no-op context) rather than routing it
+        # through the unknown-intent / WF_CLASSIFY noise path.
+        #
+        # Gated on an EXISTING state file/WM for this session: on the
+        # session's genuine FIRST prompt there is no prior init to route
+        # around, so a first prompt that happens to quote/paste text
+        # matching this pattern (e.g. a bug report containing
+        # "[SYSTEM NOTIFICATION]" or an "Agent \"x\" finished" transcript
+        # snippet) must NOT be swallowed before WM/session setup ever runs —
+        # it needs the normal WF_INIT/WF_CLASSIFY path like any other first
+        # message. Only a session that has ALREADY initialized can have a
+        # genuine background-notification turn land mid-session.
+        if session_id and read_state_file(session_id) and is_background_notification(prompt):
+            print(json.dumps({}))
+            sys.exit(0)
+
         # Turn marker for per-turn gates (e.g. the docs-first search gate
         # counts 'docread' events since the last 'prompt' marker).
         if session_id:
@@ -486,16 +524,13 @@ NO classification, NO WF_INIT chain, NO WF_CLASSIFY. Fast-tracked to WF_EXECUTE.
 <blocking-instruction priority="CRITICAL">
 STOP. Your next action MUST be a tool call. Not text. A tool call.
 
-The Serena MCP tools may be DEFERRED in this session (listed by name, schema
-NOT loaded). Calling read_memory before its schema is loaded fails with
-"No such tool available". So load the schema FIRST, then read WF_INIT:
+If the tool is deferred, load its schema first (e.g. via ToolSearch when
+available), then call mcp__plugin_swe_serena__read_memory(...):
 
-  1. ToolSearch(query="select:mcp__plugin_swe_serena__read_memory,mcp__plugin_swe_serena__list_memories")
-  2. mcp__plugin_swe_serena__read_memory(memory_name="wf/WF_INIT")
+  mcp__plugin_swe_serena__read_memory(memory_name="wf/WF_INIT")
 
 ALWAYS use the fully-qualified name mcp__plugin_swe_serena__read_memory — NEVER
-the bare read_memory. (If the tool is already loaded, ToolSearch is a harmless
-no-op — still safe to call first.)
+the bare read_memory.
 
 - Do NOT output any text before these tool calls
 - Do NOT explain what you're doing

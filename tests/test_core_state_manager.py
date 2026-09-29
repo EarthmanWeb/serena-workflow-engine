@@ -196,7 +196,11 @@ class ForwardRankConstantTest(unittest.TestCase):
 
     def test_rank_ordering_is_monotonic_forward(self):
         rank = mod._FORWARD_RANK
-        self.assertEqual(rank["WF_INIT"], 0)
+        # WF_INIT is a subflow (documented procedure, not a states.json node)
+        # and carries no "rank" field there — ranks come ONLY from states.json
+        # now (no hardcoded fallback table), so subflows are simply absent
+        # from this dict, not silently defaulted to 0.
+        self.assertNotIn("WF_INIT", rank)
         self.assertEqual(rank["WF_CLASSIFY"], 1)
         self.assertEqual(rank["WF_RESEARCH"], 2)
         self.assertEqual(rank["WF_ARCH_REVIEW"], 3)

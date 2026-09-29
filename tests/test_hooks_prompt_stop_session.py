@@ -165,6 +165,131 @@ class TestPromptPatternConstants(unittest.TestCase):
                 self.assertIsInstance(pat, str)
 
 
+class TestIsBackgroundNotification(unittest.TestCase):
+    mod = import_hook("prompt/swe_user_prompt_workflow")
+
+    def test_task_notification_tag_detected(self):
+        self.assertTrue(self.mod.is_background_notification(
+            "<task-notification>Agent finished</task-notification>"))
+
+    def test_system_notification_prefix_detected(self):
+        self.assertTrue(self.mod.is_background_notification(
+            "[SYSTEM NOTIFICATION] background job complete"))
+
+    def test_agent_finished_phrase_detected(self):
+        self.assertTrue(self.mod.is_background_notification(
+            'Agent "code-reviewer" finished: no issues found.'))
+
+    def test_leading_whitespace_system_notification_detected(self):
+        self.assertTrue(self.mod.is_background_notification(
+            "   [SYSTEM NOTIFICATION] retry limit reached"))
+
+    def test_genuine_user_prompt_not_detected(self):
+        self.assertFalse(self.mod.is_background_notification("fix the login bug"))
+
+    def test_empty_prompt_not_detected(self):
+        self.assertFalse(self.mod.is_background_notification(""))
+        self.assertFalse(self.mod.is_background_notification(None))
+
+    def test_mention_of_agent_without_finished_not_detected(self):
+        self.assertFalse(self.mod.is_background_notification(
+            'Ask the "reviewer" agent to look at this'))
+
+
+class TestMainBackgroundNotificationShortCircuit(unittest.TestCase):
+    """main() must emit no classification/transition noise for a background
+    task/agent-completion notification — but ONLY when this session already
+    has a state file / WM. A genuine FIRST prompt that happens to quote such
+    text (no state file exists yet) must NOT be swallowed before WM/session
+    setup ever runs — verified end-to-end via stdin."""
+    mod = import_hook("prompt/swe_user_prompt_workflow")
+
+    def setUp(self):
+        from _hookutil import reset_caches
+        self._reset_caches = reset_caches
+        self._reset_caches()
+        self.tmp = tempfile.TemporaryDirectory()
+        self.cwd = self.tmp.name
+        os.makedirs(os.path.join(self.cwd, '.git'), exist_ok=True)
+        os.makedirs(os.path.join(self.cwd, '.serena'), exist_ok=True)
+        with open(os.path.join(self.cwd, '.serena', 'swe-setup-complete.json'), 'w') as f:
+            json.dump({'complete': True}, f)
+        self._orig_env = os.environ.get('CLAUDE_PROJECT_DIR')
+        os.environ['CLAUDE_PROJECT_DIR'] = self.cwd
+
+    def tearDown(self):
+        if self._orig_env is None:
+            os.environ.pop('CLAUDE_PROJECT_DIR', None)
+        else:
+            os.environ['CLAUDE_PROJECT_DIR'] = self._orig_env
+        self.tmp.cleanup()
+        self._reset_caches()
+
+    def _run_main(self, prompt, session_id=None):
+        import io
+        from unittest import mock
+        transcript = (f'/x/{session_id}-0000-0000-0000-000000000000.jsonl'
+                      if session_id else '')
+        payload = {"prompt": prompt, "cwd": self.cwd, "transcript_path": transcript}
+        buf = io.StringIO()
+        with mock.patch.object(sys, "stdin", io.StringIO(json.dumps(payload))), \
+             mock.patch.object(os, 'getcwd', return_value=self.cwd), \
+             mock.patch("sys.stdout", buf):
+            try:
+                self.mod.main()
+            except SystemExit:
+                pass
+        return buf.getvalue()
+
+    def _write_state_file(self, session_id, state='WF_EXECUTE'):
+        d = os.path.join(self.cwd, '.serena', 'swe-state')
+        os.makedirs(d, exist_ok=True)
+        with open(os.path.join(d, f'{session_id}.state'), 'w') as f:
+            json.dump({'current_state': state, 'session_id': session_id}, f)
+
+    def test_existing_session_background_notification_emits_empty_context(self):
+        session_id = 'deadbeef'
+        self._write_state_file(session_id)
+        out = self._run_main('Agent "researcher" finished: done.', session_id)
+        result = json.loads(out)
+        self.assertEqual(result, {})
+
+    def test_existing_session_task_notification_tag_emits_empty_context(self):
+        session_id = 'feedface'
+        self._write_state_file(session_id)
+        out = self._run_main(
+            "<task-notification>build passed</task-notification>", session_id)
+        result = json.loads(out)
+        self.assertEqual(result, {})
+
+    def test_first_prompt_matching_notification_pattern_is_not_swallowed(self):
+        # No state file yet for this session — this IS the session's first
+        # prompt. Even though its text matches the background-notification
+        # pattern, it must be routed through normal WF_INIT handling, not
+        # silently swallowed as {}.
+        session_id = 'ab000001'
+        out = self._run_main('Agent "researcher" finished: done.', session_id)
+        result = json.loads(out)
+        self.assertNotEqual(result, {})
+        self.assertIn('hookSpecificOutput', result)
+
+    def test_first_prompt_task_notification_tag_is_not_swallowed(self):
+        session_id = 'ab000002'
+        out = self._run_main(
+            "<task-notification>build passed</task-notification>", session_id)
+        result = json.loads(out)
+        self.assertNotEqual(result, {})
+        self.assertIn('hookSpecificOutput', result)
+
+    def test_no_session_id_at_all_still_not_swallowed(self):
+        # No transcript_path -> no session_id -> read_state_file() is never
+        # even reachable the way an existing-session check would need it;
+        # the short-circuit must not fire without a resolvable session.
+        out = self._run_main('Agent "researcher" finished: done.')
+        result = json.loads(out)
+        self.assertNotEqual(result, {})
+
+
 class TestPromptLowerRegression(unittest.TestCase):
     """Regression guard: main() must define prompt_lower before use.
 

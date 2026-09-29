@@ -69,6 +69,12 @@ def _self_update_git(plugin_root):
         )
         if result.stdout.strip():
             return False, None, None  # Dirty tree — developer working locally
+        branch = subprocess.run(
+            ['git', 'rev-parse', '--abbrev-ref', 'HEAD'],
+            cwd=plugin_root, capture_output=True, text=True, timeout=5
+        ).stdout.strip()
+        if branch != 'main':
+            return False, None, None  # Feature/prototype branch — never pull main into it
     except (subprocess.TimeoutExpired, FileNotFoundError):
         return False, None, None
 
@@ -679,14 +685,11 @@ Current State: WF_INIT
 
 ═══════════════════════════════════════════════════════════════════════════════
 STEP 1: Read WF_INIT workflow instructions
-   The Serena MCP tools may be DEFERRED in this session (listed by name, schema
-   NOT loaded). Calling read_memory before its schema is loaded fails with
-   "No such tool available". So your FIRST action loads the schema, THEN reads:
-   → ToolSearch(query="select:mcp__plugin_swe_serena__read_memory,mcp__plugin_swe_serena__list_memories")
+   If the tool is deferred, load its schema first (e.g. via ToolSearch when
+   available), then call mcp__plugin_swe_serena__read_memory(...):
    → mcp__plugin_swe_serena__read_memory(memory_name="wf/WF_INIT")
    ALWAYS use the fully-qualified name mcp__plugin_swe_serena__read_memory —
-   NEVER the bare read_memory (that is the unresolved-name error above).
-   (If the tool is already loaded, ToolSearch is a harmless no-op — still safe.)
+   NEVER the bare read_memory.
 
 STEP 2: Follow WF_INIT to classify and execute user's task
 ═══════════════════════════════════════════════════════════════════════════════

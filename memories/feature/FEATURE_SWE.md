@@ -78,6 +78,7 @@ WF_INIT → WF_CLASSIFY → WF_ARCH_REVIEW → WF_EXECUTE
 | `output.py`           | Hook output formatting                     |
 | `stream.py`           | Append-only JSONL event log for sessions   |
 | `wm_validator.py`     | Working Memory validation                  |
+| `loop_guard.py`       | `loopCaps` enforcement for `readAdvance` transitions (refuse on cap exceeded, warn on oscillation) |
 
 ## MCP Server: swe-wm (`hooks/swe_hooks/mcp/`)
 
@@ -116,7 +117,7 @@ WF_INIT → WF_CLASSIFY → WF_ARCH_REVIEW → WF_EXECUTE
 
 | Hook                            | Trigger                        | Purpose                            |
 | ------------------------------- | ------------------------------ | ---------------------------------- |
-| `swe_pre_tool_init_gate.py`     | PreToolUse                     | Block ALL tools until WF_INIT read |
+| `swe_pre_tool_init_gate.py`     | PreToolUse                     | Block ALL tools until WF_INIT read. TWO-TIER breaker, both clearing on next docread: Tier 1 "recovery" (3+ init denies, no `mcp_unavailable`) unlocks ONLY recovery/diagnostic Bash (`claude mcp list/get`, `ps`/`pgrep`, restricted log paths, `--reset-sentinel`) — not codebase Read/Grep/Glob. Tier 2 "degraded" (`mcp_unavailable` from a real Serena connection failure) unlocks Read/Grep/Glob/LS/ToolSearch + hardened read-only Bash; edits still deny. See `mem:dom/DOM_SWE_HOOKS` |
 | `swe_pre_edit_validate.py`      | PreToolUse (Edit/Write/Serena) | Validate edit permissions          |
 | `swe_pre_memory_index_gate.py`  | PreToolUse (Edit/Write/write_memory/edit_memory) | HARD-DENY spec/report/research/project links entering MEMORY.md |
 | `swe_pre_bash_test_gate.py`     | PreToolUse (Bash)              | Feature gate: FEATURE_TESTS        |
@@ -141,7 +142,7 @@ WF_INIT → WF_CLASSIFY → WF_ARCH_REVIEW → WF_EXECUTE
 | Hook                              | Trigger | Purpose                                   |
 | --------------------------------- | ------- | ----------------------------------------- |
 | `swe_stop_continue_working.py`    | Stop    | Block unnecessary stops, continue-working |
-| `swe_stop_response_format.py`     | Stop    | Terse-format gate: block over-budget / recap-scaffolded replies. ON by default; config via `CLAUDE_PLUGIN_OPTION_RESPONSE_FORMAT_*` (plugin.json `userConfig` block); silent when SWE bypassed / uninitialized / disabled. Sentinel + offender log under `.serena/streams/` |
+| `swe_stop_response_format.py`     | Stop    | Terse-format gate: block over-budget / recap-scaffolded replies. ON by default; config via `CLAUDE_PLUGIN_OPTION_RESPONSE_FORMAT_*` (plugin.json `userConfig` block); silent when SWE bypassed / uninitialized / disabled. NEVER blocks when `stop_hook_active` (max 1 forced rewrite/turn) and NEVER blocks a reply ending in a question; excludes code blocks/tables/path lists from the word count. Sentinel + offender log under `.serena/streams/` |
 
 ## Skills (14 total)
 
@@ -262,17 +263,6 @@ Docpending window (narrower than the task window): a SUCCESSFUL sweep stamps a `
 | Never       | WF_DEBUG_TDD, WF_CHECKPOINT, WF_VERIFY, WF_DONE, WF_RESEARCH, WF_EXECUTE |
 | Conditional | WF_CLASSIFY (complexity >= medium)                                       |
 
-## RLVR Learning
-
-| Signal Type         | States         | Impact                    |
-| ------------------- | -------------- | ------------------------- |
-| trajectory_init     | WF_CLASSIFY    | baseline                  |
-| routing_decision    | WF_CLASSIFY    | neutral                   |
-| clarify_visit       | WF_CLARIFY     | penalty (-0.1)            |
-| arch_review         | WF_ARCH_REVIEW | bonus (+0.1)              |
-| verify_check        | WF_VERIFY      | bonus if first try (+0.1) |
-| learning_checkpoint | WF_DONE        | mandatory                 |
-
 ## Scripts
 
 | Script                | Purpose                                    |
@@ -284,6 +274,8 @@ Docpending window (narrower than the task window): a SUCCESSFUL sweep stamps a `
 | `start-serena.sh`     | Start Serena LSP server                    |
 | `start-wm-mcp.sh`     | Start WM MCP server                        |
 | `serena_memory_patch.py` | Serena memory path patching             |
+| `validate-graph.py`   | Validate `state-machine/states.json` (transitions, `transitionMatrix`, `rank`, `loopCaps`, `subflows`) |
+| `validate-memory-graph.py` | Validate the `memories/` link graph (dangling/orphan refs, word counts, CAPS hard-stop counts); `python3 scripts/validate-memory-graph.py [--root memories] [--json]`, exits 1 on dangling errors |
 
 ## Memory Paths (multi-source, `.serena/memory-paths.conf`)
 
@@ -454,3 +446,4 @@ Path: `.serena/memories/` — session Working Memory:
 - `ARCH_SWE` — SWE architecture documentation
 - `REF_SWE_DEVELOPMENT` — Development standards
 - `DOM_SWE_HOOKS` — Hook architecture
+- `ref/REF_DEV_STANDARDS_ONBOARD` — parallel-agent procedure for discovering an EXISTING codebase's dev standards (as opposed to `swe-scaffold-project`, which templates `FEATURE_DEV_STANDARDS` for a new empty project)

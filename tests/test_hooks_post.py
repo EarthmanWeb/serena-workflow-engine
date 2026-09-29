@@ -19,6 +19,7 @@ Modules under test:
 Stdlib unittest only. Deterministic + offline: no network, no real Serena, no
 real git. IO uses tempfile.TemporaryDirectory; get_project_root is monkeypatched.
 """
+import json
 import os
 import sys
 import tempfile
@@ -189,6 +190,86 @@ class TestGetContinuation(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
+# swe_post_read_state._continuation_directive — dedup wrapper
+# ---------------------------------------------------------------------------
+class TestContinuationDirective(unittest.TestCase):
+    def setUp(self):
+        reset_caches()
+        self.tmp = tempfile.TemporaryDirectory()
+        os.makedirs(os.path.join(self.tmp.name, ".git"), exist_ok=True)
+        self._orig_env = os.environ.get("CLAUDE_PROJECT_DIR")
+        os.environ["CLAUDE_PROJECT_DIR"] = self.tmp.name
+
+    def tearDown(self):
+        if self._orig_env is None:
+            os.environ.pop("CLAUDE_PROJECT_DIR", None)
+        else:
+            os.environ["CLAUDE_PROJECT_DIR"] = self._orig_env
+        self.tmp.cleanup()
+        reset_caches()
+
+    def test_first_emission_for_a_state_returns_directive(self):
+        directive = read_state_mod._continuation_directive("WF_EXECUTE", "sess0001")
+        self.assertIn("WF_EXECUTE", directive)
+
+    def test_repeated_call_same_state_returns_empty(self):
+        sid = "sess0002"
+        first = read_state_mod._continuation_directive("WF_EXECUTE", sid)
+        second = read_state_mod._continuation_directive("WF_EXECUTE", sid)
+        self.assertTrue(first)
+        self.assertEqual(second, "")
+
+    def test_state_change_re_emits(self):
+        sid = "sess0003"
+        read_state_mod._continuation_directive("WF_EXECUTE", sid)
+        directive = read_state_mod._continuation_directive("WF_VERIFY", sid)
+        self.assertIn("WF_VERIFY", directive)
+
+    def test_no_session_id_always_returns_directive_uncached(self):
+        # No session id -> no stream to dedupe against; falls back to the raw
+        # (non-deduped) directive every time.
+        d1 = read_state_mod._continuation_directive("WF_EXECUTE", None)
+        d2 = read_state_mod._continuation_directive("WF_EXECUTE", None)
+        self.assertTrue(d1)
+        self.assertTrue(d2)
+
+    def test_unknown_state_returns_empty_and_records_nothing(self):
+        sid = "sess0004"
+        self.assertEqual(read_state_mod._continuation_directive("WF_NOPE", sid), "")
+
+
+# ---------------------------------------------------------------------------
+# swe_hooks.core.stream.get_last_continuation
+# ---------------------------------------------------------------------------
+class TestGetLastContinuation(unittest.TestCase):
+    def setUp(self):
+        reset_caches()
+        self.tmp = tempfile.TemporaryDirectory()
+        import importlib
+        self.stream = importlib.import_module("swe_hooks.core.stream")
+
+    def tearDown(self):
+        self.tmp.cleanup()
+        reset_caches()
+
+    def test_missing_stream_returns_empty(self):
+        path = os.path.join(self.tmp.name, "nope.jsonl")
+        self.assertEqual(self.stream.get_last_continuation(path), "")
+
+    def test_returns_latest_continuation_state(self):
+        path = os.path.join(self.tmp.name, "s.jsonl")
+        self.stream.append_event(path, "continuation", state="WF_EXECUTE")
+        self.stream.append_event(path, "tool", name="Read")
+        self.stream.append_event(path, "continuation", state="WF_VERIFY")
+        self.assertEqual(self.stream.get_last_continuation(path), "WF_VERIFY")
+
+    def test_no_continuation_event_returns_empty(self):
+        path = os.path.join(self.tmp.name, "s2.jsonl")
+        self.stream.append_event(path, "tool", name="Read")
+        self.assertEqual(self.stream.get_last_continuation(path), "")
+
+
+# ---------------------------------------------------------------------------
 # swe_post_read_state — memory-name extraction/link parsing (alias-aware)
 # ---------------------------------------------------------------------------
 class TestMemoryNameRegexAliasAware(unittest.TestCase):
@@ -311,6 +392,116 @@ class TestUnresolvedSerenaCorrection(unittest.TestCase):
         self.assertNotIn(
             "mcp__plugin_swe_serena__read_memory", failure_mod._BARE_SERENA_NAMES
         )
+
+
+# ---------------------------------------------------------------------------
+# swe_post_tool_failure.is_mcp_unavailable_error — degraded-mode trigger
+# ---------------------------------------------------------------------------
+class TestIsMcpUnavailableError(unittest.TestCase):
+    def test_fully_qualified_serena_tool_connection_closed(self):
+        self.assertTrue(failure_mod.is_mcp_unavailable_error(
+            "mcp__plugin_swe_serena__read_memory", "Connection closed"))
+
+    def test_bare_serena_name_server_disconnected(self):
+        self.assertTrue(failure_mod.is_mcp_unavailable_error(
+            "read_memory", "MCP server disconnected unexpectedly"))
+
+    def test_econnrefused_detected(self):
+        self.assertTrue(failure_mod.is_mcp_unavailable_error(
+            "mcp__plugin_swe_serena__write_memory", "connect ECONNREFUSED 127.0.0.1:1234"))
+
+    def test_case_insensitive(self):
+        self.assertTrue(failure_mod.is_mcp_unavailable_error(
+            "mcp__plugin_swe_serena__list_memories", "FAILED TO CONNECT to MCP Server"))
+
+    def test_unresolved_name_error_is_not_connection_error(self):
+        # "No such tool available" is a deferred-schema issue, not a
+        # connection failure — must NOT trigger degraded mode.
+        self.assertFalse(failure_mod.is_mcp_unavailable_error(
+            "read_memory", "No such tool available: read_memory"))
+
+    def test_schema_validation_error_is_not_connection_error(self):
+        self.assertFalse(failure_mod.is_mcp_unavailable_error(
+            "mcp__plugin_swe_serena__replace_content", "field required: needle"))
+
+    def test_non_serena_tool_is_never_mcp_unavailable(self):
+        self.assertFalse(failure_mod.is_mcp_unavailable_error(
+            "Bash", "connection closed"))
+
+    def test_empty_inputs_false(self):
+        self.assertFalse(failure_mod.is_mcp_unavailable_error("", ""))
+        self.assertFalse(failure_mod.is_mcp_unavailable_error(None, None))
+
+
+class TestMainAppendsMcpUnavailableAndDegraded(unittest.TestCase):
+    """main() must append 'mcp_unavailable' (and, on the FIRST occurrence,
+    'degraded') to the stream when a Serena MCP connection failure is
+    reported — the init gate's circuit breaker reads these events."""
+
+    def setUp(self):
+        reset_caches()
+        self.tmp = tempfile.TemporaryDirectory()
+        os.makedirs(os.path.join(self.tmp.name, ".git"), exist_ok=True)
+        self._orig_env = os.environ.get("CLAUDE_PROJECT_DIR")
+        os.environ["CLAUDE_PROJECT_DIR"] = self.tmp.name
+        import importlib
+        self.stream = importlib.import_module("swe_hooks.core.stream")
+
+    def tearDown(self):
+        if self._orig_env is None:
+            os.environ.pop("CLAUDE_PROJECT_DIR", None)
+        else:
+            os.environ["CLAUDE_PROJECT_DIR"] = self._orig_env
+        self.tmp.cleanup()
+        reset_caches()
+
+    def _run_main(self, tool_name, tool_error, session_id="abcd1234"):
+        import io
+        from unittest import mock
+        transcript = f"/x/{session_id}-0000-0000-0000-000000000000.jsonl"
+        payload = {
+            "tool_name": tool_name,
+            "tool_error": tool_error,
+            "transcript_path": transcript,
+            "tool_input": {},
+        }
+        buf = io.StringIO()
+        with mock.patch.object(sys, "stdin", io.StringIO(json.dumps(payload))), \
+             mock.patch("select.select", return_value=([sys.stdin], [], [])), \
+             mock.patch("sys.stdout", buf):
+            try:
+                failure_mod.main()
+            except SystemExit:
+                pass
+        return buf.getvalue()
+
+    def test_connection_failure_appends_both_events_first_time(self):
+        self._run_main("mcp__plugin_swe_serena__read_memory", "Connection closed")
+        stream_path = self.stream.get_stream_path("abcd1234")
+        with open(stream_path) as f:
+            types = [json.loads(line)["type"] for line in f if line.strip()]
+        self.assertIn("mcp_unavailable", types)
+        self.assertIn("degraded", types)
+
+    def test_second_connection_failure_does_not_re_append_degraded(self):
+        self._run_main("mcp__plugin_swe_serena__read_memory", "Connection closed",
+                        session_id="eeff5678")
+        self._run_main("mcp__plugin_swe_serena__read_memory", "Connection closed",
+                        session_id="eeff5678")
+        stream_path = self.stream.get_stream_path("eeff5678")
+        with open(stream_path) as f:
+            types = [json.loads(line)["type"] for line in f if line.strip()]
+        self.assertEqual(types.count("degraded"), 1)
+        self.assertEqual(types.count("mcp_unavailable"), 2)
+
+    def test_non_connection_failure_does_not_append_degraded(self):
+        self._run_main("read_memory", "No such tool available: read_memory",
+                        session_id="facade02")
+        stream_path = self.stream.get_stream_path("facade02")
+        with open(stream_path) as f:
+            types = [json.loads(line)["type"] for line in f if line.strip()]
+        self.assertNotIn("degraded", types)
+        self.assertNotIn("mcp_unavailable", types)
 
 
 # ---------------------------------------------------------------------------

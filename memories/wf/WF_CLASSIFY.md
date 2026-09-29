@@ -12,9 +12,9 @@ metadata:
 ## Entry & Non-Skippable
 
 - WF_CLASSIFY is the FIRST workflow state after init (`WF_INIT` → `CLAUDE_OBLIGATIONS` → `WF_CLASSIFY`).
-- The hook creates the WM file and init sentinel automatically on transition into WF_CLASSIFY. Do NOT create them.
-- ALL tasks pass through WF_CLASSIFY. NEVER skip it — it loads feature memories, detects requirements, and routes.
-- A feature key in WM is NOT a loaded `FEATURE_[KEY]` memory. Features load HERE (Step 4).
+- The hook creates the WM file and init sentinel automatically on transition into WF_CLASSIFY. Do not create them.
+- Every task passes through WF_CLASSIFY. NEVER skip it — the sweep sentinel it creates gates every edit downstream, so skipping it blocks WF_EXECUTE later.
+- A feature key in WM is not a loaded `FEATURE_[KEY]` memory. Features load in Step 4 below.
 
 Valid paths to WF_EXECUTE:
 
@@ -24,32 +24,32 @@ Valid paths to WF_EXECUTE:
 
 ## ⛔ NO Task Work in This State
 
-WF_CLASSIFY is classification and routing ONLY. The edit gate (`swe_pre_edit_validate.py`) HARD-BLOCKS every Edit/Write/Serena-edit call here. Task work now is wasted — you redo it after transition.
+WF_CLASSIFY is classification and routing only. The edit gate (`swe_pre_edit_validate.py`) HARD-BLOCKS every Edit/Write/Serena-edit call here. Task work now is wasted — you redo it after transition.
 
 Allowed (classification inputs only):
 
 - `read_memory` for `INDEX_FEATURES`, the primary `FEATURE_[KEY]`, and every memory in the Feature Knowledge Sweep (Step 4d)
 - `search_memories_by_name` / `search_memories_by_front_matter` to identify features and enumerate related memories (Steps 4b/4d)
 - Read the user request and existing WM context
-- Lightweight `list_memories` / `Glob` STRICTLY to detect specs (Step 2d) or the targeted feature
+- Lightweight `list_memories` / `Glob` strictly to detect specs (Step 2d) or the targeted feature
 
 Memory reads are classification work, not task work. Source-file reads are task work.
 
-NEVER here — defer ALL to WF_EXECUTE or WF_ARCH_REVIEW:
+Defer to WF_EXECUTE or WF_ARCH_REVIEW instead:
 
-- Do NOT read the target source/doc file you intend to change
-- Do NOT run `find_symbol` / `get_symbols_overview` / `search_for_pattern` to scope the edit
-- Do NOT plan the exact change, draft the diff, or decide `needle`/`repl` values
-- Do NOT call `Edit`, `Write`, `replace_content`, `replace_symbol_body`, or any edit tool — HARD-BLOCKED here
+- Reading the target source/doc file you intend to change
+- Running `find_symbol` / `get_symbols_overview` / `search_for_pattern` to scope the edit
+- Planning the exact change, drafting the diff, or deciding `needle`/`repl` values
+- Calling `Edit`, `Write`, `replace_content`, `replace_symbol_body`, or any edit tool — HARD-BLOCKED here
 
-> Reading the file you are about to edit is task work, not classification. You do NOT need file contents to classify task type or count files touched — the user request and the loaded feature memories suffice. If you catch yourself opening the target file or reaching for an edit tool: STOP, finish routing, transition first.
+> Reading the file you are about to edit is task work, not classification. You do not need file contents to classify task type or count files touched — the user request and the loaded feature memories suffice. If you catch yourself opening the target file or reaching for an edit tool: stop, finish routing, transition first.
 
 ## Steps
 
 ### 1. Clarity Check
 
 - Cannot classify AT ALL (hard blocker, e.g. cannot tell which of two features is targeted) → `WF_CLARIFY`
-- Otherwise → continue. NEVER resolve approach/design ambiguity or approach conflicts here — defer to the single question gate at `WF_ARCH_REVIEW`.
+- Otherwise → continue. Do not resolve approach/design ambiguity or approach conflicts here — defer to the single question gate at `WF_ARCH_REVIEW`.
 
 ### 2. Detect Requirements
 
@@ -123,7 +123,7 @@ MAY SKIP `WF_ARCH_REVIEW` → route directly to `WF_EXECUTE` ONLY if ALL hold:
 When skipping arch review:
 
 - Note `arch_review_skipped: true` and the reason in WM
-- You MUST still load the relevant DEV_*/DOM_* standards for the touched files (the load WF_ARCH_REVIEW would have done) at the START of WF_EXECUTE, scoped to touched files
+- Still load the relevant DEV_*/DOM_* standards for the touched files (the load WF_ARCH_REVIEW would have done) at the start of WF_EXECUTE, scoped to touched files
 - If in WF_EXECUTE the change turns out larger than classified (>5 files or adds a module), STOP and route back to `WF_ARCH_REVIEW`
 
 When in doubt, do NOT skip → route to `WF_ARCH_REVIEW`. Skip is for genuinely small, well-understood changes only.
@@ -143,7 +143,7 @@ Scan request for feature indicators: explicit names, file paths spanning feature
 Then the MANDATORY fuzzy fallback — absence from `INDEX_FEATURES` is NOT absence of a feature memory (the registry can lag):
 
 - No registry row matches, or the match is uncertain → run BOTH `search_memories_by_name("<key terms>")` AND `search_memories_by_front_matter("<key terms>")` on the request's key nouns.
-- NEVER conclude "no feature memory exists" without both searches returning nothing.
+- Do not conclude "no feature memory exists" without both searches returning nothing.
 - A hit outside the registry (e.g. `feature/FEATURE_X` not yet registered) IS the primary feature — use it and note the registry gap in WM.
 
 ### 4c. Load the Primary FEATURE_[KEY]
@@ -153,7 +153,7 @@ Then the MANDATORY fuzzy fallback — absence from `INDEX_FEATURES` is NOT absen
 
 ### 4d. Feature Knowledge Sweep (MANDATORY — every route)
 
-Load the feature's knowledge set BEFORE transitioning — work must NEVER start on the primary FEATURE memory alone. This applies to EVERY route: operational, research, audit, and code-change tasks alike.
+Load the feature's knowledge set before transitioning — work must not start on the primary FEATURE memory alone. This applies to every route: operational, research, audit, and code-change tasks alike. Skipping this is not just a style miss: the sweep sentinel that unlocks edits in WF_EXECUTE is verified against this load (Step 4e), so an incomplete sweep here blocks work later.
 
 Enumerate related memories from THREE sources:
 
@@ -163,7 +163,7 @@ Enumerate related memories from THREE sources:
 
 Then load, TIERED by relevance — read the task-relevant set, defer the rest to on-miss expansion:
 
-1. ALWAYS read: the primary `FEATURE_*`, every secondary `FEATURE_*` the request touches, and each enumerated `REF_*`/`DOM_*`/`SYS_*`/`ARCH_*` whose title/hook is **directly relevant to what this task changes or inspects**. Judge relevance from the request's domain terms + the files/behavior in scope.
+1. Read: the primary `FEATURE_*`, every secondary `FEATURE_*` the request touches, and each enumerated `REF_*`/`DOM_*`/`SYS_*`/`ARCH_*` whose title/hook is **directly relevant to what this task changes or inspects**. Judge relevance from the request's domain terms + the files/behavior in scope.
 2. DEFER (do NOT read up front): enumerated refs that are cold to this task — tangential subsystems, sibling-feature detail the request never touches. Every link this task surfaces must end up either read (in `**Memories loaded**:`) or deferred (in `**Memories deferred**:`) — see the list rules at Step 4e for how. One exception: a link surfaced by your **Primary** feature is on-topic by construction, so read it rather than deferring.
 3. ON-MISS EXPANSION: the moment a deferred ref turns out to matter (a rule you need, a pattern the edit must follow, a `docpending` link the work surfaces), read it THEN, before the dependent edit. Reaching for a deferred ref mid-task is expected, not a failure.
 
@@ -171,7 +171,7 @@ Rationale: reading the entire `[[link]]` closure up front is the dominant per-ta
 
 Exclusions — do NOT read during the sweep:
 
-- `spec/`, `report/`, `research/`, `project/` — NEVER loaded as general context. Load a spec ONLY when the task explicitly asks to review, author, or implement THAT spec — then load exactly the named spec, nothing else from the topic.
+- `spec/`, `report/`, `research/`, `project/` — not loaded as general context. Load a spec only when the task explicitly asks to review, author, or implement that spec — then load exactly the named spec, nothing else from the topic.
 - `dev/` standards — edit-time compliance, loaded at `WF_ARCH_REVIEW` / start of `WF_EXECUTE`, scoped to the files actually touched.
 - `wf/`, `claude/`, `WM_*` — workflow machinery, not feature knowledge.
 
@@ -179,7 +179,7 @@ The sweep is memory reads ONLY — still no source-file reads, no symbol lookups
 
 ### 4e. Update WM with Features + Loaded Memories (ENFORCED)
 
-ONE `swe_wm_update` call, `session_id` passed EXPLICITLY (it is printed in every hook message: `WM[<id>]` / `session="<id>"` — NEVER omit it; there is no env fallback in practice):
+ONE `swe_wm_update` call, `session_id` passed explicitly (it is printed in every hook message: `WM[<id>]` / `session="<id>"`). NEVER omit it — there is no env fallback, and an omitted/wrong session_id writes the sweep to the wrong session's stream, silently failing verification for both sessions:
 
 ```
 mcp__plugin_swe_swe-wm__swe_wm_update(

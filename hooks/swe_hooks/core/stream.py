@@ -7,6 +7,7 @@ Events: {t: epoch, type: "tool|state|edit|checkpoint|interrupted", ...}
 """
 import os
 import json
+import re
 import time
 from typing import Optional
 
@@ -273,3 +274,378 @@ def count_task_work_since_delegation(stream_path: str) -> int:
         marker_types=('state', 'checkpoint', 'delegation'),
         count_type='task_work',
     )
+
+
+# ---------------------------------------------------------------------------
+# Init-gate degraded mode (circuit breaker for an unreachable Serena MCP)
+# ---------------------------------------------------------------------------
+# When the Serena MCP server is down, read_memory is unavailable, so the
+# init-gate's mandatory read_memory("wf/WF_INIT") chain can never run — every
+# other tool stays blanket-denied with no in-session escape (a hard deadlock).
+# These pure, testable helpers implement a TWO-TIER circuit breaker:
+#
+#   Tier 1 "recovery" — DEGRADED_DENY_THRESHOLD (3) or more bare 'init_deny'
+#   events since the last docread, with NO 'mcp_unavailable' recorded. This is
+#   ambiguous: Serena may be fully reachable and the model is simply calling
+#   the wrong tools (e.g. Bash/Grep) instead of read_memory. It unlocks ONLY
+#   recovery/diagnostic commands — NOT general Read/Grep/Glob of the
+#   codebase — because a working Serena means the correct fix is to read
+#   wf/WF_INIT, not to grant broader tool access.
+#
+#   Tier 2 "degraded" — an 'mcp_unavailable' event since the last docread,
+#   recorded by swe_post_tool_failure.py from a genuine Serena
+#   connection-level failure. This is unambiguous: Serena is actually down,
+#   so read-only tools (Read/Grep/Glob/LS/ToolSearch) and read-only Bash
+#   unlock for real diagnosis and workaround.
+#
+# Both tiers clear the moment a 'docread' event appears.
+DEGRADED_DENY_THRESHOLD = 3
+
+
+def count_init_denies_since_docread(stream_path: str) -> int:
+    """Count consecutive 'init_deny' events since the last 'docread'.
+
+    A successful read_memory/list_memories call appends 'docread' elsewhere
+    in the stream and therefore resets this streak — the circuit breaker only
+    trips when the agent has made repeated init-gate attempts with NO
+    intervening successful doc read, i.e. it genuinely cannot reach Serena.
+    """
+    return count_events_since_last(
+        stream_path,
+        marker_types=('docread',),
+        count_type='init_deny',
+    )
+
+
+def has_mcp_unavailable_since_docread(stream_path: str) -> bool:
+    """True when an 'mcp_unavailable' event (real Serena connection failure,
+    from swe_post_tool_failure.py) has been recorded since the last docread."""
+    if not os.path.exists(stream_path):
+        return False
+    return count_events_since_last(stream_path, marker_types=('docread',),
+                                    count_type='mcp_unavailable') > 0
+
+
+def is_degraded_tier2(stream_path: str) -> bool:
+    """True when the session should be in Tier-2 'degraded' mode: a genuine
+    Serena MCP connection failure was recorded (directly, or via the sticky
+    'degraded' event stamped alongside the first 'mcp_unavailable'), since the
+    last docread. Unlocks read-only tools broadly."""
+    if not os.path.exists(stream_path):
+        return False
+    if has_mcp_unavailable_since_docread(stream_path):
+        return True
+    return count_events_since_last(stream_path, marker_types=('docread',),
+                                    count_type='degraded') > 0
+
+
+def is_degraded_tier1(stream_path: str) -> bool:
+    """True when the session should be in Tier-1 'recovery' mode: bare
+    denial count has reached DEGRADED_DENY_THRESHOLD since the last docread,
+    WITH NO 'mcp_unavailable' recorded (Serena may still be fully reachable —
+    unlocks recovery/diagnostic commands only, never general codebase
+    Read/Grep/Glob)."""
+    if not os.path.exists(stream_path):
+        return False
+    if has_mcp_unavailable_since_docread(stream_path):
+        return False
+    return count_init_denies_since_docread(stream_path) >= DEGRADED_DENY_THRESHOLD
+
+
+def is_degraded(stream_path: str) -> bool:
+    """True when the session is in EITHER degraded tier (1 or 2).
+
+    Kept for backward compatibility with callers that only need to know
+    "is some form of degraded mode active" — see is_degraded_tier1/tier2 for
+    the tier-specific checks the init gate actually branches on.
+    """
+    return is_degraded_tier1(stream_path) or is_degraded_tier2(stream_path)
+
+
+# ---------------------------------------------------------------------------
+# Hardened read-only Bash classifier (shared by both tiers)
+# ---------------------------------------------------------------------------
+# Reject outright on any of these constructs, regardless of the primary
+# command matched below — they enable output redirection, command
+# substitution, or side-channel mutation that a primary-command allowlist
+# alone cannot see (e.g. `cat f > /etc/hosts`, `` cat `id` ``,
+# `grep x y | tee /etc/passwd`, `find . -exec rm {} \;`).
+_BASH_DANGEROUS_TOKEN_RE = re.compile(
+    r'`'                       # backtick command substitution
+    r'|\$\('                  # $( ... ) command substitution
+    r'|<\('                   # <( ... ) process substitution
+    r'|>\('                   # >( ... ) process substitution
+    r'|(?<!2)>>?(?!/dev/null|&1\b)'  # > or >> other than "2>/dev/null" / "2>&1"
+    r'|\btee\b'
+    r'|\bxargs\b'
+    r'|-exec\b'
+    r'|-execdir\b'
+    r'|-delete\b'
+    r'|\bsed\s+-i\b'
+    r'|\bperl\s+-i\b'
+)
+
+
+def _bash_has_dangerous_construct(command: str) -> bool:
+    """True when `command` contains a redirection/substitution/mutation
+    construct that must reject the WHOLE command outright, independent of
+    which primary commands appear. `2>/dev/null` and `2>&1` are the only
+    permitted redirections (stderr suppression/merge for diagnostics)."""
+    if not command:
+        return False
+    # Scrub the two allowed redirections first so the generic `>` check
+    # below does not fire on them.
+    scrubbed = command.replace('2>/dev/null', '').replace('2>&1', '')
+    return bool(_BASH_DANGEROUS_TOKEN_RE.search(scrubbed))
+
+
+def _split_bash_stages(command: str):
+    """Split a Bash command into ;/&&/||/&/newline-separated GROUPS, then
+    each group into |-separated STAGES, stripping simple leading env-var
+    assignments from each stage. Returns a flat list of primary-command
+    strings (one per stage across all groups)."""
+    import re as _re
+    groups = _re.split(r'(?:;|&&|\|\||&|\n)+', command)
+    stages = []
+    for group in groups:
+        group = group.strip()
+        if not group:
+            continue
+        for stage in _re.split(r'\|(?!\|)', group):
+            stage = stage.strip()
+            stage = _re.sub(
+                r'^(?:[A-Za-z_][A-Za-z0-9_]*=(?:"[^"]*"|\'[^\']*\'|\S*)\s+)*',
+                '', stage)
+            if stage:
+                stages.append(stage)
+    return stages
+
+
+# Paths under which recovery-mode log inspection (Tier 1) is permitted.
+RECOVERY_LOG_PATH_PREFIXES = (
+    '~/Library/Caches/claude-cli-nodejs/',
+    '~/.cache/claude-cli-nodejs/',
+    '~/.serena/logs/',
+)
+
+
+def _recovery_log_paths_ok(stage: str, project_root: str = '') -> bool:
+    """True when every path-looking argument in `stage` (a cat/tail/head/ls/
+    grep invocation) falls under one of RECOVERY_LOG_PATH_PREFIXES or the
+    project's own .serena/ directory. Used only by Tier-1 recovery — this is
+    intentionally narrower than the general read-only Bash classifier."""
+    import os as _os
+    import re as _re
+    tokens = stage.split()[1:]  # drop the command name itself
+    path_like = [t for t in tokens
+                 if not t.startswith('-') and t not in ('2>/dev/null', '2>&1')]
+    if not path_like:
+        return False  # no path argument at all — nothing to validate as a log
+    allowed_prefixes = list(RECOVERY_LOG_PATH_PREFIXES)
+    if project_root:
+        serena_dir = _os.path.join(project_root.rstrip('/'), '.serena')
+        allowed_prefixes.append(serena_dir if serena_dir.endswith('/') else serena_dir + '/')
+        allowed_prefixes.append('.serena/')
+    for tok in path_like:
+        # grep pattern arguments aren't paths — best-effort: only check tokens
+        # that look like a path (contain '/' or start with ~ or .).
+        if not (tok.startswith('~') or tok.startswith('/') or tok.startswith('.')):
+            continue
+        expanded = _os.path.expanduser(tok) if tok.startswith('~') else tok
+        matched = False
+        for prefix in allowed_prefixes:
+            expanded_prefix = _os.path.expanduser(prefix)
+            if expanded.startswith(expanded_prefix) or tok.startswith(prefix):
+                matched = True
+                break
+        if not matched:
+            return False
+    return True
+
+
+# Bash commands whose PRIMARY stage is read-only/diagnostic — allowed in
+# Tier-2 degraded mode so the agent can inspect state and reconnect without
+# being able to mutate anything. NOTE: unittest/pytest are deliberately
+# EXCLUDED — they execute code, not merely inspect it.
+DEGRADED_BASH_PRIMARY_RE = re.compile(
+    r'^(?:'
+    r'(?:cat|head|tail|less|more|grep|rg|find|ls|tree|pwd|wc|diff|file)\b'
+    r'|ps\b|pgrep\b'
+    r'|git\s+(?:status|log|diff|show|branch|rev-parse)\b'
+    r')',
+    re.IGNORECASE,
+)
+
+# `find` with any of these flags is a mutation/execution vector, not
+# inspection — rejected even though `find` itself is in the allowlist above.
+_FIND_DANGEROUS_FLAG_RE = re.compile(
+    r'-exec\b|-execdir\b|-delete\b', re.IGNORECASE,
+)
+
+# git subcommands allowed in degraded/recovery Bash, and the flags that
+# disqualify them (arbitrary config/output-file writes).
+_GIT_READONLY_SUBCOMMAND_RE = re.compile(
+    r'^git\s+(status|log|diff|show|branch|rev-parse)\b', re.IGNORECASE,
+)
+_GIT_DISQUALIFYING_FLAG_RE = re.compile(
+    r'(?:^|\s)(-c\b|--output(?:=|\s)|-o\b)', re.IGNORECASE,
+)
+
+
+def _git_stage_is_readonly(stage: str) -> bool:
+    """True when `stage` is an allowed read-only git subcommand with none of
+    the disqualifying flags (-c, --output, -o)."""
+    if not _GIT_READONLY_SUBCOMMAND_RE.match(stage):
+        return False
+    return not _GIT_DISQUALIFYING_FLAG_RE.search(stage)
+
+
+def degraded_bash_is_readonly(command: str) -> bool:
+    """True when EVERY stage of a Bash command is a read-only/diagnostic
+    command, safe to allow in Tier-2 degraded mode.
+
+    Hardened classifier: rejects outright on any dangerous construct
+    (backtick/$()/<()/>()/redirection-other-than-2>/dev/null-or-2>&1/tee/
+    xargs/-exec/-execdir/-delete/sed -i/perl -i), then requires EVERY
+    ;/&&/||/&/newline/pipe-separated stage's primary command to be in the
+    read-only allowlist. `python3 -m unittest` / `pytest` are NOT read-only
+    (they execute code). git is allowed only for
+    status/log/diff/show/branch/rev-parse without -c/--output/-o.
+    """
+    if not command or not command.strip():
+        return False
+    if _bash_has_dangerous_construct(command):
+        return False
+    stages = _split_bash_stages(command)
+    if not stages:
+        return False
+    for stage in stages:
+        if stage.lower().startswith('git '):
+            if not _git_stage_is_readonly(stage):
+                return False
+            continue
+        if stage.lower().startswith('find '):
+            if _FIND_DANGEROUS_FLAG_RE.search(stage):
+                return False
+        if not DEGRADED_BASH_PRIMARY_RE.match(stage):
+            return False
+    return True
+
+
+# Recovery-mode (Tier 1) diagnostic commands: `claude mcp` subcommands, ps/
+# pgrep, and log inspection restricted to the documented cache/log paths.
+_RECOVERY_CLAUDE_MCP_RE = re.compile(
+    r'^claude\s+mcp\s+(list|get\b)', re.IGNORECASE,
+)
+_RECOVERY_PS_RE = re.compile(r'^(?:ps|pgrep)\b', re.IGNORECASE)
+_RECOVERY_LOG_CMD_RE = re.compile(
+    r'^(?:cat|tail|head|ls|grep)\b', re.IGNORECASE,
+)
+
+
+def recovery_bash_is_allowed(command: str, project_root: str = '') -> bool:
+    """True when EVERY stage of `command` is a Tier-1 "recovery" diagnostic:
+    `claude mcp list`/`claude mcp get ...`, `ps`/`pgrep`, or a
+    cat/tail/head/ls/grep whose path arguments are all under
+    RECOVERY_LOG_PATH_PREFIXES or the project's own .serena/ directory.
+
+    Deliberately NOT the same as degraded_bash_is_readonly — Tier 1 fires
+    while Serena may still be fully reachable, so it must not unlock general
+    codebase inspection (grep/find/cat of source files), only the narrow set
+    of commands needed to diagnose/reconnect Serena itself.
+    """
+    if not command or not command.strip():
+        return False
+    if _bash_has_dangerous_construct(command):
+        return False
+    stages = _split_bash_stages(command)
+    if not stages:
+        return False
+    for stage in stages:
+        if _RECOVERY_CLAUDE_MCP_RE.match(stage):
+            continue
+        if _RECOVERY_PS_RE.match(stage):
+            continue
+        if _RECOVERY_LOG_CMD_RE.match(stage):
+            if _recovery_log_paths_ok(stage, project_root):
+                continue
+            return False
+        return False
+    return True
+
+
+# Tool names always allowed in Tier-2 degraded mode (read-only harness tools).
+DEGRADED_ALLOWED_TOOLS = frozenset(['Read', 'Grep', 'Glob', 'LS', 'ToolSearch'])
+
+
+def is_manual_reset_cli(command: str) -> bool:
+    """True when a Bash command invokes the manual init-gate reset CLI
+    (swe_pre_tool_init_gate.py --reset-sentinel) — always allowed in either
+    tier as the documented escape hatch alongside read-only diagnosis."""
+    if not command:
+        return False
+    return 'swe_pre_tool_init_gate.py' in command and '--reset-sentinel' in command
+
+
+def degraded_tool_allowed(tool_name: str, command: str = '') -> bool:
+    """True when `tool_name` (with Bash's `command`) is permitted in Tier-2
+    degraded mode: read-only inspection tools, hardened read-only Bash, and
+    the manual reset CLI. Edit/Write/NotebookEdit and any other mutating Bash
+    stay denied — degraded mode unlocks diagnosis, not task work."""
+    if tool_name in DEGRADED_ALLOWED_TOOLS:
+        return True
+    if tool_name == 'Bash':
+        return degraded_bash_is_readonly(command) or is_manual_reset_cli(command)
+    return False
+
+
+def recovery_tool_allowed(tool_name: str, command: str = '', project_root: str = '') -> bool:
+    """True when `tool_name` (with Bash's `command`) is permitted in Tier-1
+    recovery mode: ONLY recovery/diagnostic Bash (claude mcp list/get,
+    ps/pgrep, restricted log reads) and the manual reset CLI. NOT general
+    Read/Grep/Glob of the codebase — Tier 1 fires on ambiguous evidence
+    (Serena may be fully reachable), so it must not unlock broad tool
+    access, only the narrow path back to reading wf/WF_INIT."""
+    if tool_name != 'Bash':
+        return False
+    return (recovery_bash_is_allowed(command, project_root)
+            or is_manual_reset_cli(command))
+
+
+DEGRADED_NOTICE = (
+    "SWE degraded mode: Serena memory tools unreachable (mcp_unavailable). "
+    "Read-only tools unlocked for diagnosis; reconnect Serena (/mcp) then "
+    "read wf/WF_INIT."
+)
+
+RECOVERY_NOTICE = (
+    "SWE recovery mode: 3+ denied tool calls with no successful doc read, "
+    "but no confirmed Serena connection failure. Serena memory tools appear "
+    "unreachable, so only recovery diagnostics are unlocked (claude mcp "
+    "list/get, ps/pgrep, restricted log reads) — NOT general Read/Grep/Glob "
+    "of the codebase. Ask the user to reconnect Serena via /mcp. If Serena "
+    "is actually reachable, do not rely on this mode — instead read "
+    "wf/WF_INIT via mcp__plugin_swe_serena__read_memory."
+)
+
+
+def get_last_continuation(stream_path: str) -> str:
+    """Return the `state` value of the most recent 'continuation' event, or
+    '' if none exists yet. Used to suppress a repeated "CONTINUE (STATE): …"
+    emission on every read/list/search when the state has not changed since
+    it was last shown."""
+    if not os.path.exists(stream_path):
+        return ''
+    try:
+        with open(stream_path, 'r') as f:
+            lines = f.readlines()
+    except IOError:
+        return ''
+    for line in reversed(lines):
+        try:
+            event = json.loads(line.strip())
+        except (json.JSONDecodeError, ValueError):
+            continue
+        if event.get('type') == 'continuation':
+            return event.get('state', '')
+    return ''

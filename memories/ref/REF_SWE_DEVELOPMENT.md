@@ -110,7 +110,6 @@ with open(path, 'w') as f:
 
 - New files: use `cat > path << 'EOF' ... EOF` via Bash.
 - `Read` tool works fine — only writes are affected.
-- See `REF_CLAUDE_PLUGIN_EDITS` for full details.
 
 ## Pre-Commit Checklist
 
@@ -123,6 +122,5 @@ with open(path, 'w') as f:
 
 ## Related
 
-- `DOM_SWE_DEVELOPMENT` — project-specific development docs
 - `DOM_SWE_HOOKS` — hook architecture details
 - `DOM_SWE_STATE_MACHINE` — state transition logic

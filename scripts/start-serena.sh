@@ -46,6 +46,11 @@ PY
 if [ -z "$INSTALLED_ROOT" ] || [ ! -d "$INSTALLED_ROOT" ]; then
   INSTALLED_ROOT="$PLUGIN_ROOT"
 fi
+# Dev checkout (e.g. `claude --plugin-dir <repo>` on a prototype branch): serve
+# the checkout's own memories + patch, not the installed release's.
+if [ -n "$PLUGIN_ROOT" ] && [ -d "$PLUGIN_ROOT/.git" ]; then
+  INSTALLED_ROOT="$PLUGIN_ROOT"
+fi
 
 if [ -f "$CONF_FILE" ]; then
   # Read non-empty, non-comment lines and join with commas

@@ -19,6 +19,7 @@ Three loading strategies, one per module shape:
 
 4. `reset_caches()` — clears the memoized module globals that leak state across
    tests (config._PROJECT_ROOT, state_manager._transition_matrix_cache,
+   state_manager._states_doc_cache, state_manager._FORWARD_RANK,
    wm_validator._validator). Call in setUp/tearDown of any test that touches them.
 
 Stdlib only — the SWE plugin ships no third-party test deps.
@@ -158,6 +159,8 @@ def reset_caches():
     try:
         sm = importlib.import_module("swe_hooks.core.state_manager")
         sm._transition_matrix_cache = None
+        sm._states_doc_cache = None
+        sm._FORWARD_RANK = sm.load_forward_rank()
     except Exception:
         pass
     try:

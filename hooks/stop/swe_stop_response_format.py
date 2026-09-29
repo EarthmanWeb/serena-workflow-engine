@@ -112,13 +112,26 @@ def is_genuine_user(rec):
     return True
 
 
+# A line that is essentially a file reference / path listing — an absolute
+# or relative filesystem path, optionally with a leading bullet/number marker
+# and a trailing note. Such lines are the mechanical "here are the files"
+# output the budget must not penalize; they carry no prose content to judge.
+_FILE_REF_LINE_RE = re.compile(
+    r"^(?:[-*]\s+|\d+\.\s+)?`?(?:/|\.\./|\./|~/)?(?:[\w.-]+/)+[\w.-]+\.\w+`?"
+    r"(?:\s*[:\-—]\s*.*)?$"
+)
+
+
 def prose_words(text):
-    """Count words outside fenced code blocks; tables/bullets count at half weight."""
+    """Count words outside fenced code blocks, tables, and file-reference/
+    list-of-paths lines; bullets/tables/numbered lines count at half weight."""
     no_code = re.sub(r"```.*?```", "", text, flags=re.DOTALL)
     full, half = 0, 0
     for line in no_code.splitlines():
         stripped = line.strip()
         if not stripped:
+            continue
+        if _FILE_REF_LINE_RE.match(stripped):
             continue
         n = len(stripped.split())
         if stripped.startswith(("|", "- ", "* ", "> ")) or re.match(r"^\d+\.\s", stripped):
@@ -126,6 +139,18 @@ def prose_words(text):
         else:
             full += n
     return full + half // 2
+
+
+def ends_with_question(text):
+    """True when the reply's final non-blank paragraph ends with a question
+    mark — such a reply is asking the user something and must not be forced
+    into a rewrite by the length/format budget."""
+    stripped = (text or "").rstrip()
+    if not stripped:
+        return False
+    # Ignore trailing closing punctuation/quotes/markdown emphasis after '?'.
+    tail = stripped.rstrip("`*_\"')]} \n\t")
+    return tail.endswith("?")
 
 
 _WORD_RE = re.compile(r"[a-z0-9]+")
@@ -213,7 +238,10 @@ def evaluate(assistant_since_user, last_user_text, terse_limit, detail_limit, re
         )
         return reason, scanned, words
 
-    if words > limit or worst_single > limit:
+    # A reply that ends by asking the user a question is not judged against
+    # the length budget — it needs an answer before anything else can happen,
+    # and forcing a rewrite here would just re-ask the same question tersely.
+    if (words > limit or worst_single > limit) and not ends_with_question(reply):
         which = (
             f"{words} prose words this turn" if words > limit
             else f"a single message of {worst_single} prose words"
@@ -311,6 +339,14 @@ def main():
         sys.exit(0)
 
     retry = bool(data.get("stop_hook_active"))
+
+    # NEVER block on a stop_hook_active retry — this IS the retry the gate's
+    # own prior block produced. Blocking again risks ping-ponging with
+    # swe_stop_continue_working (capped at 3) instead of letting the turn end.
+    # At most one forced rewrite happens per turn; the retry always passes.
+    if retry:
+        sys.exit(0)
+
     session = os.path.splitext(os.path.basename(transcript_path or "unknown"))[0]
 
     try:

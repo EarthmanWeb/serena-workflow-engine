@@ -17,14 +17,14 @@ The write_memory hook warns when these are violated; trim on the warning.
 - [Feature Index](index/INDEX_FEATURES.md) — Feature registry with relationships and types
 
 ## Architecture
-- [Architecture Index](arch/ARCH_INDEX.md) — Architecture overview
+- [Architecture Overview](arch/ARCH_SWE.md) — Workflow system architecture
 
 ## Workflow Routing
 
 | Situation                  | Go To                                         |
 | -------------------------- | --------------------------------------------- |
 | Simple lookup ("find X")   | `WF_RESEARCH`                                 |
-| Starting work (full)       | `WF_INIT`                                     |
+| Starting work (full)       | `WF_INIT` → `WF_CLASSIFY`                     |
 | Researching                | `WF_RESEARCH`                                 |
 | Making changes             | `WF_CLASSIFY`                                 |
 | Continuing                 | `WF_CONTINUE`                                 |

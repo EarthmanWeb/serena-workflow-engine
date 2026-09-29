@@ -383,5 +383,143 @@ class TestPathHelpers(unittest.TestCase):
         self.assertEqual(os.path.dirname(sp), os.path.dirname(sen))
 
 
+# ---------------------------------------------------------------------------
+# Init-gate degraded mode: count_init_denies_since_docread / is_degraded /
+# degraded_tool_allowed / degraded_bash_is_readonly / is_manual_reset_cli
+# ---------------------------------------------------------------------------
+class TestCountInitDeniesSinceDocread(BaseStreamTest):
+    def test_counts_denies_since_last_docread(self):
+        self._write_jsonl([
+            {"type": "docread", "name": "wf/WF_INIT"},
+            {"type": "init_deny"},
+            {"type": "init_deny"},
+        ])
+        self.assertEqual(stream.count_init_denies_since_docread(self.stream_path), 2)
+
+    def test_docread_resets_the_streak(self):
+        self._write_jsonl([
+            {"type": "init_deny"},
+            {"type": "init_deny"},
+            {"type": "init_deny"},
+            {"type": "docread", "name": "wf/WF_INIT"},
+            {"type": "init_deny"},
+        ])
+        self.assertEqual(stream.count_init_denies_since_docread(self.stream_path), 1)
+
+    def test_no_stream_file_returns_zero(self):
+        missing = os.path.join(self.tmpdir, "missing.jsonl")
+        self.assertEqual(stream.count_init_denies_since_docread(missing), 0)
+
+
+class TestIsDegraded(BaseStreamTest):
+    def test_below_threshold_not_degraded(self):
+        self._write_jsonl([{"type": "init_deny"}, {"type": "init_deny"}])
+        self.assertFalse(stream.is_degraded(self.stream_path))
+
+    def test_at_threshold_is_degraded(self):
+        self._write_jsonl([{"type": "init_deny"}] * stream.DEGRADED_DENY_THRESHOLD)
+        self.assertTrue(stream.is_degraded(self.stream_path))
+
+    def test_past_threshold_is_degraded(self):
+        self._write_jsonl([{"type": "init_deny"}] * (stream.DEGRADED_DENY_THRESHOLD + 4))
+        self.assertTrue(stream.is_degraded(self.stream_path))
+
+    def test_docread_clears_degraded_state(self):
+        self._write_jsonl(
+            [{"type": "init_deny"}] * stream.DEGRADED_DENY_THRESHOLD
+            + [{"type": "docread", "name": "wf/WF_INIT"}]
+        )
+        self.assertFalse(stream.is_degraded(self.stream_path))
+
+    def test_mcp_unavailable_event_triggers_degraded_immediately(self):
+        self._write_jsonl([{"type": "mcp_unavailable", "name": "mcp__plugin_swe_serena__read_memory"}])
+        self.assertTrue(stream.is_degraded(self.stream_path))
+
+    def test_explicit_degraded_event_is_sticky_until_docread(self):
+        self._write_jsonl([{"type": "degraded", "trigger": "mcp_unavailable"}])
+        self.assertTrue(stream.is_degraded(self.stream_path))
+
+    def test_no_stream_file_not_degraded(self):
+        missing = os.path.join(self.tmpdir, "missing.jsonl")
+        self.assertFalse(stream.is_degraded(missing))
+
+
+class TestDegradedBashIsReadonly(unittest.TestCase):
+    def test_cat_is_readonly(self):
+        self.assertTrue(stream.degraded_bash_is_readonly("cat foo.txt"))
+
+    def test_git_status_is_readonly(self):
+        self.assertTrue(stream.degraded_bash_is_readonly("git status"))
+
+    def test_unittest_runner_is_not_readonly(self):
+        # Test runners EXECUTE code — removed from the degraded allowlist.
+        self.assertFalse(stream.degraded_bash_is_readonly(
+            "python3 -m unittest discover -s tests -p 'test_*.py'"))
+
+    def test_pytest_is_not_readonly(self):
+        self.assertFalse(stream.degraded_bash_is_readonly("pytest tests/"))
+
+    def test_claude_mcp_list_is_not_degraded_readonly(self):
+        # `claude mcp list` is a Tier-1 RECOVERY command, not general Tier-2
+        # degraded read-only Bash (it isn't codebase inspection).
+        self.assertFalse(stream.degraded_bash_is_readonly("claude mcp list"))
+
+    def test_chained_readonly_groups_all_readonly(self):
+        self.assertTrue(stream.degraded_bash_is_readonly("ls -la && git log -5"))
+
+    def test_mutating_command_not_readonly(self):
+        self.assertFalse(stream.degraded_bash_is_readonly("rm -rf /tmp/x"))
+
+    def test_chained_with_one_mutation_not_readonly(self):
+        self.assertFalse(stream.degraded_bash_is_readonly("git status && echo x > f"))
+
+    def test_empty_command_not_readonly(self):
+        self.assertFalse(stream.degraded_bash_is_readonly(""))
+
+
+class TestIsManualResetCli(unittest.TestCase):
+    def test_reset_sentinel_invocation_detected(self):
+        cmd = "python3 hooks/pre/swe_pre_tool_init_gate.py --reset-sentinel abc12345"
+        self.assertTrue(stream.is_manual_reset_cli(cmd))
+
+    def test_plain_init_gate_invocation_not_detected(self):
+        self.assertFalse(stream.is_manual_reset_cli(
+            "python3 hooks/pre/swe_pre_tool_init_gate.py"))
+
+    def test_unrelated_command_not_detected(self):
+        self.assertFalse(stream.is_manual_reset_cli("rm -rf /tmp/x"))
+
+    def test_empty_command_not_detected(self):
+        self.assertFalse(stream.is_manual_reset_cli(""))
+
+
+class TestDegradedToolAllowed(unittest.TestCase):
+    def test_read_tool_allowed(self):
+        self.assertTrue(stream.degraded_tool_allowed("Read"))
+
+    def test_grep_glob_ls_toolsearch_allowed(self):
+        for name in ("Grep", "Glob", "LS", "ToolSearch"):
+            self.assertTrue(stream.degraded_tool_allowed(name), name)
+
+    def test_readonly_bash_allowed(self):
+        self.assertTrue(stream.degraded_tool_allowed("Bash", "git status"))
+
+    def test_manual_reset_cli_bash_allowed(self):
+        cmd = "python3 hooks/pre/swe_pre_tool_init_gate.py --reset-sentinel"
+        self.assertTrue(stream.degraded_tool_allowed("Bash", cmd))
+
+    def test_mutating_bash_denied(self):
+        self.assertFalse(stream.degraded_tool_allowed("Bash", "rm -rf /tmp/x"))
+
+    def test_edit_denied(self):
+        self.assertFalse(stream.degraded_tool_allowed("Edit"))
+
+    def test_write_denied(self):
+        self.assertFalse(stream.degraded_tool_allowed("Write"))
+
+    def test_unrelated_mcp_tool_denied(self):
+        self.assertFalse(stream.degraded_tool_allowed("mcp__plugin_swe_serena__write_memory"))
+
+
 if __name__ == "__main__":
     unittest.main()

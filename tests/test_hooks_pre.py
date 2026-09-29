@@ -465,6 +465,212 @@ class TestInitInjectMetadata(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
+# swe_pre_tool_init_gate — two-tier degraded-mode circuit breaker (main()
+# integration)
+# ---------------------------------------------------------------------------
+class TestInitGateDegradedModeIntegration(unittest.TestCase):
+    """Drives init_mod.main() end-to-end: an INITIALIZED-but-not-session-
+    initialized project, with a stream file already past the denial
+    threshold, must unlock either Tier-1 recovery or Tier-2 degraded tools
+    instead of denying forever.
+
+    Tier 1 "recovery" (bare deny count >= 3, NO mcp_unavailable): Serena may
+    be fully reachable — only recovery/diagnostic Bash unlocks (claude mcp
+    list/get, ps/pgrep, restricted log reads, --reset-sentinel). NOT general
+    Read/Grep/Glob/git status of the codebase.
+
+    Tier 2 "degraded" (an mcp_unavailable event recorded): a genuine Serena
+    connection failure — read-only tools (Read/Grep/Glob/LS/ToolSearch) and
+    hardened read-only Bash unlock broadly. Edits/mutating Bash stay denied
+    in both tiers.
+    """
+
+    def setUp(self):
+        reset_caches()
+        self.tmp = tempfile.TemporaryDirectory()
+        self.cwd = self.tmp.name
+        os.makedirs(os.path.join(self.cwd, '.git'), exist_ok=True)
+        os.makedirs(os.path.join(self.cwd, '.serena'), exist_ok=True)
+        with open(os.path.join(self.cwd, '.serena', 'swe-setup-complete.json'), 'w') as f:
+            json.dump({'complete': True}, f)
+        self.session_id = 'deadbeef'
+        self.transcript = f'/x/{self.session_id}-0000-0000-0000-000000000000.jsonl'
+
+    def tearDown(self):
+        self.tmp.cleanup()
+        reset_caches()
+
+    def _stream_path(self):
+        d = os.path.join(self.cwd, '.serena', 'streams')
+        os.makedirs(d, exist_ok=True)
+        return os.path.join(d, f'{self.session_id}.jsonl')
+
+    def _write_denies(self, n):
+        with open(self._stream_path(), 'w') as f:
+            for _ in range(n):
+                f.write(json.dumps({"type": "init_deny"}) + "\n")
+
+    def _write_mcp_unavailable(self):
+        with open(self._stream_path(), 'a') as f:
+            f.write(json.dumps({"type": "mcp_unavailable"}) + "\n")
+            f.write(json.dumps({"type": "degraded", "trigger": "mcp_unavailable"}) + "\n")
+
+    def _run_main(self, tool_name, tool_input):
+        import io
+        import json as _json
+        from unittest import mock
+        payload = {
+            'tool_name': tool_name,
+            'tool_input': tool_input,
+            'transcript_path': self.transcript,
+            'cwd': self.cwd,
+        }
+        buf = io.StringIO()
+        with mock.patch.object(sys, 'stdin', io.StringIO(_json.dumps(payload))), \
+             mock.patch('select.select', return_value=([sys.stdin], [], [])), \
+             mock.patch.object(os, 'getcwd', return_value=self.cwd), \
+             mock.patch.dict(os.environ, {'CLAUDE_PROJECT_DIR': self.cwd}), \
+             mock.patch('sys.stdout', buf):
+            try:
+                init_mod.main()
+            except SystemExit:
+                pass
+        return _json.loads(buf.getvalue() or '{}')
+
+    def test_below_threshold_bash_still_denied(self):
+        self._write_denies(2)
+        result = self._run_main('Bash', {'command': 'git status'})
+        decision = result.get('hookSpecificOutput', {}).get('permissionDecision')
+        self.assertEqual(decision, 'deny')
+
+    # --- Tier 1: recovery (bare denies, Serena presumed reachable) ---------
+    def test_tier1_recovery_claude_mcp_list_allowed(self):
+        self._write_denies(3)
+        result = self._run_main('Bash', {'command': 'claude mcp list'})
+        decision = result.get('hookSpecificOutput', {}).get('permissionDecision')
+        self.assertEqual(decision, 'allow')
+        self.assertIn('recovery', result.get('systemMessage', '').lower())
+
+    def test_tier1_recovery_ps_allowed(self):
+        self._write_denies(3)
+        result = self._run_main('Bash', {'command': 'ps aux | grep serena'})
+        decision = result.get('hookSpecificOutput', {}).get('permissionDecision')
+        self.assertEqual(decision, 'allow')
+
+    def test_tier1_recovery_git_status_still_denied(self):
+        # git status is NOT a recovery/diagnostic command — Tier 1 must not
+        # unlock general codebase inspection while Serena may be fully up.
+        self._write_denies(3)
+        result = self._run_main('Bash', {'command': 'git status'})
+        decision = result.get('hookSpecificOutput', {}).get('permissionDecision')
+        self.assertEqual(decision, 'deny')
+
+    def test_tier1_recovery_read_tool_still_denied(self):
+        self._write_denies(3)
+        result = self._run_main('Read', {'file_path': 'src/x.py'})
+        decision = result.get('hookSpecificOutput', {}).get('permissionDecision')
+        self.assertEqual(decision, 'deny')
+
+    def test_tier1_recovery_grep_still_denied(self):
+        self._write_denies(3)
+        result = self._run_main('Grep', {'pattern': 'foo'})
+        decision = result.get('hookSpecificOutput', {}).get('permissionDecision')
+        self.assertEqual(decision, 'deny')
+
+    def test_tier1_recovery_edit_still_denied(self):
+        self._write_denies(3)
+        result = self._run_main('Edit', {'file_path': '/x/y.py'})
+        decision = result.get('hookSpecificOutput', {}).get('permissionDecision')
+        self.assertEqual(decision, 'deny')
+
+    def test_tier1_recovery_mutating_bash_still_denied(self):
+        self._write_denies(3)
+        result = self._run_main('Bash', {'command': 'rm -rf /tmp/x'})
+        decision = result.get('hookSpecificOutput', {}).get('permissionDecision')
+        self.assertEqual(decision, 'deny')
+
+    # --- Tier 2: degraded (confirmed mcp_unavailable) -----------------------
+    def test_tier2_degraded_read_tool_allowed(self):
+        self._write_mcp_unavailable()
+        result = self._run_main('Read', {'file_path': '/x/y.py'})
+        decision = result.get('hookSpecificOutput', {}).get('permissionDecision')
+        self.assertEqual(decision, 'allow')
+        self.assertIn('degraded', result.get('systemMessage', '').lower())
+
+    def test_tier2_degraded_readonly_bash_allowed(self):
+        self._write_mcp_unavailable()
+        result = self._run_main('Bash', {'command': 'git status'})
+        decision = result.get('hookSpecificOutput', {}).get('permissionDecision')
+        self.assertEqual(decision, 'allow')
+
+    def test_tier2_degraded_mutating_bash_still_denied(self):
+        self._write_mcp_unavailable()
+        result = self._run_main('Bash', {'command': 'rm -rf /tmp/x'})
+        decision = result.get('hookSpecificOutput', {}).get('permissionDecision')
+        self.assertEqual(decision, 'deny')
+
+    def test_tier2_degraded_edit_still_denied(self):
+        self._write_mcp_unavailable()
+        result = self._run_main('Edit', {'file_path': '/x/y.py'})
+        decision = result.get('hookSpecificOutput', {}).get('permissionDecision')
+        self.assertEqual(decision, 'deny')
+
+    def test_tier2_degraded_bypass_strings_all_denied(self):
+        # Every hardened-classifier bypass vector must stay denied even in
+        # confirmed Tier-2 degraded mode.
+        self._write_mcp_unavailable()
+        for cmd in (
+            'cat f > /etc/hosts',
+            'cat `id`',
+            'grep x y | tee /etc/passwd',
+            'find . -exec rm {} \\;',
+            'find . -execdir rm {} \\;',
+            'find . -delete',
+            'sed -i s/x/y/ file',
+            'perl -i -pe "s/x/y/" file',
+            'echo $(whoami)',
+            'cat <(echo hi)',
+            'echo hi >(cat)',
+            'ls >> /tmp/out',
+            'python3 -m unittest discover',
+            'pytest tests/',
+            'git commit -m x',
+            'git push',
+            'xargs rm',
+        ):
+            result = self._run_main('Bash', {'command': cmd})
+            decision = result.get('hookSpecificOutput', {}).get('permissionDecision')
+            self.assertEqual(decision, 'deny', cmd)
+
+    def test_tier2_degraded_benign_commands_allowed(self):
+        self._write_mcp_unavailable()
+        for cmd in (
+            'git status',
+            'ls -la .serena',
+            'cat ~/.serena/logs/x.txt 2>/dev/null | tail -20',
+        ):
+            result = self._run_main('Bash', {'command': cmd})
+            decision = result.get('hookSpecificOutput', {}).get('permissionDecision')
+            self.assertEqual(decision, 'allow', cmd)
+
+    def test_docread_clears_tier2_degraded_and_resumes_normal_deny(self):
+        self._write_mcp_unavailable()
+        with open(self._stream_path(), 'a') as f:
+            f.write(json.dumps({"type": "docread", "name": "wf/WF_INIT"}) + "\n")
+        result = self._run_main('Bash', {'command': 'rm -rf /tmp/x'})
+        decision = result.get('hookSpecificOutput', {}).get('permissionDecision')
+        self.assertEqual(decision, 'deny')
+
+    def test_docread_clears_tier1_recovery_and_resumes_normal_deny(self):
+        self._write_denies(3)
+        with open(self._stream_path(), 'a') as f:
+            f.write(json.dumps({"type": "docread", "name": "wf/WF_INIT"}) + "\n")
+        result = self._run_main('Bash', {'command': 'claude mcp list'})
+        decision = result.get('hookSpecificOutput', {}).get('permissionDecision')
+        self.assertEqual(decision, 'deny')
+
+
+# ---------------------------------------------------------------------------
 # swe_pre_bash_test_gate
 # ---------------------------------------------------------------------------
 class TestBashTestGateConstants(unittest.TestCase):

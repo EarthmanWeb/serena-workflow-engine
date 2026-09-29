@@ -9,6 +9,8 @@ metadata:
 
 > **On step WF_CLEANUP**
 
+Subflow — not an FSM state; do not set_state to it.
+
 Terminal state. Archive completed work.
 
 ## Entry

@@ -44,7 +44,7 @@ Proceed only after all feature memories are loaded.
 
 ## Before Starting Work
 
-If multi-layer (touches >1 architectural layer), read `arch/ARCH_INDEX`.
+If multi-layer (touches >1 architectural layer), read `arch/ARCH_SWE`.
 
 For each layer, load context:
 
@@ -66,10 +66,10 @@ Do NOT write code until relevant memories are loaded.
 
 ## Multi-Layer Implementation
 
-1. Read architecture docs (`ARCH_INDEX`, `SYS_*`, `DOM_*`).
-2. Understand data flow from `ARCH_INDEX`.
+1. Read architecture docs (`arch/ARCH_SWE`, `dom/DOM_*`).
+2. Understand data flow from `arch/ARCH_SWE`.
 3. Implement each layer following patterns from `SYS_*` and `REF_*`.
-4. Read `REF_TESTING`, implement tests, run and verify.
+4. Read the project's test-standards memory (e.g. `dev/DEV_TESTS` or `feature/FEATURE_TESTS`, if present), implement tests, run and verify.
 
 ## Single-Layer Implementation
 

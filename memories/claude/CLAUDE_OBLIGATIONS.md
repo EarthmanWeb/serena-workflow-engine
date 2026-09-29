@@ -23,27 +23,27 @@ Priority order: KISS → DRY → YAGNI.
 - Write simple, readable code.
 - Search for existing features before creating new ones.
 - Extract at 2+ occurrences.
-- NEVER over-engineer. Stick to specs. Build only when needed.
+- Do not over-engineer. Stick to specs. Build only when needed.
 
-## NEVER Do
+## Do Not
 
-- NEVER skip or rationalize around workflow steps. See `wf/WF_INIT` anti-rationalization block.
+- NEVER skip or rationalize around workflow steps — this corrupts the FSM state and is easy to talk yourself into ("just this once", "it's simple"). See `wf/WF_INIT` anti-rationalization block.
 - NEVER use fallbacks or defensive programming. Fail fast; no fallback masking.
-- NEVER synthesize or fake data unless EXPLICITLY asked.
-- NEVER attribute problems to caching unless caching exists in the code.
-- NEVER use `as any` type assertions (TypeScript).
-- NEVER guess file paths. Use Serena tools.
-- NEVER run dev servers. The user manages these.
-- NEVER implement workarounds without asking.
-- NEVER proceed when memories conflict with user instructions. STOP and ask.
+- Do not synthesize or fake data unless explicitly asked.
+- Do not attribute problems to caching unless caching exists in the code.
+- Do not use `as any` type assertions (TypeScript).
+- Do not guess file paths — use Serena tools.
+- Do not run dev servers; the user manages these.
+- Do not implement workarounds without asking.
+- NEVER proceed when memories conflict with user instructions — silently picking one loses the other's requirement. STOP and ask.
 
-## ALWAYS Do
+## Always Do
 
 - Follow `wf/WF_INIT` → `claude/CLAUDE_OBLIGATIONS` → `wf/WF_CLASSIFY` sequence. No shortcuts. See `wf/WF_INIT`.
 - "Let It Fail": remove defensive code, add none, allow clear failures.
 - Check `MEMORY.md` or `index/INDEX_FEATURES` when navigating features.
-- Use Serena symbolic tools for ALL code edits: `replace_symbol_body`, `insert_before_symbol`, `insert_after_symbol` to modify; `find_symbol`, `get_symbols_overview`, `search_for_pattern` to discover. Fall back to `Read`/`Edit` ONLY for non-code files or when symbols cannot be resolved.
-- Update WM using `swe-wm` MCP tools: `swe_wm_update_section` for section updates, `swe_wm_update_status` for status, `swe_wm_read` to read. NEVER use `write_memory`/`edit_memory` on WM files — risks clobbering daemon-managed fields.
+- Use Serena symbolic tools for code edits: `replace_symbol_body`, `insert_before_symbol`, `insert_after_symbol` to modify; `find_symbol`, `get_symbols_overview`, `search_for_pattern` to discover. Fall back to `Read`/`Edit` only for non-code files or when symbols cannot be resolved.
+- Update WM using `swe-wm` MCP tools: `swe_wm_update_section` for section updates, `swe_wm_update_status` for status, `swe_wm_read` to read. NEVER use `write_memory`/`edit_memory` on WM files — these bypass the daemon and can clobber the `Workflow Context`/`Transitions` fields the state machine depends on.
 - Ask for clarification when uncertain.
 - Follow existing patterns. Check docs and existing code first.
 - Document new patterns or deviations in Serena memories.
@@ -59,7 +59,7 @@ After 2 consecutive command failures of the same type:
 3. Retry with adjustments.
 4. Ask the user if still failing.
 
-NEVER flail with variations of the same broken approach.
+Do not flail with variations of the same broken approach.
 
 ## Debugging
 
@@ -81,7 +81,7 @@ When a user instruction contradicts a memory:
 
 ## Working Style
 
-- NO time constraints on any task. Prioritize thoroughness and accuracy over speed. NEVER rush or skip steps to save time.
+- No time constraints on any task. Prioritize thoroughness and accuracy over speed; do not rush or skip steps to save time.
 - MAKE NO ASSUMPTIONS. Research any assumption in the codebase or on the Web before asserting a direction.
 
 ## Parallel Processing
@@ -92,4 +92,4 @@ When a user instruction contradicts a memory:
 
 - Complete validation of all work: syntax checks, line counts.
 - Follow architectural patterns exactly as specified.
-- NEVER cut corners or make assumptions to save time.
+- Do not cut corners or make assumptions to save time.

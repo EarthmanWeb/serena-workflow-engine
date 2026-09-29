@@ -9,6 +9,8 @@ metadata:
 
 > **On step WF_UPDATE_MEMORY**
 
+Subflow — not an FSM state; do not set_state to it.
+
 ## Use When
 
 - Add or update domain requirements (`DOM_*`).

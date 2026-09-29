@@ -228,7 +228,8 @@ def write_state_file(session_id: str, new_state: str,
                      return_step: str = None,
                      task: str = None,
                      features: list = None,
-                     progress: list = None) -> bool:
+                     progress: list = None,
+                     clarify_entered_from: str = "__unset__") -> bool:
     """Atomic write to JSON state file. Merges with existing data.
 
     Refuses the write if this process is a STALE daemon (older plugin version
@@ -276,6 +277,20 @@ def write_state_file(session_id: str, new_state: str,
     }
     if return_step:
         data["return"] = return_step
+
+    # clarify_entered_from: the state the FSM was in right before entering
+    # WF_CLARIFY, so a later CLARIFY exit (possibly in a different process,
+    # since every hook rebuilds StateManager from disk) can allow returning
+    # to that caller rather than only WF_CLASSIFY/WF_ARCH_REVIEW. Sentinel
+    # default "__unset__" means "leave whatever is already on disk alone";
+    # an explicit None clears it (set on CLARIFY exit); any string sets it.
+    if clarify_entered_from != "__unset__":
+        if clarify_entered_from is None:
+            data.pop("clarify_entered_from", None)
+        else:
+            data["clarify_entered_from"] = clarify_entered_from
+    elif "clarify_entered_from" in existing:
+        data["clarify_entered_from"] = existing["clarify_entered_from"]
 
     try:
         with open(tmp, 'w') as f:
@@ -510,6 +525,7 @@ def read_working_memory_state(cwd: str, wm_filename: str = None,
                 state['current_state'] = sf['current_state']
                 if 'return' in sf:
                     state['return_step'] = sf['return']
+                state['clarify_entered_from'] = sf.get('clarify_entered_from')
 
         return state, filepath
     except IOError:
@@ -518,7 +534,8 @@ def read_working_memory_state(cwd: str, wm_filename: str = None,
 
 def write_working_memory_state(cwd: str, wm_filepath: str, new_state: str,
                                 return_step: str = None,
-                                session_id: str = None) -> bool:
+                                session_id: str = None,
+                                clarify_entered_from: str = "__unset__") -> bool:
     """Update state in decoupled state file (authoritative) and WM (best-effort display).
 
     Args:
@@ -527,6 +544,9 @@ def write_working_memory_state(cwd: str, wm_filepath: str, new_state: str,
         new_state: New workflow state (e.g., 'WF_EXECUTE')
         return_step: Optional return step to set
         session_id: Optional session ID for decoupled state file
+        clarify_entered_from: State the FSM was in before entering WF_CLARIFY
+            ("__unset__" leaves the stored value alone, None clears it,
+            any other string sets it). See write_state_file.
 
     Returns:
         True if successful, False otherwise
@@ -535,7 +555,8 @@ def write_working_memory_state(cwd: str, wm_filepath: str, new_state: str,
     if session_id:
         current = read_state_file(session_id)
         prev = current.get('current_state') if current else None
-        write_state_file(session_id, new_state, prev_state=prev, return_step=return_step)
+        write_state_file(session_id, new_state, prev_state=prev, return_step=return_step,
+                          clarify_entered_from=clarify_entered_from)
 
     # 2. WM update (best-effort, for display only)
     if not os.path.exists(wm_filepath):

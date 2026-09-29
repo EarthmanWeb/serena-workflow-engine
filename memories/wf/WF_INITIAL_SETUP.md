@@ -31,10 +31,6 @@ Run in order:
 6. `handle_claude_md` — create/update CLAUDE.md with workflow entry point.
 7. `configure_gitignore` — add workflow artifacts to `.gitignore`.
 
-## RLVR Signal
-
-- Type: `setup`. Impact: `neutral`.
-
 ## Routing
 
 | Condition          | Read Next     |

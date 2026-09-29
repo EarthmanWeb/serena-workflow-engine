@@ -20,8 +20,49 @@ from .session import (
 )
 
 
-# Cache for transition matrix
+# Cache for transition matrix (kept for backward compatibility — tests and
+# other modules poke this attribute directly via reset_caches()).
 _transition_matrix_cache = None
+
+# Cache for the full states.json document, invalidated by file mtime so a
+# states.json edit (or a test writing a temp copy) is picked up without
+# requiring an explicit reset_caches() call. Tuple of (mtime, data) or None.
+_states_doc_cache = None
+
+
+def get_states_file_path() -> str:
+    """Path to state-machine/states.json, derived from this file's location."""
+    # Derive plugin root from __file__: core/ -> swe_hooks/ -> hooks/ -> plugin root
+    plugin_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+    return os.path.join(plugin_root, 'state-machine', 'states.json')
+
+
+def load_states_document() -> Dict[str, Any]:
+    """Load the full states.json document, cached and invalidated by mtime.
+
+    This is the single source of truth for the transition matrix, per-state
+    ranks, subflow names, loop caps, and the readAdvance flag. Returns {} if
+    the file is missing or invalid (callers fail closed on that).
+    """
+    global _states_doc_cache
+
+    states_file = get_states_file_path()
+    try:
+        mtime = os.path.getmtime(states_file)
+    except OSError:
+        return {}
+
+    if _states_doc_cache is not None and _states_doc_cache[0] == mtime:
+        return _states_doc_cache[1]
+
+    try:
+        with open(states_file, 'r') as f:
+            data = json.load(f)
+    except (IOError, json.JSONDecodeError):
+        return {}
+
+    _states_doc_cache = (mtime, data)
+    return data
 
 
 def load_transition_matrix() -> Dict[str, List[str]]:
@@ -35,18 +76,33 @@ def load_transition_matrix() -> Dict[str, List[str]]:
     if _transition_matrix_cache is not None:
         return _transition_matrix_cache
 
-    # Derive plugin root from __file__: core/ -> swe_hooks/ -> hooks/ -> plugin root
-    plugin_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-    states_file = os.path.join(plugin_root, 'state-machine', 'states.json')
+    data = load_states_document()
+    _transition_matrix_cache = data.get('transitionMatrix', {})
+    return _transition_matrix_cache
 
-    try:
-        with open(states_file, 'r') as f:
-            data = json.load(f)
-            _transition_matrix_cache = data.get('transitionMatrix', {})
-            return _transition_matrix_cache
-    except (IOError, json.JSONDecodeError):
-        # Return permissive matrix if file not found
-        return {}
+
+def load_subflows() -> List[str]:
+    """Documented non-FSM procedures (WF_INIT, WF_CLEANUP, ...).
+
+    These have memories/wf/WF_X.md docs but are NOT states.json nodes — they
+    are linear procedures, not places the FSM can be "in". set_state must
+    never target one.
+    """
+    data = load_states_document()
+    return list(data.get('subflows', []))
+
+
+def load_loop_caps() -> Dict[str, int]:
+    """Loop-traversal caps keyed 'A->B' (directed) or 'A<->B' (either
+    direction counted together). See loop_guard.check_loop_cap."""
+    data = load_states_document()
+    caps = data.get('loopCaps', {})
+    return {k: v for k, v in caps.items() if k != 'description' and isinstance(v, int)}
+
+
+def is_read_advance_enabled() -> bool:
+    data = load_states_document()
+    return bool(data.get('readAdvance', {}).get('enabled', True))
 
 
 def is_valid_transition(from_state: str, to_state: str) -> Tuple[bool, str]:
@@ -71,9 +127,22 @@ def is_valid_transition(from_state: str, to_state: str) -> Tuple[bool, str]:
     if from_state in ("WF_INIT", "UNINITIALIZED", "SessionStart"):
         return True, ""
 
-    # Special case: WF_CLARIFY can return to caller (any state)
+    # Special case: WF_CLARIFY can return to caller. This pure, stateless
+    # check has no access to "which state entered CLARIFY", so it stays
+    # permissive here; StateManager.transition_to enforces the tighter
+    # clarify_allowed_targets() rule (previous_state or WF_CLASSIFY /
+    # WF_ARCH_REVIEW) where the actual previous_state is known.
     if from_state == "WF_CLARIFY":
         return True, ""
+
+    # Subflows (WF_INIT, WF_CLEANUP, ...) are documented procedures, not FSM
+    # states — they never appear as a matrix key. Give a distinct reason so
+    # callers (set_state) know not to retry with --force expecting a node.
+    if to_state in load_subflows():
+        return False, (
+            f"BLOCKED: {to_state} is a subflow, not an FSM state — do not set_state to it. "
+            f"It is a documented procedure, entered by reading its memory, not by transitioning."
+        )
 
     # Check if from_state exists in matrix
     if from_state not in matrix:
@@ -101,22 +170,46 @@ def is_valid_transition(from_state: str, to_state: str) -> Tuple[bool, str]:
 # but reading-ahead/backward to INSPECT a memory does not jump the FSM. This is
 # the targeted fix for the old "accidentally moved to the wrong transition" bug
 # while restoring the natural read-your-way-forward flow.
-_FORWARD_RANK = {
-    "WF_INIT": 0,
-    "WF_INITIAL_SETUP": 0,
-    "WF_ONBOARD": 0,
-    "WF_CLASSIFY": 1,
-    "WF_CONTINUE": 1,
-    "WF_RESEARCH": 2,
-    "WF_ARCH_REVIEW": 3,
-    "WF_EXECUTE": 4,
-    "WF_CHECKPOINT": 4,
-    "WF_DEBUG_TDD": 4,
-    "WF_VERIFY": 5,
-    "WF_DONE": 6,
-    # WF_CLARIFY is a return-to-caller gate — never a forward read target.
-    "WF_CLARIFY": -1,
-}
+#
+# Ranks live ONLY in states.json (per-state "rank" field) — there is no
+# hardcoded fallback table. If states.json is missing/unreadable, or has no
+# states with a "rank" field, ranks are simply unavailable: read-advance is
+# then disabled outright (see is_forward_read_transition) rather than silently
+# guessing at an ordering from a stale hardcoded copy. Subflow names (WF_INIT,
+# WF_CLEANUP, ...) are documented procedures, not states.json nodes, and
+# never carry a rank — they never advance via a read, by design.
+def load_forward_rank() -> Dict[str, int]:
+    """Load per-state ranks from states.json's "rank" fields.
+
+    Single source of truth for progression order. Returns {} if states.json
+    is missing/invalid or no state declares a "rank" — callers must treat an
+    empty result as "ranks unavailable", not as "everything is rank 0".
+    """
+    data = load_states_document()
+    states = data.get('states', {})
+    ranks = {name: info.get('rank') for name, info in states.items() if isinstance(info, dict) and 'rank' in info}
+    return ranks
+
+
+# Populated at import time; refreshed on demand by callers that want the
+# latest ranks (is_forward_read_transition() always calls load_forward_rank()
+# fresh so an states.json edit takes effect without restarting the process —
+# the mtime cache in load_states_document() keeps this cheap). Empty dict
+# when ranks are unavailable — kept as a module attribute for tests/back-compat.
+_FORWARD_RANK = load_forward_rank()
+
+
+def clarify_allowed_targets(previous_state: Optional[str]) -> List[str]:
+    """Valid return targets from WF_CLARIFY.
+
+    WF_CLARIFY is a gate, not a wildcard: it may only return to the state it
+    was entered from (if known), or fall back to WF_CLASSIFY / WF_ARCH_REVIEW
+    — the two states that route into clarification in the first place.
+    """
+    targets = ["WF_CLASSIFY", "WF_ARCH_REVIEW"]
+    if previous_state and previous_state not in targets and previous_state != "WF_CLARIFY":
+        targets = [previous_state] + targets
+    return targets
 
 
 def is_forward_read_transition(from_state: str, to_state: str) -> Tuple[bool, str]:
@@ -146,8 +239,24 @@ def is_forward_read_transition(from_state: str, to_state: str) -> Tuple[bool, st
     if not valid:
         return False, msg
 
-    from_rank = _FORWARD_RANK.get(from_state, 0)
-    to_rank = _FORWARD_RANK.get(to_state, 0)
+    # Ranks missing/unreadable (states.json absent, invalid, or declares no
+    # ranks): read-advance is DISABLED rather than silently falling back to a
+    # hardcoded guess. Fresh lookup (not the module-level _FORWARD_RANK
+    # snapshot) so an states.json fix takes effect without a restart.
+    ranks = load_forward_rank()
+    if not ranks:
+        return False, (
+            "read-advance disabled: states.json has no per-state ranks "
+            "(missing, unreadable, or no state declares \"rank\")"
+        )
+    if from_state not in ranks or to_state not in ranks:
+        return False, (
+            f"read-advance disabled: no rank for "
+            f"{from_state if from_state not in ranks else to_state} in states.json"
+        )
+
+    from_rank = ranks[from_state]
+    to_rank = ranks[to_state]
     if to_rank < from_rank:
         return False, (
             f"read-ahead/back: {to_state} (rank {to_rank}) is behind "
@@ -243,7 +352,11 @@ class StateManager:
                 # No WM found — fallback to decoupled state file
                 sf = read_state_file(session_id)
                 if sf:
-                    state_data = {'current_state': sf['current_state'], 'session_id': session_id}
+                    state_data = {
+                        'current_state': sf['current_state'],
+                        'session_id': session_id,
+                        'clarify_entered_from': sf.get('clarify_entered_from'),
+                    }
         else:
             # No session context - fall back to most recent (legacy behavior)
             state_data, filepath = read_working_memory_state(cwd)
@@ -265,6 +378,7 @@ class StateManager:
                 "feature_keys": state_data.get("feature_keys", []),
                 "edits_since_checkpoint": 0,
                 "plan_mode": state_data.get("current_state") in PLAN_MODE_STATES,
+                "clarify_entered_from": state_data.get("clarify_entered_from"),
             }
         else:
             self.state = {
@@ -274,6 +388,7 @@ class StateManager:
                 "working_memory_file": None,
                 "edits_since_checkpoint": 0,
                 "plan_mode": False,
+                "clarify_entered_from": None,
             }
 
     def get_current_state(self) -> str:
@@ -304,12 +419,41 @@ class StateManager:
 
         # Validate the transition unless forced
         if not force:
-            is_valid, error_msg = is_valid_transition(old_state, new_state)
-            if not is_valid:
-                return False, error_msg
+            if old_state == "WF_CLARIFY":
+                allowed = clarify_allowed_targets(self.state.get("clarify_entered_from"))
+                if new_state not in allowed:
+                    return False, (
+                        f"BLOCKED: WF_CLARIFY may only return to {allowed}, not {new_state}. "
+                        f"Use --force to override."
+                    )
+            else:
+                is_valid, error_msg = is_valid_transition(old_state, new_state)
+                if not is_valid:
+                    return False, error_msg
+
+            loop_block = self._check_loop_guard(old_state, new_state)
+            if loop_block is not None:
+                return False, loop_block
+
+        oscillation_warning = None
+        if not force:
+            oscillation_warning = self._detect_oscillation_warning(old_state, new_state)
 
         # Update in-memory state
         self.state["previous_state"] = old_state
+        # clarify_entered_from tracks the caller state across the CLARIFY
+        # gate. Set it on entry, clear it on exit (from either CLARIFY
+        # itself, or leaving a stale value behind if CLARIFY was skipped via
+        # --force). Persisted below (write_working_memory_state /
+        # write_state_file) since every hook process rebuilds StateManager
+        # from disk — an in-memory-only stamp is invisible to the next hook.
+        clarify_entered_from_write = "__unset__"
+        if new_state == "WF_CLARIFY":
+            self.state["clarify_entered_from"] = old_state
+            clarify_entered_from_write = old_state
+        elif old_state == "WF_CLARIFY":
+            self.state["clarify_entered_from"] = None
+            clarify_entered_from_write = None
         self.state["current_state"] = new_state
 
         # Handle plan mode
@@ -329,19 +473,96 @@ class StateManager:
         if new_state == 'WF_CLASSIFY':
             clear_sweep_sentinel(sid)
 
+        suffix = f" ⚠️ {oscillation_warning}" if oscillation_warning else ""
+
         if self.wm_filepath:
-            if write_working_memory_state(self.cwd, self.wm_filepath, new_state, session_id=sid):
-                return True, f"Transition: {old_state} → {new_state}"
+            if write_working_memory_state(self.cwd, self.wm_filepath, new_state, session_id=sid,
+                                           clarify_entered_from=clarify_entered_from_write):
+                return True, f"Transition: {old_state} → {new_state}{suffix}"
             else:
                 return False, f"Failed to save state transition to WM"
         elif sid:
             # No WM yet — write state file only
-            if write_state_file(sid, new_state, prev_state=old_state):
-                return True, f"Transition: {old_state} → {new_state} (state file only)"
+            if write_state_file(sid, new_state, prev_state=old_state,
+                                 clarify_entered_from=clarify_entered_from_write):
+                return True, f"Transition: {old_state} → {new_state} (state file only){suffix}"
             return False, "Failed to write state file"
         else:
             # No WM and no session — in-memory only
-            return True, f"Transition: {old_state} → {new_state} (in-memory, no WM yet)"
+            return True, f"Transition: {old_state} → {new_state} (in-memory, no WM yet){suffix}"
+
+    def _get_state_events(self) -> List[dict]:
+        """Best-effort read of this session's 'state' events from the stream.
+
+        Returns [] (never raises) if there is no session, no stream module,
+        or no stream file yet — the loop guard degrades to a no-op rather
+        than guessing at session identity.
+        """
+        sid = self.session_id or self.state.get("session_id")
+        if not sid:
+            return []
+        try:
+            from .stream import get_stream_path
+            path = get_stream_path(sid)
+        except Exception:
+            return []
+        if not os.path.exists(path):
+            return []
+        events = []
+        try:
+            with open(path, 'r') as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        events.append(json.loads(line))
+                    except (json.JSONDecodeError, ValueError):
+                        continue
+        except IOError:
+            return []
+        return events
+
+    def _check_loop_guard(self, old_state: str, new_state: str) -> Optional[str]:
+        """Refuse the transition if this edge's loop cap is exceeded.
+
+        Returns the refusal message when the cap is exceeded, else None — a
+        None result covers both "within cap" and "guard unavailable" (no
+        session events, no loop_guard module, no caps declared): the guard
+        degrades to a no-op rather than guessing and blocking a transition it
+        cannot actually verify.
+        """
+        try:
+            from . import loop_guard
+        except Exception:
+            return None
+        events = self._get_state_events()
+        if not events:
+            return None
+        caps = load_loop_caps()
+        if not caps:
+            return None
+        ok, _count, _cap, message = loop_guard.check_loop_cap(events, old_state, new_state, caps)
+        if not ok:
+            return message
+        return None
+
+    def _detect_oscillation_warning(self, old_state: str, new_state: str) -> Optional[str]:
+        """Best-effort oscillation warning for the transition about to happen.
+
+        Included as a warning suffix on success, never blocks. Looks at the
+        prospective edge appended to the real event history.
+        """
+        try:
+            from . import loop_guard
+        except Exception:
+            return None
+        events = self._get_state_events()
+        prospective = events + [{"type": "state", "from_s": old_state, "to_s": new_state}]
+        try:
+            return loop_guard.detect_oscillation(prospective)
+        except Exception:
+            return None
 
     def increment_edits(self, edited_file: str = None) -> int:
         """Increment in-memory edit counter.
