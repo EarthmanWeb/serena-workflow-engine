@@ -11,6 +11,7 @@ metadata:
 - [v4 FSM Redesign](feedback/FEEDBACK_V4_FSM_REDESIGN.md) — WF_* reads never transition state (explicit set_state only); WF_START removed; arch review is complexity-gated
 
 ## Response & Style
+- [Commit Checkpoints](feedback/FEEDBACK_COMMIT_CHECKPOINTS.md) — commit each verified stage; never leave the tree dirty
 - [Response Format](feedback/FEEDBACK_RESPONSE_FORMAT.md) — no conversational language, use functional/direct phrasing only
 - [Read docs = list memories](feedback/FEEDBACK_READ_DOCS_MEANS_LIST.md) — "read the docs" means check MEMORY.md and use Serena to list_memories, not external docs
 
