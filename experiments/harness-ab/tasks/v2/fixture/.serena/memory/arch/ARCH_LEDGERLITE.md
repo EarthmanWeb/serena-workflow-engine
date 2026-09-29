@@ -85,6 +85,13 @@ before building anything that touches their subject matter:
   file.
 - `mem:ref/REF_REPORT_STYLE` — text-report rendering conventions. READ
   BEFORE implementing any feature that renders a report as text.
+- `mem:dom/DOM_IDEMPOTENCY` — duplicate-record fingerprinting and
+  row-rejection collection for batch-ingest features. READ BEFORE
+  implementing anything that ingests a batch of externally-sourced
+  records.
+- `mem:dom/DOM_ARCHIVAL` — where data leaving the active store goes and
+  how repeated archival runs merge into it. READ BEFORE implementing any
+  feature that removes records from the active store.
 - `mem:feature/FEATURE_TESTS` — how to run the test suite.
 - `mem:feature/FEATURE_DEV_STANDARDS` — language/style conventions.
 

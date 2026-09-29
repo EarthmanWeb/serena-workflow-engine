@@ -1,0 +1,194 @@
+[
+  {
+    "id": "P1",
+    "memory": "dom/DOM_IDEMPOTENCY",
+    "summary": "Record fingerprint = first 16 hex chars of sha256(\"<date ISO>|<amount cents>|<normalized description>\"); duplicates by fingerprint are skipped, never updated; row rejection is per-row, batch continues.",
+    "quote": "Compute a fingerprint for each incoming record as the first **16 hex\n  characters** of `sha256(\"<date ISO>|<amount cents>|<normalized\n  description>\")`",
+    "tests": [
+      {
+        "id": "test_pivot_doc_fingerprint.TestFingerprintFormula.test_first_import_matches_expected_fingerprint",
+        "asserts": "fingerprint of an imported transaction equals sha256('2026-01-05|-450|coffee')[:16] exactly"
+      },
+      {
+        "id": "test_pivot_doc_fingerprint.TestFingerprintFormula.test_reimporting_same_file_produces_zero_new_transactions",
+        "asserts": "re-importing the same CSV a second time adds 0 new transactions, skipped_duplicates == 1"
+      },
+      {
+        "id": "test_pivot_doc_fingerprint.TestFingerprintFormula.test_duplicate_within_same_import_call_skipped",
+        "asserts": "two identical rows in one import call: 1 added, 1 skipped_duplicates"
+      },
+      {
+        "id": "test_pivot_doc_fingerprint.TestFingerprintFormula.test_different_date_not_a_duplicate",
+        "asserts": "a row differing only in date from an existing transaction is added, not skipped"
+      },
+      {
+        "id": "test_pivot_doc_fingerprint.TestFingerprintFormula.test_duplicate_is_skipped_never_updated",
+        "asserts": "a duplicate row does not replace/update the existing store transaction object (skip-only, never upsert)"
+      }
+    ]
+  },
+  {
+    "id": "P2",
+    "memory": "ref/REF_DATA_INTERCHANGE",
+    "summary": "The bank CSV import follows this project's own interchange standard byte-for-byte: semicolon delimiter, DD.MM.YYYY dates, comma-decimal signed amounts, UTF-8 BOM tolerated, CRLF rows.",
+    "quote": "Any file this project writes for a consumer outside the application itself\n(a downstream import, a third-party report, any \"export\"-shaped feature)\nmust follow this standard exactly, regardless of which feature produces\nit.",
+    "tests": [
+      {
+        "id": "test_pivot_doc_import_csv_format.TestImportCsvFormat.test_semicolon_delimiter_accepted",
+        "asserts": "a semicolon-delimited bank CSV row is parsed and added"
+      },
+      {
+        "id": "test_pivot_doc_import_csv_format.TestImportCsvFormat.test_ddmmyyyy_date_parsed_correctly",
+        "asserts": "date field '20.01.2026' parses to date(2026, 1, 20)"
+      },
+      {
+        "id": "test_pivot_doc_import_csv_format.TestImportCsvFormat.test_comma_decimal_negative_amount_parsed",
+        "asserts": "amount field '-4,50' parses to amount_cents == -450"
+      },
+      {
+        "id": "test_pivot_doc_import_csv_format.TestImportCsvFormat.test_bom_tolerated",
+        "asserts": "a UTF-8 BOM at the start of the bank CSV file does not cause the first data row to be rejected"
+      },
+      {
+        "id": "test_pivot_doc_import_csv_format.TestImportCsvFormat.test_crlf_rows_accepted",
+        "asserts": "CRLF-terminated rows are parsed correctly (2 valid rows -> 2 added)"
+      }
+    ]
+  },
+  {
+    "id": "P3",
+    "memory": "dom/DOM_INPUT_NORMALIZATION",
+    "summary": "Category aliases (food->groceries, car->transport, fuel->transport) are accepted in imported rows too; the stored/added transaction always carries the canonical name.",
+    "quote": "must accept the documented alias table below **in addition to** the\ncanonical names, resolving an alias to its canonical form before any\nfurther validation, storage, or output.",
+    "tests": [
+      {
+        "id": "test_pivot_doc_import_aliases.TestImportCategoryAliases.test_food_alias_canonicalized_on_import",
+        "asserts": "imported row with category 'food' -> added transaction category == 'groceries' exactly"
+      },
+      {
+        "id": "test_pivot_doc_import_aliases.TestImportCategoryAliases.test_car_alias_canonicalized_on_import",
+        "asserts": "imported row with category 'car' -> added transaction category == 'transport' exactly"
+      },
+      {
+        "id": "test_pivot_doc_import_aliases.TestImportCategoryAliases.test_fuel_alias_canonicalized_on_import",
+        "asserts": "imported row with category 'fuel' -> added transaction category == 'transport' exactly"
+      }
+    ]
+  },
+  {
+    "id": "P4",
+    "memory": "dom/DOM_FINANCE_CALENDAR",
+    "summary": "Retention's kept window is counted in fiscal periods (15th-14th), not calendar months; 'today' resolves to its containing fiscal period, which is the first kept period.",
+    "quote": "A period string `\"YYYY-MM\"` names the fiscal period that starts on the\n  15th of that month and ends on the 14th of the following month,\n  inclusive on both ends.",
+    "tests": [
+      {
+        "id": "test_pivot_doc_retention_calendar.TestRetentionFiscalWindow.test_date_before_current_fiscal_period_start_but_after_calendar_month_start",
+        "asserts": "today=2026-06-20, keep=1: a tx dated 2026-06-10 (after calendar-month start, before fiscal period start 06-15) is archived, not kept"
+      },
+      {
+        "id": "test_pivot_doc_retention_calendar.TestRetentionFiscalWindow.test_today_on_15th_starts_new_period_excluding_prior_month_end",
+        "asserts": "today=2026-06-15, keep=1: a tx dated 2026-06-14 (prior fiscal period) is archived"
+      },
+      {
+        "id": "test_pivot_doc_retention_calendar.TestRetentionFiscalWindow.test_keep_two_periods_boundary_excludes_date_a_calendar_window_would_keep",
+        "asserts": "today=2026-06-20, keep=2: a tx dated 2026-05-10 (before the 2nd kept fiscal period's 05-15 start) is archived"
+      },
+      {
+        "id": "test_pivot_doc_retention_calendar.TestRetentionFiscalWindow.test_today_before_15th_current_period_started_prior_calendar_month",
+        "asserts": "today=2026-06-10, keep=1: a tx dated 2026-06-05 (inside the current fiscal period '2026-05') is kept"
+      }
+    ]
+  },
+  {
+    "id": "P5",
+    "memory": "dom/DOM_AUDIT",
+    "summary": "purge writes an external archive file, so it must append one audit line: timestamp|purge|<archived count>, next to the primary store, appended across runs.",
+    "quote": "Any operation that writes a file **outside** the project's primary data\nstore (the JSON ledger file) — an export, a generated report saved to\ndisk, or any future \"write to an external path\" feature — must append\nexactly one line to an audit log, in addition to performing its own write.",
+    "tests": [
+      {
+        "id": "test_pivot_doc_audit.TestPurgeAuditLog.test_purge_writes_audit_line_next_to_store",
+        "asserts": "purging archives a transaction -> .ledgerlite-audit.log exists next to the store file"
+      },
+      {
+        "id": "test_pivot_doc_audit.TestPurgeAuditLog.test_purge_audit_line_timestamp_and_operation_name",
+        "asserts": "audit line's first field == LEDGERLITE_NOW value, second field == 'purge'"
+      },
+      {
+        "id": "test_pivot_doc_audit.TestPurgeAuditLog.test_purge_audit_line_detail_field_is_archived_count",
+        "asserts": "audit line's third field == archived transaction count as plain integer"
+      },
+      {
+        "id": "test_pivot_doc_audit.TestPurgeAuditLog.test_purge_audit_log_appends_across_multiple_runs",
+        "asserts": "two purge runs produce exactly 2 lines in the audit log (append, not overwrite)"
+      }
+    ]
+  },
+  {
+    "id": "P6",
+    "memory": "ref/REF_ERROR_HANDLING",
+    "summary": "New retention error code follows E_<AREA>_<CONDITION>: area RETENTION (the module), condition PERIODS (prompt.md's own vocabulary: 'keep_periods must be a positive integer') -> E_RETENTION_PERIODS. Same LedgerError/CLI contract as every other code.",
+    "quote": "<AREA>` is one word (all caps, underscore-joined if the area name has\n  multiple words) naming the subsystem the failure belongs to. Use the\n  subsystem/module name the failing check lives in",
+    "tests": [
+      {
+        "id": "test_pivot_doc_error_codes.TestRetentionErrorCode.test_error_code_constant_defined",
+        "asserts": "E_RETENTION_PERIODS == 'E_RETENTION_PERIODS' exactly"
+      },
+      {
+        "id": "test_pivot_doc_error_codes.TestRetentionErrorCode.test_zero_keep_periods_raises_with_correct_code",
+        "asserts": "purge(store, 0, today) raises LedgerError with .code == E_RETENTION_PERIODS exactly"
+      },
+      {
+        "id": "test_pivot_doc_error_codes.TestRetentionErrorCode.test_negative_keep_periods_raises_with_correct_code",
+        "asserts": ".code == E_RETENTION_PERIODS exactly for keep_periods=-3"
+      },
+      {
+        "id": "test_pivot_doc_error_codes.TestRetentionCliErrorContract.test_cli_prints_error_code_and_exits_2",
+        "asserts": "CLI purge --keep 0 prints 'error: E_RETENTION_PERIODS: ...' to stderr and exits 2"
+      },
+      {
+        "id": "test_pivot_doc_error_codes.TestRetentionCliErrorContract.test_cli_error_goes_to_stderr_not_stdout",
+        "asserts": "stdout is empty, stderr contains 'error: E_RETENTION_PERIODS'"
+      }
+    ]
+  },
+  {
+    "id": "P7",
+    "memory": "dom/DOM_ARCHIVAL",
+    "summary": "Archive file named '<store stem>.archive.<fiscal-year>.json' next to the active store; current fiscal period never archived; records spanning fiscal years split into one file per year; append-merge sorted by date then id; standard interchange envelope with kind=archive.",
+    "quote": "The archive file is named `<store stem>.archive.<fiscal-year>.json`,\n  where `<store stem>` is the active store's own filename with its\n  extension removed",
+    "tests": [
+      {
+        "id": "test_pivot_doc_archival.TestArchiveNaming.test_archive_filename_uses_store_stem_and_fiscal_year",
+        "asserts": "archive_path == '<tmpdir>/ledger.archive.2025.json' exactly for a tx in fiscal year 2025"
+      },
+      {
+        "id": "test_pivot_doc_archival.TestArchiveNaming.test_records_spanning_two_fiscal_years_split_into_two_files",
+        "asserts": "transactions in fiscal years 2025 and 2024 produce two separate archive files, both existing"
+      },
+      {
+        "id": "test_pivot_doc_archival.TestCurrentPeriodNeverArchived.test_current_fiscal_period_transaction_never_archived_even_with_keep_1",
+        "asserts": "a transaction in the current fiscal period is never archived (archived == 0, kept == 1) even with keep_periods=1"
+      },
+      {
+        "id": "test_pivot_doc_archival.TestArchiveAppendMerge.test_second_purge_run_merges_into_existing_archive",
+        "asserts": "a second purge run against the same fiscal year's archive merges in (2 total entries), same archive_path"
+      },
+      {
+        "id": "test_pivot_doc_archival.TestArchiveAppendMerge.test_archive_entries_sorted_by_date_then_id",
+        "asserts": "archive entries end up sorted by date ascending"
+      },
+      {
+        "id": "test_pivot_doc_archival.TestArchiveEnvelopeShape.test_archive_schema_uses_archive_kind",
+        "asserts": "archive file's schema == 'ledgerlite.archive/3' exactly"
+      },
+      {
+        "id": "test_pivot_doc_archival.TestArchiveEnvelopeShape.test_archive_entry_amount_is_signed_decimal_string",
+        "asserts": "archive entry amount is a signed decimal string '-1.00', not raw cents"
+      },
+      {
+        "id": "test_pivot_doc_archival.TestArchiveEnvelopeShape.test_archive_keys_sorted_alphabetically",
+        "asserts": "raw-text key positions in an archive entry appear in alphabetical order amount < category < date < description < id"
+      }
+    ]
+  }
+]

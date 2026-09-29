@@ -20,6 +20,8 @@ so keep it lean — aim for < 200 lines.
 - [Input Normalization Policy](dom/DOM_INPUT_NORMALIZATION.md) — category alias acceptance on input (READ BEFORE adding a category-accepting entry point)
 - [Error Handling Standard](ref/REF_ERROR_HANDLING.md) — error code naming scheme + CLI error contract
 - [Audit Policy](dom/DOM_AUDIT.md) — audit-log requirement for writes outside the primary data store
+- [Idempotency Policy](dom/DOM_IDEMPOTENCY.md) — duplicate fingerprinting + row-rejection collection for batch-ingest features (READ BEFORE any batch-import feature)
+- [Archival Policy](dom/DOM_ARCHIVAL.md) — archive file naming + append-merge rules for data leaving the active store (READ BEFORE any retention/archival feature)
 - [Report Style Guide](ref/REF_REPORT_STYLE.md) — text-report rendering conventions
 - [Test Suite](feature/FEATURE_TESTS.md) — how to run tests
 - [Dev Standards](feature/FEATURE_DEV_STANDARDS.md) — stdlib only, Decimal, dataclasses, error codes
