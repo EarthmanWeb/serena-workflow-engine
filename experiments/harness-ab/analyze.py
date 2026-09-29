@@ -8,17 +8,32 @@ import json
 import os
 import sys
 
+def _est_cost_usd(r):
+    """`est_cost_usd` is the current field name; older runs.jsonl rows (written
+    before the rename) used `total_cost_usd`. Read either, preferring the new
+    name. Both values are Claude Code's notional cost estimate, never an
+    actual charge — the harness runs on a claude.ai Max subscription."""
+    m = r.get("metrics") or {}
+    if "est_cost_usd" in m:
+        return m.get("est_cost_usd")
+    return m.get("total_cost_usd")
+
+
 METRIC_FIELDS = [
     ("num_turns", lambda r: (r.get("metrics") or {}).get("num_turns")),
     ("total_tokens", lambda r: (r.get("metrics") or {}).get("total_tokens")),
     ("output_tokens", lambda r: (r.get("metrics") or {}).get("usage", {}).get("output_tokens")),
     ("cache_read_tokens", lambda r: (r.get("metrics") or {}).get("usage", {}).get("cache_read_input_tokens")),
-    ("cost_usd", lambda r: (r.get("metrics") or {}).get("total_cost_usd")),
+    ("est_cost_usd", _est_cost_usd),
     ("wall_s", lambda r: r.get("wall_s")),
     ("tool_calls", lambda r: (r.get("metrics") or {}).get("total_tool_calls")),
     ("hook_denials", lambda r: (r.get("metrics") or {}).get("hook_denials")),
     ("stop_hook_blocks", lambda r: (r.get("metrics") or {}).get("stop_hook_blocks")),
 ]
+
+METRIC_LABELS = {
+    "est_cost_usd": "est. cost (notional)",
+}
 
 
 def median(values):
@@ -151,8 +166,9 @@ def format_markdown(agg):
         for field, _ in METRIC_FIELDS:
             st = s["stats"][field]
             delta = deltas.get(field) if deltas else None
+            label = METRIC_LABELS.get(field, field)
             lines.append(
-                f"| {arm} | {field} | {_fmt(st['median'])} | {_fmt(st['mean'])} | "
+                f"| {arm} | {label} | {_fmt(st['median'])} | {_fmt(st['mean'])} | "
                 f"{_fmt(st['min'])} | {_fmt(st['max'])} | {_fmt(delta)} |"
             )
 
@@ -183,7 +199,7 @@ def per_run_lines(rows):
             f"success={acc.get('ok')}\t"
             f"turns={m.get('num_turns')}\t"
             f"tokens={m.get('total_tokens')}\t"
-            f"cost={m.get('total_cost_usd')}\t"
+            f"est_cost={_est_cost_usd(r)}\t"
             f"wall_s={r.get('wall_s')}"
         )
     return lines
@@ -193,7 +209,7 @@ def write_csv(rows, agg, out_dir):
     runs_csv = os.path.join(out_dir, "runs.csv")
     fieldnames = ["run_id", "arm", "trial", "seed", "model", "exit_code", "timed_out",
                   "wall_s", "num_turns", "total_tokens", "output_tokens",
-                  "cache_read_tokens", "total_cost_usd", "tool_calls", "hook_denials",
+                  "cache_read_tokens", "est_cost_usd", "tool_calls", "hook_denials",
                   "stop_hook_blocks", "acceptance_ok", "acceptance_passed",
                   "acceptance_total", "regression_ok"]
     with open(runs_csv, "w", newline="") as f:
@@ -216,7 +232,7 @@ def write_csv(rows, agg, out_dir):
                 "total_tokens": m.get("total_tokens"),
                 "output_tokens": m.get("usage", {}).get("output_tokens"),
                 "cache_read_tokens": m.get("usage", {}).get("cache_read_input_tokens"),
-                "total_cost_usd": m.get("total_cost_usd"),
+                "est_cost_usd": _est_cost_usd(r),
                 "tool_calls": m.get("total_tool_calls"),
                 "hook_denials": m.get("hook_denials"),
                 "stop_hook_blocks": m.get("stop_hook_blocks"),

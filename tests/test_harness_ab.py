@@ -4,6 +4,7 @@ experiments/harness-ab is a hyphenated directory name, so run.py/analyze.py
 are loaded via importlib.util.spec_from_file_location (see _hookutil.py's
 load_script() strategy for hyphen-named scripts), not via normal import.
 """
+import argparse
 import importlib.util
 import json
 import os
@@ -131,7 +132,7 @@ class ParseTranscriptTest(unittest.TestCase):
                 "num_turns": 12,
                 "duration_ms": 5000,
                 "duration_api_ms": 4000,
-                "total_cost_usd": 0.42,
+                "total_cost_usd": 0.42,  # raw transcript field name; mapped to metrics["est_cost_usd"]
                 "usage": {
                     "input_tokens": 100,
                     "output_tokens": 50,
@@ -155,7 +156,7 @@ class ParseTranscriptTest(unittest.TestCase):
         self.assertEqual(m["subtype"], "success")
         self.assertFalse(m["is_error"])
         self.assertEqual(m["num_turns"], 12)
-        self.assertEqual(m["total_cost_usd"], 0.42)
+        self.assertEqual(m["est_cost_usd"], 0.42)
         self.assertEqual(m["usage"]["input_tokens"], 100)
         self.assertEqual(m["total_tokens"], 180)
         self.assertEqual(m["distinct_models_used"], 2)
@@ -205,10 +206,34 @@ class CleanEnvTest(unittest.TestCase):
         env = run.clean_env(src)
         self.assertEqual(env["CLAUDE_CONFIG_DIR"], "/home/x/.config/claude")
 
-    def test_keeps_anthropic_keys(self):
-        src = {"ANTHROPIC_API_KEY": "sk-x"}
+    def test_strips_all_anthropic_keys(self):
+        # A stray ANTHROPIC_* key must never be able to switch the child
+        # process from subscription auth to API billing.
+        src = {
+            "ANTHROPIC_API_KEY": "sk-x",
+            "ANTHROPIC_AUTH_TOKEN": "tok",
+            "ANTHROPIC_BASE_URL": "https://example.com",
+            "ANTHROPIC_MODEL": "claude-x",
+            "ANTHROPIC_SOMETHING_ELSE": "y",
+        }
         env = run.clean_env(src)
-        self.assertEqual(env["ANTHROPIC_API_KEY"], "sk-x")
+        self.assertNotIn("ANTHROPIC_API_KEY", env)
+        self.assertNotIn("ANTHROPIC_AUTH_TOKEN", env)
+        self.assertNotIn("ANTHROPIC_BASE_URL", env)
+        self.assertNotIn("ANTHROPIC_MODEL", env)
+        self.assertNotIn("ANTHROPIC_SOMETHING_ELSE", env)
+
+    def test_strips_aws_bedrock_bearer_token(self):
+        src = {"AWS_BEARER_TOKEN_BEDROCK": "tok", "PATH": "/usr/bin"}
+        env = run.clean_env(src)
+        self.assertNotIn("AWS_BEARER_TOKEN_BEDROCK", env)
+        self.assertEqual(env["PATH"], "/usr/bin")
+
+    def test_strips_bedrock_vertex_flags_via_claude_prefix(self):
+        src = {"CLAUDE_CODE_USE_BEDROCK": "1", "CLAUDE_CODE_USE_VERTEX": "1"}
+        env = run.clean_env(src)
+        self.assertNotIn("CLAUDE_CODE_USE_BEDROCK", env)
+        self.assertNotIn("CLAUDE_CODE_USE_VERTEX", env)
 
     def test_sets_mcp_timeout(self):
         env = run.clean_env({})
@@ -251,6 +276,158 @@ class BuildCommandTest(unittest.TestCase):
         self.assertEqual(cmd[idx + 1], "3.5")
         idx = cmd.index("--model")
         self.assertEqual(cmd[idx + 1], "claude-sonnet-5")
+
+    def test_budget_none_omits_flag(self):
+        # Default budget_usd is None at the CLI level: no --max-budget-usd
+        # flag is passed at all (no dollar cap on a flat-rate subscription).
+        cmd = run.build_command("t", "claude-sonnet-5", None)
+        self.assertNotIn("--max-budget-usd", cmd)
+
+
+class ParseAuthStatusTest(unittest.TestCase):
+    def test_subscription_logged_in_ok(self):
+        text = json.dumps({
+            "loggedIn": True, "authMethod": "claude.ai",
+            "apiProvider": "firstParty", "subscriptionType": "max",
+        })
+        status = run.parse_auth_status(text)
+        self.assertTrue(status["ok"])
+        self.assertTrue(status["loggedIn"])
+        self.assertEqual(status["authMethod"], "claude.ai")
+        self.assertEqual(status["subscriptionType"], "max")
+        self.assertEqual(status["apiProvider"], "firstParty")
+        self.assertIsNone(status["reason"])
+
+    def test_api_key_auth_not_ok(self):
+        text = json.dumps({"loggedIn": True, "authMethod": "apiKey",
+                            "apiProvider": "firstParty"})
+        status = run.parse_auth_status(text)
+        self.assertFalse(status["ok"])
+        self.assertIsNotNone(status["reason"])
+
+    def test_not_logged_in_not_ok(self):
+        text = json.dumps({"loggedIn": False, "authMethod": None})
+        status = run.parse_auth_status(text)
+        self.assertFalse(status["ok"])
+
+    def test_empty_output_not_ok(self):
+        status = run.parse_auth_status("")
+        self.assertFalse(status["ok"])
+        self.assertIsNotNone(status["reason"])
+
+    def test_unparseable_json_not_ok(self):
+        status = run.parse_auth_status("not json {{{")
+        self.assertFalse(status["ok"])
+        self.assertIsNotNone(status["reason"])
+
+    def test_non_dict_json_not_ok(self):
+        status = run.parse_auth_status(json.dumps([1, 2, 3]))
+        self.assertFalse(status["ok"])
+        self.assertIsNotNone(status["reason"])
+
+    def test_missing_fields_default_none(self):
+        status = run.parse_auth_status(json.dumps({}))
+        self.assertFalse(status["ok"])
+        self.assertIsNone(status["loggedIn"])
+        self.assertIsNone(status["authMethod"])
+
+
+class CheckAuthTest(unittest.TestCase):
+    def test_ok_status_returns_without_raising(self):
+        orig = run.subprocess.run
+        fake_stdout = json.dumps({"loggedIn": True, "authMethod": "claude.ai",
+                                   "apiProvider": "firstParty", "subscriptionType": "max"})
+
+        class FakeResult:
+            stdout = fake_stdout
+            stderr = ""
+
+        run.subprocess.run = lambda *a, **k: FakeResult()
+        try:
+            status = run.check_auth({}, allow_api_billing=False)
+            self.assertTrue(status["ok"])
+        finally:
+            run.subprocess.run = orig
+
+    def test_bad_status_raises_systemexit_by_default(self):
+        orig = run.subprocess.run
+
+        class FakeResult:
+            stdout = json.dumps({"loggedIn": False, "authMethod": None})
+            stderr = ""
+
+        run.subprocess.run = lambda *a, **k: FakeResult()
+        try:
+            with self.assertRaises(SystemExit):
+                run.check_auth({}, allow_api_billing=False)
+        finally:
+            run.subprocess.run = orig
+
+    def test_bad_status_allowed_with_flag(self):
+        orig = run.subprocess.run
+
+        class FakeResult:
+            stdout = json.dumps({"loggedIn": False, "authMethod": None})
+            stderr = ""
+
+        run.subprocess.run = lambda *a, **k: FakeResult()
+        try:
+            status = run.check_auth({}, allow_api_billing=True)
+            self.assertFalse(status["ok"])
+        finally:
+            run.subprocess.run = orig
+
+
+class ValidateBillingArgsTest(unittest.TestCase):
+    def test_subscription_auth_always_valid(self):
+        # allow_api_billing False: caps stay optional, no errors regardless
+        # of what budget_usd / total_budget_usd are.
+        self.assertEqual(run.validate_billing_args(False, None, None), [])
+        self.assertEqual(run.validate_billing_args(False, 5.0, None), [])
+        self.assertEqual(run.validate_billing_args(False, None, 50.0), [])
+        self.assertEqual(run.validate_billing_args(False, -1.0, -1.0), [])
+
+    def test_api_billing_requires_both_caps(self):
+        errors = run.validate_billing_args(True, None, None)
+        self.assertEqual(len(errors), 2)
+
+    def test_api_billing_missing_budget_usd_only(self):
+        errors = run.validate_billing_args(True, None, 100.0)
+        self.assertEqual(len(errors), 1)
+        self.assertIn("--budget-usd", errors[0])
+
+    def test_api_billing_missing_total_budget_usd_only(self):
+        errors = run.validate_billing_args(True, 5.0, None)
+        self.assertEqual(len(errors), 1)
+        self.assertIn("--total-budget-usd", errors[0])
+
+    def test_api_billing_zero_or_negative_caps_rejected(self):
+        self.assertEqual(len(run.validate_billing_args(True, 0, 100.0)), 1)
+        self.assertEqual(len(run.validate_billing_args(True, -5.0, 100.0)), 1)
+        self.assertEqual(len(run.validate_billing_args(True, 5.0, 0)), 1)
+        self.assertEqual(len(run.validate_billing_args(True, 5.0, -100.0)), 1)
+
+    def test_api_billing_valid_caps_no_errors(self):
+        self.assertEqual(run.validate_billing_args(True, 5.0, 100.0), [])
+
+
+class BudgetAllowsNextTest(unittest.TestCase):
+    def test_no_total_cap_always_allows(self):
+        self.assertTrue(run.budget_allows_next(1000.0, 5.0, None))
+        self.assertTrue(run.budget_allows_next(0, None, None))
+
+    def test_allows_when_within_cap(self):
+        self.assertTrue(run.budget_allows_next(spent=10.0, per_run_cap=5.0, total_cap=20.0))
+
+    def test_allows_at_exact_boundary(self):
+        self.assertTrue(run.budget_allows_next(spent=15.0, per_run_cap=5.0, total_cap=20.0))
+
+    def test_disallows_when_next_run_would_exceed(self):
+        self.assertFalse(run.budget_allows_next(spent=16.0, per_run_cap=5.0, total_cap=20.0))
+
+    def test_per_run_cap_none_treated_as_zero(self):
+        self.assertTrue(run.budget_allows_next(spent=20.0, per_run_cap=None, total_cap=20.0))
+        self.assertFalse(run.budget_allows_next(spent=20.01, per_run_cap=None, total_cap=20.0))
 
 
 class ShuffledArmOrderTest(unittest.TestCase):
@@ -328,7 +505,7 @@ class AggregateTest(unittest.TestCase):
                 "num_turns": turns,
                 "total_tokens": tokens,
                 "usage": {"output_tokens": tokens // 2, "cache_read_input_tokens": 10},
-                "total_cost_usd": cost,
+                "est_cost_usd": cost,
                 "total_tool_calls": tool_calls,
                 "hook_denials": hook_denials,
                 "stop_hook_blocks": stop_hook_blocks,
@@ -390,6 +567,21 @@ class AggregateTest(unittest.TestCase):
     def test_analyze_median_matches_run_median(self):
         self.assertEqual(analyze.median([1, 2, 3]), run.median([1, 2, 3]))
 
+    def test_reads_old_total_cost_usd_field_for_backward_compat(self):
+        # Rows written before the est_cost_usd rename used total_cost_usd;
+        # analyze must still read those for old runs.jsonl files.
+        old_row = self._row("baseline", 0, cost=1.23)
+        del old_row["metrics"]["est_cost_usd"]
+        old_row["metrics"]["total_cost_usd"] = 1.23
+        agg = analyze.aggregate([old_row])
+        self.assertEqual(agg["arms"]["baseline"]["stats"]["est_cost_usd"]["median"], 1.23)
+
+    def test_est_cost_usd_label_in_markdown(self):
+        rows = [self._row("baseline", 0)]
+        agg = analyze.aggregate(rows)
+        md = analyze.format_markdown(agg)
+        self.assertIn("est. cost (notional)", md)
+
 
 class PyCompileTest(unittest.TestCase):
     def test_run_py_compiles(self):
@@ -399,6 +591,39 @@ class PyCompileTest(unittest.TestCase):
     def test_analyze_py_compiles(self):
         import py_compile
         py_compile.compile(os.path.join(HARNESS_DIR, "analyze.py"), doraise=True)
+
+
+class FullRunPreflightBudgetGuardTest(unittest.TestCase):
+    """cmd_full_run/cmd_preflight validate billing args before any I/O
+    (subprocess, network, file writes), so calling them with
+    --allow-api-billing and no caps must raise SystemExit immediately."""
+
+    def _args(self, **overrides):
+        base = dict(
+            trials=1, arms=None, model="claude-sonnet-5", effort=None,
+            budget_usd=None, total_budget_usd=None, timeout_min=45.0,
+            parallel=1, seed=42, out=run.DEFAULT_OUT, resume=None,
+            dry_run=False, selftest=False, preflight=False, only_prepare=False,
+            allow_api_billing=True,
+        )
+        base.update(overrides)
+        return argparse.Namespace(**base)
+
+    def test_full_run_aborts_without_caps(self):
+        with self.assertRaises(SystemExit):
+            run.cmd_full_run(self._args(), [])
+
+    def test_full_run_aborts_with_only_per_run_cap(self):
+        with self.assertRaises(SystemExit):
+            run.cmd_full_run(self._args(budget_usd=5.0), [])
+
+    def test_preflight_aborts_without_caps(self):
+        with self.assertRaises(SystemExit):
+            run.cmd_preflight(self._args())
+
+    def test_preflight_aborts_with_only_total_cap(self):
+        with self.assertRaises(SystemExit):
+            run.cmd_preflight(self._args(total_budget_usd=50.0))
 
 
 class DryRunSmokeTest(unittest.TestCase):

@@ -107,7 +107,7 @@ def parse_transcript(lines):
         "num_turns": None,
         "duration_ms": None,
         "duration_api_ms": None,
-        "total_cost_usd": None,
+        "est_cost_usd": None,
         "usage": {
             "input_tokens": 0,
             "output_tokens": 0,
@@ -186,7 +186,11 @@ def parse_transcript(lines):
             metrics["num_turns"] = event.get("num_turns")
             metrics["duration_ms"] = event.get("duration_ms")
             metrics["duration_api_ms"] = event.get("duration_api_ms")
-            metrics["total_cost_usd"] = event.get("total_cost_usd")
+            # `total_cost_usd` in the stream-json result event is Claude
+            # Code's notional cost estimate, not an actual charge (the user
+            # runs on a claude.ai Max subscription, not API billing) — kept
+            # under `est_cost_usd` throughout runs.jsonl / analyze output.
+            metrics["est_cost_usd"] = event.get("total_cost_usd")
             usage = event.get("usage") or {}
             for key in metrics["usage"]:
                 val = usage.get(key)
@@ -218,7 +222,17 @@ def _tool_result_text(block):
 
 def clean_env(source_env):
     """Return a copy of source_env with CLAUDE*/SWE_* keys removed (except
-    CLAUDE_CONFIG_DIR), MCP_TIMEOUT set, and ANTHROPIC_* preserved."""
+    CLAUDE_CONFIG_DIR), MCP_TIMEOUT set, and every ANTHROPIC_* key dropped.
+
+    The user runs these experiments on a claude.ai Max subscription, never
+    API billing. ANTHROPIC_API_KEY / ANTHROPIC_AUTH_TOKEN / ANTHROPIC_BASE_URL
+    (and any other ANTHROPIC_* var, e.g. ANTHROPIC_MODEL — the model is
+    passed explicitly via --model) are stripped unconditionally so a stray
+    key in the ambient environment can never switch the child process to API
+    billing. CLAUDE_CODE_USE_BEDROCK / CLAUDE_CODE_USE_VERTEX are already
+    covered by the CLAUDE prefix strip; AWS_BEARER_TOKEN_BEDROCK is stripped
+    explicitly since it doesn't share either prefix.
+    """
     env = {}
     for key, val in source_env.items():
         if key == "CLAUDE_CONFIG_DIR":
@@ -226,13 +240,135 @@ def clean_env(source_env):
             continue
         if key.startswith("CLAUDE") or key.startswith("SWE_"):
             continue
+        if key.startswith("ANTHROPIC_"):
+            continue
+        if key == "AWS_BEARER_TOKEN_BEDROCK":
+            continue
         env[key] = val
     env["MCP_TIMEOUT"] = "300000"
     return env
 
 
+def parse_auth_status(stdout_text):
+    """Parse `claude auth status` JSON stdout into a normalized dict.
+
+    Returns {"loggedIn": bool|None, "authMethod": str|None,
+             "apiProvider": str|None, "subscriptionType": str|None,
+             "ok": bool, "reason": str|None}.
+
+    `ok` is True only when loggedIn is True and authMethod == "claude.ai"
+    (i.e. subscription auth, not a raw API key). Never raises: unparseable
+    input yields ok=False with a reason.
+    """
+    result = {"loggedIn": None, "authMethod": None, "apiProvider": None,
+              "subscriptionType": None, "ok": False, "reason": None}
+    if not stdout_text or not stdout_text.strip():
+        result["reason"] = "empty output"
+        return result
+    try:
+        data = json.loads(stdout_text)
+    except (ValueError, TypeError):
+        result["reason"] = "unparseable JSON"
+        return result
+    if not isinstance(data, dict):
+        result["reason"] = "unexpected JSON shape"
+        return result
+
+    result["loggedIn"] = data.get("loggedIn")
+    result["authMethod"] = data.get("authMethod")
+    result["apiProvider"] = data.get("apiProvider")
+    result["subscriptionType"] = data.get("subscriptionType")
+
+    if result["loggedIn"] is not True:
+        result["reason"] = "not logged in"
+        return result
+    if result["authMethod"] != "claude.ai":
+        result["reason"] = f"authMethod is {result['authMethod']!r}, expected 'claude.ai' (subscription)"
+        return result
+
+    result["ok"] = True
+    return result
+
+
+def validate_billing_args(allow_api_billing, budget_usd, total_budget_usd):
+    """Validate the billing/budget CLI args. Pure, no I/O.
+
+    Returns a list of error message strings (empty list = valid). When
+    allow_api_billing is True, both --budget-usd (> 0) and --total-budget-usd
+    (> 0) are mandatory: API billing has no flat-rate ceiling, so a per-run
+    cap alone can't bound total spend across an experiment. When
+    allow_api_billing is False, both remain optional (subscription billing
+    has no dollar figure to enforce); any caller-supplied values are left
+    alone here (callers may still pass an optional per-run --budget-usd on
+    subscription auth as a runaway-turn guard, unrelated to dollars).
+    """
+    errors = []
+    if not allow_api_billing:
+        return errors
+    if budget_usd is None or budget_usd <= 0:
+        errors.append(
+            "--allow-api-billing requires --budget-usd > 0 (a mandatory "
+            "per-run spend cap passed as --max-budget-usd to every "
+            "`claude -p` call)."
+        )
+    if total_budget_usd is None or total_budget_usd <= 0:
+        errors.append(
+            "--allow-api-billing requires --total-budget-usd > 0 (a "
+            "mandatory cumulative spend cap across the whole experiment)."
+        )
+    return errors
+
+
+def budget_allows_next(spent, per_run_cap, total_cap):
+    """Scheduling helper: may the next run start, given cumulative spend so
+    far? Pure, no I/O.
+
+    Returns True when there is no total cap to enforce (total_cap is None)
+    — the caller is expected to only enforce this when API billing was
+    explicitly allowed with both caps validated. Otherwise returns True iff
+    spent + per_run_cap <= total_cap, i.e. starting one more run at its
+    worst case (spending the full per-run cap) cannot push cumulative spend
+    past the total cap. per_run_cap is treated as 0 when None (no known
+    per-run ceiling to project forward).
+    """
+    if total_cap is None:
+        return True
+    cap = per_run_cap if per_run_cap is not None else 0
+    return (spent + cap) <= total_cap
+
+
+def check_auth(env, allow_api_billing=False):
+    """Run `claude auth status` with the given (already-cleaned) env and
+    enforce subscription auth unless allow_api_billing is set.
+
+    Returns the parsed status dict (see parse_auth_status). Raises
+    SystemExit with a clear message when the check fails and
+    allow_api_billing is False.
+    """
+    result = subprocess.run(["claude", "auth", "status"], env=env,
+                             capture_output=True, text=True)
+    status = parse_auth_status(result.stdout)
+    if not status["ok"] and not allow_api_billing:
+        raise SystemExit(
+            "auth check failed: expected a logged-in claude.ai (subscription) "
+            f"session, got loggedIn={status['loggedIn']!r} "
+            f"authMethod={status['authMethod']!r} ({status['reason']}).\n"
+            "This harness is meant to run on a Max subscription, not API "
+            "billing. Pass --allow-api-billing to override.\n"
+            f"raw stdout: {result.stdout.strip()!r}\n"
+            f"raw stderr: {result.stderr.strip()!r}"
+        )
+    return status
+
+
 def build_command(task_text, model, budget_usd, plugin_dir=None, effort=None):
-    """Build the `claude -p ...` argv list (no shell)."""
+    """Build the `claude -p ...` argv list (no shell).
+
+    budget_usd is optional (None by default at the CLI level): when None,
+    no --max-budget-usd flag is passed at all — cost figures are notional
+    estimates on a subscription, not a spend cap that needs enforcing. Pass
+    a number to add an optional runaway-cost guard.
+    """
     cmd = [
         "claude", "-p", task_text,
         "--output-format", "stream-json",
@@ -240,9 +376,10 @@ def build_command(task_text, model, budget_usd, plugin_dir=None, effort=None):
         "--model", model,
         "--setting-sources", "project,local",
         "--dangerously-skip-permissions",
-        "--max-budget-usd", str(budget_usd),
         "--no-session-persistence",
     ]
+    if budget_usd is not None:
+        cmd += ["--max-budget-usd", str(budget_usd)]
     if plugin_dir:
         cmd += ["--plugin-dir", plugin_dir]
     if effort:
@@ -621,6 +758,18 @@ def cmd_dry_run(args, arms):
         print("DRY-RUN SKIP: fixture/ not present yet", file=sys.stderr)
         return 1
 
+    # `claude auth status` is a read-only check, not a model call — safe to
+    # run in --dry-run. Never aborts the dry-run; just reports the result,
+    # since --dry-run never invokes `claude -p`.
+    env = clean_env(dict(os.environ))
+    auth_result = subprocess.run(["claude", "auth", "status"], env=env,
+                                  capture_output=True, text=True)
+    auth_status = parse_auth_status(auth_result.stdout)
+    print(f"auth check: loggedIn={auth_status['loggedIn']} "
+          f"authMethod={auth_status['authMethod']!r} "
+          f"subscriptionType={auth_status['subscriptionType']!r} "
+          f"ok={auth_status['ok']}")
+
     prepared = prepare_all_arms(arms)
     task_text = read_task_text()
 
@@ -650,18 +799,32 @@ def cmd_dry_run(args, arms):
 
 
 def cmd_preflight(args):
+    billing_errors = validate_billing_args(args.allow_api_billing, args.budget_usd,
+                                            args.total_budget_usd)
+    if billing_errors:
+        raise SystemExit("\n".join(billing_errors))
+
     print("+ claude --version", file=sys.stderr)
     v = subprocess.run(["claude", "--version"], capture_output=True, text=True)
     print(v.stdout.strip() or v.stderr.strip())
 
     env = clean_env(dict(os.environ))
+
+    auth_status = check_auth(env, allow_api_billing=args.allow_api_billing)
+    print(f"auth: loggedIn={auth_status['loggedIn']} "
+          f"authMethod={auth_status['authMethod']!r} "
+          f"subscriptionType={auth_status['subscriptionType']!r} "
+          f"apiProvider={auth_status['apiProvider']!r}")
+
     tmp = os.path.join(WORK_ROOT, "preflight-" + uuid.uuid4().hex[:8])
     os.makedirs(tmp, exist_ok=True)
 
     cmd = ["claude", "-p", "Reply with the single word OK",
            "--output-format", "json", "--model", args.model,
            "--setting-sources", "project,local",
-           "--max-budget-usd", "0.05", "--no-session-persistence"]
+           "--no-session-persistence"]
+    if args.budget_usd is not None:
+        cmd += ["--max-budget-usd", str(args.budget_usd)]
     print("+ " + " ".join(cmd), file=sys.stderr)
     result = subprocess.run(cmd, cwd=tmp, env=env, capture_output=True, text=True)
     print("stdout:", result.stdout.strip())
@@ -674,8 +837,10 @@ def cmd_preflight(args):
         cmd2 = ["claude", "-p", "Reply with the single word OK",
                 "--output-format", "json", "--model", args.model,
                 "--setting-sources", "project,local",
-                "--max-budget-usd", "0.05", "--no-session-persistence",
+                "--no-session-persistence",
                 "--plugin-dir", prepared["dir"]]
+        if args.budget_usd is not None:
+            cmd2 += ["--max-budget-usd", str(args.budget_usd)]
         print("+ " + " ".join(cmd2), file=sys.stderr)
         result2 = subprocess.run(cmd2, cwd=tmp, env=env, capture_output=True, text=True)
         print(f"plugin arm ({arm['name']}) stdout:", result2.stdout.strip())
@@ -683,9 +848,33 @@ def cmd_preflight(args):
     return 0
 
 
+def _row_est_cost_usd(row):
+    """Read est_cost_usd from a runs.jsonl row, defaulting to 0 when missing
+    or non-numeric (e.g. a run that errored before a `result` event)."""
+    val = (row.get("metrics") or {}).get("est_cost_usd")
+    return val if isinstance(val, (int, float)) else 0
+
+
 def cmd_full_run(args, arms):
     if not os.path.exists(TASK_MD):
         raise SystemExit("task.md not present yet (fixture track not ready)")
+
+    billing_errors = validate_billing_args(args.allow_api_billing, args.budget_usd,
+                                            args.total_budget_usd)
+    if billing_errors:
+        raise SystemExit("\n".join(billing_errors))
+
+    env = clean_env(dict(os.environ))
+    auth_status = check_auth(env, allow_api_billing=args.allow_api_billing)
+
+    # Total cumulative cap is only enforced when API billing was explicitly
+    # allowed (and validated above); on subscription auth it's ignored, with
+    # a note, since there's no dollar figure to enforce on a flat-rate plan.
+    enforce_total_cap = args.allow_api_billing
+    total_cap = args.total_budget_usd if enforce_total_cap else None
+    if args.total_budget_usd is not None and not enforce_total_cap:
+        print(f"note: --total-budget-usd {args.total_budget_usd} ignored "
+              "(subscription auth; no dollar cap enforced)", file=sys.stderr)
 
     prepared = prepare_all_arms(arms, force=False)
 
@@ -705,6 +894,7 @@ def cmd_full_run(args, arms):
 
     runs_jsonl = os.path.join(stamp_dir, "runs.jsonl")
     done_ids = set()
+    spent_usd = 0
     if os.path.exists(runs_jsonl):
         with open(runs_jsonl) as f:
             for line in f:
@@ -712,7 +902,9 @@ def cmd_full_run(args, arms):
                 if not line:
                     continue
                 try:
-                    done_ids.add(json.loads(line)["run_id"])
+                    row = json.loads(line)
+                    done_ids.add(row["run_id"])
+                    spent_usd += _row_est_cost_usd(row)
                 except Exception:
                     continue
 
@@ -724,30 +916,56 @@ def cmd_full_run(args, arms):
         "args": vars(args),
         "arms": arms,
         "prepared": prepared,
+        "auth": {
+            "authMethod": auth_status["authMethod"],
+            "subscriptionType": auth_status["subscriptionType"],
+            "apiProvider": auth_status["apiProvider"],
+        },
         "claude_version": subprocess.run(["claude", "--version"], capture_output=True,
                                           text=True).stdout.strip(),
         "machine": {"platform": sys.platform},
         "stamp": stamp,
+        "stopped_for_budget": False,
     }
-    with open(os.path.join(stamp_dir, "meta.json"), "w") as f:
-        json.dump(meta, f, indent=2)
 
+    def _write_meta():
+        with open(os.path.join(stamp_dir, "meta.json"), "w") as f:
+            json.dump(meta, f, indent=2)
+
+    _write_meta()
+
+    stopped_for_budget = False
     with open(runs_jsonl, "a") as out_f:
         for trial, arm_seq in enumerate(order):
+            if stopped_for_budget:
+                break
             for arm_name in arm_seq:
                 run_id = f"{arm_name}-t{trial}"
                 if run_id in done_ids:
                     print(f"skip (resume): {run_id}", file=sys.stderr)
                     continue
+                if enforce_total_cap and not budget_allows_next(spent_usd, args.budget_usd, total_cap):
+                    print(
+                        f"stopping: cumulative spend ${spent_usd:.4f} + per-run "
+                        f"cap ${args.budget_usd:.4f} would exceed "
+                        f"--total-budget-usd ${total_cap:.4f}; skipping remaining "
+                        "runs.", file=sys.stderr)
+                    stopped_for_budget = True
+                    break
                 arm = arms_by_name[arm_name]
                 row = run_one(stamp_dir, arm, prepared, trial, args.model,
                               args.effort, args.budget_usd, args.timeout_min)
                 row["seed"] = args.seed
                 out_f.write(json.dumps(row) + "\n")
                 out_f.flush()
+                spent_usd += _row_est_cost_usd(row)
                 print(f"done: {run_id} acceptance={row['acceptance']['passed']}/"
                       f"{row['acceptance']['total']} wall_s={row['wall_s']:.1f}",
                       file=sys.stderr)
+
+    if stopped_for_budget:
+        meta["stopped_for_budget"] = True
+        _write_meta()
 
     print(stamp_dir)
     return 0
@@ -760,7 +978,21 @@ def build_arg_parser():
                     help="comma-separated subset of arm names")
     p.add_argument("--model", type=str, default="claude-sonnet-5")
     p.add_argument("--effort", type=str, default=None)
-    p.add_argument("--budget-usd", type=float, default=5.0)
+    p.add_argument("--budget-usd", type=float, default=None,
+                    help="optional runaway-cost guard: passes --max-budget-usd "
+                         "to `claude -p`. Default is None (no flag passed) — "
+                         "cost figures are notional estimates on a subscription, "
+                         "not a spend cap that needs enforcing. MANDATORY "
+                         "(must be > 0) when --allow-api-billing is passed: "
+                         "the per-run cap.")
+    p.add_argument("--total-budget-usd", type=float, default=None,
+                    help="cumulative spend cap across the whole experiment. "
+                         "Ignored (with a note) on subscription auth. "
+                         "MANDATORY (must be > 0) when --allow-api-billing is "
+                         "passed: run.py stops scheduling further runs once "
+                         "sum(est_cost_usd of completed runs) + --budget-usd "
+                         "would exceed this value, and records "
+                         "stopped_for_budget: true in meta.json.")
     p.add_argument("--timeout-min", type=float, default=45.0)
     p.add_argument("--parallel", type=int, default=1)
     p.add_argument("--seed", type=int, default=42)
@@ -770,6 +1002,10 @@ def build_arg_parser():
     p.add_argument("--selftest", action="store_true")
     p.add_argument("--preflight", action="store_true")
     p.add_argument("--only-prepare", action="store_true")
+    p.add_argument("--allow-api-billing", action="store_true",
+                    help="skip the claude.ai-subscription auth guard and allow "
+                         "the run to proceed even if `claude auth status` shows "
+                         "API-key/non-subscription billing.")
     return p
 
 

@@ -32,7 +32,9 @@ Per run, parsed from `transcript.jsonl` (the `stream-json` output of
 `claude -p`):
 
 - From the final `result` event: `subtype`, `is_error`, `num_turns`,
-  `duration_ms`, `duration_api_ms`, `total_cost_usd`, `usage` (input/output/
+  `duration_ms`, `duration_api_ms`, `est_cost_usd` (read from the raw
+  transcript's `total_cost_usd` field — Claude Code's notional cost estimate,
+  not an actual charge), `usage` (input/output/
   cache-creation/cache-read token counts), and count of distinct models in
   `modelUsage` (subagent-model-use indicator).
 - From `assistant` events: assistant message count, tool calls by name,
@@ -81,8 +83,21 @@ already has a line), plus a `meta.json` with args, arm resolution (commit SHA
 - The subprocess environment is a scrubbed copy of `os.environ`: every key
   starting with `CLAUDE` or `SWE_` is removed (except `CLAUDE_CONFIG_DIR`,
   kept if set) so a harness invoked from inside a Claude Code session itself
-  doesn't leak nested-session state into the child; `ANTHROPIC_*` is kept;
-  `MCP_TIMEOUT=300000` is set.
+  doesn't leak nested-session state into the child; every `ANTHROPIC_*` key
+  (including `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`,
+  `ANTHROPIC_BASE_URL`, `ANTHROPIC_MODEL`) and `AWS_BEARER_TOKEN_BEDROCK` are
+  stripped unconditionally, so a stray key in the ambient environment can
+  never switch the child to API billing — the harness is meant to run on a
+  claude.ai Max subscription, never API billing; `MCP_TIMEOUT=300000` is set.
+- Before any `claude -p` call (full run and `--preflight`), `run.py` runs
+  `claude auth status` with the cleaned env and requires
+  `loggedIn: true` and `authMethod: "claude.ai"` (i.e. logged into a
+  claude.ai subscription, not an API key). If that check fails, the run
+  aborts with a clear message unless `--allow-api-billing` is passed. The
+  parsed status (`authMethod`, `subscriptionType`, `apiProvider` — no
+  email/orgId) is recorded in `meta.json` under `auth`. `--dry-run` also
+  runs `claude auth status` (read-only, no model call) and reports the
+  result without aborting.
 - Each `claude` subprocess starts a new process group
   (`start_new_session=True`). On timeout the harness kills the *whole group*
   (SIGTERM, then SIGKILL after 10s) — plugin arms spawn MCP servers (uv/
@@ -96,22 +111,23 @@ already has a line), plus a `meta.json` with args, arm resolution (commit SHA
 Run in order:
 
 ```bash
-# 1. Confirm auth, cost, and headless plugin loading work at all (spends a few cents).
+# 1. Confirm auth (claude.ai subscription, not API key) and headless plugin
+#    loading work at all.
 python3 experiments/harness-ab/run.py --preflight --model claude-sonnet-5
 
 # 2. Validate fixture + reference_solution + hidden_tests are internally consistent
 #    (no claude calls; must exit 0).
 python3 experiments/harness-ab/run.py --selftest
 
-# 3. Prepare arm clones, print exact commands, and sanity-check the UNMODIFIED
-#    fixture fails acceptance (no claude calls).
+# 3. Prepare arm clones, print exact commands, run the auth check, and
+#    sanity-check the UNMODIFIED fixture fails acceptance (no claude calls).
 python3 experiments/harness-ab/run.py --dry-run --model claude-sonnet-5
 
 # 4. Full run: 3 arms x 3 trials = 9 agent invocations, each capped at
-#    --max-budget-usd (default $5) and --timeout-min (default 45).
-#    Real cost/time depend entirely on the task and those caps.
+#    --timeout-min (default 45). No cost cap is applied by default — see
+#    "Cost and budget" below.
 python3 experiments/harness-ab/run.py --trials 3 --model claude-sonnet-5 \
-  --budget-usd 5 --timeout-min 45 --seed 42
+  --timeout-min 45 --seed 42
 
 # 5. Aggregate.
 python3 experiments/harness-ab/analyze.py experiments/harness-ab/results/<stamp> --csv --md
@@ -119,6 +135,69 @@ python3 experiments/harness-ab/analyze.py experiments/harness-ab/results/<stamp>
 
 Re-run an interrupted full run with `--resume <stamp>` to skip completed
 runs (matched by `run_id` already present in `runs.jsonl`).
+
+## Cost and budget
+
+This harness is meant to run on a **claude.ai Max subscription**, never API
+billing. `run.py` enforces this before any `claude -p` call: it runs `claude
+auth status` with the scrubbed subprocess env and aborts (unless
+`--allow-api-billing` is passed) if the account isn't logged in via
+`authMethod: "claude.ai"`.
+
+`--budget-usd` defaults to `None`, meaning **no `--max-budget-usd` flag is
+passed to `claude -p` at all** — there's no dollar figure to enforce on a
+flat-rate subscription. The `est_cost_usd` figure recorded per run (renamed
+from `total_cost_usd` in the raw transcript) is Claude Code's own **notional
+cost estimate**, the same number it would compute if you were on API
+billing — it is not an actual charge against the subscription. Pass
+`--budget-usd <n>` if you want an optional runaway-cost guard anyway (e.g.
+to catch a pathological loop early); it's off by default.
+
+### Mandatory spend caps when `--allow-api-billing` is passed
+
+`--allow-api-billing` switches the auth guard off and lets the run proceed
+even on API-key/non-subscription billing, where cost is a real charge, not
+a notional estimate. When that flag is passed, two caps become **mandatory**
+and `run.py` validates them up front (`validate_billing_args`), aborting
+with a clear message before any `claude -p` call if either is missing or
+not `> 0`:
+
+- **`--budget-usd <n>` (per-run cap, required, must be `> 0`)** — passed as
+  `--max-budget-usd <n>` to *every* `claude -p` invocation while API billing
+  is allowed, including `--preflight`'s two probe calls and every run in a
+  full experiment. On subscription auth this same flag stays optional (only
+  passed at all if you supply it, as the runaway-cost guard described above).
+
+- **`--total-budget-usd <n>` (cumulative cap across the whole experiment,
+  required, must be `> 0`)** — enforced only when `--allow-api-billing` is
+  set; on subscription auth it is accepted but **ignored**, with a note
+  printed to stderr, since there's no dollar figure to enforce on a
+  flat-rate plan. Before starting each run, `run.py` sums `est_cost_usd`
+  across the runs already completed in this experiment's `runs.jsonl`
+  (including ones from a prior `--resume`d session) and compares
+  `spent + per_run_cap` against the total cap
+  (`budget_allows_next(spent, per_run_cap, total_cap)`). Once one more run
+  at its worst case (spending the full per-run cap) would exceed the total,
+  scheduling stops — remaining runs in the trial matrix are skipped — and
+  `meta.json` records `"stopped_for_budget": true`. Re-running with
+  `--resume <stamp>` after raising `--total-budget-usd` (or after actual
+  spend came in under the per-run cap) picks up where it left off, same as
+  any other `--resume`.
+
+Example:
+
+```bash
+python3 experiments/harness-ab/run.py --trials 3 --model claude-sonnet-5 \
+  --allow-api-billing --budget-usd 2.00 --total-budget-usd 15.00
+```
+
+The practical constraint on a Max plan is **usage limits within a rolling
+5-hour window**, not dollars. Runs are sequential by default
+(`--parallel` is currently unused by `cmd_full_run`'s loop), which keeps
+concurrent usage predictable; running many trials back-to-back can still
+exhaust a 5-hour window, in which case `claude -p` calls will start failing
+until the window rolls over — use `--resume <stamp>` to pick a run back up
+after that happens.
 
 ## Caveats
 
