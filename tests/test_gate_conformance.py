@@ -437,5 +437,145 @@ class ComputeGateConformanceTest(unittest.TestCase):
         self.assertEqual(result["edits_before_sweep"], 1)
 
 
+class FindPivotBoundaryTimestampTest(unittest.TestCase):
+    def test_finds_resume_marker(self):
+        stream = [
+            {"t": 1, "type": "docread", "name": "wf/WF_INIT"},
+            {"t": 5, "type": "sweep"},
+            {"t": 10, "type": "resume"},
+            {"t": 12, "type": "edit"},
+        ]
+        self.assertEqual(gc.find_pivot_boundary_timestamp(stream), 10)
+
+    def test_finds_session_boot_marker(self):
+        stream = [{"t": 1, "type": "docread"}, {"t": 9, "type": "session_boot"}]
+        self.assertEqual(gc.find_pivot_boundary_timestamp(stream), 9)
+
+    def test_falls_back_when_no_marker(self):
+        stream = [{"t": 1, "type": "docread"}]
+        self.assertEqual(gc.find_pivot_boundary_timestamp(stream, fallback_ts=99), 99)
+
+    def test_returns_none_when_no_marker_and_no_fallback(self):
+        self.assertIsNone(gc.find_pivot_boundary_timestamp([], fallback_ts=None))
+
+
+class SplitEventsAtPivotBoundaryTest(unittest.TestCase):
+    def test_splits_stream_on_timestamp(self):
+        stream = [
+            {"t": 1, "type": "docread"},
+            {"t": 5, "type": "sweep"},
+            {"t": 10, "type": "resume"},
+            {"t": 12, "type": "state", "to_s": "WF_CLASSIFY"},
+        ]
+        task1_window, pivot_window = gc.split_events_at_pivot_boundary(stream, [], boundary_ts=10)
+        self.assertEqual(len(task1_window["stream"]), 2)
+        self.assertEqual(len(pivot_window["stream"]), 2)
+        self.assertEqual(pivot_window["stream"][0]["type"], "resume")
+
+    def test_event_with_no_timestamp_stays_in_task1(self):
+        stream = [{"type": "gated"}]  # no 't' field
+        task1_window, pivot_window = gc.split_events_at_pivot_boundary(stream, [], boundary_ts=5)
+        self.assertEqual(len(task1_window["stream"]), 1)
+        self.assertEqual(len(pivot_window["stream"]), 0)
+
+
+class ComputePivotReclassifiedTest(unittest.TestCase):
+    def test_succeeded_true_when_state_event_present(self):
+        pivot_stream = [{"t": 20, "type": "state", "from_s": "WF_EXECUTE", "to_s": "WF_CLASSIFY"}]
+        result = gc.compute_pivot_reclassified_from_streams(pivot_stream, [])
+        self.assertTrue(result["succeeded"])
+        self.assertTrue(result["attempted"])
+
+    def test_attempted_true_succeeded_false_on_denied_transition(self):
+        # v1.2.82-era plugin build: EXECUTE->CLASSIFY missing as a valid FSM
+        # edge, so no 'state' stream event fires, but the hook denial text
+        # mentions WF_CLASSIFY.
+        pivot_transcript = [
+            {"type": "assistant", "message": {"content": [{"type": "tool_use",
+                "name": "mcp__plugin_swe_serena__set_state", "input": {}}]}},
+            {"type": "user", "message": {"content": [{"type": "tool_result", "is_error": True,
+                "content": "cannot transition to WF_CLASSIFY from WF_EXECUTE"}]}},
+        ]
+        result = gc.compute_pivot_reclassified_from_streams([], pivot_transcript)
+        self.assertFalse(result["succeeded"])
+        self.assertTrue(result["attempted"])
+
+    def test_neither_attempted_nor_succeeded(self):
+        result = gc.compute_pivot_reclassified_from_streams([], [])
+        self.assertFalse(result["succeeded"])
+        self.assertFalse(result["attempted"])
+
+
+class ComputePivotResweepVerifiedTest(unittest.TestCase):
+    def test_true_when_pivot_window_has_its_own_sweep(self):
+        pivot_stream = [{"t": 20, "type": "sweep"}]
+        self.assertTrue(gc.compute_pivot_resweep_verified(pivot_stream))
+
+    def test_false_when_pivot_window_has_no_sweep(self):
+        # task1's sweep lives in the task1 window, not this one.
+        pivot_stream = [{"t": 20, "type": "edit"}]
+        self.assertFalse(gc.compute_pivot_resweep_verified(pivot_stream))
+
+
+class ComputePivotEditsBeforeSweepTest(unittest.TestCase):
+    def test_counts_edits_in_pivot_window_before_new_sweep(self):
+        pivot_stream = [
+            {"t": 21, "type": "edit", "file": "a.py"},
+            {"t": 22, "type": "sweep"},
+        ]
+        pivot_transcript = [
+            {"type": "assistant", "message": {"content": [{"type": "tool_use",
+                "name": "Edit", "input": {"file_path": "a.py"}}]}},
+        ]
+        self.assertEqual(gc.compute_pivot_edits_before_sweep(pivot_stream, pivot_transcript), 1)
+
+    def test_zero_when_sweep_happens_first(self):
+        pivot_stream = [{"t": 20, "type": "sweep"}, {"t": 21, "type": "edit", "file": "a.py"}]
+        self.assertEqual(gc.compute_pivot_edits_before_sweep(pivot_stream, []), 0)
+
+
+class ComputeGateConformancePivotTest(unittest.TestCase):
+    PIVOT_DOC_RULES = [{"id": "P1", "memory": "dom/DOM_PIVOT_RULE", "tests": []}]
+
+    def test_full_pivot_shape_includes_pivot_keys(self):
+        pivot_stream = [
+            {"t": 20, "type": "docread", "s": "s1", "name": "dom/DOM_PIVOT_RULE"},
+            {"t": 21, "type": "sweep", "s": "s1"},
+            {"t": 22, "type": "edit", "file": "a.py", "s": "s1"},
+            {"t": 23, "type": "state", "from_s": "WF_EXECUTE", "to_s": "WF_CLASSIFY", "s": "s1"},
+        ]
+        pivot_transcript = [
+            {"type": "assistant", "message": {"content": [{"type": "tool_use",
+                "name": "mcp__plugin_swe_serena__read_memory",
+                "input": {"memory_name": "dom/DOM_PIVOT_RULE"}}]}},
+            {"type": "assistant", "message": {"content": [{"type": "tool_use",
+                "name": "Edit", "input": {"file_path": "a.py"}}]}},
+        ]
+        result = gc.compute_gate_conformance_pivot(
+            pivot_stream, pivot_transcript, pivot_doc_rules=self.PIVOT_DOC_RULES,
+            is_plugin_arm=True)
+        self.assertIn("pivot_reclassified", result)
+        self.assertTrue(result["pivot_reclassified"]["succeeded"])
+        self.assertTrue(result["pivot_resweep_verified"])
+        self.assertEqual(result["pivot_edits_before_sweep"], 0)
+        self.assertEqual(result["pivot_memories_read"], ["dom/dom_pivot_rule"])
+        self.assertEqual(result["pivot_doc_rule_memories_coverage"], 1.0)
+        # base-shape keys are still present (init_chain_complete included
+        # for shape consistency even though a pivot window never re-runs
+        # WF_INIT).
+        self.assertIn("init_chain_complete", result)
+
+    def test_control_arm_pivot_uses_plain_read_channel(self):
+        pivot_transcript = [
+            {"type": "assistant", "message": {"content": [{"type": "tool_use",
+                "name": "Read", "input": {"file_path": ".serena/memory/dom/DOM_PIVOT_RULE.md"}}]}},
+        ]
+        result = gc.compute_gate_conformance_pivot(
+            [], pivot_transcript, pivot_doc_rules=self.PIVOT_DOC_RULES, is_plugin_arm=False)
+        self.assertEqual(result["memories_read_channel"], "plain_read")
+        self.assertEqual(result["pivot_memories_read"], ["dom/dom_pivot_rule"])
+        self.assertFalse(result["pivot_resweep_verified"])
+
+
 if __name__ == "__main__":
     unittest.main()

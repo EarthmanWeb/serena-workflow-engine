@@ -398,6 +398,177 @@ def compute_gate_denials(transcript_events):
 
 
 def compute_gate_conformance(stream_events, transcript_events, doc_rules=None, is_plugin_arm=True):
+    return _compute_gate_conformance_impl(stream_events, transcript_events, doc_rules, is_plugin_arm)
+
+
+# --------------------------------------------------------------------------
+# Pivot (two-phase run) gate conformance.
+#
+# A pivot run's stream/transcript files are windowed by run.py at the pivot
+# boundary before any of the functions below are called: everything here
+# takes an already-sliced stream_events/transcript_events list scoped to
+# ONE phase's window (either "everything up to the pivot boundary" for
+# task1, or "everything from the pivot boundary onward" for the pivot
+# phase). split_events_at_pivot_boundary() below is the one function that
+# does the actual windowing, given a boundary timestamp -- callers resolve
+# that timestamp from the pivot transcript's first event time (or an
+# explicit session_boot/resume stream marker when one exists; see
+# find_pivot_boundary_timestamp()).
+# --------------------------------------------------------------------------
+
+def find_pivot_boundary_timestamp(stream_events, fallback_ts=None):
+    """Resolve the epoch timestamp marking the start of the pivot phase, by
+    scanning stream_events (the FULL, unwindowed stream — spanning both
+    phases, since the plugin's own streams/*.jsonl file is written
+    continuously across a --resume'd session) for the first
+    'session_boot'/'resume' marker event. Falls back to `fallback_ts` (the
+    caller-supplied wall-clock time the pivot `claude -p --resume` process
+    was launched, i.e. os.path.getmtime/time.time() captured by run.py at
+    that point) when no such marker exists in the stream -- some plugin
+    versions/hook configs may not emit one. Pure given the events + a
+    caller-supplied fallback; returns None only when both are unavailable
+    (caller should then treat pivot gate conformance as unmeasurable rather
+    than silently windowing on the wrong boundary)."""
+    for event in stream_events:
+        if event.get("type") in ("session_boot", "resume"):
+            ts = event.get("t")
+            if isinstance(ts, (int, float)):
+                return ts
+    return fallback_ts
+
+
+def split_events_at_pivot_boundary(stream_events, transcript_events, boundary_ts):
+    """Split both event lists into (task1_window, pivot_window) pairs at
+    boundary_ts. Pure.
+
+    stream_events are split on their own 't' (epoch) field: events with
+    t < boundary_ts are task1's, t >= boundary_ts are the pivot's. A stream
+    event with no usable 't' is treated as task1 (conservative — it can't
+    be proven to belong to the pivot window).
+
+    transcript_events (parsed stream-json lines, which carry no 't' field
+    of their own — Claude Code's stream-json format doesn't timestamp
+    individual events) are split positionally: the pivot transcript is
+    ALWAYS its own separate file (transcript.pivot.jsonl, per the two-file
+    contract), so callers pass the two transcripts' already-separate event
+    lists directly rather than relying on this function to split a single
+    merged transcript list. This function still accepts and splits a merged
+    transcript_events list for completeness/tests (treating boundary_ts as
+    meaningless for transcript events with no timestamps — the split is
+    simply position len(transcript_events)//1, i.e. NOT split at all,
+    returned whole as task1_window with an empty pivot window) so a caller
+    that mistakenly passes one merged list gets an obviously-empty pivot
+    window rather than a wrong split -- the two-file contract is the
+    supported path; use the pivot transcript's own already-loaded event
+    list directly instead of this function's transcript output."""
+    task1_stream = []
+    pivot_stream = []
+    for event in stream_events:
+        ts = event.get("t")
+        if isinstance(ts, (int, float)) and boundary_ts is not None and ts >= boundary_ts:
+            pivot_stream.append(event)
+        else:
+            task1_stream.append(event)
+    return (
+        {"stream": task1_stream, "transcript": transcript_events},
+        {"stream": pivot_stream, "transcript": []},
+    )
+
+
+def compute_pivot_reclassified(pivot_transcript_events):
+    """Whether the agent re-entered WF_CLASSIFY after the pivot prompt.
+
+    Returns {"attempted": bool, "succeeded": bool}:
+      - "succeeded": a stream 'state' event with to_s == "WF_CLASSIFY"
+        exists anywhere the caller-supplied pivot-window stream_events
+        carries (see compute_pivot_reclassified_from_streams — this
+        transcript-only variant cannot see stream state events at all, so
+        it always reports succeeded=False; kept for callers that only have
+        a transcript to inspect).
+      - "attempted": textual evidence in a hook-denial/tool_result or
+        assistant text mentioning "WF_CLASSIFY" appears in the pivot
+        transcript, even if the actual state transition didn't happen (a
+        v1.2.82-era plugin build has EXECUTE->CLASSIFY missing as a valid
+        FSM edge, so the hook may deny the attempted transition while still
+        leaving textual evidence the agent tried).
+    """
+    attempted = False
+    for _i, kind, _name, payload in iter_transcript_tool_events(pivot_transcript_events):
+        text = payload if isinstance(payload, str) else None
+        if text and "WF_CLASSIFY" in text:
+            attempted = True
+    return {"attempted": attempted, "succeeded": False}
+
+
+def compute_pivot_reclassified_from_streams(pivot_stream_events, pivot_transcript_events):
+    """Full pivot_reclassified check using BOTH the pivot-window stream
+    events (for the authoritative 'state' transition marker) and transcript
+    events (for the 'attempted' textual signal, see
+    compute_pivot_reclassified). Returns {"attempted": bool, "succeeded":
+    bool} — "succeeded" is True iff a 'state' stream event with
+    to_s == "WF_CLASSIFY" occurs anywhere in pivot_stream_events."""
+    succeeded = any(
+        e.get("type") == "state" and e.get("to_s") == "WF_CLASSIFY"
+        for e in pivot_stream_events
+    )
+    attempted = succeeded or compute_pivot_reclassified(pivot_transcript_events)["attempted"]
+    return {"attempted": attempted, "succeeded": succeeded}
+
+
+def compute_pivot_resweep_verified(pivot_stream_events):
+    """True iff a NEW 'sweep' marker occurs within the pivot-window stream
+    events (i.e. the agent re-verified the sweep gate after the pivot
+    prompt, rather than relying on task1's already-consumed sweep). Pure —
+    identical logic to compute_sweep_verified, just applied to a
+    pre-windowed pivot-only stream event list, so a task1-phase sweep
+    (which lives in the task1 window, not this one) never counts."""
+    return compute_sweep_verified(pivot_stream_events)
+
+
+def compute_pivot_edits_before_sweep(pivot_stream_events, pivot_transcript_events):
+    """Count of Edit/Write/NotebookEdit/Serena-edit tool_use events within
+    the pivot phase that occur before the pivot's own new sweep marker
+    (see compute_pivot_resweep_verified). Identical logic to
+    compute_edits_before_sweep, applied to the pivot-only windowed event
+    lists -- any edit recorded in the task1 window is out of scope."""
+    return compute_edits_before_sweep(pivot_stream_events, pivot_transcript_events)
+
+
+def compute_pivot_memories_read(pivot_transcript_events, pivot_stream_events, is_plugin_arm=True):
+    """Memories read strictly within the pivot window, via the same
+    plugin/control channel selection as compute_gate_conformance. Pure."""
+    if is_plugin_arm:
+        return compute_memories_read(pivot_transcript_events, pivot_stream_events)
+    return compute_control_memories_read(pivot_transcript_events)
+
+
+def compute_gate_conformance_pivot(pivot_stream_events, pivot_transcript_events,
+                                    pivot_doc_rules=None, is_plugin_arm=True):
+    """Pivot-phase gate-conformance dict: the pivot-specific checks
+    (pivot_reclassified, pivot_resweep_verified, pivot_edits_before_sweep)
+    layered on top of the same base shape compute_gate_conformance()
+    returns (init_chain_complete/sweep_verified/edits_before_sweep/
+    memories_read/... computed over the PIVOT WINDOW ONLY, since the pivot
+    phase never re-runs WF_INIT — init_chain_complete is expected to be
+    False for a pivot window and is not a conformance signal there; kept in
+    the base dict purely for shape consistency with task1's row). Pure —
+    no I/O; caller supplies already-windowed event lists (see
+    split_events_at_pivot_boundary / find_pivot_boundary_timestamp)."""
+    base = _compute_gate_conformance_impl(
+        pivot_stream_events, pivot_transcript_events, pivot_doc_rules, is_plugin_arm)
+    base["pivot_reclassified"] = compute_pivot_reclassified_from_streams(
+        pivot_stream_events, pivot_transcript_events)
+    base["pivot_resweep_verified"] = compute_pivot_resweep_verified(pivot_stream_events)
+    base["pivot_edits_before_sweep"] = compute_pivot_edits_before_sweep(
+        pivot_stream_events, pivot_transcript_events)
+    base["pivot_memories_read"] = compute_pivot_memories_read(
+        pivot_transcript_events, pivot_stream_events, is_plugin_arm=is_plugin_arm)
+    base["pivot_doc_rule_memories_coverage"] = compute_doc_rule_memories_coverage(
+        base["pivot_memories_read"], pivot_doc_rules).get("doc_rule_memories_coverage")
+    return base
+
+
+def _compute_gate_conformance_impl(stream_events, transcript_events, doc_rules=None, is_plugin_arm=True):
     """Top-level per-run gate-conformance dict, assembled from the functions
     above. Pure — no I/O; caller supplies already-loaded event lists.
 

@@ -147,6 +147,164 @@ def gate_conformance_stats(rows):
     return out
 
 
+def _has_phases(r):
+    """True iff this row is a two-phase (pivot) run — carries a `phases`
+    dict with both task1 and pivot keys. A single-phase row (including one
+    from a task with no pivot/) has no `phases` field at all."""
+    phases = r.get("phases")
+    return isinstance(phases, dict) and "task1" in phases and "pivot" in phases
+
+
+def _benchmark_pct(benchmark, category):
+    """Pass % (0-100) for one acceptance category on a phases.<phase>.
+    benchmark dict (score_hidden_tests_dir()'s return shape) — same idea as
+    _acceptance_category_pct but reading a benchmark sub-dict directly
+    instead of a top-level row's "acceptance" field."""
+    if not isinstance(benchmark, dict):
+        return None
+    cat = benchmark.get(category) or {}
+    total = cat.get("total") or 0
+    if not total:
+        return None
+    return 100.0 * (cat.get("passed") or 0) / total
+
+
+def _benchmark_success(benchmark):
+    """A benchmark counts as a success iff it ran at least one test and all
+    of them passed (100% of that benchmark, per the spec: success = 100% of
+    that benchmark). None (not measured) when no tests ran at all."""
+    if not isinstance(benchmark, dict):
+        return None
+    total = benchmark.get("total") or 0
+    if not total:
+        return None
+    return bool(benchmark.get("ok"))
+
+
+def pivot_benchmark_stats(rows):
+    """Per-arm Benchmark 1 / Benchmark 2 stats for two-phase rows only.
+    Returns {arm: {"b1": {...}, "b2": {...}, "task1_retention": {...},
+    "n_pivot": n}}. Non-pivot rows (single-phase, or a pivot-less task) are
+    excluded entirely rather than counted as zero -- an arm with no pivot
+    rows at all gets an empty per-arm entry (n_pivot == 0), so callers can
+    tell "no pivot data" from "0% success on pivot data". Pure."""
+    by_arm = {}
+    for r in rows:
+        if _has_phases(r):
+            by_arm.setdefault(r.get("arm"), []).append(r)
+
+    out = {}
+    for arm, arm_rows in by_arm.items():
+        b1_bench = [r["phases"]["task1"].get("benchmark") for r in arm_rows]
+        b2_bench = [r["phases"]["pivot"].get("benchmark") for r in arm_rows]
+
+        b1_spec = [v for v in (_benchmark_pct(b, "spec") for b in b1_bench) if v is not None]
+        b1_doc = [v for v in (_benchmark_pct(b, "doc") for b in b1_bench) if v is not None]
+        b1_success = [v for v in (_benchmark_success(b) for b in b1_bench) if v is not None]
+
+        b2_spec = [v for v in (_benchmark_pct(b, "spec") for b in b2_bench) if v is not None]
+        b2_doc = [v for v in (_benchmark_pct(b, "doc") for b in b2_bench) if v is not None]
+        b2_success = [v for v in (_benchmark_success(b) for b in b2_bench) if v is not None]
+
+        retentions = [r["phases"]["pivot"].get("task1_retention") for r in arm_rows]
+        retentions = [t for t in retentions if isinstance(t, dict)]
+        retention_rates = []
+        total_regressions = 0
+        for t in retentions:
+            total = t.get("total") or 0
+            if total:
+                retention_rates.append(100.0 * (t.get("passed") or 0) / total)
+            total_regressions += len(t.get("regressions") or [])
+
+        task1_medians = _phase_metric_medians(r["phases"]["task1"].get("metrics") for r in arm_rows)
+        pivot_medians = _phase_metric_medians(r["phases"]["pivot"].get("metrics") for r in arm_rows)
+
+        out[arm] = {
+            "n_pivot": len(arm_rows),
+            "b1": {
+                "spec_pass_pct_mean": mean(b1_spec),
+                "doc_pass_pct_mean": mean(b1_doc),
+                "success_rate": mean([1.0 if v else 0.0 for v in b1_success]) if b1_success else None,
+            },
+            "b2": {
+                "spec_pass_pct_mean": mean(b2_spec),
+                "doc_pass_pct_mean": mean(b2_doc),
+                "success_rate": mean([1.0 if v else 0.0 for v in b2_success]) if b2_success else None,
+            },
+            "task1_retention": {
+                "rate_mean": mean(retention_rates),
+                "total_regressions": total_regressions,
+            },
+            "phase_medians": {
+                "task1": task1_medians,
+                "pivot": pivot_medians,
+            },
+        }
+    return out
+
+
+_PHASE_METRIC_KEYS = ("total_tokens", "assistant_turns_incl_subagents",
+                       "num_turns", "total_tool_calls", "est_cost_usd")
+
+
+def _phase_metric_medians(metrics_iter):
+    """Per-phase median of a fixed set of metrics (tokens/turns/tool_calls/
+    est_cost) across a set of phases.<phase>.metrics dicts. Pure."""
+    vals_by_key = {k: [] for k in _PHASE_METRIC_KEYS}
+    for m in metrics_iter:
+        if not isinstance(m, dict):
+            continue
+        for k in _PHASE_METRIC_KEYS:
+            v = m.get(k)
+            if isinstance(v, (int, float)):
+                vals_by_key[k].append(v)
+    return {k: median(v) for k, v in vals_by_key.items()}
+
+
+def pivot_gate_stats(rows):
+    """Per-arm pivot-gate conformance rollup: pivot_reclassified (attempted/
+    succeeded rates), pivot_resweep_verified rate, mean
+    pivot_edits_before_sweep, mean pivot_doc_rule_memories_coverage. Reads
+    phases.pivot.gates on two-phase rows only. Pure."""
+    by_arm = {}
+    for r in rows:
+        if _has_phases(r):
+            by_arm.setdefault(r.get("arm"), []).append(r)
+
+    out = {}
+    for arm, arm_rows in by_arm.items():
+        pivot_gates = [r["phases"]["pivot"].get("gates") for r in arm_rows]
+        pivot_gates = [g for g in pivot_gates if isinstance(g, dict)]
+        n = len(pivot_gates)
+
+        reclass = [g.get("pivot_reclassified") for g in pivot_gates]
+        reclass = [rc for rc in reclass if isinstance(rc, dict)]
+        attempted_vals = [rc.get("attempted") for rc in reclass]
+        succeeded_vals = [rc.get("succeeded") for rc in reclass]
+
+        resweep_vals = [g.get("pivot_resweep_verified") for g in pivot_gates]
+        resweep_vals = [v for v in resweep_vals if isinstance(v, bool)]
+
+        edits_vals = [g.get("pivot_edits_before_sweep") for g in pivot_gates]
+        edits_vals = [v for v in edits_vals if isinstance(v, (int, float))]
+
+        coverage_vals = [g.get("pivot_doc_rule_memories_coverage") for g in pivot_gates]
+        coverage_vals = [v for v in coverage_vals if isinstance(v, (int, float))]
+
+        out[arm] = {
+            "n_with_pivot_gates": n,
+            "pivot_reclassified_attempted_rate":
+                (sum(1 for v in attempted_vals if v) / len(attempted_vals)) if attempted_vals else None,
+            "pivot_reclassified_succeeded_rate":
+                (sum(1 for v in succeeded_vals if v) / len(succeeded_vals)) if succeeded_vals else None,
+            "pivot_resweep_verified_rate":
+                (sum(1 for v in resweep_vals if v) / len(resweep_vals)) if resweep_vals else None,
+            "pivot_edits_before_sweep_mean": mean(edits_vals),
+            "pivot_doc_rule_memories_coverage_mean": mean(coverage_vals),
+        }
+    return out
+
+
 def doc_rule_pass_matrix(rows):
     """arm x rule pass matrix from each row's acceptance["doc_rules"] (see
     acceptance.doc_rule_pass_matrix). Returns
@@ -321,7 +479,13 @@ def aggregate(rows):
                     deltas[field] = 100.0 * (arm_med - base_med) / base_med
             s["vs_baseline_pct"] = deltas
 
-    return {"arms": summary, "arm_order": arm_order, "doc_rule_matrix": doc_rule_pass_matrix(rows)}
+    return {
+        "arms": summary,
+        "arm_order": arm_order,
+        "doc_rule_matrix": doc_rule_pass_matrix(rows),
+        "pivot_benchmarks": pivot_benchmark_stats(rows),
+        "pivot_gates": pivot_gate_stats(rows),
+    }
 
 
 def format_markdown(agg):
@@ -397,6 +561,69 @@ def format_markdown(agg):
         s = arms[arm]
         top = ", ".join(f"{k}: {v}" for k, v in s.get("swe_top_event_types", []))
         lines.append(f"| {arm} | {s.get('swe_gated_events_total', 0)} | {top or '-'} |")
+
+    pivot_bench = agg.get("pivot_benchmarks") or {}
+    pivot_gates = agg.get("pivot_gates") or {}
+    pivot_arms = [a for a in arm_names if (pivot_bench.get(a) or {}).get("n_pivot")]
+    if pivot_arms:
+        lines.append("")
+        lines.append("## Benchmark 1 — after task 1")
+        lines.append("")
+        lines.append("| arm | n | success_rate (100% of B1) | spec_pass% | doc_pass% |")
+        lines.append("|---|---|---|---|---|")
+        for arm in pivot_arms:
+            pb = pivot_bench[arm]
+            b1 = pb["b1"]
+            lines.append(
+                f"| {arm} | {pb['n_pivot']} | {_fmt_pct(b1['success_rate'])} | "
+                f"{_fmt(b1['spec_pass_pct_mean'])} | {_fmt(b1['doc_pass_pct_mean'])} |"
+            )
+
+        lines.append("")
+        lines.append("## Benchmark 2 — after pivot")
+        lines.append("")
+        lines.append("| arm | n | success_rate (100% of B2) | spec_pass% | doc_pass% | "
+                      "task1_retention% | task1 regressions (total) |")
+        lines.append("|---|---|---|---|---|---|---|")
+        for arm in pivot_arms:
+            pb = pivot_bench[arm]
+            b2 = pb["b2"]
+            ret = pb["task1_retention"]
+            lines.append(
+                f"| {arm} | {pb['n_pivot']} | {_fmt_pct(b2['success_rate'])} | "
+                f"{_fmt(b2['spec_pass_pct_mean'])} | {_fmt(b2['doc_pass_pct_mean'])} | "
+                f"{_fmt(ret['rate_mean'])} | {ret['total_regressions']} |"
+            )
+
+        lines.append("")
+        lines.append("| arm | task1 tokens (median) | task1 turns (median) | "
+                      "pivot tokens (median) | pivot turns (median) |")
+        lines.append("|---|---|---|---|---|")
+        for arm in pivot_arms:
+            pm = pivot_bench[arm]["phase_medians"]
+            t1, pv = pm["task1"], pm["pivot"]
+            lines.append(
+                f"| {arm} | {_fmt(t1.get('total_tokens'))} | "
+                f"{_fmt(t1.get('assistant_turns_incl_subagents'))} | "
+                f"{_fmt(pv.get('total_tokens'))} | "
+                f"{_fmt(pv.get('assistant_turns_incl_subagents'))} |"
+            )
+
+        lines.append("")
+        lines.append("| arm | n | pivot_reclassified attempted% | pivot_reclassified succeeded% | "
+                      "pivot_resweep_verified% | pivot_edits_before_sweep (mean) | "
+                      "pivot_doc_rule_coverage (mean) |")
+        lines.append("|---|---|---|---|---|---|---|")
+        for arm in pivot_arms:
+            pg = pivot_gates.get(arm) or {}
+            lines.append(
+                f"| {arm} | {pg.get('n_with_pivot_gates', 0)} | "
+                f"{_fmt_pct(pg.get('pivot_reclassified_attempted_rate'))} | "
+                f"{_fmt_pct(pg.get('pivot_reclassified_succeeded_rate'))} | "
+                f"{_fmt_pct(pg.get('pivot_resweep_verified_rate'))} | "
+                f"{_fmt(pg.get('pivot_edits_before_sweep_mean'))} | "
+                f"{_fmt_pct(pg.get('pivot_doc_rule_memories_coverage_mean'))} |"
+            )
 
     return "\n".join(lines)
 

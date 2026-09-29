@@ -156,5 +156,137 @@ class AggregateIncludesNewFieldsTest(unittest.TestCase):
         self.assertIn("R1", md)
 
 
+def _pivot_row(arm, b1_spec=None, b1_doc=None, b1_ok=True, b2_spec=None, b2_doc=None,
+                b2_ok=True, retention=None, pivot_gates=None, trial=0):
+    b1 = {"total": 0, "passed": 0, "ok": b1_ok}
+    if b1_spec is not None:
+        b1["spec"] = b1_spec
+    if b1_doc is not None:
+        b1["doc"] = b1_doc
+    if b1_spec or b1_doc:
+        b1["total"] = (b1_spec or {}).get("total", 0) + (b1_doc or {}).get("total", 0)
+
+    b2 = {"total": 0, "passed": 0, "ok": b2_ok}
+    if b2_spec is not None:
+        b2["spec"] = b2_spec
+    if b2_doc is not None:
+        b2["doc"] = b2_doc
+    if b2_spec or b2_doc:
+        b2["total"] = (b2_spec or {}).get("total", 0) + (b2_doc or {}).get("total", 0)
+
+    return {
+        "arm": arm, "trial": trial,
+        "acceptance": b2,
+        "regression": {"ok": True},
+        "gates": pivot_gates,
+        "wall_s": 1.0,
+        "phases": {
+            "task1": {"benchmark": b1, "metrics": {"total_tokens": 100,
+                                                     "assistant_turns_incl_subagents": 5}},
+            "pivot": {
+                "benchmark": b2,
+                "gates": pivot_gates,
+                "task1_retention": retention or {"passed": 0, "total": 0, "regressions": []},
+                "metrics": {"total_tokens": 50, "assistant_turns_incl_subagents": 3},
+            },
+        },
+    }
+
+
+class PivotBenchmarkStatsTest(unittest.TestCase):
+    def test_non_pivot_rows_excluded(self):
+        rows = [_row("baseline")]
+        stats = analyze.pivot_benchmark_stats(rows)
+        self.assertEqual(stats, {})
+
+    def test_b1_and_b2_pass_pct_and_success_rate(self):
+        rows = [
+            _pivot_row("baseline",
+                       b1_spec={"passed": 2, "total": 2}, b1_ok=True,
+                       b2_spec={"passed": 1, "total": 2}, b2_ok=False),
+        ]
+        stats = analyze.pivot_benchmark_stats(rows)
+        self.assertEqual(stats["baseline"]["n_pivot"], 1)
+        self.assertEqual(stats["baseline"]["b1"]["spec_pass_pct_mean"], 100.0)
+        self.assertEqual(stats["baseline"]["b1"]["success_rate"], 1.0)
+        self.assertEqual(stats["baseline"]["b2"]["spec_pass_pct_mean"], 50.0)
+        self.assertEqual(stats["baseline"]["b2"]["success_rate"], 0.0)
+
+    def test_task1_retention_rate_and_regressions(self):
+        rows = [
+            _pivot_row("baseline", retention={"passed": 2, "total": 3,
+                                               "regressions": ["test_x (a.b.T.test_x)"]}),
+        ]
+        stats = analyze.pivot_benchmark_stats(rows)
+        ret = stats["baseline"]["task1_retention"]
+        self.assertAlmostEqual(ret["rate_mean"], 100.0 * 2 / 3)
+        self.assertEqual(ret["total_regressions"], 1)
+
+    def test_phase_medians_present(self):
+        rows = [_pivot_row("baseline")]
+        stats = analyze.pivot_benchmark_stats(rows)
+        medians = stats["baseline"]["phase_medians"]
+        self.assertEqual(medians["task1"]["total_tokens"], 100)
+        self.assertEqual(medians["pivot"]["total_tokens"], 50)
+
+
+class PivotGateStatsTest(unittest.TestCase):
+    def test_non_pivot_rows_excluded(self):
+        rows = [_row("baseline")]
+        stats = analyze.pivot_gate_stats(rows)
+        self.assertEqual(stats, {})
+
+    def test_reclassified_and_resweep_rates(self):
+        gates = {
+            "pivot_reclassified": {"attempted": True, "succeeded": True},
+            "pivot_resweep_verified": True,
+            "pivot_edits_before_sweep": 0,
+            "pivot_doc_rule_memories_coverage": 1.0,
+        }
+        rows = [_pivot_row("v5", pivot_gates=gates)]
+        stats = analyze.pivot_gate_stats(rows)
+        self.assertEqual(stats["v5"]["pivot_reclassified_attempted_rate"], 1.0)
+        self.assertEqual(stats["v5"]["pivot_reclassified_succeeded_rate"], 1.0)
+        self.assertEqual(stats["v5"]["pivot_resweep_verified_rate"], 1.0)
+        self.assertEqual(stats["v5"]["pivot_edits_before_sweep_mean"], 0.0)
+        self.assertEqual(stats["v5"]["pivot_doc_rule_memories_coverage_mean"], 1.0)
+
+    def test_missing_gates_excluded_from_denominator(self):
+        rows = [_pivot_row("v5", pivot_gates=None)]
+        stats = analyze.pivot_gate_stats(rows)
+        self.assertEqual(stats["v5"]["n_with_pivot_gates"], 0)
+        self.assertIsNone(stats["v5"]["pivot_reclassified_attempted_rate"])
+
+
+class AggregateAndMarkdownPivotGroupingTest(unittest.TestCase):
+    def test_aggregate_includes_pivot_keys(self):
+        rows = [_pivot_row("baseline")]
+        agg = analyze.aggregate(rows)
+        self.assertIn("pivot_benchmarks", agg)
+        self.assertIn("pivot_gates", agg)
+        self.assertIn("baseline", agg["pivot_benchmarks"])
+
+    def test_markdown_grouped_under_benchmark_headings(self):
+        rows = [
+            _pivot_row("baseline", b1_spec={"passed": 1, "total": 1},
+                       b2_spec={"passed": 1, "total": 1},
+                       pivot_gates={"pivot_reclassified": {"attempted": True, "succeeded": True},
+                                    "pivot_resweep_verified": True,
+                                    "pivot_edits_before_sweep": 0,
+                                    "pivot_doc_rule_memories_coverage": 1.0}),
+        ]
+        agg = analyze.aggregate(rows)
+        md = analyze.format_markdown(agg)
+        self.assertIn("Benchmark 1 — after task 1", md)
+        self.assertIn("Benchmark 2 — after pivot", md)
+        self.assertIn("task1_retention%", md)
+
+    def test_markdown_omits_pivot_sections_when_no_pivot_rows(self):
+        rows = [_row("baseline")]
+        agg = analyze.aggregate(rows)
+        md = analyze.format_markdown(agg)
+        self.assertNotIn("Benchmark 1 — after task 1", md)
+
+
 if __name__ == "__main__":
     unittest.main()

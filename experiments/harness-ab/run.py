@@ -70,8 +70,17 @@ def task_paths(task_name):
     `overlay_swe` is kept for backward compat with any external caller that
     imported it directly; `overlays_dir` is the new generic base (see
     overlay_dir_for()) used for per-arm overlays (arms.json's "overlay"
-    field)."""
+    field).
+
+    Two-phase (pivot) tasks additionally ship tasks/<task>/pivot/: a second
+    prompt (pivot/prompt.md, text starting "New task:"), its own hidden
+    tests (pivot/hidden_tests/, test_pivot_spec_*.py / test_pivot_doc_*.py),
+    a reference-solution overlay applied on top of task1's reference
+    (pivot/reference_solution/), and an optional pivot/doc_rules.json (same
+    schema as the task-level one). A task with no pivot/ directory on disk
+    runs single-phase exactly as before — see has_pivot()."""
     task_dir = os.path.join(TASKS_DIR, task_name)
+    pivot_dir = os.path.join(task_dir, "pivot")
     return {
         "dir": task_dir,
         "fixture": os.path.join(task_dir, "fixture"),
@@ -81,7 +90,31 @@ def task_paths(task_name):
         "reference_solution": os.path.join(task_dir, "reference_solution"),
         "task_md": os.path.join(task_dir, "task.md"),
         "doc_rules": os.path.join(task_dir, "doc_rules.json"),
+        "pivot_dir": pivot_dir,
+        "pivot_prompt": os.path.join(pivot_dir, "prompt.md"),
+        "pivot_hidden_tests": os.path.join(pivot_dir, "hidden_tests"),
+        "pivot_reference_solution": os.path.join(pivot_dir, "reference_solution"),
+        "pivot_doc_rules": os.path.join(pivot_dir, "doc_rules.json"),
     }
+
+
+def has_pivot(paths):
+    """True iff this task ships a pivot/ phase (pivot/prompt.md exists on
+    disk). Pure filesystem check, no parsing. A task without it runs
+    single-phase; callers branch on this before doing any pivot-specific
+    work (benchmark 1/2, --resume, phase windowing, ...)."""
+    return os.path.isfile(paths.get("pivot_prompt") or "")
+
+
+def read_pivot_task_text(paths):
+    """Read tasks/<task>/pivot/prompt.md text. Raises SystemExit if absent
+    -- callers must guard with has_pivot() first; this is only reached once
+    a pivot run has already committed to phase 2."""
+    pivot_prompt = paths["pivot_prompt"]
+    if not os.path.exists(pivot_prompt):
+        raise SystemExit(f"missing {pivot_prompt} (pivot phase not ready)")
+    with open(pivot_prompt) as f:
+        return f.read()
 
 
 def overlay_dir_for(paths, overlay_name):
@@ -534,14 +567,36 @@ def check_auth(env, allow_api_billing=False):
     return status
 
 
-def build_command(task_text, model, budget_usd, plugin_dir=None, effort=None):
+def build_command(task_text, model, budget_usd, plugin_dir=None, effort=None,
+                   session_id=None, resume=None):
     """Build the `claude -p ...` argv list (no shell).
 
     budget_usd is optional (None by default at the CLI level): when None,
     no --max-budget-usd flag is passed at all — cost figures are notional
     estimates on a subscription, not a spend cap that needs enforcing. Pass
     a number to add an optional runaway-cost guard.
+
+    session_id / resume implement the two-phase (pivot) run: at most one of
+    the two may be given (both is a caller bug -- see below).
+
+    - session_id: pass `--session-id <uuid>` for a run that must be
+      resumable later (the task1 phase of a pivot run). This also DROPS
+      `--no-session-persistence` (session persistence must stay on for
+      `--resume` to work on the same chat session later) -- every other flag
+      (stream-json, --verbose, --model, --setting-sources, --dangerously-
+      skip-permissions, budget/plugin/effort) is unchanged.
+    - resume: pass `-r/--resume <value>` to continue a previously-persisted
+      session (the pivot phase). Also drops `--no-session-persistence` for
+      the same reason (the CLI flag only works with --print, and a run that
+      resumes was already, by construction, persisted in phase 1).
+    - Neither given (the default): identical to the single-phase command
+      (session-persistence stays disabled), i.e. 100% backward compatible
+      with every existing single-phase call site.
     """
+    assert not (session_id and resume), (
+        "build_command: session_id and resume are mutually exclusive "
+        "(session_id starts a resumable session, resume continues one)"
+    )
     cmd = [
         "claude", "-p", task_text,
         "--output-format", "stream-json",
@@ -549,8 +604,13 @@ def build_command(task_text, model, budget_usd, plugin_dir=None, effort=None):
         "--model", model,
         "--setting-sources", "project,local",
         "--dangerously-skip-permissions",
-        "--no-session-persistence",
     ]
+    if session_id:
+        cmd += ["--session-id", str(session_id)]
+    elif resume:
+        cmd += ["--resume", str(resume)]
+    else:
+        cmd += ["--no-session-persistence"]
     if budget_usd is not None:
         cmd += ["--max-budget-usd", str(budget_usd)]
     if plugin_dir:
@@ -1005,6 +1065,129 @@ def score_run(work_dir, run_dir=None, paths=None):
     return acceptance, regression
 
 
+# --------------------------------------------------------------------------
+# Two-phase (pivot) benchmark scoring.
+#
+# A pivot run scores the work tree TWICE: once after task1 (benchmark 1,
+# before the pivot prompt is ever shown to the agent) and once after the
+# pivot phase (benchmark 2). Both passes reuse score_run()'s acceptance-
+# scoring machinery, but score_run() always scores against ONE fixed
+# hidden_tests dir at a single `_acceptance/` path. score_hidden_tests_dir()
+# below generalizes that to an arbitrary (source hidden_tests dir,
+# destination subdir under _acceptance/) pair, so benchmark 2 can place
+# pivot/hidden_tests/ and task1's hidden_tests/ side by side under
+# `_acceptance/pivot/` + `_acceptance/task1/` and `-t .` discovery still
+# finds both (see run_unittest_dir's `-t .` top-level arg).
+# --------------------------------------------------------------------------
+
+def score_hidden_tests_dir(work_dir, hidden_tests_dir, acceptance_subdir,
+                            run_dir=None, log_name=None, doc_rules_path=None):
+    """Copy `hidden_tests_dir` -> work_dir/_acceptance/<acceptance_subdir>/,
+    run it, and return an acceptance dict shaped exactly like
+    score_run()'s (total/passed/failures/errors/skipped/ok/exit_code/
+    failed_tests/spec/doc/other/doc_rules).
+
+    `acceptance_subdir` may be "" for the single-phase _acceptance/ root
+    (score_run's own layout); a non-empty value (e.g. "pivot", "task1")
+    nests under it instead, so multiple hidden_tests sets can coexist for
+    one discovery pass. Pure I/O helper -- no git, no removal of
+    _acceptance/ itself (callers are responsible for cleanup, see
+    remove_acceptance_dir)."""
+    acceptance_root = os.path.join(work_dir, "_acceptance")
+    dest = os.path.join(acceptance_root, acceptance_subdir) if acceptance_subdir else acceptance_root
+    if os.path.isdir(hidden_tests_dir):
+        if os.path.exists(dest):
+            shutil.rmtree(dest)
+        shutil.copytree(hidden_tests_dir, dest)
+        if acceptance_subdir:
+            # A nested subdir (e.g. _acceptance/task1/) makes _acceptance/
+            # itself a package root too -- unittest discover's `-s
+            # _acceptance` requires __init__.py directly in _acceptance/,
+            # not just in the nested subdir the hidden tests were copied
+            # into. The single-phase score_run() layout (acceptance_subdir
+            # == "") never nests, so this only applies to pivot's two-
+            # subdir discovery.
+            init_path = os.path.join(acceptance_root, "__init__.py")
+            if not os.path.exists(init_path):
+                with open(init_path, "w"):
+                    pass
+        rc, out, err = run_unittest_dir(work_dir, "_acceptance", ".")
+    else:
+        rc, out, err = (-1, "", f"{hidden_tests_dir} not present")
+
+    acceptance = parse_unittest_output(out + "\n" + err)
+    acceptance["exit_code"] = rc
+    acceptance["failed_tests"] = parse_failed_test_ids(out + "\n" + err)
+
+    test_results = acceptance_module.parse_verbose_unittest_output(out + "\n" + err)
+    categories = acceptance_module.categorize_results(test_results)
+    acceptance["spec"] = categories["spec"]
+    acceptance["doc"] = categories["doc"]
+    acceptance["other"] = categories["other"]
+    doc_rules = acceptance_module.load_doc_rules(doc_rules_path)
+    acceptance["doc_rules"] = acceptance_module.doc_rule_pass_matrix(test_results, doc_rules)
+
+    if log_name:
+        _write_score_log(run_dir, log_name, log_name, rc, out, err)
+    return acceptance
+
+
+def remove_acceptance_dir(work_dir):
+    """Remove work_dir/_acceptance/ entirely (best-effort). Called after
+    each benchmark scoring pass so the agent never sees hidden tests on
+    disk in the NEXT phase (task1's _acceptance/ must be gone before the
+    pivot prompt runs, and benchmark 2's before any further phase, if one
+    is ever added)."""
+    acceptance_dir = os.path.join(work_dir, "_acceptance")
+    if os.path.isdir(acceptance_dir):
+        shutil.rmtree(acceptance_dir)
+
+
+def git_commit_snapshot(work_dir, message, run=None):
+    """Snapshot the work tree with `git add -A && git commit` under a fixed
+    harness identity (matching make_run_workdir's own commits), and return
+    the resulting commit sha. `run` defaults to the module's own _run()
+    helper; overridable for tests that want to avoid a real git repo.
+    Raises (via _run's check=True default) if either git command fails --
+    a snapshot that silently didn't happen would corrupt every downstream
+    benchmark/regression comparison."""
+    run = run or _run
+    run(["git", "-c", "user.name=harness-ab", "-c", "user.email=harness-ab@localhost",
+         "add", "-A"], cwd=work_dir)
+    run(["git", "-c", "user.name=harness-ab", "-c", "user.email=harness-ab@localhost",
+         "commit", "-qm", message, "--allow-empty"], cwd=work_dir)
+    result = run(["git", "rev-parse", "HEAD"], cwd=work_dir)
+    return result.stdout.strip()
+
+
+def task1_retention(task1_results_at_b1, task1_results_at_b2):
+    """Compute the pivot phase's task1_retention summary: how many of
+    task1's hidden tests, having passed at benchmark 1, still pass at
+    benchmark 2 (after the pivot phase edited the tree further).
+
+    Both args are score_hidden_tests_dir()-shaped acceptance dicts for the
+    SAME hidden_tests set (task1's), scored once at each benchmark. Uses
+    each dict's "total"/"passed"/"failed_tests" -- a test id is "passed at
+    B1" iff it's not in task1_results_at_b1["failed_tests"] (and the suite
+    ran at all, total > 0). Returns {"passed": n, "total": n,
+    "regressions": [ids that passed at B1 and fail at B2]}. "total" here is
+    the count of task1 tests that passed at B1 (the retention denominator,
+    per the spec: "task1 tests on the final tree"); "passed" is how many of
+    those still pass at B2."""
+    b1_failed = set(task1_results_at_b1.get("failed_tests") or [])
+    b2_failed = set(task1_results_at_b2.get("failed_tests") or [])
+    b1_total = task1_results_at_b1.get("total") or 0
+    b1_passed_count = task1_results_at_b1.get("passed") or 0
+
+    regressions = sorted(b2_failed - b1_failed) if (b1_total and b1_passed_count) else []
+    retained = b1_passed_count - len(regressions)
+    return {
+        "passed": max(0, retained),
+        "total": b1_passed_count,
+        "regressions": regressions,
+    }
+
+
 def read_stream_metrics(work_dir):
     stream_glob = os.path.join(work_dir, ".serena", "streams", "*.jsonl")
     counts = {}
@@ -1075,7 +1258,15 @@ def isolation_check(arm, transcript_metrics):
 
 def run_one(stamp_dir, arm, arms_prepared, trial, model, effort, budget_usd,
             timeout_min, out_lock=None, task=DEFAULT_TASK, paths=None):
+    """Run one arm/trial. Dispatches to the two-phase pivot flow
+    (run_one_pivot) when the task ships tasks/<task>/pivot/prompt.md (see
+    has_pivot); otherwise runs the single-phase flow exactly as before —
+    unchanged row shape for every existing task/stamp."""
     paths = paths or task_paths(task)
+    if has_pivot(paths):
+        return run_one_pivot(stamp_dir, arm, arms_prepared, trial, model, effort,
+                              budget_usd, timeout_min, task=task, paths=paths)
+
     arm_name = arm["name"]
     run_id = f"{arm_name}-t{trial}"
     run_dir = os.path.join(stamp_dir, "runs", run_id)
@@ -1148,6 +1339,255 @@ def run_one(stamp_dir, arm, arms_prepared, trial, model, effort, budget_usd,
     return row
 
 
+def run_one_pivot(stamp_dir, arm, arms_prepared, trial, model, effort, budget_usd,
+                   timeout_min, task=DEFAULT_TASK, paths=None):
+    """Two-phase (pivot) run: task1 in a fresh `claude -p --session-id`
+    session, benchmark 1, then the pivot prompt via `claude -p --resume` in
+    the SAME chat session, then benchmark 2. See the module-level design
+    note above run_one for the on-disk contract this depends on
+    (tasks/<task>/pivot/{prompt.md,hidden_tests/,reference_solution/,
+    doc_rules.json}).
+
+    Row shape: single-phase fields (run_id/arm/task/trial/model/... /
+    metrics/gates/acceptance/regression) are kept at top level for
+    backward-compat with analyze.py's existing per-row readers, but they
+    now describe the OVERALL run (metrics = sum of both phases' metrics;
+    acceptance/regression = benchmark 2's, i.e. the final tree) -- analyze
+    treats "missing phases" as task1-only (see analyze.py's phase-aware
+    aggregation), and a `phases` key carries the full per-phase detail:
+    phases.task1.{metrics,benchmark,gates}, phases.pivot.{metrics,
+    benchmark,gates,task1_retention}.
+    """
+    paths = paths or task_paths(task)
+    arm_name = arm["name"]
+    run_id = f"{arm_name}-t{trial}"
+    run_dir = os.path.join(stamp_dir, "runs", run_id)
+    os.makedirs(run_dir, exist_ok=True)
+
+    work_dir, overlay_info = make_run_workdir(run_dir, arm, paths=paths)
+    claude_md_text = read_effective_claude_md(work_dir)
+    claude_md_sha256 = sha256_of_claude_md(work_dir)
+    claude_md_errors = validate_claude_md(arm_name, bool(arm.get("plugin")), claude_md_text)
+    if claude_md_errors:
+        raise SystemExit(
+            f"{run_id}: effective CLAUDE.md failed validation before any "
+            f"`claude -p` call:\n" + "\n".join(f"  - {e}" for e in claude_md_errors)
+        )
+
+    session_id = str(uuid.uuid4())
+    task1_text = read_task_text(paths=paths)
+    plugin_dir = arms_prepared[arm_name]["dir"] if arm.get("plugin") else None
+    env = clean_env(dict(os.environ))
+    doc_rules = acceptance_module.load_doc_rules(paths.get("doc_rules"))
+    pivot_doc_rules = acceptance_module.load_doc_rules(paths.get("pivot_doc_rules"))
+
+    # --- Phase task1 -----------------------------------------------------
+    cmd1 = build_command(task1_text, model, budget_usd, plugin_dir=plugin_dir,
+                          effort=effort, session_id=session_id)
+    transcript1_path = os.path.join(run_dir, "transcript.task1.jsonl")
+    stderr1_path = os.path.join(run_dir, "stderr.task1.log")
+    rc1, timed_out1, wall_s1 = run_claude(cmd1, work_dir, env, timeout_min,
+                                           transcript1_path, stderr1_path)
+
+    with open(transcript1_path) as f:
+        lines1 = f.readlines()
+    metrics1 = parse_transcript(lines1)
+    transcript_events1 = _parse_transcript_events(lines1)
+
+    # --- Benchmark 1 (before the pivot prompt is ever shown) -------------
+    b1_sha = git_commit_snapshot(work_dir, "benchmark1")
+    b1_acceptance = score_hidden_tests_dir(
+        work_dir, paths["hidden_tests"], "", run_dir=run_dir,
+        log_name="acceptance.task1.b1.txt", doc_rules_path=paths.get("doc_rules"))
+    b1_regression = _score_fixture_regression(work_dir, run_dir, "regression.task1.b1.txt")
+    remove_acceptance_dir(work_dir)
+
+    stream_events_b1 = read_raw_stream_events(work_dir) if arm.get("plugin") else []
+    gates1 = gate_conformance.compute_gate_conformance(
+        stream_events_b1, transcript_events1, doc_rules=doc_rules,
+        is_plugin_arm=bool(arm.get("plugin")))
+
+    # --- Phase pivot -------------------------------------------------------
+    pivot_text = read_pivot_task_text(paths)
+    cmd2 = build_command(pivot_text, model, budget_usd, plugin_dir=plugin_dir,
+                          effort=effort, resume=session_id)
+    transcript2_path = os.path.join(run_dir, "transcript.pivot.jsonl")
+    stderr2_path = os.path.join(run_dir, "stderr.pivot.log")
+    rc2, timed_out2, wall_s2 = run_claude(cmd2, work_dir, env, timeout_min,
+                                           transcript2_path, stderr2_path)
+
+    with open(transcript2_path) as f:
+        lines2 = f.readlines()
+    metrics2 = parse_transcript(lines2)
+    transcript_events2 = _parse_transcript_events(lines2)
+
+    # --- Benchmark 2 -------------------------------------------------------
+    b2_sha = git_commit_snapshot(work_dir, "benchmark2")
+    b2_pivot_acceptance = score_hidden_tests_dir(
+        work_dir, paths["pivot_hidden_tests"], "pivot", run_dir=run_dir,
+        log_name="acceptance.pivot.b2.txt", doc_rules_path=paths.get("pivot_doc_rules"))
+    b2_task1_acceptance = score_hidden_tests_dir(
+        work_dir, paths["hidden_tests"], "task1", run_dir=run_dir,
+        log_name="acceptance.task1.b2.txt", doc_rules_path=paths.get("doc_rules"))
+    b2_regression = _score_fixture_regression(work_dir, run_dir, "regression.pivot.b2.txt")
+    remove_acceptance_dir(work_dir)
+
+    retention = task1_retention(b1_acceptance, b2_task1_acceptance)
+
+    stream_events_all = read_raw_stream_events(work_dir) if arm.get("plugin") else []
+    boundary_ts = gate_conformance.find_pivot_boundary_timestamp(
+        stream_events_all, fallback_ts=None)
+    pivot_stream_events = [e for e in stream_events_all
+                            if boundary_ts is None or
+                            (isinstance(e.get("t"), (int, float)) and e.get("t") >= boundary_ts)]
+    if boundary_ts is None:
+        # No resume/session_boot marker found anywhere in the plugin
+        # stream (e.g. control arm with no stream at all, or a plugin build
+        # that doesn't emit one) -- fall back to "everything is the pivot
+        # window" since we can't prove otherwise; task1's own gates1 above
+        # still reflect the task1-only transcript/stream regardless.
+        pivot_stream_events = stream_events_all
+    gates2 = gate_conformance.compute_gate_conformance_pivot(
+        pivot_stream_events, transcript_events2, pivot_doc_rules=pivot_doc_rules,
+        is_plugin_arm=bool(arm.get("plugin")))
+
+    combined_metrics = _sum_phase_metrics(metrics1, metrics2)
+    stream_metrics = read_stream_metrics(work_dir) if arm.get("plugin") else \
+        {"stream_event_counts": {}, "final_workflow_state": None}
+    isolation = isolation_check(arm, metrics2)
+
+    row = {
+        "run_id": run_id,
+        "arm": arm_name,
+        "task": task,
+        "trial": trial,
+        "seed": None,  # filled by caller
+        "model": model,
+        "effort": effort,
+        "arm_commit": arms_prepared[arm_name]["sha"],
+        "arm_plugin_version": arms_prepared[arm_name]["version"],
+        "exit_code": rc2,
+        "timed_out": bool(timed_out1 or timed_out2),
+        "wall_s": wall_s1 + wall_s2,
+        "metrics": combined_metrics,
+        "stream_metrics": stream_metrics,
+        "gates": gates2,
+        "acceptance": b2_pivot_acceptance,
+        "regression": b2_regression,
+        "isolation": isolation,
+        "overlay": overlay_info["overlay"],
+        "overlay_applied": overlay_info["overlay_applied"],
+        "claude_md_sha256": claude_md_sha256,
+        "claude_md_check": "ok" if not claude_md_errors else claude_md_errors,
+        "session_id": session_id,
+        "phases": {
+            "task1": {
+                "exit_code": rc1,
+                "timed_out": timed_out1,
+                "wall_s": wall_s1,
+                "commit_sha": b1_sha,
+                "metrics": metrics1,
+                "gates": gates1,
+                "benchmark": b1_acceptance,
+                "regression": b1_regression,
+            },
+            "pivot": {
+                "exit_code": rc2,
+                "timed_out": timed_out2,
+                "wall_s": wall_s2,
+                "commit_sha": b2_sha,
+                "metrics": metrics2,
+                "gates": gates2,
+                "benchmark": b2_pivot_acceptance,
+                "regression": b2_regression,
+                "task1_retention": retention,
+            },
+        },
+    }
+    return row
+
+
+def _score_fixture_regression(work_dir, run_dir, log_name):
+    """Run the fixture's own tests/ regression suite (same logic as
+    score_run's regression half) and return the regression dict. Factored
+    out so run_one_pivot can call it twice (once per benchmark) without
+    duplicating score_run's whole hidden-tests-scoring path."""
+    reg_test_dir = os.path.join(work_dir, "tests")
+    if os.path.isdir(reg_test_dir):
+        rrc, rout, rerr = run_unittest_dir(work_dir, "tests", ".")
+        regression = parse_unittest_output(rout + "\n" + rerr)
+        regression["exit_code"] = rrc
+        regression["failed_tests"] = parse_failed_test_ids(rout + "\n" + rerr)
+        _write_score_log(run_dir, log_name, log_name, rrc, rout, rerr)
+        return regression
+    regression = {"total": 0, "passed": 0, "failures": 0, "errors": 0,
+                  "skipped": 0, "ok": True, "exit_code": 0, "failed_tests": []}
+    _write_score_log(run_dir, log_name, log_name, 0, "", "tests/ not present")
+    return regression
+
+
+def _sum_phase_metrics(metrics1, metrics2):
+    """Sum two parse_transcript()-shaped metrics dicts into one overall
+    dict, for backward compat with analyze.py's top-level metrics readers
+    (total tokens, turns, tool calls, est cost, ...) on a two-phase run.
+    Pure.
+
+    Numeric leaf fields are summed; usage/model_usage dicts are summed key-
+    wise; tool_calls_by_name is summed key-wise; list fields (mcp_servers,
+    plugins) take phase2's value (the resumed session's own init, which is
+    authoritative for what was actually loaded); is_error/subtype/duration_*
+    also take phase2's value (the run's outcome is judged by its final
+    state); distinct_models_used is recomputed from the summed model_usage
+    dict rather than summed naively."""
+    out = dict(metrics2)  # start from phase2 for non-additive fields
+    numeric_sum_fields = (
+        "num_turns", "assistant_message_count", "assistant_turns_incl_subagents",
+        "total_tool_calls", "memory_file_reads", "subagent_launches",
+        "subagent_messages", "tool_result_errors", "hook_denials",
+        "stop_hook_blocks", "main_tokens", "all_model_tokens", "total_tokens",
+    )
+    for field in numeric_sum_fields:
+        v1 = metrics1.get(field) or 0
+        v2 = metrics2.get(field) or 0
+        out[field] = v1 + v2
+
+    out["duration_ms"] = (metrics1.get("duration_ms") or 0) + (metrics2.get("duration_ms") or 0)
+    out["duration_api_ms"] = (metrics1.get("duration_api_ms") or 0) + (metrics2.get("duration_api_ms") or 0)
+
+    cost1 = metrics1.get("est_cost_usd")
+    cost2 = metrics2.get("est_cost_usd")
+    if cost1 is None and cost2 is None:
+        out["est_cost_usd"] = None
+    else:
+        out["est_cost_usd"] = (cost1 or 0) + (cost2 or 0)
+
+    usage = {}
+    for key in ("input_tokens", "output_tokens", "cache_creation_input_tokens",
+                "cache_read_input_tokens"):
+        usage[key] = (metrics1.get("usage", {}).get(key) or 0) + \
+                     (metrics2.get("usage", {}).get(key) or 0)
+    out["usage"] = usage
+
+    tool_calls_by_name = dict(metrics1.get("tool_calls_by_name") or {})
+    for name, count in (metrics2.get("tool_calls_by_name") or {}).items():
+        tool_calls_by_name[name] = tool_calls_by_name.get(name, 0) + count
+    out["tool_calls_by_name"] = tool_calls_by_name
+
+    model_usage = {}
+    for phase_mu in (metrics1.get("model_usage") or {}, metrics2.get("model_usage") or {}):
+        for model_name, mu in phase_mu.items():
+            if not isinstance(mu, dict):
+                continue
+            entry = model_usage.setdefault(model_name, {})
+            for field in ("inputTokens", "outputTokens", "cacheReadInputTokens",
+                          "cacheCreationInputTokens", "costUSD"):
+                entry[field] = (entry.get(field) or 0) + (mu.get(field) or 0)
+    out["model_usage"] = model_usage
+    out["distinct_models_used"] = len(model_usage)
+
+    return out
+
+
 # --------------------------------------------------------------------------
 # Commands
 # --------------------------------------------------------------------------
@@ -1198,7 +1638,40 @@ def cmd_selftest(task=DEFAULT_TASK):
 
     ok = (acceptance.get("ok") and acceptance.get("total", 0) > 0 and
           regression.get("ok") and claude_md_all_ok)
-    if not ok:
+
+    pivot_ok = True
+    if has_pivot(paths):
+        _run(["git", "init", "-q"], cwd=work_dir)
+        b1_acceptance = score_hidden_tests_dir(
+            work_dir, paths["hidden_tests"], "", doc_rules_path=paths.get("doc_rules"))
+        b1_ok = b1_acceptance.get("ok") and b1_acceptance.get("total", 0) > 0
+        remove_acceptance_dir(work_dir)
+        print(json.dumps({"pivot_benchmark1": b1_acceptance}, indent=2))
+
+        if os.path.isdir(paths["pivot_reference_solution"]):
+            _copy_overlay(paths["pivot_reference_solution"], work_dir)
+        b2_pivot_acceptance = score_hidden_tests_dir(
+            work_dir, paths["pivot_hidden_tests"], "pivot",
+            doc_rules_path=paths.get("pivot_doc_rules"))
+        b2_task1_acceptance = score_hidden_tests_dir(
+            work_dir, paths["hidden_tests"], "task1", doc_rules_path=paths.get("doc_rules"))
+        remove_acceptance_dir(work_dir)
+        retention = task1_retention(b1_acceptance, b2_task1_acceptance)
+        print(json.dumps({
+            "pivot_benchmark2": b2_pivot_acceptance,
+            "pivot_task1_retention": retention,
+        }, indent=2))
+
+        b2_ok = (b2_pivot_acceptance.get("ok") and b2_pivot_acceptance.get("total", 0) > 0)
+        pivot_ok = bool(b1_ok and b2_ok and not retention["regressions"])
+        if not pivot_ok:
+            print("SELFTEST: pivot phase FAILED (see benchmark1/benchmark2/"
+                  "task1_retention above)", file=sys.stderr)
+    else:
+        print(f"SELFTEST: tasks/{task}/pivot/ not present, skipping pivot "
+              f"self-test", file=sys.stderr)
+
+    if not (ok and pivot_ok):
         print("SELFTEST FAILED", file=sys.stderr)
         return 1
     print("SELFTEST OK", file=sys.stderr)
@@ -1238,11 +1711,30 @@ def cmd_dry_run(args, arms):
         os.makedirs(run_dir, exist_ok=True)
         work_dir, overlay_info = make_run_workdir(run_dir, arm, paths=paths)
         plugin_dir = prepared[arm_name]["dir"] if arm.get("plugin") else None
-        cmd = build_command(task_text, args.model, args.budget_usd,
-                             plugin_dir=plugin_dir, effort=args.effort)
+        pivot = has_pivot(paths)
+        placeholder_uuid = "00000000-0000-4000-8000-000000000000"
+        if pivot:
+            cmd = build_command(task_text, args.model, args.budget_usd,
+                                 plugin_dir=plugin_dir, effort=args.effort,
+                                 session_id=placeholder_uuid)
+        else:
+            cmd = build_command(task_text, args.model, args.budget_usd,
+                                 plugin_dir=plugin_dir, effort=args.effort)
         print(f"=== {arm_name} ===")
         print(" ".join(cmd))
         print(f"  overlay={overlay_info['overlay']!r} applied={overlay_info['overlay_applied']}")
+        if pivot:
+            print("  [pivot] phase task1 session-id:", placeholder_uuid)
+            print("  [pivot] benchmark1: git commit snapshot -> score task1 "
+                  "hidden_tests -> fixture regression -> remove _acceptance/")
+            pivot_cmd = build_command("<pivot/prompt.md text>", args.model,
+                                       args.budget_usd, plugin_dir=plugin_dir,
+                                       effort=args.effort, resume=placeholder_uuid)
+            print("  [pivot] phase pivot command:")
+            print("    " + " ".join(pivot_cmd))
+            print("  [pivot] benchmark2: git commit snapshot -> score pivot "
+                  "hidden_tests + task1 hidden_tests (task1_retention) -> "
+                  "fixture regression -> remove _acceptance/")
 
         claude_md_text = read_effective_claude_md(work_dir)
         claude_md_lines = claude_md_text.splitlines()
@@ -1652,6 +2144,78 @@ def _row_task_name(row):
     return row.get("task") or "v1"
 
 
+def _reparse_pivot_row(row, run_dir, paths, arm):
+    """--reparse for a two-phase (pivot) run_id: recompute metrics/gates
+    per phase from transcript.task1.jsonl + transcript.pivot.jsonl (and
+    the combined top-level metrics), same non-goals as the single-phase
+    branch in cmd_reparse -- never re-invokes `claude -p`, never touches a
+    recorded acceptance/regression/benchmark *result*, only recomputes what
+    a pure re-parse of already-saved transcript/stream data can recompute.
+    A row missing one of the two transcripts keeps that phase's old
+    metrics/gates untouched (with a warning) rather than erroring the whole
+    reparse."""
+    run_id = row.get("run_id")
+    work_dir = os.path.join(run_dir, "work")
+    is_plugin = bool(arm.get("plugin"))
+    doc_rules = acceptance_module.load_doc_rules(paths.get("doc_rules"))
+    pivot_doc_rules = acceptance_module.load_doc_rules(paths.get("pivot_doc_rules"))
+    phases = row.setdefault("phases", {"task1": {}, "pivot": {}})
+    phases.setdefault("task1", {})
+    phases.setdefault("pivot", {})
+
+    t1_path = os.path.join(run_dir, "transcript.task1.jsonl")
+    t2_path = os.path.join(run_dir, "transcript.pivot.jsonl")
+    lines1, lines2 = [], []
+    if os.path.exists(t1_path):
+        with open(t1_path) as f:
+            lines1 = f.readlines()
+        phases["task1"]["metrics"] = parse_transcript(lines1)
+    else:
+        print(f"warn: no transcript.task1.jsonl for {run_id}, keeping old task1 metrics",
+              file=sys.stderr)
+    if os.path.exists(t2_path):
+        with open(t2_path) as f:
+            lines2 = f.readlines()
+        phases["pivot"]["metrics"] = parse_transcript(lines2)
+    else:
+        print(f"warn: no transcript.pivot.jsonl for {run_id}, keeping old pivot metrics",
+              file=sys.stderr)
+
+    if "metrics" in phases["task1"] and "metrics" in phases["pivot"]:
+        row["metrics"] = _sum_phase_metrics(phases["task1"]["metrics"], phases["pivot"]["metrics"])
+
+    if not os.path.isdir(work_dir):
+        print(f"warn: no work/ dir for {run_id}, keeping old gates/stream_metrics", file=sys.stderr)
+        return
+
+    row["stream_metrics"] = read_stream_metrics(work_dir) if is_plugin else \
+        {"stream_event_counts": {}, "final_workflow_state": None}
+    row["isolation"] = isolation_check(arm, phases["pivot"].get("metrics") or row.get("metrics") or {})
+
+    stream_events_all = read_raw_stream_events(work_dir) if is_plugin else []
+    transcript_events1 = _parse_transcript_events(lines1) if lines1 else []
+    transcript_events2 = _parse_transcript_events(lines2) if lines2 else []
+
+    boundary_ts = gate_conformance.find_pivot_boundary_timestamp(stream_events_all, fallback_ts=None)
+    if boundary_ts is not None:
+        task1_stream = [e for e in stream_events_all
+                         if not (isinstance(e.get("t"), (int, float)) and e.get("t") >= boundary_ts)]
+        pivot_stream = [e for e in stream_events_all
+                         if isinstance(e.get("t"), (int, float)) and e.get("t") >= boundary_ts]
+    else:
+        task1_stream = stream_events_all
+        pivot_stream = stream_events_all
+
+    if transcript_events1 or task1_stream:
+        phases["task1"]["gates"] = gate_conformance.compute_gate_conformance(
+            task1_stream, transcript_events1, doc_rules=doc_rules, is_plugin_arm=is_plugin)
+    if transcript_events2 or pivot_stream:
+        phases["pivot"]["gates"] = gate_conformance.compute_gate_conformance_pivot(
+            pivot_stream, transcript_events2, pivot_doc_rules=pivot_doc_rules,
+            is_plugin_arm=is_plugin)
+        row["gates"] = phases["pivot"]["gates"]
+
+
 def cmd_reparse(stamp, out_dir=DEFAULT_OUT):
     """Recompute `metrics` / `stream_metrics` / `gates` for every row in an
     existing <out_dir>/<stamp>/runs.jsonl from the already-saved
@@ -1717,6 +2281,15 @@ def cmd_reparse(stamp, out_dir=DEFAULT_OUT):
         run_dir = os.path.join(stamp_dir, "runs", run_id) if run_id else None
         if not run_dir or not os.path.isdir(run_dir):
             print(f"skip (no run dir): {run_id}", file=sys.stderr)
+            continue
+
+        work_dir_for_pivot_check = os.path.join(run_dir, "work")
+        arm_for_pivot_check = arms_by_name.get(
+            arm_name, {"name": arm_name, "plugin": bool(row.get("arm_commit"))})
+        transcript1_path = os.path.join(run_dir, "transcript.task1.jsonl")
+        if os.path.exists(transcript1_path) or isinstance(row.get("phases"), dict):
+            _reparse_pivot_row(row, run_dir, paths, arm_for_pivot_check)
+            reparsed += 1
             continue
 
         transcript_path = os.path.join(run_dir, "transcript.jsonl")
