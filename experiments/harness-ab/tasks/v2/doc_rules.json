@@ -1,0 +1,115 @@
+[
+  {
+    "id": "R1",
+    "memory": "dom/DOM_FISCAL_CALENDAR",
+    "summary": "Fiscal period \"YYYY-MM\" runs 15th of that month through 14th of next month (inclusive both ends); statement period_start/period_end and opening-balance cutoff follow this, not the calendar month.",
+    "tests": [
+      "test_doc_fiscal_calendar.TestFiscalCalendar.test_period_start_is_15th",
+      "test_doc_fiscal_calendar.TestFiscalCalendar.test_period_end_is_14th_of_next_month",
+      "test_doc_fiscal_calendar.TestFiscalCalendar.test_december_period_rolls_to_next_year",
+      "test_doc_fiscal_calendar.TestFiscalCalendar.test_transaction_on_14th_belongs_to_prior_period",
+      "test_doc_fiscal_calendar.TestFiscalCalendar.test_transaction_on_15th_belongs_to_period",
+      "test_doc_fiscal_calendar.TestFiscalCalendar.test_transaction_on_last_day_included",
+      "test_doc_fiscal_calendar.TestFiscalCalendar.test_transaction_on_day_after_period_excluded",
+      "test_doc_statement_format.TestStatementFormat.test_opening_balance_is_sum_before_period_start",
+      "test_doc_statement_format.TestStatementFormat.test_render_first_line_is_opening_balance_label",
+      "test_doc_statement_format.TestStatementFormat.test_render_last_line_is_closing_balance_label",
+      "test_doc_statement_format.TestStatementFormat.test_render_opening_balance_reflects_prior_transactions",
+      "test_doc_statement_format.TestStatementFormat.test_closing_balance_accounts_for_opening"
+    ]
+  },
+  {
+    "id": "R2",
+    "memory": "dom/DOM_SPLIT_ALLOCATION",
+    "summary": "Split allocation uses the largest-remainder method; leftover cents go to the largest fractional remainder, ties broken alphabetically by category name (not dict/insertion order); child transaction descriptions are \"<desc> [split i/n]\" with i assigned by alphabetical category order.",
+    "tests": [
+      "test_doc_split_allocation.TestSplitAllocationDoc.test_largest_remainder_gets_leftover_cent",
+      "test_doc_split_allocation.TestSplitAllocationDoc.test_tie_broken_alphabetically_not_by_dict_order",
+      "test_doc_split_allocation.TestSplitAllocationDoc.test_larger_weight_favored_for_remainder_when_not_tied",
+      "test_doc_split_allocation.TestSplitAllocationDoc.test_negative_total_preserves_sign_per_category",
+      "test_doc_split_allocation.TestSplitAllocationDoc.test_negative_total_largest_remainder_still_alphabetical",
+      "test_doc_split_allocation.TestSplitChildDescriptionDoc.test_child_description_format",
+      "test_doc_split_allocation.TestSplitChildDescriptionDoc.test_child_description_index_follows_alphabetical_category_order",
+      "test_doc_split_allocation.TestSplitChildDescriptionDoc.test_three_way_split_description_indices"
+    ]
+  },
+  {
+    "id": "R3",
+    "memory": "dom/DOM_EXPORT_FORMATS",
+    "summary": "CSV export: semicolon delimiter, exact header \"id;date;description;category;amount\", dates DD.MM.YYYY, amounts comma-decimal with trailing \"-\" for expenses and no sign for income, UTF-8 with BOM, CRLF line endings.",
+    "tests": [
+      "test_doc_export_formats.TestCsvExportFormat.test_csv_has_utf8_bom",
+      "test_doc_export_formats.TestCsvExportFormat.test_csv_uses_crlf_line_endings",
+      "test_doc_export_formats.TestCsvExportFormat.test_csv_header_exact",
+      "test_doc_export_formats.TestCsvExportFormat.test_csv_delimiter_is_semicolon",
+      "test_doc_export_formats.TestCsvExportFormat.test_csv_date_format_ddmmyyyy",
+      "test_doc_export_formats.TestCsvExportFormat.test_csv_amount_comma_decimal_expense_trailing_minus",
+      "test_doc_export_formats.TestCsvExportFormat.test_csv_amount_comma_decimal_income_no_sign"
+    ]
+  },
+  {
+    "id": "R4",
+    "memory": "dom/DOM_EXPORT_FORMATS",
+    "summary": "JSON export envelope is {\"schema\": \"ledgerlite.export/3\", \"period\": {\"start\":..,\"end\":..}, \"entries\": [...]} with all object keys sorted and amounts rendered as signed decimal strings (not raw cents).",
+    "tests": [
+      "test_doc_export_formats.TestJsonExportFormat.test_json_schema_field",
+      "test_doc_export_formats.TestJsonExportFormat.test_json_period_envelope",
+      "test_doc_export_formats.TestJsonExportFormat.test_json_amounts_are_strings",
+      "test_doc_export_formats.TestJsonExportFormat.test_json_keys_sorted"
+    ]
+  },
+  {
+    "id": "R5",
+    "memory": "dom/DOM_PRIVACY_REDACTION",
+    "summary": "Descriptions containing a 12-19 digit run are redacted to \"****\" + last 4 digits; case-insensitive \"ssn\" followed by digits becomes \"SSN:REDACTED\"; redaction applies ONLY in exports (CSV/JSON), never in the store, CLI list, or statement output.",
+    "tests": [
+      "test_doc_privacy_redaction.TestRedactFunction.test_redacts_16_digit_number",
+      "test_doc_privacy_redaction.TestRedactFunction.test_redacts_12_digit_number_minimum",
+      "test_doc_privacy_redaction.TestRedactFunction.test_does_not_redact_11_digit_number",
+      "test_doc_privacy_redaction.TestRedactFunction.test_redacts_ssn_case_insensitive",
+      "test_doc_privacy_redaction.TestRedactFunction.test_unaffected_text_unchanged",
+      "test_doc_privacy_redaction.TestRedactionAppliesOnlyToExports.test_store_transaction_description_unredacted",
+      "test_doc_privacy_redaction.TestRedactionAppliesOnlyToExports.test_statement_render_unredacted",
+      "test_doc_privacy_redaction.TestRedactionAppliesOnlyToExports.test_csv_export_redacted",
+      "test_doc_privacy_redaction.TestRedactionAppliesOnlyToExports.test_json_export_redacted"
+    ]
+  },
+  {
+    "id": "R6",
+    "memory": "dom/DOM_LEDGER_RULES",
+    "summary": "Category aliases (food->groceries, car->transport, fuel->transport) are accepted wherever a category is taken as input (add, split shares); exports and stored data always use the canonical category name.",
+    "tests": [
+      "test_doc_category_aliases.TestCategoryAliasesAcceptedOnInput.test_food_alias_accepted_and_canonicalized",
+      "test_doc_category_aliases.TestCategoryAliasesAcceptedOnInput.test_car_alias_accepted_and_canonicalized",
+      "test_doc_category_aliases.TestCategoryAliasesAcceptedOnInput.test_fuel_alias_accepted_and_canonicalized",
+      "test_doc_category_aliases.TestCategoryAliasesAcceptedOnInput.test_split_share_accepts_alias",
+      "test_doc_category_aliases.TestCategoryAliasesCanonicalInExports.test_export_shows_canonical_category"
+    ]
+  },
+  {
+    "id": "R7",
+    "memory": "ref/REF_ERROR_CODES",
+    "summary": "New error codes are exactly E_FISCAL_PERIOD, E_EXPORT_FORMAT, E_SPLIT_WEIGHTS, E_EXPORT_EXISTS, raised via LedgerError for invalid period strings, unknown export formats, zero/negative split weights, and refusing to overwrite an existing export path without --force.",
+    "tests": [
+      "test_doc_error_codes.TestErrorCodesExist.test_error_code_constants_defined",
+      "test_doc_error_codes.TestFiscalPeriodError.test_bad_period_format_raises",
+      "test_doc_error_codes.TestFiscalPeriodError.test_bad_period_month_out_of_range_raises",
+      "test_doc_error_codes.TestExportFormatError.test_unknown_format_raises",
+      "test_doc_error_codes.TestSplitWeightsError.test_negative_weight_raises",
+      "test_doc_error_codes.TestExportExistsError.test_refuses_overwrite_without_force",
+      "test_doc_error_codes.TestExportExistsError.test_force_allows_overwrite"
+    ]
+  },
+  {
+    "id": "R8",
+    "memory": "dom/DOM_EXPORT_FORMATS",
+    "summary": "Every export appends one line to .ledgerlite-audit.log next to the ledger file: \"<ISO8601 UTC>|export|<format>|<period>|<count>\"; timestamp comes from env LEDGERLITE_NOW when set (used by tests), otherwise current UTC time.",
+    "tests": [
+      "test_doc_audit_log.TestAuditLog.test_audit_log_created_next_to_ledger_file",
+      "test_doc_audit_log.TestAuditLog.test_audit_log_line_format_csv",
+      "test_doc_audit_log.TestAuditLog.test_audit_log_line_format_json",
+      "test_doc_audit_log.TestAuditLog.test_audit_log_appends_not_overwrites",
+      "test_doc_audit_log.TestAuditLog.test_audit_log_count_reflects_entry_count"
+    ]
+  }
+]
