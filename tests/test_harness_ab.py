@@ -8,7 +8,9 @@ import argparse
 import importlib.util
 import json
 import os
+import shutil
 import sys
+import tempfile
 import unittest
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -139,7 +141,21 @@ class ParseTranscriptTest(unittest.TestCase):
                     "cache_creation_input_tokens": 10,
                     "cache_read_input_tokens": 20,
                 },
-                "modelUsage": {"claude-sonnet-5": {}, "claude-haiku": {}},
+                # Real shape (per results/20260929-123133/runs/*/transcript.jsonl
+                # `result` events): camelCase per-model dict keyed by model id,
+                # each value carrying the 4 token fields + costUSD + extras.
+                "modelUsage": {
+                    "claude-sonnet-5": {
+                        "inputTokens": 90, "outputTokens": 45,
+                        "cacheReadInputTokens": 15, "cacheCreationInputTokens": 8,
+                        "costUSD": 0.40, "contextWindow": 200000,
+                    },
+                    "claude-haiku": {
+                        "inputTokens": 10, "outputTokens": 5,
+                        "cacheReadInputTokens": 5, "cacheCreationInputTokens": 2,
+                        "costUSD": 0.02, "contextWindow": 200000,
+                    },
+                },
             },
         ]
         return [json.dumps(e) for e in events]
@@ -158,8 +174,16 @@ class ParseTranscriptTest(unittest.TestCase):
         self.assertEqual(m["num_turns"], 12)
         self.assertEqual(m["est_cost_usd"], 0.42)
         self.assertEqual(m["usage"]["input_tokens"], 100)
+        self.assertEqual(m["main_tokens"], 180)
+        # all_model_tokens sums the 4 token fields over every model in
+        # modelUsage: (90+45+15+8) + (10+5+5+2) = 158 + 22 = 180.
+        self.assertEqual(m["all_model_tokens"], 180)
+        # total_tokens follows all_model_tokens when modelUsage is present.
         self.assertEqual(m["total_tokens"], 180)
         self.assertEqual(m["distinct_models_used"], 2)
+        self.assertEqual(
+            sorted(m["model_usage"].keys()), ["claude-haiku", "claude-sonnet-5"]
+        )
         self.assertEqual(
             sorted(s["name"] for s in m["mcp_servers"]), ["serena", "swe-wm"]
         )
@@ -182,7 +206,59 @@ class ParseTranscriptTest(unittest.TestCase):
         m = run.parse_transcript(lines)
         self.assertEqual(m["usage"]["input_tokens"], 5)
         self.assertEqual(m["usage"]["output_tokens"], 0)
+        # No modelUsage on this result -> total_tokens falls back to
+        # main_tokens (the main-agent-only usage sum).
+        self.assertEqual(m["main_tokens"], 5)
+        self.assertEqual(m["all_model_tokens"], 0)
         self.assertEqual(m["total_tokens"], 5)
+
+    def test_real_result_event_model_usage_shape(self):
+        # Redacted excerpt of an actual `result` event from
+        # results/20260929-123133/runs/v5-t0/transcript.jsonl: single model,
+        # modelUsage token counts roughly 4x the main `usage` block because
+        # the run delegated to subagents whose tokens only show up here.
+        event = {
+            "type": "result", "subtype": "success", "is_error": False,
+            "num_turns": 31, "total_cost_usd": 5.25275125,
+            "usage": {
+                "input_tokens": 7063, "cache_creation_input_tokens": 97211,
+                "cache_read_input_tokens": 1609030, "output_tokens": 27254,
+            },
+            "modelUsage": {
+                "claude-sonnet-5": {
+                    "inputTokens": 30074, "outputTokens": 68680,
+                    "cacheReadInputTokens": 3174255,
+                    "cacheCreationInputTokens": 229394,
+                    "webSearchRequests": 0, "costUSD": 5.25275125,
+                    "contextWindow": 200000, "maxOutputTokens": 32000,
+                }
+            },
+            "permission_denials": [],
+        }
+        m = run.parse_transcript([json.dumps(event)])
+        self.assertEqual(m["main_tokens"], 7063 + 97211 + 1609030 + 27254)
+        self.assertEqual(m["all_model_tokens"], 30074 + 68680 + 3174255 + 229394)
+        self.assertEqual(m["total_tokens"], m["all_model_tokens"])
+        self.assertGreater(m["all_model_tokens"], m["main_tokens"])
+        self.assertEqual(m["distinct_models_used"], 1)
+
+    def test_subagent_events_counted_separately(self):
+        # Real shape: an assistant/user event that belongs to a subagent's
+        # own turn carries a non-null top-level parent_tool_use_id.
+        events = [
+            {"type": "assistant", "message": {"content": [
+                {"type": "tool_use", "name": "Agent", "input": {}},
+            ]}},
+            {"type": "assistant", "parent_tool_use_id": "toolu_01subagent",
+             "message": {"content": [{"type": "text", "text": "working"}]}},
+            {"type": "user", "parent_tool_use_id": "toolu_01subagent",
+             "message": {"content": [{"type": "tool_result", "content": "ok"}]}},
+        ]
+        m = run.parse_transcript([json.dumps(e) for e in events])
+        self.assertEqual(m["subagent_launches"], 1)
+        self.assertEqual(m["assistant_message_count"], 1)  # main agent only
+        self.assertEqual(m["assistant_turns_incl_subagents"], 2)  # main + subagent
+        self.assertEqual(m["subagent_messages"], 2)  # 1 assistant + 1 user
 
 
 class CleanEnvTest(unittest.TestCase):
@@ -477,6 +553,31 @@ class CountStreamEventsTest(unittest.TestCase):
         counts = run.count_stream_events([json.dumps({"foo": "bar"})])
         self.assertEqual(counts, {"unknown": 1})
 
+    def test_real_stream_excerpt_gated_state_delegation(self):
+        # Redacted excerpt of an actual .serena/streams/<session>.jsonl file
+        # (results/20260929-123133/runs/v5-t0/work/.serena/streams/*.jsonl).
+        # `gated` marks an internal SWE gate firing; `state` carries
+        # from_s/to_s workflow-state transitions; `delegation` marks a
+        # subagent kickoff via the Agent tool. All keyed by the same `type`
+        # field count_stream_events already reads generically.
+        lines = [
+            json.dumps({"t": 1, "type": "session_boot", "s": "abc123"}),
+            json.dumps({"t": 2, "type": "docread", "s": "abc123", "name": "wf/WF_INIT"}),
+            json.dumps({"t": 3, "type": "state", "s": "abc123",
+                        "from_s": "WF_CLASSIFY", "to_s": "WF_ARCH_REVIEW"}),
+            json.dumps({"t": 4, "type": "delegation", "s": "abc123", "tool": "Agent"}),
+            json.dumps({"t": 5, "type": "gated", "t2": 1}),
+            json.dumps({"t": 6, "type": "edit", "s": "abc123", "file": "ledgerlite/store.py"}),
+            json.dumps({"t": 7, "type": "session_end", "s": "abc123",
+                        "final_state": "WF_EXECUTE", "duration_s": 513}),
+        ]
+        counts = run.count_stream_events(lines)
+        self.assertEqual(counts["state"], 1)
+        self.assertEqual(counts["gated"], 1)
+        self.assertEqual(counts["delegation"], 1)
+        self.assertEqual(counts["session_boot"], 1)
+        self.assertEqual(counts["session_end"], 1)
+
 
 class MedianTest(unittest.TestCase):
     def test_odd_count(self):
@@ -641,6 +742,101 @@ class DryRunSmokeTest(unittest.TestCase):
         # --dry-run manually. This test only proves the module wires up
         # correctly once the fixture exists.
         self.assertTrue(callable(run.cmd_dry_run))
+
+
+class CmdReparseTest(unittest.TestCase):
+    """--reparse against a small synthetic stamp dir (not a live claude -p
+    invocation): builds a runs.jsonl with one stale row whose metrics are
+    obviously wrong (no modelUsage capture, old-shape total_tokens), plus a
+    saved transcript.jsonl + .serena/streams/*.jsonl on disk, then checks
+    --reparse recomputes metrics/stream_metrics from the saved files, backs
+    up the original, and preserves acceptance/wall_s/exit_code untouched."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp(prefix="harness_reparse_test_")
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+        self.stamp_dir = os.path.join(self.tmp, "20990101-000000")
+        self.run_dir = os.path.join(self.stamp_dir, "runs", "v5-t0")
+        os.makedirs(self.run_dir, exist_ok=True)
+
+        transcript_events = [
+            {"type": "result", "subtype": "success", "is_error": False,
+             "num_turns": 5, "total_cost_usd": 1.5,
+             "usage": {"input_tokens": 10, "output_tokens": 5,
+                        "cache_creation_input_tokens": 0, "cache_read_input_tokens": 0},
+             "modelUsage": {"claude-sonnet-5": {
+                 "inputTokens": 100, "outputTokens": 50,
+                 "cacheReadInputTokens": 0, "cacheCreationInputTokens": 0,
+             }}},
+        ]
+        with open(os.path.join(self.run_dir, "transcript.jsonl"), "w") as f:
+            for e in transcript_events:
+                f.write(json.dumps(e) + "\n")
+
+        work_dir = os.path.join(self.run_dir, "work")
+        streams_dir = os.path.join(work_dir, ".serena", "streams")
+        os.makedirs(streams_dir, exist_ok=True)
+        with open(os.path.join(streams_dir, "sess.jsonl"), "w") as f:
+            f.write(json.dumps({"type": "state", "from_s": "WF_CLASSIFY", "to_s": "WF_EXECUTE"}) + "\n")
+            f.write(json.dumps({"type": "gated"}) + "\n")
+
+        # Stale row: old-shape metrics (as if written before this fix), plus
+        # acceptance/regression/wall_s that --reparse must NOT touch.
+        stale_row = {
+            "run_id": "v5-t0", "arm": "v5", "trial": 0,
+            "exit_code": 0, "timed_out": False, "wall_s": 123.4,
+            "metrics": {"total_tokens": 15, "hook_denials": 0},  # wrong: old bug
+            "stream_metrics": {"stream_event_counts": {}, "final_workflow_state": None},
+            "acceptance": {"total": 3, "passed": 3, "ok": True, "exit_code": 0},
+            "regression": {"total": 2, "passed": 2, "ok": True, "exit_code": 0},
+            "isolation": {"ok": True},
+        }
+        self.runs_jsonl = os.path.join(self.stamp_dir, "runs.jsonl")
+        with open(self.runs_jsonl, "w") as f:
+            f.write(json.dumps(stale_row) + "\n")
+
+    def test_reparse_recomputes_metrics_and_backs_up_original(self):
+        rc = run.cmd_reparse(self.stamp_dir)
+        self.assertEqual(rc, 0)
+
+        orig_path = self.runs_jsonl + ".orig"
+        self.assertTrue(os.path.exists(orig_path))
+        with open(orig_path) as f:
+            orig_row = json.loads(f.readline())
+        self.assertEqual(orig_row["metrics"]["total_tokens"], 15)  # untouched backup
+
+        with open(self.runs_jsonl) as f:
+            new_row = json.loads(f.readline())
+
+        # metrics recomputed from the saved transcript: all_model_tokens
+        # (100+50) beats the old buggy total_tokens=15.
+        self.assertEqual(new_row["metrics"]["all_model_tokens"], 150)
+        self.assertEqual(new_row["metrics"]["total_tokens"], 150)
+
+        # stream_metrics recomputed from the saved work/.serena/streams.
+        self.assertEqual(
+            new_row["stream_metrics"]["stream_event_counts"].get("gated"), 1
+        )
+        self.assertEqual(
+            new_row["stream_metrics"]["stream_event_counts"].get("state"), 1
+        )
+
+        # Recorded acceptance/regression/wall_s/exit_code are untouched.
+        self.assertEqual(new_row["acceptance"]["passed"], 3)
+        self.assertEqual(new_row["regression"]["passed"], 2)
+        self.assertEqual(new_row["wall_s"], 123.4)
+        self.assertEqual(new_row["exit_code"], 0)
+
+    def test_reparse_twice_does_not_clobber_orig_backup(self):
+        run.cmd_reparse(self.stamp_dir)
+        orig_path = self.runs_jsonl + ".orig"
+        with open(orig_path) as f:
+            first_backup = f.read()
+        # Run again; the .orig from the FIRST reparse must survive untouched.
+        run.cmd_reparse(self.stamp_dir)
+        with open(orig_path) as f:
+            second_backup = f.read()
+        self.assertEqual(first_backup, second_backup)
 
 
 if __name__ == "__main__":

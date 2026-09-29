@@ -100,6 +100,42 @@ def parse_transcript(lines):
 
     `lines` is an iterable of raw JSON-text lines (already split, no
     trailing newline required).
+
+    Token/cost accounting (see experiments/harness-ab tests for real-shape
+    fixtures pulled from results/20260929-123133):
+
+    - `usage` / `main_tokens`: the top-level `result` event's `usage` block.
+      This is the MAIN AGENT ONLY — it does not include tokens spent inside
+      subagents launched via the Agent/Task tool.
+    - `model_usage`: the `result` event's `modelUsage` dict, verbatim
+      (camelCase per-model dict, keyed by model id, each value carrying
+      inputTokens/outputTokens/cacheReadInputTokens/cacheCreationInputTokens/
+      costUSD/...). This total is AUTHORITATIVE and includes subagents,
+      because Claude Code attributes every model call (main agent or
+      delegated subagent) into the same per-model rollup.
+    - `all_model_tokens`: sum over `model_usage` of the four token fields
+      (inputTokens + outputTokens + cacheReadInputTokens +
+      cacheCreationInputTokens) across every model. This is what
+      `total_tokens` is set to (see below) — on runs with no subagent
+      delegation, all_model_tokens == main_tokens (mod the camelCase/
+      snake_case field pairing); on runs that delegate, all_model_tokens is
+      the larger, correct total, since a low num_turns count on the MAIN
+      transcript can hide a lot of subagent token spend (e.g. a 8-turn run
+      that fanned out into several Agent-tool subagents can cost more than a
+      60-turn run with no delegation at all).
+    - `total_tokens` = `all_model_tokens` (falls back to `main_tokens` when
+      the `result` event has no modelUsage, e.g. an errored/truncated run) —
+      this is a deliberate change from the old behavior of summing only the
+      main-agent `usage` block, which silently under-counted every
+      subagent-delegating run.
+    - `subagent_launches`: count of Agent/Task tool_use blocks emitted by the
+      MAIN agent (i.e. how many subagents were kicked off).
+    - `subagent_messages`: count of assistant/user stream-json events whose
+      top-level `parent_tool_use_id` is non-null, i.e. events that belong to
+      a subagent's own turn sequence rather than the main agent's.
+    - `assistant_turns_incl_subagents`: total assistant-message events,
+      main agent + every subagent combined (assistant_message_count is now
+      main-agent-only; this new field is the previous ambiguous total).
     """
     metrics = {
         "subtype": None,
@@ -114,12 +150,17 @@ def parse_transcript(lines):
             "cache_creation_input_tokens": 0,
             "cache_read_input_tokens": 0,
         },
+        "main_tokens": 0,
+        "model_usage": {},
+        "all_model_tokens": 0,
         "total_tokens": 0,
         "distinct_models_used": 0,
         "assistant_message_count": 0,
+        "assistant_turns_incl_subagents": 0,
         "tool_calls_by_name": {},
         "total_tool_calls": 0,
         "subagent_launches": 0,
+        "subagent_messages": 0,
         "tool_result_errors": 0,
         "hook_denials": 0,
         "stop_hook_blocks": 0,
@@ -139,6 +180,7 @@ def parse_transcript(lines):
             continue
 
         etype = event.get("type")
+        is_subagent_event = event.get("parent_tool_use_id") is not None
 
         if etype == "system" and event.get("subtype") == "init":
             servers = event.get("mcp_servers") or event.get("mcpServers") or []
@@ -147,7 +189,11 @@ def parse_transcript(lines):
             metrics["plugins"] = plugins
 
         elif etype == "assistant":
-            metrics["assistant_message_count"] += 1
+            metrics["assistant_turns_incl_subagents"] += 1
+            if is_subagent_event:
+                metrics["subagent_messages"] += 1
+            else:
+                metrics["assistant_message_count"] += 1
             message = event.get("message") or {}
             content = message.get("content") or []
             if isinstance(content, list):
@@ -160,10 +206,17 @@ def parse_transcript(lines):
                             metrics["tool_calls_by_name"].get(name, 0) + 1
                         )
                         metrics["total_tool_calls"] += 1
-                        if name in ("Agent", "Task"):
+                        if name in ("Agent", "Task") and not is_subagent_event:
+                            # Only the main agent's own Agent/Task tool_use
+                            # blocks count as a "launch" — a subagent that
+                            # itself launches a nested subagent is real, but
+                            # top-level fan-out is what we want to compare
+                            # across arms.
                             metrics["subagent_launches"] += 1
 
         elif etype == "user":
+            if is_subagent_event:
+                metrics["subagent_messages"] += 1
             message = event.get("message") or {}
             content = message.get("content") or []
             if isinstance(content, list):
@@ -196,11 +249,31 @@ def parse_transcript(lines):
                 val = usage.get(key)
                 if isinstance(val, (int, float)):
                     metrics["usage"][key] = val
+
             model_usage = event.get("modelUsage") or event.get("model_usage") or {}
             if isinstance(model_usage, dict):
+                metrics["model_usage"] = model_usage
                 metrics["distinct_models_used"] = len(model_usage)
 
-    metrics["total_tokens"] = sum(metrics["usage"].values())
+    metrics["main_tokens"] = sum(metrics["usage"].values())
+
+    all_model_tokens = 0
+    for _model_name, mu in metrics["model_usage"].items():
+        if not isinstance(mu, dict):
+            continue
+        for field in ("inputTokens", "outputTokens", "cacheReadInputTokens",
+                       "cacheCreationInputTokens"):
+            val = mu.get(field)
+            if isinstance(val, (int, float)):
+                all_model_tokens += val
+    metrics["all_model_tokens"] = all_model_tokens
+
+    # total_tokens = all_model_tokens (the authoritative total, including
+    # subagent spend) when a modelUsage breakdown was present; fall back to
+    # the main-agent-only usage sum for a run whose result event lacked
+    # modelUsage entirely (e.g. errored before completion).
+    metrics["total_tokens"] = all_model_tokens if metrics["model_usage"] else metrics["main_tokens"]
+
     return metrics
 
 
@@ -971,6 +1044,106 @@ def cmd_full_run(args, arms):
     return 0
 
 
+def cmd_reparse(stamp, out_dir=DEFAULT_OUT):
+    """Recompute `metrics` / `stream_metrics` for every row in an existing
+    <out_dir>/<stamp>/runs.jsonl from the already-saved transcript.jsonl and
+    work/ directory on disk, without re-invoking `claude -p`.
+
+    Recorded acceptance/regression/wall_s/exit_code/timed_out/isolation are
+    left untouched UNLESS acceptance is missing entirely (e.g. an older row
+    written before scoring existed), in which case acceptance is re-run
+    against the saved work/ dir (never against a live re-run of the agent).
+
+    Writes runs.jsonl atomically: the original is copied to
+    runs.jsonl.orig first (only on the first --reparse of a given stamp;
+    an existing .orig is never overwritten, so repeated --reparse runs
+    don't lose the true original), then the new content is written to a
+    temp file and os.replace()'d over runs.jsonl.
+    """
+    if os.path.isdir(stamp):
+        stamp_dir = stamp
+    else:
+        stamp_dir = os.path.join(out_dir, stamp)
+        if not os.path.isdir(stamp_dir):
+            raise SystemExit(f"--reparse {stamp}: no such results dir {stamp_dir!r}")
+
+    runs_jsonl = os.path.join(stamp_dir, "runs.jsonl")
+    if not os.path.exists(runs_jsonl):
+        raise SystemExit(f"--reparse: {runs_jsonl} not found")
+
+    orig_path = runs_jsonl + ".orig"
+    if not os.path.exists(orig_path):
+        shutil.copy2(runs_jsonl, orig_path)
+
+    arms_by_name = {}
+    try:
+        arms_by_name = {a["name"]: a for a in load_arms()}
+    except Exception:
+        arms_by_name = {}
+
+    rows = []
+    with open(runs_jsonl) as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                rows.append(json.loads(line))
+            except Exception:
+                continue
+
+    reparsed = 0
+    for row in rows:
+        run_id = row.get("run_id")
+        arm_name = row.get("arm")
+        run_dir = os.path.join(stamp_dir, "runs", run_id) if run_id else None
+        if not run_dir or not os.path.isdir(run_dir):
+            print(f"skip (no run dir): {run_id}", file=sys.stderr)
+            continue
+
+        transcript_path = os.path.join(run_dir, "transcript.jsonl")
+        if os.path.exists(transcript_path):
+            with open(transcript_path) as f:
+                lines = f.readlines()
+            row["metrics"] = parse_transcript(lines)
+        else:
+            print(f"warn: no transcript.jsonl for {run_id}, keeping old metrics", file=sys.stderr)
+
+        work_dir = os.path.join(run_dir, "work")
+        arm = arms_by_name.get(arm_name, {"name": arm_name, "plugin": bool(row.get("arm_commit"))})
+        if os.path.isdir(work_dir):
+            row["stream_metrics"] = read_stream_metrics(work_dir) if arm.get("plugin") else \
+                {"stream_event_counts": {}, "final_workflow_state": None}
+        else:
+            print(f"warn: no work/ dir for {run_id}, keeping old stream_metrics", file=sys.stderr)
+
+        # Recompute isolation from the freshly-parsed transcript metrics.
+        row["isolation"] = isolation_check(arm, row.get("metrics") or {})
+
+        # Only re-run acceptance if it's missing outright; never re-run the
+        # agent itself, and never touch a present acceptance/regression
+        # result even if it looks suspicious — --reparse only fixes metrics
+        # extraction, not scoring.
+        acceptance = row.get("acceptance")
+        if (not acceptance or "total" not in acceptance) and os.path.isdir(work_dir):
+            new_acceptance, new_regression = score_run(work_dir)
+            row["acceptance"] = new_acceptance
+            if not row.get("regression"):
+                row["regression"] = new_regression
+
+        reparsed += 1
+
+    tmp_path = runs_jsonl + ".tmp"
+    with open(tmp_path, "w") as f:
+        for row in rows:
+            f.write(json.dumps(row) + "\n")
+    os.replace(tmp_path, runs_jsonl)
+
+    print(f"reparsed {reparsed}/{len(rows)} rows in {runs_jsonl} "
+          f"(original backed up to {orig_path})", file=sys.stderr)
+    return 0
+
+
 def build_arg_parser():
     p = argparse.ArgumentParser(description="Harness A/B experiment runner")
     p.add_argument("--trials", type=int, default=3)
@@ -1006,6 +1179,17 @@ def build_arg_parser():
                     help="skip the claude.ai-subscription auth guard and allow "
                          "the run to proceed even if `claude auth status` shows "
                          "API-key/non-subscription billing.")
+    p.add_argument("--reparse", type=str, default=None, metavar="STAMP",
+                    help="recompute metrics/stream_metrics for every row of "
+                         "results/<STAMP>/runs.jsonl from the saved "
+                         "transcript.jsonl + work/ dir on disk, without "
+                         "invoking `claude -p` again. Keeps recorded "
+                         "acceptance/regression/wall_s/exit_code/isolation "
+                         "(re-runs acceptance only if missing). Backs up the "
+                         "original file to runs.jsonl.orig first, then "
+                         "rewrites runs.jsonl atomically. STAMP may be a bare "
+                         "timestamp dir name (resolved under --out / the "
+                         "default results dir) or a full path.")
     return p
 
 
@@ -1019,6 +1203,8 @@ def main(argv=None):
     else:
         arms = all_arms
 
+    if args.reparse:
+        return cmd_reparse(args.reparse, out_dir=args.out)
     if args.selftest:
         return cmd_selftest()
     if args.preflight:

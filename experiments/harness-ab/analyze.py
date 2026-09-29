@@ -21,19 +21,50 @@ def _est_cost_usd(r):
 
 METRIC_FIELDS = [
     ("num_turns", lambda r: (r.get("metrics") or {}).get("num_turns")),
+    # total_tokens == all_model_tokens: the authoritative total summed over
+    # the result event's modelUsage (camelCase per-model dict), which
+    # includes subagent token spend the main-agent-only `usage` block
+    # misses entirely. See run.parse_transcript's docstring.
     ("total_tokens", lambda r: (r.get("metrics") or {}).get("total_tokens")),
+    ("main_tokens", lambda r: (r.get("metrics") or {}).get("main_tokens")),
     ("output_tokens", lambda r: (r.get("metrics") or {}).get("usage", {}).get("output_tokens")),
     ("cache_read_tokens", lambda r: (r.get("metrics") or {}).get("usage", {}).get("cache_read_input_tokens")),
     ("est_cost_usd", _est_cost_usd),
     ("wall_s", lambda r: r.get("wall_s")),
     ("tool_calls", lambda r: (r.get("metrics") or {}).get("total_tool_calls")),
+    ("subagent_launches", lambda r: (r.get("metrics") or {}).get("subagent_launches")),
+    ("subagent_messages", lambda r: (r.get("metrics") or {}).get("subagent_messages")),
+    ("assistant_turns_incl_subagents", lambda r: (r.get("metrics") or {}).get("assistant_turns_incl_subagents")),
     ("hook_denials", lambda r: (r.get("metrics") or {}).get("hook_denials")),
     ("stop_hook_blocks", lambda r: (r.get("metrics") or {}).get("stop_hook_blocks")),
 ]
 
 METRIC_LABELS = {
     "est_cost_usd": "est. cost (notional)",
+    "total_tokens": "total tokens (all models, incl. subagents)",
+    "main_tokens": "main-agent tokens only",
 }
+
+
+def _swe_gate_count(r):
+    """Count of `gated` events in this run's SWE stream (internal
+    init/docs/edit gate firings recorded by the plugin itself), from
+    stream_metrics.stream_event_counts."""
+    sm = r.get("stream_metrics") or {}
+    counts = sm.get("stream_event_counts") or {}
+    return counts.get("gated")
+
+
+def _swe_top_event_types(rows, top_n=8):
+    """Aggregate stream_event_counts across rows -> [(type, total_count)],
+    sorted descending, top_n entries."""
+    totals = {}
+    for r in rows:
+        sm = r.get("stream_metrics") or {}
+        for k, v in (sm.get("stream_event_counts") or {}).items():
+            if isinstance(v, (int, float)):
+                totals[k] = totals.get(k, 0) + v
+    return sorted(totals.items(), key=lambda kv: -kv[1])[:top_n]
 
 
 def median(values):
@@ -111,6 +142,9 @@ def aggregate(rows):
                 "max": max([v for v in vals if v is not None], default=None),
             }
 
+        swe_gate_counts = [_swe_gate_count(r) for r in arm_rows]
+        swe_gate_counts = [v for v in swe_gate_counts if v is not None]
+
         summary[arm] = {
             "n": n,
             "success_rate": success_rate,
@@ -119,6 +153,8 @@ def aggregate(rows):
             "timeouts": timeouts,
             "timeout_rate": timeout_rate,
             "stats": stats,
+            "swe_gated_events_total": sum(swe_gate_counts) if swe_gate_counts else 0,
+            "swe_top_event_types": _swe_top_event_types(arm_rows),
         }
 
     # vs-baseline deltas (% change of medians), for every arm except baseline
@@ -172,6 +208,14 @@ def format_markdown(agg):
                 f"{_fmt(st['min'])} | {_fmt(st['max'])} | {_fmt(delta)} |"
             )
 
+    lines.append("")
+    lines.append("| arm | SWE `gated` events (total) | top stream event types (type: total count) |")
+    lines.append("|---|---|---|")
+    for arm in arm_names:
+        s = arms[arm]
+        top = ", ".join(f"{k}: {v}" for k, v in s.get("swe_top_event_types", []))
+        lines.append(f"| {arm} | {s.get('swe_gated_events_total', 0)} | {top or '-'} |")
+
     return "\n".join(lines)
 
 
@@ -198,9 +242,13 @@ def per_run_lines(rows):
             f"{r['arm']}\tt{r['trial']}\t"
             f"success={acc.get('ok')}\t"
             f"turns={m.get('num_turns')}\t"
-            f"tokens={m.get('total_tokens')}\t"
+            f"tokens(all/main)={m.get('total_tokens')}/{m.get('main_tokens')}\t"
+            f"subagents={m.get('subagent_launches')}\t"
             f"est_cost={_est_cost_usd(r)}\t"
-            f"wall_s={r.get('wall_s')}"
+            f"wall_s={r.get('wall_s')}\t"
+            f"hook_denials={m.get('hook_denials')}\t"
+            f"stop_hook_blocks={m.get('stop_hook_blocks')}\t"
+            f"swe_gated={_swe_gate_count(r)}"
         )
     return lines
 
@@ -208,10 +256,12 @@ def per_run_lines(rows):
 def write_csv(rows, agg, out_dir):
     runs_csv = os.path.join(out_dir, "runs.csv")
     fieldnames = ["run_id", "arm", "trial", "seed", "model", "exit_code", "timed_out",
-                  "wall_s", "num_turns", "total_tokens", "output_tokens",
-                  "cache_read_tokens", "est_cost_usd", "tool_calls", "hook_denials",
-                  "stop_hook_blocks", "acceptance_ok", "acceptance_passed",
-                  "acceptance_total", "regression_ok"]
+                  "wall_s", "num_turns", "total_tokens", "main_tokens", "output_tokens",
+                  "cache_read_tokens", "est_cost_usd", "tool_calls",
+                  "subagent_launches", "subagent_messages",
+                  "assistant_turns_incl_subagents", "hook_denials",
+                  "stop_hook_blocks", "swe_gated_events", "acceptance_ok",
+                  "acceptance_passed", "acceptance_total", "regression_ok"]
     with open(runs_csv, "w", newline="") as f:
         w = csv.DictWriter(f, fieldnames=fieldnames)
         w.writeheader()
@@ -230,12 +280,17 @@ def write_csv(rows, agg, out_dir):
                 "wall_s": r.get("wall_s"),
                 "num_turns": m.get("num_turns"),
                 "total_tokens": m.get("total_tokens"),
+                "main_tokens": m.get("main_tokens"),
                 "output_tokens": m.get("usage", {}).get("output_tokens"),
                 "cache_read_tokens": m.get("usage", {}).get("cache_read_input_tokens"),
                 "est_cost_usd": _est_cost_usd(r),
                 "tool_calls": m.get("total_tool_calls"),
+                "subagent_launches": m.get("subagent_launches"),
+                "subagent_messages": m.get("subagent_messages"),
+                "assistant_turns_incl_subagents": m.get("assistant_turns_incl_subagents"),
                 "hook_denials": m.get("hook_denials"),
                 "stop_hook_blocks": m.get("stop_hook_blocks"),
+                "swe_gated_events": _swe_gate_count(r),
                 "acceptance_ok": acc.get("ok"),
                 "acceptance_passed": acc.get("passed"),
                 "acceptance_total": acc.get("total"),
