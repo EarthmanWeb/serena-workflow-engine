@@ -210,3 +210,47 @@ after that happens.
 - Plugin arms start Serena (via `uv`) on first use of that arm's clone;
   expect extra first-run latency the first time each arm directory is
   prepared, not on every trial.
+
+## Report
+
+`report.py` renders one self-contained HTML file comparing all runs of an
+experiment: a header with a plain-language verdict, a KPI row per arm, five
+chart sections (per-metric dot/strip plots, token composition, acceptance
+pass rate, harness friction + stream events, tool mix), a sortable per-run
+table, and a method/caveats section. Stdlib only — no build step, no
+external JS. It imports `analyze.py`'s `aggregate()` by path (read-only) for
+per-arm summary stats and adds the per-run chart data `aggregate()` doesn't
+compute.
+
+```bash
+python3 experiments/harness-ab/report.py experiments/harness-ab/results/<stamp> \
+  --out report.html --title "Harness A/B Results"
+```
+
+Arm colors are fixed and identical everywhere: **baseline = blue, v5 =
+orange, control = green** (never aqua/teal/cyan). The green step is a
+re-stepped value within the default palette's green hue family — the
+documented-default `#008300` step fails CVD separation against orange under
+`--pairs all`, so light uses `#006300` and dark uses `#008f00`, both
+re-validated with `scripts/validate_palette.js` from the `dataviz` skill.
+Light mode clears every hard gate; dark mode's blue/orange/green trio clears
+every hard gate too, with CVD separation for green vs. orange landing in the
+6–8 "floor" WARN band (ΔE 6.3) — legal only with secondary encoding, which
+every chart in this report already carries (direct row labels, a legend,
+hover/focus tooltips, and a `<details>` data-table fallback). Regression
+failures and timeouts are marked with an icon + label (never color alone),
+so the reserved status-critical red is never reused as arm identity. Token
+composition and tool-mix charts use a single neutral blue sequential ramp,
+never the arm colors.
+
+Tests live in `tests/test_harness_report.py` (repo root) and cover the pure
+scale-math helpers (`linear_scale`, `nice_ticks`, `median`), the data
+extraction helpers, and a full render against a synthetic 3-arm dataset
+(including a timed-out run and a run with missing metrics) — asserting the
+output file is written, every chart section has an `<svg>`, every arm name
+and run row appears, missing fields render as an em dash rather than
+`NaN`/`None`, and tooltip `data-tip` attributes are present. Run with:
+
+```bash
+python3 -m unittest discover -s tests -p 'test_*.py'
+```
