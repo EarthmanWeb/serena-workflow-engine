@@ -1,6 +1,6 @@
-"""Doc-only: category aliases (dom/DOM_LEDGER_RULES or DOM_EXPORT_FORMATS
-extension). food->groceries, car->transport, fuel->transport accepted
-wherever a category is taken as input; exports always show canonical."""
+"""Doc-only: input normalization policy (dom/DOM_INPUT_NORMALIZATION).
+food->groceries, car->transport, fuel->transport accepted wherever a
+category is taken as input; exports always show canonical."""
 
 import os
 import tempfile

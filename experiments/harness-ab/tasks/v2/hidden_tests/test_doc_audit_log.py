@@ -1,7 +1,8 @@
-"""Doc-only: export audit log (dom/DOM_EXPORT_FORMATS or DOM_PRIVACY_REDACTION
-extension). Every export appends one line to .ledgerlite-audit.log next to
-the ledger file: "<ISO8601 UTC>|export|<format>|<period>|<count>". Timestamp
-from env LEDGERLITE_NOW when set."""
+"""Doc-only: audit policy (dom/DOM_AUDIT). Every export appends one line to
+.ledgerlite-audit.log next to the ledger file:
+"<ISO8601 UTC>|export|<format>|<period>|<count>" (operation name "export",
+then that operation's own detail fields in task.md's listed order: format,
+period, count). Timestamp from env LEDGERLITE_NOW when set."""
 
 import os
 import tempfile
@@ -57,13 +58,13 @@ class TestAuditLog(unittest.TestCase):
             lines = [l for l in f.read().splitlines() if l]
         self.assertEqual(len(lines), 2)
 
-    def test_audit_log_count_reflects_entry_count(self):
+    def test_audit_log_count_reflects_entry_count_exact(self):
         self.store.add_transaction(date(2026, 1, 21), "y", -200, "other")
         out = os.path.join(self.tmpdir, "out.csv")
         export_csv(self.store, "2026-01", out)
         with open(self.audit_path) as f:
             line = f.read().strip()
-        self.assertTrue(line.endswith("|2"))
+        self.assertEqual(line, "2026-01-20T12:00:00Z|export|csv|2026-01|2")
 
 
 if __name__ == "__main__":

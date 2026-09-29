@@ -12,7 +12,7 @@ from .categories import canonical_category
 from .errors import E_EXPORT_EXISTS, E_EXPORT_FORMAT, LedgerError
 from .statement import fiscal_period_bounds
 
-_LONG_NUMBER_RE = re.compile(r"\d{12,19}")
+_LONG_NUMBER_RE = re.compile(r"(?<!\d)\d{12,19}(?!\d)")
 _SSN_RE = re.compile(r"\bssn\b\D*(\d+)", re.IGNORECASE)
 
 

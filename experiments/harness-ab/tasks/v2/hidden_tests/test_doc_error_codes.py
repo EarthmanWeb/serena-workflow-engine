@@ -1,4 +1,5 @@
-"""Doc-only: exact error codes and refusal behavior (ref/REF_ERROR_CODES).
+"""Doc-only: error code naming scheme (ref/REF_ERROR_HANDLING) applied to
+the four conditions task.md lists in section 5, deriving
 E_FISCAL_PERIOD, E_EXPORT_FORMAT, E_SPLIT_WEIGHTS, E_EXPORT_EXISTS."""
 
 import os

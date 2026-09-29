@@ -1,5 +1,5 @@
 """Doc-only: statement rendering and opening-balance rules
-(dom/DOM_FISCAL_CALENDAR)."""
+(dom/DOM_FINANCE_CALENDAR + ref/REF_REPORT_STYLE)."""
 
 import os
 import tempfile

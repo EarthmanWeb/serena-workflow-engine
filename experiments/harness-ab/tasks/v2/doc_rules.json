@@ -1,115 +1,298 @@
 [
   {
     "id": "R1",
-    "memory": "dom/DOM_FISCAL_CALENDAR",
-    "summary": "Fiscal period \"YYYY-MM\" runs 15th of that month through 14th of next month (inclusive both ends); statement period_start/period_end and opening-balance cutoff follow this, not the calendar month.",
+    "memory": "dom/DOM_FINANCE_CALENDAR",
+    "summary": "Fiscal period \"YYYY-MM\" runs 15th of that month through 14th of next month (inclusive both ends); opening balance = sum of everything strictly before period_start.",
+    "quote": "A period string `\"YYYY-MM\"` names the fiscal period that starts on the\n  15th of that month and ends on the 14th of the following month,\n  inclusive on both ends.",
     "tests": [
-      "test_doc_fiscal_calendar.TestFiscalCalendar.test_period_start_is_15th",
-      "test_doc_fiscal_calendar.TestFiscalCalendar.test_period_end_is_14th_of_next_month",
-      "test_doc_fiscal_calendar.TestFiscalCalendar.test_december_period_rolls_to_next_year",
-      "test_doc_fiscal_calendar.TestFiscalCalendar.test_transaction_on_14th_belongs_to_prior_period",
-      "test_doc_fiscal_calendar.TestFiscalCalendar.test_transaction_on_15th_belongs_to_period",
-      "test_doc_fiscal_calendar.TestFiscalCalendar.test_transaction_on_last_day_included",
-      "test_doc_fiscal_calendar.TestFiscalCalendar.test_transaction_on_day_after_period_excluded",
-      "test_doc_statement_format.TestStatementFormat.test_opening_balance_is_sum_before_period_start",
-      "test_doc_statement_format.TestStatementFormat.test_render_first_line_is_opening_balance_label",
-      "test_doc_statement_format.TestStatementFormat.test_render_last_line_is_closing_balance_label",
-      "test_doc_statement_format.TestStatementFormat.test_render_opening_balance_reflects_prior_transactions",
-      "test_doc_statement_format.TestStatementFormat.test_closing_balance_accounts_for_opening"
+      {
+        "id": "test_doc_finance_calendar.TestFiscalCalendar.test_period_start_is_15th",
+        "asserts": "build_statement(store, '2026-01').period_start == date(2026, 1, 15)"
+      },
+      {
+        "id": "test_doc_finance_calendar.TestFiscalCalendar.test_period_end_is_14th_of_next_month",
+        "asserts": "period_end == date(2026, 2, 14)"
+      },
+      {
+        "id": "test_doc_finance_calendar.TestFiscalCalendar.test_december_period_rolls_to_next_year",
+        "asserts": "period '2026-12' -> period_start == 2026-12-15, period_end == 2027-01-14"
+      },
+      {
+        "id": "test_doc_finance_calendar.TestFiscalCalendar.test_transaction_on_14th_belongs_to_prior_period",
+        "asserts": "a transaction dated 2026-01-14 is excluded from period '2026-01' (stmt.lines == []) and counted in opening_balance_cents"
+      },
+      {
+        "id": "test_doc_finance_calendar.TestFiscalCalendar.test_transaction_on_15th_belongs_to_period",
+        "asserts": "a transaction dated 2026-01-15 is included (len(stmt.lines) == 1) and opening_balance_cents == 0"
+      },
+      {
+        "id": "test_doc_finance_calendar.TestFiscalCalendar.test_transaction_on_last_day_included",
+        "asserts": "a transaction dated 2026-02-14 is included in period '2026-01'"
+      },
+      {
+        "id": "test_doc_finance_calendar.TestFiscalCalendar.test_transaction_on_day_after_period_excluded",
+        "asserts": "a transaction dated 2026-02-15 is excluded from period '2026-01'"
+      },
+      {
+        "id": "test_doc_statement_format.TestStatementFormat.test_opening_balance_is_sum_before_period_start",
+        "asserts": "opening_balance_cents == sum of every transaction dated strictly before period_start (exact cents value 400)"
+      },
+      {
+        "id": "test_doc_statement_format.TestStatementFormat.test_render_opening_balance_reflects_prior_transactions",
+        "asserts": "rendered first line exact string 'OPENING BALANCE  -25.00' for a prior transaction of -2500 cents"
+      },
+      {
+        "id": "test_doc_statement_format.TestStatementFormat.test_closing_balance_accounts_for_opening",
+        "asserts": "closing_balance_cents == opening_balance_cents + sum(in-period lines), exact value -1500"
+      }
     ]
   },
   {
     "id": "R2",
-    "memory": "dom/DOM_SPLIT_ALLOCATION",
-    "summary": "Split allocation uses the largest-remainder method; leftover cents go to the largest fractional remainder, ties broken alphabetically by category name (not dict/insertion order); child transaction descriptions are \"<desc> [split i/n]\" with i assigned by alphabetical category order.",
+    "memory": "dom/DOM_MONEY_DISTRIBUTION",
+    "summary": "Weighted distribution uses the largest-remainder method; leftover cents go to the largest fractional remainder, ties broken alphabetically by recipient key (not dict/insertion order); derived record labels are \"<original> [<i>/<n>]\" with i assigned by alphabetical recipient-key order.",
+    "quote": "when two or more recipients have an equal\n   remainder, the leftover cent goes to whichever recipient's key sorts\n   **alphabetically first**",
     "tests": [
-      "test_doc_split_allocation.TestSplitAllocationDoc.test_largest_remainder_gets_leftover_cent",
-      "test_doc_split_allocation.TestSplitAllocationDoc.test_tie_broken_alphabetically_not_by_dict_order",
-      "test_doc_split_allocation.TestSplitAllocationDoc.test_larger_weight_favored_for_remainder_when_not_tied",
-      "test_doc_split_allocation.TestSplitAllocationDoc.test_negative_total_preserves_sign_per_category",
-      "test_doc_split_allocation.TestSplitAllocationDoc.test_negative_total_largest_remainder_still_alphabetical",
-      "test_doc_split_allocation.TestSplitChildDescriptionDoc.test_child_description_format",
-      "test_doc_split_allocation.TestSplitChildDescriptionDoc.test_child_description_index_follows_alphabetical_category_order",
-      "test_doc_split_allocation.TestSplitChildDescriptionDoc.test_three_way_split_description_indices"
+      {
+        "id": "test_doc_split_allocation.TestSplitAllocationDoc.test_largest_remainder_gets_leftover_cent_exact",
+        "asserts": "allocate(100, {a:1,b:1,c:1}) == {'a': 34, 'b': 33, 'c': 33} exactly"
+      },
+      {
+        "id": "test_doc_split_allocation.TestSplitAllocationDoc.test_tie_broken_alphabetically_not_by_dict_order_exact",
+        "asserts": "allocate(100, {zebra:1,apple:1,mango:1}) == {'zebra': 33, 'apple': 34, 'mango': 33} exactly (alphabetically-first key 'apple' gets the leftover cent despite being listed second)"
+      },
+      {
+        "id": "test_doc_split_allocation.TestSplitAllocationDoc.test_larger_remainder_favored_when_not_tied_exact",
+        "asserts": "allocate(11, {a:3,b:2}) == {'a': 7, 'b': 4} exactly (no tie, larger remainder wins)"
+      },
+      {
+        "id": "test_doc_split_allocation.TestSplitAllocationDoc.test_negative_total_preserves_sign_and_sum_exact",
+        "asserts": "allocate(-100, {a:1,b:1,c:1}) == {'a': -34, 'b': -33, 'c': -33} exactly"
+      },
+      {
+        "id": "test_doc_split_allocation.TestSplitAllocationDoc.test_negative_total_largest_remainder_still_alphabetical_exact",
+        "asserts": "allocate(-100, {zebra:1,apple:1,mango:1}) == {'zebra': -33, 'apple': -34, 'mango': -33} exactly"
+      },
+      {
+        "id": "test_doc_split_allocation.TestSplitChildDescriptionDoc.test_child_description_format_exact",
+        "asserts": "add_split(..., 'Dinner', ..., {dining:1, groceries:1}) -> dining description == 'Dinner [1/2]', groceries == 'Dinner [2/2]' (dining < groceries alphabetically)"
+      },
+      {
+        "id": "test_doc_split_allocation.TestSplitChildDescriptionDoc.test_child_description_index_follows_alphabetical_category_order_exact",
+        "asserts": "groceries == 'Trip [1/2]', transport == 'Trip [2/2]'"
+      },
+      {
+        "id": "test_doc_split_allocation.TestSplitChildDescriptionDoc.test_three_way_split_description_indices_exact",
+        "asserts": "dining == 'Big trip [1/3]', groceries == 'Big trip [2/3]', transport == 'Big trip [3/3]'"
+      },
+      {
+        "id": "test_doc_split_allocation.TestSplitChildDescriptionDoc.test_children_returned_in_alphabetical_category_order_exact",
+        "asserts": "[c.category for c in children] == ['dining', 'groceries', 'transport']"
+      }
     ]
   },
   {
     "id": "R3",
-    "memory": "dom/DOM_EXPORT_FORMATS",
-    "summary": "CSV export: semicolon delimiter, exact header \"id;date;description;category;amount\", dates DD.MM.YYYY, amounts comma-decimal with trailing \"-\" for expenses and no sign for income, UTF-8 with BOM, CRLF line endings.",
+    "memory": "ref/REF_DATA_INTERCHANGE",
+    "summary": "CSV files: semicolon delimiter, dates DD.MM.YYYY, signed-decimal fields comma-decimal with leading '-' for negative and no sign for non-negative, UTF-8 with BOM, CRLF line endings; header column list and order come from task.md.",
+    "quote": "Signed decimal fields** (e.g. monetary amounts): a comma as the\n  decimal separator (e.g. `12,34`, not `12.34`), with a leading `-` for\n  negative values and no sign character for non-negative values.",
     "tests": [
-      "test_doc_export_formats.TestCsvExportFormat.test_csv_has_utf8_bom",
-      "test_doc_export_formats.TestCsvExportFormat.test_csv_uses_crlf_line_endings",
-      "test_doc_export_formats.TestCsvExportFormat.test_csv_header_exact",
-      "test_doc_export_formats.TestCsvExportFormat.test_csv_delimiter_is_semicolon",
-      "test_doc_export_formats.TestCsvExportFormat.test_csv_date_format_ddmmyyyy",
-      "test_doc_export_formats.TestCsvExportFormat.test_csv_amount_comma_decimal_expense_trailing_minus",
-      "test_doc_export_formats.TestCsvExportFormat.test_csv_amount_comma_decimal_income_no_sign"
+      {
+        "id": "test_doc_export_formats.TestCsvExportFormat.test_csv_has_utf8_bom",
+        "asserts": "file's first 3 bytes == b'\\xef\\xbb\\xbf'"
+      },
+      {
+        "id": "test_doc_export_formats.TestCsvExportFormat.test_csv_uses_crlf_line_endings_exactly",
+        "asserts": "every LF in the body is preceded by CR (count(b'\\n') == count(b'\\r\\n'))"
+      },
+      {
+        "id": "test_doc_export_formats.TestCsvExportFormat.test_csv_header_exact",
+        "asserts": "first line == 'id;date;description;category;amount' (column list from task.md section 3, semicolon delimiter from this memory)"
+      },
+      {
+        "id": "test_doc_export_formats.TestCsvExportFormat.test_csv_data_row_exact",
+        "asserts": "data row == 't1;20.01.2026;x;other;-5,00' exactly"
+      },
+      {
+        "id": "test_doc_export_formats.TestCsvExportFormat.test_csv_amount_comma_decimal_income_no_sign_exact",
+        "asserts": "data row == 't1;20.01.2026;pay;salary;5,00' exactly (no sign for non-negative)"
+      }
     ]
   },
   {
     "id": "R4",
-    "memory": "dom/DOM_EXPORT_FORMATS",
-    "summary": "JSON export envelope is {\"schema\": \"ledgerlite.export/3\", \"period\": {\"start\":..,\"end\":..}, \"entries\": [...]} with all object keys sorted and amounts rendered as signed decimal strings (not raw cents).",
+    "memory": "ref/REF_DATA_INTERCHANGE",
+    "summary": "JSON export envelope is {\"schema\": \"ledgerlite.export/3\", \"period\": {\"start\":..,\"end\":..}, \"entries\": [...]} with all object keys sorted alphabetically and amounts rendered as signed decimal strings (never raw cents, never a JSON number).",
+    "quote": "`<kind>` is the lowercase name of the module/feature producing the file\n  (e.g. a file produced by this project's `export` feature uses\n  `\"ledgerlite.export/<api_version>\"`). The current `<api_version>` for\n  this project's external JSON envelope is **3**",
     "tests": [
-      "test_doc_export_formats.TestJsonExportFormat.test_json_schema_field",
-      "test_doc_export_formats.TestJsonExportFormat.test_json_period_envelope",
-      "test_doc_export_formats.TestJsonExportFormat.test_json_amounts_are_strings",
-      "test_doc_export_formats.TestJsonExportFormat.test_json_keys_sorted"
+      {
+        "id": "test_doc_export_formats.TestJsonExportFormat.test_json_schema_field_exact",
+        "asserts": "data['schema'] == 'ledgerlite.export/3' exactly"
+      },
+      {
+        "id": "test_doc_export_formats.TestJsonExportFormat.test_json_period_envelope_exact",
+        "asserts": "data['period'] == {'start': '2026-01-15', 'end': '2026-02-14'} exactly"
+      },
+      {
+        "id": "test_doc_export_formats.TestJsonExportFormat.test_json_entry_exact",
+        "asserts": "entries[0] == {'id': 't1', 'date': '2026-01-20', 'description': 'x', 'category': 'other', 'amount': '-5.00'} exactly, amount is a str"
+      },
+      {
+        "id": "test_doc_export_formats.TestJsonExportFormat.test_json_keys_sorted_exact_order",
+        "asserts": "raw-text key positions for one entry appear in alphabetical order amount < category < date < description < id"
+      }
     ]
   },
   {
     "id": "R5",
-    "memory": "dom/DOM_PRIVACY_REDACTION",
-    "summary": "Descriptions containing a 12-19 digit run are redacted to \"****\" + last 4 digits; case-insensitive \"ssn\" followed by digits becomes \"SSN:REDACTED\"; redaction applies ONLY in exports (CSV/JSON), never in the store, CLI list, or statement output.",
+    "memory": "dom/DOM_PRIVACY",
+    "summary": "Descriptions containing a 12-19 digit run are redacted to \"****\" + last 4 digits; case-insensitive \"ssn\" followed by digits becomes \"SSN:REDACTED\" (whole matched span replaced); redaction applies ONLY in exports, never in the store, CLI list, or statement output.",
+    "quote": "any remaining run\n   of **12 to 19 consecutive digits** (inclusive on both ends) is replaced\n   with the literal string `\"****\"` followed by that run's own last 4\n   digits.",
     "tests": [
-      "test_doc_privacy_redaction.TestRedactFunction.test_redacts_16_digit_number",
-      "test_doc_privacy_redaction.TestRedactFunction.test_redacts_12_digit_number_minimum",
-      "test_doc_privacy_redaction.TestRedactFunction.test_does_not_redact_11_digit_number",
-      "test_doc_privacy_redaction.TestRedactFunction.test_redacts_ssn_case_insensitive",
-      "test_doc_privacy_redaction.TestRedactFunction.test_unaffected_text_unchanged",
-      "test_doc_privacy_redaction.TestRedactionAppliesOnlyToExports.test_store_transaction_description_unredacted",
-      "test_doc_privacy_redaction.TestRedactionAppliesOnlyToExports.test_statement_render_unredacted",
-      "test_doc_privacy_redaction.TestRedactionAppliesOnlyToExports.test_csv_export_redacted",
-      "test_doc_privacy_redaction.TestRedactionAppliesOnlyToExports.test_json_export_redacted"
+      {
+        "id": "test_doc_privacy_redaction.TestRedactFunction.test_redacts_16_digit_number_exact",
+        "asserts": "redact('card 1234567890123456 charged') == 'card ****3456 charged' exactly"
+      },
+      {
+        "id": "test_doc_privacy_redaction.TestRedactFunction.test_redacts_12_digit_number_minimum_exact",
+        "asserts": "redact('id 123456789012 here') == 'id ****9012 here' exactly (12-digit boundary)"
+      },
+      {
+        "id": "test_doc_privacy_redaction.TestRedactFunction.test_does_not_redact_11_digit_number",
+        "asserts": "11 digits left completely unchanged"
+      },
+      {
+        "id": "test_doc_privacy_redaction.TestRedactFunction.test_does_not_redact_20_digit_number",
+        "asserts": "20 digits left completely unchanged (upper boundary)"
+      },
+      {
+        "id": "test_doc_privacy_redaction.TestRedactFunction.test_redacts_ssn_case_insensitive_exact",
+        "asserts": "redact('SSN: 123456789') == 'SSN:REDACTED' exactly; redact('Ssn#123456789 on file') == 'SSN:REDACTED on file' exactly"
+      },
+      {
+        "id": "test_doc_privacy_redaction.TestRedactionAppliesOnlyToExports.test_store_transaction_description_unredacted",
+        "asserts": "stored Transaction.description exactly equals the original unredacted text"
+      },
+      {
+        "id": "test_doc_privacy_redaction.TestRedactionAppliesOnlyToExports.test_statement_render_unredacted",
+        "asserts": "render_statement output contains the raw unredacted digit run"
+      },
+      {
+        "id": "test_doc_privacy_redaction.TestRedactionAppliesOnlyToExports.test_csv_export_redacted_exact",
+        "asserts": "CSV data row == 't1;20.01.2026;card ****3456;other;-5,00' exactly"
+      },
+      {
+        "id": "test_doc_privacy_redaction.TestRedactionAppliesOnlyToExports.test_json_export_redacted_exact",
+        "asserts": "entries[0]['description'] == 'card ****3456' exactly"
+      }
     ]
   },
   {
     "id": "R6",
-    "memory": "dom/DOM_LEDGER_RULES",
+    "memory": "dom/DOM_INPUT_NORMALIZATION",
     "summary": "Category aliases (food->groceries, car->transport, fuel->transport) are accepted wherever a category is taken as input (add, split shares); exports and stored data always use the canonical category name.",
+    "quote": "| Alias   | Canonical    |\n| ------- | ------------ |\n| `food`  | `groceries`  |\n| `car`   | `transport`  |\n| `fuel`  | `transport`  |",
     "tests": [
-      "test_doc_category_aliases.TestCategoryAliasesAcceptedOnInput.test_food_alias_accepted_and_canonicalized",
-      "test_doc_category_aliases.TestCategoryAliasesAcceptedOnInput.test_car_alias_accepted_and_canonicalized",
-      "test_doc_category_aliases.TestCategoryAliasesAcceptedOnInput.test_fuel_alias_accepted_and_canonicalized",
-      "test_doc_category_aliases.TestCategoryAliasesAcceptedOnInput.test_split_share_accepts_alias",
-      "test_doc_category_aliases.TestCategoryAliasesCanonicalInExports.test_export_shows_canonical_category"
+      {
+        "id": "test_doc_category_aliases.TestCategoryAliasesAcceptedOnInput.test_food_alias_accepted_and_canonicalized",
+        "asserts": "add_transaction(..., 'food') -> tx.category == 'groceries' exactly"
+      },
+      {
+        "id": "test_doc_category_aliases.TestCategoryAliasesAcceptedOnInput.test_car_alias_accepted_and_canonicalized",
+        "asserts": "tx.category == 'transport' exactly"
+      },
+      {
+        "id": "test_doc_category_aliases.TestCategoryAliasesAcceptedOnInput.test_fuel_alias_accepted_and_canonicalized",
+        "asserts": "tx.category == 'transport' exactly"
+      },
+      {
+        "id": "test_doc_category_aliases.TestCategoryAliasesAcceptedOnInput.test_split_share_accepts_alias",
+        "asserts": "add_split with shares={'food': 1} -> child category == 'groceries' exactly"
+      },
+      {
+        "id": "test_doc_category_aliases.TestCategoryAliasesCanonicalInExports.test_export_shows_canonical_category",
+        "asserts": "exported entry category == 'transport' exactly for a transaction stored with alias 'car'"
+      }
     ]
   },
   {
     "id": "R7",
-    "memory": "ref/REF_ERROR_CODES",
-    "summary": "New error codes are exactly E_FISCAL_PERIOD, E_EXPORT_FORMAT, E_SPLIT_WEIGHTS, E_EXPORT_EXISTS, raised via LedgerError for invalid period strings, unknown export formats, zero/negative split weights, and refusing to overwrite an existing export path without --force.",
+    "memory": "ref/REF_ERROR_HANDLING",
+    "summary": "Error codes follow the naming scheme E_<AREA>_<CONDITION>; applying the memory's own worked area/condition words to task.md's four listed conditions derives exactly E_FISCAL_PERIOD, E_EXPORT_FORMAT, E_SPLIT_WEIGHTS, E_EXPORT_EXISTS. All raised via LedgerError; CLI prints 'error: <CODE>: <message>' to stderr, exit code 2.",
+    "quote": "a check that\n  lives in the period-resolution logic uses the area word `FISCAL` (the\n  domain concept that module implements",
     "tests": [
-      "test_doc_error_codes.TestErrorCodesExist.test_error_code_constants_defined",
-      "test_doc_error_codes.TestFiscalPeriodError.test_bad_period_format_raises",
-      "test_doc_error_codes.TestFiscalPeriodError.test_bad_period_month_out_of_range_raises",
-      "test_doc_error_codes.TestExportFormatError.test_unknown_format_raises",
-      "test_doc_error_codes.TestSplitWeightsError.test_negative_weight_raises",
-      "test_doc_error_codes.TestExportExistsError.test_refuses_overwrite_without_force",
-      "test_doc_error_codes.TestExportExistsError.test_force_allows_overwrite"
+      {
+        "id": "test_doc_error_codes.TestErrorCodesExist.test_error_code_constants_defined",
+        "asserts": "E_FISCAL_PERIOD == 'E_FISCAL_PERIOD', E_EXPORT_FORMAT == 'E_EXPORT_FORMAT', E_SPLIT_WEIGHTS == 'E_SPLIT_WEIGHTS', E_EXPORT_EXISTS == 'E_EXPORT_EXISTS' exactly"
+      },
+      {
+        "id": "test_doc_error_codes.TestFiscalPeriodError.test_bad_period_format_raises",
+        "asserts": "fiscal_period_bounds('2026/01') raises LedgerError with .code == E_FISCAL_PERIOD exactly"
+      },
+      {
+        "id": "test_doc_error_codes.TestFiscalPeriodError.test_bad_period_month_out_of_range_raises",
+        "asserts": ".code == E_FISCAL_PERIOD exactly for month 13"
+      },
+      {
+        "id": "test_doc_error_codes.TestExportFormatError.test_unknown_format_raises",
+        "asserts": ".code == E_EXPORT_FORMAT exactly for fmt='xml'"
+      },
+      {
+        "id": "test_doc_error_codes.TestSplitWeightsError.test_negative_weight_raises",
+        "asserts": ".code == E_SPLIT_WEIGHTS exactly"
+      },
+      {
+        "id": "test_doc_error_codes.TestExportExistsError.test_refuses_overwrite_without_force",
+        "asserts": ".code == E_EXPORT_EXISTS exactly on a second export_csv to the same path without force"
+      },
+      {
+        "id": "test_doc_error_codes.TestExportExistsError.test_force_allows_overwrite",
+        "asserts": "force=True does not raise"
+      }
     ]
   },
   {
     "id": "R8",
-    "memory": "dom/DOM_EXPORT_FORMATS",
-    "summary": "Every export appends one line to .ledgerlite-audit.log next to the ledger file: \"<ISO8601 UTC>|export|<format>|<period>|<count>\"; timestamp comes from env LEDGERLITE_NOW when set (used by tests), otherwise current UTC time.",
+    "memory": "dom/DOM_AUDIT",
+    "summary": "Every export appends one line to .ledgerlite-audit.log next to the primary data file: \"<ISO8601 UTC>|export|<format>|<period>|<count>\" (operation name first field after timestamp, then task.md's listed detail fields format/period/count in order); timestamp from env LEDGERLITE_NOW when set, else current UTC.",
+    "quote": "the\n  operation's name (the lowercase name of the feature performing the\n  write, e.g. the name used in that feature's own CLI subcommand or\n  function name), then that operation's own detail fields **in the same\n  order that operation's own specification lists its inputs/outputs**",
     "tests": [
-      "test_doc_audit_log.TestAuditLog.test_audit_log_created_next_to_ledger_file",
-      "test_doc_audit_log.TestAuditLog.test_audit_log_line_format_csv",
-      "test_doc_audit_log.TestAuditLog.test_audit_log_line_format_json",
-      "test_doc_audit_log.TestAuditLog.test_audit_log_appends_not_overwrites",
-      "test_doc_audit_log.TestAuditLog.test_audit_log_count_reflects_entry_count"
+      {
+        "id": "test_doc_audit_log.TestAuditLog.test_audit_log_created_next_to_ledger_file",
+        "asserts": "os.path.exists(tmpdir/.ledgerlite-audit.log) is True"
+      },
+      {
+        "id": "test_doc_audit_log.TestAuditLog.test_audit_log_line_format_csv",
+        "asserts": "line == '2026-01-20T12:00:00Z|export|csv|2026-01|1' exactly"
+      },
+      {
+        "id": "test_doc_audit_log.TestAuditLog.test_audit_log_line_format_json",
+        "asserts": "line == '2026-01-20T12:00:00Z|export|json|2026-01|1' exactly"
+      },
+      {
+        "id": "test_doc_audit_log.TestAuditLog.test_audit_log_appends_not_overwrites",
+        "asserts": "two exports produce exactly 2 non-empty lines in the log"
+      },
+      {
+        "id": "test_doc_audit_log.TestAuditLog.test_audit_log_count_reflects_entry_count_exact",
+        "asserts": "line == '2026-01-20T12:00:00Z|export|csv|2026-01|2' exactly for 2 in-period transactions"
+      }
+    ]
+  },
+  {
+    "id": "R9",
+    "memory": "ref/REF_REPORT_STYLE",
+    "summary": "Text reports render 'OPENING BALANCE  <amount>' as the exact first line and 'CLOSING BALANCE  <amount>' as the exact last line (label, two spaces, formatted amount), with one '<date>  <amount>  <category>  <description>' line per record in between.",
+    "quote": "The **first line** of a period report is the opening-balance line,\n  formatted exactly:\n  ```\n  OPENING BALANCE  <amount>\n  ```",
+    "tests": [
+      {
+        "id": "test_doc_statement_format.TestStatementFormat.test_render_first_line_is_opening_balance_label",
+        "asserts": "rendered.splitlines()[0] == 'OPENING BALANCE  0.00' exactly"
+      },
+      {
+        "id": "test_doc_statement_format.TestStatementFormat.test_render_last_line_is_closing_balance_label",
+        "asserts": "last non-empty line == 'CLOSING BALANCE  0.00' exactly"
+      }
     ]
   }
 ]

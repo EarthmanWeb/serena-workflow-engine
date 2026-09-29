@@ -1,4 +1,4 @@
-"""Doc-only: fiscal period calendar (dom/DOM_FISCAL_CALENDAR).
+"""Doc-only: finance calendar policy (dom/DOM_FINANCE_CALENDAR).
 Period "YYYY-MM" runs from the 15th of that month through the 14th of the
 next month, inclusive."""
 

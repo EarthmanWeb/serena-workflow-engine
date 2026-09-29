@@ -11,14 +11,16 @@ so keep it lean — aim for < 200 lines.
 
 ## Ledger
 
-- [Ledger Architecture](feature/FEATURE_LEDGER.md) — modules, data flow, file layout
-- [Ledger Domain Rules](dom/DOM_LEDGER_RULES.md) — validation, categories + aliases, error codes (READ BEFORE editing domain logic)
-- [Fiscal Calendar](dom/DOM_FISCAL_CALENDAR.md) — fiscal period bounds for statements/exports (READ BEFORE statement/export work)
-- [Split Allocation](dom/DOM_SPLIT_ALLOCATION.md) — split-transaction allocation algorithm + child naming (READ BEFORE split work)
-- [Export Formats](dom/DOM_EXPORT_FORMATS.md) — exact CSV/JSON export formats + audit log (READ BEFORE export work)
-- [Privacy Redaction](dom/DOM_PRIVACY_REDACTION.md) — description redaction rules for exports (READ BEFORE export work)
-- [Error Codes](ref/REF_ERROR_CODES.md) — new error codes for statement/export/split
-- [CLI Output Formats](ref/REF_CLI_OUTPUT.md) — exact stdout/stderr formats (graded by tests)
+- [Ledger Architecture](arch/ARCH_LEDGERLITE.md) — modules, layering, data flow, file layout, standing-standards index
+- [Ledger Domain Rules](dom/DOM_LEDGER_RULES.md) — amount parsing, fixed category set (READ BEFORE editing domain logic)
+- [Finance Calendar Policy](dom/DOM_FINANCE_CALENDAR.md) — fiscal period bounds for any period-scoped feature (READ BEFORE period-scoped work)
+- [Money Distribution Policy](dom/DOM_MONEY_DISTRIBUTION.md) — weighted-distribution algorithm + derived-record naming (READ BEFORE any weight-based split/allocation work)
+- [Data Interchange Standard](ref/REF_DATA_INTERCHANGE.md) — exact CSV/JSON format for files produced for outside consumption (READ BEFORE export/report-to-file work)
+- [Privacy Policy](dom/DOM_PRIVACY.md) — sensitive-number redaction rules for outbound data (READ BEFORE export/report-to-file work)
+- [Input Normalization Policy](dom/DOM_INPUT_NORMALIZATION.md) — category alias acceptance on input (READ BEFORE adding a category-accepting entry point)
+- [Error Handling Standard](ref/REF_ERROR_HANDLING.md) — error code naming scheme + CLI error contract
+- [Audit Policy](dom/DOM_AUDIT.md) — audit-log requirement for writes outside the primary data store
+- [Report Style Guide](ref/REF_REPORT_STYLE.md) — text-report rendering conventions
 - [Test Suite](feature/FEATURE_TESTS.md) — how to run tests
 - [Dev Standards](feature/FEATURE_DEV_STANDARDS.md) — stdlib only, Decimal, dataclasses, error codes
 
@@ -39,4 +41,5 @@ so keep it lean — aim for < 200 lines.
 | FEATURE_ | Feature configs   |
 | DOM_     | Domain behaviors  |
 | REF_     | Reference docs    |
+| ARCH_    | Architecture      |
 | INDEX_   | Navigation        |

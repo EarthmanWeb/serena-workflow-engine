@@ -104,7 +104,7 @@ class Store:
         (category -> positive integer weight), allocating `total_cents`
         across them via ledgerlite.split.allocate.
 
-        Each child's description is "<description> [split i/n]" where n is
+        Each child's description is "<description> [i/n]" where n is
         the number of categories and i is the child's 1-based position when
         categories are sorted alphabetically. Returns the list of created
         Transactions in that same (alphabetical-category) order.
@@ -120,7 +120,7 @@ class Store:
 
         created = []
         for i, category in enumerate(ordered_categories, start=1):
-            child_description = f"{description} [split {i}/{n}]"
+            child_description = f"{description} [{i}/{n}]"
             tx = self.add_transaction(tx_date, child_description, allocation[category], category)
             created.append(tx)
         return created
