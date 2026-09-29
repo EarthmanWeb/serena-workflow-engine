@@ -397,6 +397,65 @@ class ScoreRunPersistenceTest(unittest.TestCase):
         self.assertIn("failed_tests", regression)
 
 
+class ScoreRunExpectedIdScoringTest(unittest.TestCase):
+    """score_run() against a REAL hidden_tests/ dir, including a module that
+    fails to import -- exercises the acceptance["total"]/["passed"] fix end
+    to end (STATIC expected-id scoring, not unittest's own "Ran N tests"
+    summary, which under-counts an import-failed module -- see
+    acceptance.score_against_expected_ids's module docstring)."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp(prefix="harness_score_expected_test_")
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+        self.work_dir = os.path.join(self.tmp, "work")
+        os.makedirs(self.work_dir)
+
+        self.task_dir = os.path.join(self.tmp, "task")
+        hidden = os.path.join(self.task_dir, "hidden_tests")
+        os.makedirs(hidden)
+        with open(os.path.join(hidden, "__init__.py"), "w") as f:
+            f.write("")
+        with open(os.path.join(hidden, "test_spec_ok.py"), "w") as f:
+            f.write(
+                "import unittest\n"
+                "class T(unittest.TestCase):\n"
+                "    def test_pass(self):\n"
+                "        pass\n"
+            )
+        # This module fails to import in the agent's tree (references a
+        # name that doesn't exist yet) -- unittest -v reports it as ONE
+        # _FailedTest/ERROR line for the whole module, not its 2 real tests.
+        with open(os.path.join(hidden, "test_doc_broken.py"), "w") as f:
+            f.write(
+                "import unittest\n"
+                "from nonexistent_agent_module import DOES_NOT_EXIST\n"
+                "class T(unittest.TestCase):\n"
+                "    def test_a(self):\n"
+                "        pass\n"
+                "    def test_b(self):\n"
+                "        pass\n"
+            )
+        self.paths = run.task_paths("__unused__")
+        self.paths["hidden_tests"] = hidden
+        self.paths["doc_rules"] = os.path.join(self.task_dir, "doc_rules.json")
+
+    def test_total_reflects_static_expected_ids_not_unittest_summary(self):
+        acceptance, _regression = run.score_run(self.work_dir, paths=self.paths)
+        # 1 (test_spec_ok) + 2 (test_doc_broken, import-failed) == 3 expected,
+        # NOT the 2 unittest itself would report (1 real pass + 1 opaque
+        # _FailedTest line collapsing test_doc_broken's 2 tests into 1).
+        self.assertEqual(acceptance["total"], 3)
+        self.assertEqual(acceptance["passed"], 1)
+        self.assertFalse(acceptance["ok"])
+        self.assertEqual(acceptance["spec"], {"passed": 1, "total": 1})
+        self.assertEqual(acceptance["doc"], {"passed": 0, "total": 2})
+        self.assertIn("by_id", acceptance)
+        import_error_statuses = {
+            v["status"] for k, v in acceptance["by_id"].items() if "test_doc_broken" in k
+        }
+        self.assertEqual(import_error_statuses, {"import_error"})
+
+
 class CleanEnvTest(unittest.TestCase):
     def test_strips_claude_and_swe_prefixed_keys(self):
         src = {
@@ -1530,9 +1589,13 @@ class ScoreHiddenTestsDirTest(unittest.TestCase):
         self.assertEqual(acc_a["spec"]["total"], 1)
 
         acc_b = run.score_hidden_tests_dir(self.work_dir, self.hidden_b, "pivot")
-        # -t . discovery finds BOTH subdirs' tests once both are copied in,
-        # so acc_b's total reflects task1's test too.
-        self.assertEqual(acc_b["total"], 2)
+        # -t . discovery's raw `out`/`err` text contains BOTH subdirs' test
+        # result lines once both are copied in (task1's is still on disk
+        # from the acc_a call above), but acc_b's total/passed/spec/doc are
+        # scored against the STATIC expected-id set scanned from ITS OWN
+        # hidden_tests dir only (module_prefix "_acceptance.pivot") -- see
+        # run._score_expected_ids -- so acc_b never counts task1's test.
+        self.assertEqual(acc_b["total"], 1)
         self.assertFalse(acc_b["ok"])
         self.assertEqual(acc_b["doc"]["total"], 1)
         self.assertIn("test_b_fails (_acceptance.pivot.test_doc_b.T.test_b_fails)",
@@ -1599,6 +1662,218 @@ class GitCommitSnapshotTest(unittest.TestCase):
         self.assertNotEqual(sha1, sha2)
 
 
+class ResolveCommitShaTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp(prefix="harness_resolve_sha_test_")
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+        run._run(["git", "init", "-q"], cwd=self.tmp)
+        with open(os.path.join(self.tmp, "f.txt"), "w") as f:
+            f.write("v1\n")
+        run._run(["git", "-c", "user.name=x", "-c", "user.email=x@x", "add", "-A"], cwd=self.tmp)
+        run._run(["git", "-c", "user.name=x", "-c", "user.email=x@x", "commit", "-qm", "init"],
+                  cwd=self.tmp)
+
+    def test_finds_exact_subject_match(self):
+        sha = run.git_commit_snapshot(self.tmp, "benchmark1")
+        found = run._resolve_commit_sha(self.tmp, "benchmark1")
+        self.assertEqual(found, sha)
+
+    def test_no_matching_subject_returns_none(self):
+        self.assertIsNone(run._resolve_commit_sha(self.tmp, "benchmark1"))
+
+    def test_substring_subject_does_not_false_match(self):
+        # "benchmark1" must not match a commit literally titled
+        # "benchmark10" or "not benchmark1 related" -- exact subject only.
+        run._run(["git", "-c", "user.name=x", "-c", "user.email=x@x",
+                   "commit", "-qm", "benchmark10", "--allow-empty"], cwd=self.tmp)
+        self.assertIsNone(run._resolve_commit_sha(self.tmp, "benchmark1"))
+
+    def test_most_recent_match_wins(self):
+        sha1 = run.git_commit_snapshot(self.tmp, "benchmark1")
+        run._run(["git", "-c", "user.name=x", "-c", "user.email=x@x",
+                   "commit", "-qm", "other", "--allow-empty"], cwd=self.tmp)
+        sha2 = run.git_commit_snapshot(self.tmp, "benchmark1")
+        found = run._resolve_commit_sha(self.tmp, "benchmark1")
+        self.assertEqual(found, sha2)
+        self.assertNotEqual(sha1, sha2)
+
+    def test_non_git_dir_returns_none(self):
+        empty = tempfile.mkdtemp(prefix="harness_not_a_repo_")
+        self.addCleanup(shutil.rmtree, empty, ignore_errors=True)
+        self.assertIsNone(run._resolve_commit_sha(empty, "benchmark1"))
+
+
+class ExportGitCommitTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp(prefix="harness_export_commit_test_")
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+        run._run(["git", "init", "-q"], cwd=self.tmp)
+        os.makedirs(os.path.join(self.tmp, "sub"))
+        with open(os.path.join(self.tmp, "f.txt"), "w") as f:
+            f.write("v1\n")
+        with open(os.path.join(self.tmp, "sub", "g.txt"), "w") as f:
+            f.write("nested\n")
+        run._run(["git", "-c", "user.name=x", "-c", "user.email=x@x", "add", "-A"], cwd=self.tmp)
+        run._run(["git", "-c", "user.name=x", "-c", "user.email=x@x", "commit", "-qm", "init"],
+                  cwd=self.tmp)
+        self.sha = run._run(["git", "rev-parse", "HEAD"], cwd=self.tmp).stdout.strip()
+
+    def test_exports_tree_contents(self):
+        dest = tempfile.mkdtemp(prefix="harness_export_dest_")
+        self.addCleanup(shutil.rmtree, dest, ignore_errors=True)
+        run._export_git_commit(self.tmp, self.sha, dest)
+        with open(os.path.join(dest, "f.txt")) as f:
+            self.assertEqual(f.read(), "v1\n")
+        with open(os.path.join(dest, "sub", "g.txt")) as f:
+            self.assertEqual(f.read(), "nested\n")
+
+    def test_never_mutates_source_repo(self):
+        # Change the working tree AFTER the commit (uncommitted), export the
+        # commit, and confirm the source repo's working tree is untouched
+        # (no checkout, no reset -- git archive is read-only).
+        with open(os.path.join(self.tmp, "f.txt"), "w") as f:
+            f.write("UNCOMMITTED CHANGE\n")
+        dest = tempfile.mkdtemp(prefix="harness_export_dest2_")
+        self.addCleanup(shutil.rmtree, dest, ignore_errors=True)
+        run._export_git_commit(self.tmp, self.sha, dest)
+        # Exported copy reflects the COMMITTED content...
+        with open(os.path.join(dest, "f.txt")) as f:
+            self.assertEqual(f.read(), "v1\n")
+        # ...while the source repo's working tree still has the
+        # uncommitted change, proving nothing was checked out/reset there.
+        with open(os.path.join(self.tmp, "f.txt")) as f:
+            self.assertEqual(f.read(), "UNCOMMITTED CHANGE\n")
+
+    def test_bad_sha_raises(self):
+        dest = tempfile.mkdtemp(prefix="harness_export_dest3_")
+        self.addCleanup(shutil.rmtree, dest, ignore_errors=True)
+        with self.assertRaises(RuntimeError):
+            run._export_git_commit(self.tmp, "0" * 40, dest)
+
+
+class CopyTreeExcludingGitTest(unittest.TestCase):
+    def test_excludes_git_dir_copies_rest(self):
+        src = tempfile.mkdtemp(prefix="harness_copytree_src_")
+        self.addCleanup(shutil.rmtree, src, ignore_errors=True)
+        dest = tempfile.mkdtemp(prefix="harness_copytree_dest_")
+        self.addCleanup(shutil.rmtree, dest, ignore_errors=True)
+        os.makedirs(os.path.join(src, ".git"))
+        with open(os.path.join(src, ".git", "HEAD"), "w") as f:
+            f.write("ref: refs/heads/main\n")
+        with open(os.path.join(src, "f.txt"), "w") as f:
+            f.write("content\n")
+        run._copy_tree_excluding_git(src, dest)
+        self.assertFalse(os.path.exists(os.path.join(dest, ".git")))
+        with open(os.path.join(dest, "f.txt")) as f:
+            self.assertEqual(f.read(), "content\n")
+
+
+class CmdRescoreSinglePhaseTest(unittest.TestCase):
+    """--rescore against a small synthetic single-phase stamp dir: a real
+    git repo under runs/<id>/work/ with a hidden_tests/ module that fails to
+    import, checking the rewritten acceptance["total"]/["passed"] reflect
+    the STATIC expected-id count and runs.jsonl.prerescore preserves the
+    original."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp(prefix="harness_rescore_single_test_")
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+        self.stamp_dir = os.path.join(self.tmp, "20990101-000000")
+        self.run_dir = os.path.join(self.stamp_dir, "runs", "control-t0")
+        self.work_dir = os.path.join(self.run_dir, "work")
+        os.makedirs(self.work_dir)
+
+        run._run(["git", "init", "-q"], cwd=self.work_dir)
+        with open(os.path.join(self.work_dir, "f.txt"), "w") as f:
+            f.write("v1\n")
+        run._run(["git", "-c", "user.name=x", "-c", "user.email=x@x", "add", "-A"], cwd=self.work_dir)
+        run._run(["git", "-c", "user.name=x", "-c", "user.email=x@x", "commit", "-qm", "init"],
+                  cwd=self.work_dir)
+
+        with open(os.path.join(self.run_dir, "transcript.jsonl"), "w") as f:
+            f.write(json.dumps({"type": "result", "subtype": "success", "is_error": False,
+                                 "num_turns": 1, "usage": {}, "modelUsage": {}}) + "\n")
+
+        self.task_dir = os.path.join(self.tmp, "task")
+        hidden = os.path.join(self.task_dir, "hidden_tests")
+        os.makedirs(hidden)
+        with open(os.path.join(hidden, "__init__.py"), "w") as f:
+            f.write("")
+        with open(os.path.join(hidden, "test_doc_broken.py"), "w") as f:
+            f.write(
+                "import unittest\n"
+                "from nonexistent_agent_module import X\n"
+                "class T(unittest.TestCase):\n"
+                "    def test_a(self):\n"
+                "        pass\n"
+                "    def test_b(self):\n"
+                "        pass\n"
+            )
+
+        stale_row = {
+            "run_id": "control-t0", "arm": "control", "task": "__rescore_fixture__",
+            "trial": 0, "exit_code": 0, "timed_out": False, "wall_s": 1.0,
+            "metrics": {}, "stream_metrics": {},
+            "acceptance": {"total": 1, "passed": 1, "ok": True, "exit_code": 0},
+            "regression": {"total": 0, "passed": 0, "ok": True, "exit_code": 0},
+            "isolation": {"ok": True},
+        }
+        self.runs_jsonl = os.path.join(self.stamp_dir, "runs.jsonl")
+        with open(self.runs_jsonl, "w") as f:
+            f.write(json.dumps(stale_row) + "\n")
+
+        # Point task_paths("__rescore_fixture__") at our synthetic task dir.
+        self._orig_task_paths = run.task_paths
+        def _fake_task_paths(task_name):
+            paths = self._orig_task_paths(task_name)
+            if task_name == "__rescore_fixture__":
+                paths["hidden_tests"] = hidden
+                paths["doc_rules"] = os.path.join(self.task_dir, "doc_rules.json")
+            return paths
+        run.task_paths = _fake_task_paths
+        self.addCleanup(setattr, run, "task_paths", self._orig_task_paths)
+
+    def test_rescore_recomputes_acceptance_from_static_expected_ids(self):
+        rc = run.cmd_rescore(self.stamp_dir)
+        self.assertEqual(rc, 0)
+
+        backup_path = self.runs_jsonl + ".prerescore"
+        self.assertTrue(os.path.exists(backup_path))
+        with open(backup_path) as f:
+            backup_row = json.loads(f.readline())
+        self.assertEqual(backup_row["acceptance"]["total"], 1)  # untouched backup
+
+        with open(self.runs_jsonl) as f:
+            new_row = json.loads(f.readline())
+        # 2 expected ids (test_a, test_b), both import_error -> 2/0, not the
+        # stale row's fictitious 1/1.
+        self.assertEqual(new_row["acceptance"]["total"], 2)
+        self.assertEqual(new_row["acceptance"]["passed"], 0)
+        self.assertIn("gates", new_row)
+
+    def test_rescore_twice_does_not_clobber_prerescore_backup(self):
+        run.cmd_rescore(self.stamp_dir)
+        backup_path = self.runs_jsonl + ".prerescore"
+        with open(backup_path) as f:
+            first_backup = f.read()
+        run.cmd_rescore(self.stamp_dir)
+        with open(backup_path) as f:
+            second_backup = f.read()
+        self.assertEqual(first_backup, second_backup)
+
+    def test_rescore_never_writes_into_source_work_git_repo(self):
+        # The run's own work/ git repo must have no new commits/dirty state
+        # from a rescore (B2 is scored from a COPY, and this single-phase
+        # path never touches work/ at all beyond read-only git/log calls).
+        before_head = run._run(["git", "rev-parse", "HEAD"], cwd=self.work_dir).stdout.strip()
+        before_status = run._run(["git", "status", "--porcelain"], cwd=self.work_dir).stdout
+        run.cmd_rescore(self.stamp_dir)
+        after_head = run._run(["git", "rev-parse", "HEAD"], cwd=self.work_dir).stdout.strip()
+        after_status = run._run(["git", "status", "--porcelain"], cwd=self.work_dir).stdout
+        self.assertEqual(before_head, after_head)
+        self.assertEqual(before_status, after_status)
+
+
 class Task1RetentionTest(unittest.TestCase):
     def test_all_b1_passes_retained_at_b2(self):
         b1 = {"total": 3, "passed": 3, "failed_tests": []}
@@ -1634,6 +1909,57 @@ class Task1RetentionTest(unittest.TestCase):
         b2 = {"total": 0, "passed": 0, "failed_tests": []}
         result = run.task1_retention(b1, b2)
         self.assertEqual(result, {"passed": 0, "total": 0, "regressions": []})
+
+    # -- by_id-based path (score_against_expected_ids' STATIC expected-id
+    # scoring, see acceptance.py's module docstring) -- the default prefixes
+    # match run_one_pivot's real acceptance_subdir pair: "" at B1 (module
+    # prefix "_acceptance"), "task1" at B2 (module prefix "_acceptance.task1").
+
+    def test_by_id_all_pass_retained(self):
+        b1 = {"by_id": {"_acceptance.test_spec_a.T.test_x": {"status": "ok"}}}
+        b2 = {"by_id": {"_acceptance.task1.test_spec_a.T.test_x": {"status": "ok"}}}
+        result = run.task1_retention(b1, b2)
+        self.assertEqual(result, {"passed": 1, "total": 1, "regressions": []})
+
+    def test_by_id_regression_detected(self):
+        b1 = {"by_id": {"_acceptance.test_spec_a.T.test_x": {"status": "ok"}}}
+        b2 = {"by_id": {"_acceptance.task1.test_spec_a.T.test_x": {"status": "fail"}}}
+        result = run.task1_retention(b1, b2)
+        self.assertEqual(result["total"], 1)
+        self.assertEqual(result["passed"], 0)
+        self.assertEqual(result["regressions"], ["test_spec_a.T.test_x"])
+
+    def test_by_id_import_error_at_b2_counts_as_regression(self):
+        # The whole point of the by_id-based path: a test that PASSED at B1
+        # but whose module fails to import at B2 (status "import_error", not
+        # "fail") must still be counted as a regression -- not silently
+        # dropped because its status string isn't literally "fail".
+        b1 = {"by_id": {"_acceptance.test_doc_a.T.test_x": {"status": "ok"}}}
+        b2 = {"by_id": {"_acceptance.task1.test_doc_a.T.test_x": {"status": "import_error"}}}
+        result = run.task1_retention(b1, b2)
+        self.assertEqual(result["regressions"], ["test_doc_a.T.test_x"])
+
+    def test_by_id_missing_at_b2_counts_as_regression(self):
+        b1 = {"by_id": {"_acceptance.test_doc_a.T.test_x": {"status": "ok"}}}
+        b2 = {"by_id": {}}
+        result = run.task1_retention(b1, b2)
+        self.assertEqual(result["regressions"], ["test_doc_a.T.test_x"])
+
+    def test_by_id_not_passed_at_b1_never_a_regression(self):
+        b1 = {"by_id": {"_acceptance.test_doc_a.T.test_x": {"status": "fail"}}}
+        b2 = {"by_id": {"_acceptance.task1.test_doc_a.T.test_x": {"status": "fail"}}}
+        result = run.task1_retention(b1, b2)
+        self.assertEqual(result["total"], 0)
+        self.assertEqual(result["regressions"], [])
+
+    def test_by_id_missing_on_one_side_falls_back_to_legacy(self):
+        # An older, un-rescored row may have "failed_tests" but no "by_id"
+        # at all (pre-expected-id-scoring). Falls back rather than treating
+        # the whole retention as unmeasurable.
+        b1 = {"total": 2, "passed": 2, "failed_tests": []}
+        b2 = {"total": 2, "passed": 2, "failed_tests": []}
+        result = run.task1_retention(b1, b2)
+        self.assertEqual(result, {"passed": 2, "total": 2, "regressions": []})
 
 
 class SumPhaseMetricsTest(unittest.TestCase):

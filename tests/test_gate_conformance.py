@@ -237,6 +237,94 @@ class InitChainCompleteTest(unittest.TestCase):
         ]
         self.assertTrue(gc.compute_init_chain_complete(transcript))
 
+    def test_denied_agent_call_before_chain_does_not_break_it(self):
+        # Real shape, redacted from
+        # results/20260929-142806/runs/baseline-t0/transcript.task1.jsonl
+        # (event indices 28/30/34/37/43): the agent calls the `Agent` tool
+        # to pre-load a deferred MCP tool's schema (mistakenly using `Agent`
+        # instead of `ToolSearch`) BEFORE the init chain starts. The
+        # PreToolUse hook denies it ("BLOCKED: Agent called before WF_INIT
+        # complete"), and the agent then runs the real chain starting with
+        # wf/WF_INIT. Since the `Agent` call never executed (it was denied),
+        # it must not count as chain-breaking task work -- the run
+        # completed the chain cleanly in the end.
+        transcript = [
+            _tool_use_event("Agent", {"description": "Load Serena read_memory tool schema",
+                                       "prompt": "placeholder"}),
+            _tool_deny_event(
+                "PreToolUse:Agent hook error: \U0001f6d1 BLOCKED: Agent called before "
+                "WF_INIT complete.\n\nThis tool is NOT allowed before initialization.\n"
+                "Only read_memory and list_memories (init-chain) are permitted."
+            ),
+            _tool_use_event("mcp__plugin_swe_serena__read_memory", {"memory_name": "wf/WF_INIT"}),
+            _tool_use_event("mcp__plugin_swe_serena__read_memory", {"memory_name": "claude/CLAUDE_OBLIGATIONS"}),
+            _tool_use_event("mcp__plugin_swe_serena__read_memory", {"memory_name": "wf/WF_CLASSIFY"}),
+        ]
+        self.assertTrue(gc.compute_init_chain_complete(transcript))
+
+    def test_non_denied_agent_call_before_chain_still_breaks_it(self):
+        # Contrast with the above: if the SAME `Agent` call had NOT been
+        # denied (no is_error tool_result follows), it's genuine task work
+        # that ran before init completed -- the chain is violated exactly
+        # as compute_init_chain_complete always treated other-tool-before-
+        # chain-complete.
+        transcript = [
+            _tool_use_event("Agent", {"description": "do something", "prompt": "go"}),
+            _tool_use_event("mcp__plugin_swe_serena__read_memory", {"memory_name": "wf/WF_INIT"}),
+            _tool_use_event("mcp__plugin_swe_serena__read_memory", {"memory_name": "claude/CLAUDE_OBLIGATIONS"}),
+            _tool_use_event("mcp__plugin_swe_serena__read_memory", {"memory_name": "wf/WF_CLASSIFY"}),
+        ]
+        self.assertFalse(gc.compute_init_chain_complete(transcript))
+
+    def test_swe_wm_read_before_chain_does_not_break_it(self):
+        transcript = [
+            _tool_use_event("mcp__plugin_swe_swe-wm__swe_wm_read", {}),
+            _tool_use_event("mcp__plugin_swe_serena__read_memory", {"memory_name": "wf/WF_INIT"}),
+            _tool_use_event("mcp__plugin_swe_serena__read_memory", {"memory_name": "claude/CLAUDE_OBLIGATIONS"}),
+            _tool_use_event("mcp__plugin_swe_serena__read_memory", {"memory_name": "wf/WF_CLASSIFY"}),
+        ]
+        self.assertTrue(gc.compute_init_chain_complete(transcript))
+
+    def test_denied_tool_use_with_no_following_user_event_at_all(self):
+        # Edge case: a denied tool_use is the very LAST event in the
+        # transcript (nothing follows it) -- _tool_use_was_denied must not
+        # raise, and since the chain never completes either way this stays
+        # False.
+        transcript = [
+            _tool_use_event("Agent", {"prompt": "go"}),
+        ]
+        self.assertFalse(gc.compute_init_chain_complete(transcript))
+
+
+class ToolUseWasDeniedTest(unittest.TestCase):
+    def test_denied_true(self):
+        transcript = [
+            _tool_use_event("Agent", {"prompt": "go"}),
+            _tool_deny_event("BLOCKED: Agent called before WF_INIT complete."),
+        ]
+        self.assertTrue(gc._tool_use_was_denied(transcript, 0))
+
+    def test_not_denied_false(self):
+        transcript = [
+            _tool_use_event("Bash", {"command": "ls"}),
+            {"type": "user", "message": {"content": [
+                {"type": "tool_result", "is_error": False, "content": "ok"},
+            ]}},
+        ]
+        self.assertFalse(gc._tool_use_was_denied(transcript, 0))
+
+    def test_no_following_event_false(self):
+        transcript = [_tool_use_event("Agent", {"prompt": "go"})]
+        self.assertFalse(gc._tool_use_was_denied(transcript, 0))
+
+    def test_skips_interleaved_subagent_events_to_find_own_result(self):
+        transcript = [
+            _tool_use_event("Agent", {"prompt": "go"}),
+            _tool_use_event("Bash", {"command": "ls"}, parent="sub1"),  # interleaved subagent event
+            _tool_deny_event("BLOCKED: Agent called before WF_INIT complete."),
+        ]
+        self.assertTrue(gc._tool_use_was_denied(transcript, 0))
+
 
 class SweepVerifiedTest(unittest.TestCase):
     def test_conforming_true(self):

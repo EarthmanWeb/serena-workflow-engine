@@ -165,6 +165,68 @@ def iter_transcript_tool_events(transcript_events):
                     yield (i, "tool_deny", None, text)
 
 
+NON_TASK_TOOL_NAMES = frozenset({
+    "mcp__plugin_swe_serena__list_memories",
+    "mcp__plugin_swe_serena__search_memories_by_name",
+    "mcp__plugin_swe_serena__search_memories_by_front_matter",
+    # ToolSearch loads a deferred MCP tool's schema (e.g. read_memory
+    # itself, on a harness build where Serena tools are deferred) — it
+    # is infrastructure for making the chain call possible, not task
+    # work, and legitimately precedes the very first read_memory call.
+    # Real transcripts confirm this shape (see
+    # results/20260929-123133/runs/baseline-t1/transcript.jsonl,
+    # event index 22: ToolSearch immediately before wf/WF_INIT's
+    # read_memory at index 25).
+    "ToolSearch",
+    # swe_wm (Working Memory) tools record/read session bookkeeping, not
+    # task work -- calling one before the init chain completes (e.g. to
+    # check whether a WM file already exists) is plugin-scaffolding, the
+    # same category as list/search memory calls.
+    "mcp__plugin_swe_swe-wm__swe_wm_read",
+    "mcp__plugin_swe_swe-wm__swe_wm_list",
+    "mcp__plugin_swe_swe-wm__swe_wm_update",
+    "mcp__plugin_swe_swe-wm__swe_wm_update_section",
+    "mcp__plugin_swe_swe-wm__swe_wm_update_status",
+})
+
+
+def _tool_use_was_denied(transcript_events, tool_use_index):
+    """True iff the tool_use event at `tool_use_index` was immediately
+    followed (within the same transcript, scanning forward) by a
+    "tool_deny" event (a tool_result block with is_error=True) before any
+    OTHER tool_use/tool_deny/stop_block event of interest — i.e. it's THIS
+    call's own denial, not some later unrelated one. A denied tool_use never
+    executed: it contributed no task work and no real chain-breaking read,
+    so init-chain tracking treats it the same as never having been called at
+    all (see compute_init_chain_complete). Pure — scans the already-parsed
+    transcript_events list directly (not iter_transcript_tool_events' merged
+    stream) so it can look at the very next raw event after the tool_use's
+    own event index, matching how Claude Code always emits a tool_use's
+    tool_result in the very next "user" event."""
+    for event in transcript_events[tool_use_index + 1:]:
+        if not isinstance(event, dict):
+            continue
+        if event.get("type") != "user":
+            # Only a "user" event can carry this tool_use's tool_result;
+            # anything else in between (e.g. an interleaved subagent's own
+            # assistant/user events) is skipped over rather than treated as
+            # "no denial found" -- subagent transcripts interleave with the
+            # parent's in emission order, so the very next "user" event may
+            # belong to a different tool_use_id.
+            continue
+        message = event.get("message") or {}
+        content = message.get("content") or []
+        if not isinstance(content, list):
+            continue
+        for block in content:
+            if isinstance(block, dict) and block.get("type") == "tool_result":
+                return bool(block.get("is_error"))
+        # First "user" event found had no tool_result block at all -> not a
+        # denial of this call.
+        return False
+    return False
+
+
 def compute_init_chain_complete(transcript_events):
     """True iff docreads of wf/WF_INIT, claude/CLAUDE_OBLIGATIONS,
     wf/WF_CLASSIFY occur (via mcp__plugin_swe_serena__read_memory tool_use
@@ -173,28 +235,31 @@ def compute_init_chain_complete(transcript_events):
 
     "non-memory-read tool_use" = any tool_use whose name is not
     read_memory/list_memories/search_memories_by_name/
-    search_memories_by_front_matter — i.e. genuine task work, matching
-    run.py's MEMORY_TOOL_NAMES intent but scoped to reads only (list/search
-    calls before init completes don't violate the chain requirement, only
-    reading a DIFFERENT memory or doing task work would — this function
-    tracks the chain itself, not the full init-gate policy).
+    search_memories_by_front_matter/swe_wm read tools/ToolSearch (see
+    NON_TASK_TOOL_NAMES) — i.e. genuine task work, matching run.py's
+    MEMORY_TOOL_NAMES intent but scoped to reads only (list/search calls
+    before init completes don't violate the chain requirement, only reading
+    a DIFFERENT memory or doing task work would — this function tracks the
+    chain itself, not the full init-gate policy).
+
+    A tool_use that the init-gate hook itself DENIED (its tool_result is
+    is_error=True — see _tool_use_was_denied) never breaks the chain either,
+    regardless of tool name: it never executed, so it did no task work.
+    This covers e.g. a subagent-launching `Agent`/`Task` call made (in
+    error, or to pre-load a deferred tool's schema before ToolSearch was
+    used correctly) before init completes and immediately blocked by the
+    hook — real shape confirmed in
+    results/20260929-142806/runs/baseline-t0/transcript.task1.jsonl: an
+    `Agent` tool_use at event index 28 ("Load Serena read_memory tool
+    schema") is denied at index 30 ("BLOCKED: Agent called before WF_INIT
+    complete"), and the agent then proceeds with the real
+    wf/WF_INIT -> claude/CLAUDE_OBLIGATIONS -> wf/WF_CLASSIFY chain
+    starting at index 34 -- a run that self-corrected after a blocked
+    attempt is chain-conformant, not a violation, since the gate did
+    exactly its job.
     """
-    memory_list_search = frozenset({
-        "mcp__plugin_swe_serena__list_memories",
-        "mcp__plugin_swe_serena__search_memories_by_name",
-        "mcp__plugin_swe_serena__search_memories_by_front_matter",
-        # ToolSearch loads a deferred MCP tool's schema (e.g. read_memory
-        # itself, on a harness build where Serena tools are deferred) — it
-        # is infrastructure for making the chain call possible, not task
-        # work, and legitimately precedes the very first read_memory call.
-        # Real transcripts confirm this shape (see
-        # results/20260929-123133/runs/baseline-t1/transcript.jsonl,
-        # event index 22: ToolSearch immediately before wf/WF_INIT's
-        # read_memory at index 25).
-        "ToolSearch",
-    })
     chain_progress = 0
-    for _i, kind, name, payload in iter_transcript_tool_events(transcript_events):
+    for i, kind, name, payload in iter_transcript_tool_events(transcript_events):
         if kind != "tool_use":
             continue
         if name in MEMORY_READ_TOOL_NAMES:
@@ -208,7 +273,9 @@ def compute_init_chain_complete(transcript_events):
             # itself (e.g. a re-read); only non-memory-read tool work before
             # the chain completes breaks it.
             continue
-        if name in memory_list_search:
+        if name in NON_TASK_TOOL_NAMES:
+            continue
+        if chain_progress < len(INIT_CHAIN) and _tool_use_was_denied(transcript_events, i):
             continue
         # Any other tool_use before the chain completed -> chain violated.
         if chain_progress < len(INIT_CHAIN):

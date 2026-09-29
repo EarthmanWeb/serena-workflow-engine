@@ -26,6 +26,7 @@ import shutil
 import signal
 import subprocess
 import sys
+import tempfile
 import time
 import uuid
 
@@ -1011,6 +1012,37 @@ def _write_score_log(run_dir, filename, cmd_label, rc, out, err):
         pass
 
 
+def _score_expected_ids(hidden_tests_dir, module_prefix, out, err, doc_rules_path):
+    """Shared expected-id scoring pass (see acceptance.scan_expected_test_ids
+    / score_against_expected_ids's module docstring for the root-cause this
+    fixes: a hidden test MODULE that fails to import is reported by
+    unittest -v as a single `_FailedTest`/ERROR line instead of its N real
+    test methods, silently shrinking "Ran N tests" and every category/
+    doc_rule/retention count derived from it).
+
+    Returns a dict of the fields score_run()/score_hidden_tests_dir() layer
+    onto their acceptance dict: {"total", "passed", "spec", "doc", "other",
+    "doc_rules", "by_id"} -- "total"/"passed" here OVERRIDE the
+    parse_unittest_output() summary-line counts (which are exactly the
+    buggy under-count for an import-failed module), computed instead from
+    the static AST-scanned expected id set."""
+    test_results = acceptance_module.parse_verbose_unittest_output(out + "\n" + err)
+    expected_by_module = acceptance_module.scan_expected_test_ids(hidden_tests_dir, module_prefix)
+    scored = acceptance_module.score_against_expected_ids(test_results, expected_by_module, module_prefix)
+    categories = acceptance_module.categorize_expected_results(scored["by_id"])
+    doc_rules = acceptance_module.load_doc_rules(doc_rules_path)
+    doc_rule_matrix = acceptance_module.doc_rule_pass_matrix_from_expected(scored["by_id"], doc_rules)
+    return {
+        "total": scored["total"],
+        "passed": scored["passed"],
+        "spec": categories["spec"],
+        "doc": categories["doc"],
+        "other": categories["other"],
+        "doc_rules": doc_rule_matrix,
+        "by_id": scored["by_id"],
+    }
+
+
 def score_run(work_dir, run_dir=None, paths=None):
     """Copy hidden tests -> _acceptance/, run acceptance + regression tests.
 
@@ -1024,7 +1056,12 @@ def score_run(work_dir, run_dir=None, paths=None):
     acceptance["other"] = {"passed": n, "total": n}, and
     acceptance["doc_rules"] = {rule_id: {"passed", "total", "memory",
     "summary", "ok"}} when the task ships a doc_rules.json (empty dict
-    otherwise)."""
+    otherwise). acceptance["total"]/["passed"] are computed from the
+    STATIC expected-test-id set (see _score_expected_ids), not from
+    unittest's own "Ran N tests" summary line -- a hidden test module that
+    fails to import is scored against every one of its expected ids
+    ("import_error") rather than collapsing to unittest's single opaque
+    `_FailedTest` result."""
     paths = paths or task_paths(DEFAULT_TASK)
     hidden_tests_dir = paths["hidden_tests"]
     acceptance_dir = os.path.join(work_dir, "_acceptance")
@@ -1039,13 +1076,15 @@ def score_run(work_dir, run_dir=None, paths=None):
     acceptance["exit_code"] = rc
     acceptance["failed_tests"] = parse_failed_test_ids(out + "\n" + err)
 
-    test_results = acceptance_module.parse_verbose_unittest_output(out + "\n" + err)
-    categories = acceptance_module.categorize_results(test_results)
-    acceptance["spec"] = categories["spec"]
-    acceptance["doc"] = categories["doc"]
-    acceptance["other"] = categories["other"]
-    doc_rules = acceptance_module.load_doc_rules(paths.get("doc_rules"))
-    acceptance["doc_rules"] = acceptance_module.doc_rule_pass_matrix(test_results, doc_rules)
+    expected = _score_expected_ids(hidden_tests_dir, "_acceptance", out, err, paths.get("doc_rules"))
+    acceptance["total"] = expected["total"]
+    acceptance["passed"] = expected["passed"]
+    acceptance["ok"] = expected["total"] > 0 and expected["passed"] == expected["total"]
+    acceptance["spec"] = expected["spec"]
+    acceptance["doc"] = expected["doc"]
+    acceptance["other"] = expected["other"]
+    acceptance["doc_rules"] = expected["doc_rules"]
+    acceptance["by_id"] = expected["by_id"]
 
     _write_score_log(run_dir, "acceptance.txt", "acceptance", rc, out, err)
 
@@ -1119,13 +1158,25 @@ def score_hidden_tests_dir(work_dir, hidden_tests_dir, acceptance_subdir,
     acceptance["exit_code"] = rc
     acceptance["failed_tests"] = parse_failed_test_ids(out + "\n" + err)
 
-    test_results = acceptance_module.parse_verbose_unittest_output(out + "\n" + err)
-    categories = acceptance_module.categorize_results(test_results)
-    acceptance["spec"] = categories["spec"]
-    acceptance["doc"] = categories["doc"]
-    acceptance["other"] = categories["other"]
-    doc_rules = acceptance_module.load_doc_rules(doc_rules_path)
-    acceptance["doc_rules"] = acceptance_module.doc_rule_pass_matrix(test_results, doc_rules)
+    # `-t .` discovery (above) runs from work_dir's top level, so when a
+    # SIBLING acceptance_subdir also exists on disk at scoring time (pivot's
+    # benchmark 2 scores "task1" and "pivot" back to back, both nested under
+    # the same _acceptance/ root -- see run_one_pivot), `out`/`err` contain
+    # BOTH subdirs' test result lines intermixed, not just this call's own.
+    # module_prefix scopes scan_expected_test_ids/score_against_expected_ids
+    # to exactly "_acceptance.<this acceptance_subdir>.*" so a sibling
+    # subdir's tests are never counted into THIS acceptance dict's
+    # total/passed/spec/doc/doc_rules.
+    module_prefix = f"_acceptance.{acceptance_subdir}" if acceptance_subdir else "_acceptance"
+    expected = _score_expected_ids(hidden_tests_dir, module_prefix, out, err, doc_rules_path)
+    acceptance["total"] = expected["total"]
+    acceptance["passed"] = expected["passed"]
+    acceptance["ok"] = expected["total"] > 0 and expected["passed"] == expected["total"]
+    acceptance["spec"] = expected["spec"]
+    acceptance["doc"] = expected["doc"]
+    acceptance["other"] = expected["other"]
+    acceptance["doc_rules"] = expected["doc_rules"]
+    acceptance["by_id"] = expected["by_id"]
 
     if log_name:
         _write_score_log(run_dir, log_name, log_name, rc, out, err)
@@ -1160,20 +1211,61 @@ def git_commit_snapshot(work_dir, message, run=None):
     return result.stdout.strip()
 
 
-def task1_retention(task1_results_at_b1, task1_results_at_b2):
+def _strip_module_prefix(expected_id, module_prefix):
+    """Strip a score_against_expected_ids() `by_id` key's leading
+    module_prefix ("_acceptance" or "_acceptance.<subdir>") so ids scored
+    under two different acceptance_subdir prefixes (e.g. task1's hidden
+    tests scored at B1 under "" and again at B2 under "task1", see
+    run_one_pivot) can be compared as the SAME underlying test. Pure."""
+    prefix = f"{module_prefix}." if module_prefix else ""
+    return expected_id[len(prefix):] if expected_id.startswith(prefix) else expected_id
+
+
+def task1_retention(task1_results_at_b1, task1_results_at_b2,
+                     b1_module_prefix="_acceptance", b2_module_prefix="_acceptance.task1"):
     """Compute the pivot phase's task1_retention summary: how many of
     task1's hidden tests, having passed at benchmark 1, still pass at
     benchmark 2 (after the pivot phase edited the tree further).
 
-    Both args are score_hidden_tests_dir()-shaped acceptance dicts for the
-    SAME hidden_tests set (task1's), scored once at each benchmark. Uses
-    each dict's "total"/"passed"/"failed_tests" -- a test id is "passed at
-    B1" iff it's not in task1_results_at_b1["failed_tests"] (and the suite
-    ran at all, total > 0). Returns {"passed": n, "total": n,
-    "regressions": [ids that passed at B1 and fail at B2]}. "total" here is
-    the count of task1 tests that passed at B1 (the retention denominator,
-    per the spec: "task1 tests on the final tree"); "passed" is how many of
-    those still pass at B2."""
+    Both args are score_run()/score_hidden_tests_dir()-shaped acceptance
+    dicts for the SAME hidden_tests set (task1's), scored once at each
+    benchmark -- via each dict's "by_id" (score_against_expected_ids()'s
+    STATIC expected-id scoring; see acceptance.py's module docstring for
+    why this matters: a test whose module fails to import at one benchmark
+    is scored "import_error"/failed against its OWN expected id rather than
+    vanishing from the count entirely). "total" is the count of task1 tests
+    that passed ("ok") at B1 (the retention denominator, per the spec:
+    "task1 tests on the final tree"); "passed" is how many of those STILL
+    score "ok" at B2. "regressions" lists the (prefix-normalized) ids that
+    passed at B1 and do not at B2 -- this includes ids whose B2 status is
+    "import_error"/"fail"/"error"/"missing", not just "fail".
+
+    b1_module_prefix/b2_module_prefix default to the two prefixes
+    run_one_pivot actually uses for task1's hidden tests at each benchmark
+    (score_hidden_tests_dir's acceptance_subdir "" at B1, "task1" at B2) --
+    overridable for tests exercising other prefix pairs. Falls back to the
+    now-legacy "failed_tests"-string comparison when either side lacks a
+    "by_id" (e.g. an older, un-rescored runs.jsonl row -- see
+    --rescore/cmd_rescore) so a pre-existing row's retention doesn't
+    silently zero out."""
+    b1_by_id = task1_results_at_b1.get("by_id")
+    b2_by_id = task1_results_at_b2.get("by_id")
+    if isinstance(b1_by_id, dict) and isinstance(b2_by_id, dict):
+        b1_norm = {_strip_module_prefix(k, b1_module_prefix): v.get("status")
+                   for k, v in b1_by_id.items()}
+        b2_norm = {_strip_module_prefix(k, b2_module_prefix): v.get("status")
+                   for k, v in b2_by_id.items()}
+        b1_ok_ids = {k for k, status in b1_norm.items() if status == "ok"}
+        regressions = sorted(k for k in b1_ok_ids if b2_norm.get(k) != "ok")
+        retained = len(b1_ok_ids) - len(regressions)
+        return {
+            "passed": max(0, retained),
+            "total": len(b1_ok_ids),
+            "regressions": regressions,
+        }
+
+    # Legacy fallback (no "by_id" on one/both sides): failed_tests-string
+    # comparison, same logic this function used before expected-id scoring.
     b1_failed = set(task1_results_at_b1.get("failed_tests") or [])
     b2_failed = set(task1_results_at_b2.get("failed_tests") or [])
     b1_total = task1_results_at_b1.get("total") or 0
@@ -2367,6 +2459,308 @@ def cmd_reparse(stamp, out_dir=DEFAULT_OUT):
     return 0
 
 
+def _export_git_commit(work_git_dir, commit_sha, dest_dir):
+    """Export `commit_sha`'s tree from the git repo at `work_git_dir` into
+    `dest_dir` (already-created, empty) via `git archive | tar -x`, WITHOUT
+    ever modifying/checking out the source repo (no `git checkout`, no
+    working-tree mutation of work_git_dir at all -- a run's saved work/ dir
+    is the only durable record of that trial and must never be touched by a
+    rescore). Raises RuntimeError if the archive or extract fails (e.g.
+    commit_sha doesn't exist in that repo)."""
+    archive = subprocess.run(
+        ["git", "-C", work_git_dir, "archive", commit_sha],
+        capture_output=True, check=False)
+    if archive.returncode != 0:
+        raise RuntimeError(
+            f"git archive {commit_sha} in {work_git_dir} failed: "
+            f"{archive.stderr.decode('utf-8', 'replace')}")
+    extract = subprocess.run(
+        ["tar", "-x", "-C", dest_dir], input=archive.stdout,
+        capture_output=True, check=False)
+    if extract.returncode != 0:
+        raise RuntimeError(
+            f"tar -x -C {dest_dir} (from {work_git_dir}@{commit_sha}) failed: "
+            f"{extract.stderr.decode('utf-8', 'replace')}")
+
+
+def _resolve_commit_sha(work_git_dir, ref):
+    """Resolve a git ref (an exact commit subject, e.g. 'benchmark1') to its
+    full commit sha in the repo at work_git_dir. Lists every commit's
+    (sha, subject) via `git log --format=%H%x1f%s` (unit-separator-joined,
+    so a subject containing spaces is still parsed unambiguously) and
+    returns the sha of the FIRST (most recent) commit whose subject is
+    EXACTLY `ref` -- git_commit_snapshot() always commits with `-m
+    <message>` as the literal, single-line subject (via `--allow-empty`, no
+    body), so this is an exact match, not a --grep substring/regex search
+    (git log --grep's anchoring behaves inconsistently across git versions
+    when combined with -F, so matching is done here in Python instead).
+    Returns None if no commit has that exact subject (e.g. a single-phase
+    run's work/ repo, which never commits a 'benchmark1' message) or if
+    work_git_dir isn't a git repo at all."""
+    result = subprocess.run(
+        ["git", "-C", work_git_dir, "log", "--format=%H%x1f%s"],
+        capture_output=True, text=True, check=False)
+    if result.returncode != 0:
+        return None
+    for line in result.stdout.splitlines():
+        sha, sep, subject = line.partition("\x1f")
+        if sep and subject == ref:
+            return sha
+    return None
+
+
+def _rescore_one_run_dir(run_dir, paths, arm, doc_rules, pivot_doc_rules):
+    """Re-score one finished run directory's acceptance/gates from data
+    already on disk (saved transcripts, the run's own work/ git repo, and
+    for a pivot run's B1 the 'benchmark1' commit exported to a scratch dir)
+    -- never re-invokes `claude -p`, never mutates run_dir/work/ itself
+    (git archive + tar -x into a fresh tempfile.mkdtemp() scratch dir; that
+    scratch dir is always removed before returning, success or failure).
+
+    Returns a dict of the fields to overlay onto the row:
+    single-phase -> {"acceptance": ..., "gates": ...}
+    two-phase (pivot) -> {"acceptance": ..., "gates": ...,
+        "phases": {"task1": {"benchmark":..., "gates":...},
+                   "pivot": {"benchmark":..., "gates":..., "task1_retention":...}}}
+    Returns None if run_dir/work isn't present (nothing to rescore from)."""
+    work_dir = os.path.join(run_dir, "work")
+    if not os.path.isdir(work_dir):
+        return None
+    is_plugin = bool(arm.get("plugin"))
+
+    t1_path = os.path.join(run_dir, "transcript.task1.jsonl")
+    is_pivot = os.path.exists(t1_path)
+
+    if not is_pivot:
+        transcript_path = os.path.join(run_dir, "transcript.jsonl")
+        transcript_lines = []
+        if os.path.exists(transcript_path):
+            with open(transcript_path) as f:
+                transcript_lines = f.readlines()
+        # Gates (stream/transcript-derived) are read from the live work_dir
+        # (streams persist independently of any git commit -- see
+        # find_pivot_boundary_timestamp's module note), but acceptance is
+        # scored against a COPY so the live work_dir's tree (and its git
+        # repo) is never touched by a rescore -- score_run() copies
+        # hidden_tests/ into work_dir/_acceptance/ and leaves it there for
+        # the caller to clean up (see remove_acceptance_dir), which the
+        # ORIGINAL run flow (run_one) does via its own call, but a rescore
+        # has no such follow-up call of its own, so scoring the live dir
+        # directly would leave a stray _acceptance/ dir (and untracked git
+        # status) behind permanently.
+        stream_events = read_raw_stream_events(work_dir) if is_plugin else []
+        transcript_events = _parse_transcript_events(transcript_lines) if transcript_lines else []
+        gates = gate_conformance.compute_gate_conformance(
+            stream_events, transcript_events, doc_rules=doc_rules, is_plugin_arm=is_plugin)
+
+        scratch = tempfile.mkdtemp(prefix="harness_rescore_")
+        try:
+            _copy_tree_excluding_git(work_dir, scratch)
+            acceptance, regression = score_run(scratch, run_dir=run_dir, paths=paths)
+        finally:
+            shutil.rmtree(scratch, ignore_errors=True)
+        return {"acceptance": acceptance, "regression": regression, "gates": gates}
+
+    # --- Two-phase (pivot) run -----------------------------------------
+    t2_path = os.path.join(run_dir, "transcript.pivot.jsonl")
+    lines1, lines2 = [], []
+    if os.path.exists(t1_path):
+        with open(t1_path) as f:
+            lines1 = f.readlines()
+    if os.path.exists(t2_path):
+        with open(t2_path) as f:
+            lines2 = f.readlines()
+    transcript_events1 = _parse_transcript_events(lines1) if lines1 else []
+    transcript_events2 = _parse_transcript_events(lines2) if lines2 else []
+
+    stream_events_all = read_raw_stream_events(work_dir) if is_plugin else []
+    boundary_ts = gate_conformance.find_pivot_boundary_timestamp(stream_events_all, fallback_ts=None)
+    if boundary_ts is not None:
+        task1_stream = [e for e in stream_events_all
+                         if not (isinstance(e.get("t"), (int, float)) and e.get("t") >= boundary_ts)]
+        pivot_stream = [e for e in stream_events_all
+                         if isinstance(e.get("t"), (int, float)) and e.get("t") >= boundary_ts]
+    else:
+        task1_stream = stream_events_all
+        pivot_stream = stream_events_all
+
+    gates1 = gate_conformance.compute_gate_conformance(
+        task1_stream, transcript_events1, doc_rules=doc_rules, is_plugin_arm=is_plugin)
+    gates2 = gate_conformance.compute_gate_conformance_pivot(
+        pivot_stream, transcript_events2, pivot_doc_rules=pivot_doc_rules, is_plugin_arm=is_plugin)
+
+    # B1: export the 'benchmark1' commit (task1's finished tree, before the
+    # pivot prompt) to a scratch dir -- NEVER score against the live work/
+    # tree for B1, since work/ has since moved on to B2's (pivot) state.
+    b1_sha = _resolve_commit_sha(work_dir, "benchmark1")
+    b1_scratch = tempfile.mkdtemp(prefix="harness_rescore_b1_")
+    try:
+        if b1_sha:
+            _export_git_commit(work_dir, b1_sha, b1_scratch)
+            b1_acceptance = score_hidden_tests_dir(
+                b1_scratch, paths["hidden_tests"], "", run_dir=run_dir,
+                log_name="acceptance.task1.b1.txt", doc_rules_path=paths.get("doc_rules"))
+            b1_regression = _score_fixture_regression(b1_scratch, run_dir, "regression.task1.b1.txt")
+        else:
+            print(f"warn: no 'benchmark1' commit found in {work_dir}, "
+                  f"scoring B1 against the live (post-pivot) tree instead", file=sys.stderr)
+            b1_acceptance = score_hidden_tests_dir(
+                work_dir, paths["hidden_tests"], "", run_dir=run_dir,
+                log_name="acceptance.task1.b1.txt", doc_rules_path=paths.get("doc_rules"))
+            b1_regression = _score_fixture_regression(work_dir, run_dir, "regression.task1.b1.txt")
+            remove_acceptance_dir(work_dir)
+    finally:
+        shutil.rmtree(b1_scratch, ignore_errors=True)
+
+    # B2: score against a COPY of the final (live) work tree -- copied
+    # rather than scored in place so run_dir/work/_acceptance/ never lingers
+    # on disk after a rescore (matching the original run's own
+    # remove_acceptance_dir cleanup contract).
+    b2_scratch = tempfile.mkdtemp(prefix="harness_rescore_b2_")
+    try:
+        _copy_tree_excluding_git(work_dir, b2_scratch)
+        b2_pivot_acceptance = score_hidden_tests_dir(
+            b2_scratch, paths["pivot_hidden_tests"], "pivot", run_dir=run_dir,
+            log_name="acceptance.pivot.b2.txt", doc_rules_path=paths.get("pivot_doc_rules"))
+        b2_task1_acceptance = score_hidden_tests_dir(
+            b2_scratch, paths["hidden_tests"], "task1", run_dir=run_dir,
+            log_name="acceptance.task1.b2.txt", doc_rules_path=paths.get("doc_rules"))
+        b2_regression = _score_fixture_regression(b2_scratch, run_dir, "regression.pivot.b2.txt")
+    finally:
+        shutil.rmtree(b2_scratch, ignore_errors=True)
+
+    retention = task1_retention(b1_acceptance, b2_task1_acceptance)
+
+    return {
+        "acceptance": b2_pivot_acceptance,
+        "regression": b2_regression,
+        "gates": gates2,
+        "phases": {
+            "task1": {"benchmark": b1_acceptance, "regression": b1_regression, "gates": gates1},
+            "pivot": {"benchmark": b2_pivot_acceptance, "regression": b2_regression,
+                      "gates": gates2, "task1_retention": retention},
+        },
+    }
+
+
+def _copy_tree_excluding_git(src_dir, dest_dir):
+    """Copy src_dir's contents into dest_dir (already-created), excluding
+    .git/ -- used to snapshot a run's live work tree into a scratch dir for
+    B2 rescoring without dragging the (potentially large) git history along,
+    and without ever risking a write back into src_dir itself."""
+    for name in os.listdir(src_dir):
+        if name == ".git":
+            continue
+        s = os.path.join(src_dir, name)
+        d = os.path.join(dest_dir, name)
+        if os.path.isdir(s):
+            shutil.copytree(s, d, symlinks=True)
+        else:
+            shutil.copy2(s, d)
+
+
+def cmd_rescore(stamp, out_dir=DEFAULT_OUT):
+    """Re-score every finished run in results/<stamp>/ from data already on
+    disk, using the STATIC expected-test-id acceptance scoring
+    (acceptance.py's scan_expected_test_ids/score_against_expected_ids --
+    see their module docstrings: an import-failed hidden test module scores
+    every one of its expected ids individually instead of collapsing to
+    unittest's own single opaque count) and current gate conformance
+    (gate_conformance.compute_init_chain_complete treats a denied tool_use
+    as never having executed) -- WITHOUT re-invoking `claude -p` and WITHOUT
+    mutating any run's saved work/ git repo (B1 is exported from the
+    'benchmark1' commit via `git archive | tar -x` into a scratch dir; B2 is
+    scored against a COPY of the live work tree). New acceptance*.txt/
+    regression*.txt log files are written next to each run's transcripts
+    (overwriting the originals, same filenames run.py itself uses) since
+    those are plain scoring logs, not the run's evidentiary record.
+
+    Backs up runs.jsonl to runs.jsonl.prerescore first (kept across repeat
+    --rescore calls: an existing backup is left as-is, so the ORIGINAL
+    pre-any-rescore file is always what's under .prerescore -- same
+    one-time-backup contract as --reparse's .orig), then rewrites
+    runs.jsonl atomically (temp file + os.replace).
+
+    `stamp` may be a bare timestamp dir name (resolved under `out_dir`) or a
+    full path. Returns 0 on success; individual rows that can't be
+    rescored (no work/ dir on disk) are skipped with a warning, not fatal.
+    """
+    if os.path.isdir(stamp):
+        stamp_dir = stamp
+    else:
+        stamp_dir = os.path.join(out_dir, stamp)
+        if not os.path.isdir(stamp_dir):
+            raise SystemExit(f"--rescore {stamp}: no such results dir {stamp_dir!r}")
+
+    runs_jsonl = os.path.join(stamp_dir, "runs.jsonl")
+    if not os.path.exists(runs_jsonl):
+        raise SystemExit(f"--rescore: {runs_jsonl} not found")
+
+    backup_path = runs_jsonl + ".prerescore"
+    if not os.path.exists(backup_path):
+        shutil.copy2(runs_jsonl, backup_path)
+
+    arms_by_name = {}
+    try:
+        arms_by_name = {a["name"]: a for a in load_arms()}
+    except Exception:
+        arms_by_name = {}
+
+    rows = []
+    with open(runs_jsonl) as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                rows.append(json.loads(line))
+            except Exception:
+                continue
+
+    rescored = 0
+    for row in rows:
+        run_id = row.get("run_id")
+        arm_name = row.get("arm")
+        task_name = _row_task_name(row)
+        row["task"] = task_name
+        paths = task_paths(task_name)
+        run_dir = os.path.join(stamp_dir, "runs", run_id) if run_id else None
+        if not run_dir or not os.path.isdir(run_dir):
+            print(f"skip (no run dir): {run_id}", file=sys.stderr)
+            continue
+
+        arm = arms_by_name.get(arm_name, {"name": arm_name, "plugin": bool(row.get("arm_commit"))})
+        doc_rules = acceptance_module.load_doc_rules(paths.get("doc_rules"))
+        pivot_doc_rules = acceptance_module.load_doc_rules(paths.get("pivot_doc_rules"))
+
+        result = _rescore_one_run_dir(run_dir, paths, arm, doc_rules, pivot_doc_rules)
+        if result is None:
+            print(f"skip (no work/ dir): {run_id}", file=sys.stderr)
+            continue
+
+        row["acceptance"] = result["acceptance"]
+        if "regression" in result:
+            row["regression"] = result["regression"]
+        row["gates"] = result["gates"]
+        if "phases" in result:
+            row["phases"] = result["phases"]
+            # Keep the summed top-level metrics as-is (rescore never
+            # touches metrics/transcripts), but the top-level
+            # acceptance/gates always mirror the FINAL phase (pivot's),
+            # matching run_one_pivot's own row shape.
+        rescored += 1
+
+    tmp_path = runs_jsonl + ".tmp"
+    with open(tmp_path, "w") as f:
+        for row in rows:
+            f.write(json.dumps(row) + "\n")
+    os.replace(tmp_path, runs_jsonl)
+
+    print(f"rescored {rescored}/{len(rows)} rows in {runs_jsonl} "
+          f"(original backed up to {backup_path})", file=sys.stderr)
+    return 0
+
+
 def build_arg_parser():
     p = argparse.ArgumentParser(description="Harness A/B experiment runner")
     p.add_argument("--task", type=str, default=DEFAULT_TASK,
@@ -2433,6 +2827,21 @@ def build_arg_parser():
                          "rewrites runs.jsonl atomically. STAMP may be a bare "
                          "timestamp dir name (resolved under --out / the "
                          "default results dir) or a full path.")
+    p.add_argument("--rescore", type=str, default=None, metavar="STAMP",
+                    help="re-score every row of results/<STAMP>/runs.jsonl's "
+                         "acceptance (spec/doc/other/doc_rules/task1_retention) "
+                         "and gate-conformance fields from data already on "
+                         "disk, using the STATIC expected-test-id scoring "
+                         "(see acceptance.scan_expected_test_ids) and current "
+                         "gate-conformance logic -- without invoking "
+                         "`claude -p` and without mutating any run's saved "
+                         "work/ git repo. B1 is scored from a `git archive` "
+                         "export of the run's own 'benchmark1' commit; B2 "
+                         "from a copy of the live work tree. Backs up the "
+                         "original file to runs.jsonl.prerescore first, then "
+                         "rewrites runs.jsonl atomically. STAMP may be a bare "
+                         "timestamp dir name (resolved under --out / the "
+                         "default results dir) or a full path.")
     return p
 
 
@@ -2446,6 +2855,8 @@ def main(argv=None):
     else:
         arms = all_arms
 
+    if args.rescore:
+        return cmd_rescore(args.rescore, out_dir=args.out)
     if args.reparse:
         return cmd_reparse(args.reparse, out_dir=args.out)
     if args.gate_selftest:
