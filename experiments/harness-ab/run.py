@@ -1,0 +1,796 @@
+#!/usr/bin/env python3
+"""Harness A/B experiment runner.
+
+Compares a headless Claude Code agent on one fixed coding task under three
+arms: baseline (SWE plugin @ 23ec65d), v5 (SWE plugin @ harness-v5-prototype),
+control (no plugin).
+
+Pure/testable pieces (no I/O, no subprocess) are kept as free functions so
+tests/test_harness_ab.py can exercise them directly:
+    parse_transcript, parse_unittest_output, clean_env, build_command,
+    shuffled_arm_order, count_stream_events.
+
+Everything else (arm prep via git clone, subprocess invocation of `claude`,
+filesystem copying) is orchestration and lives in functions prefixed with
+do_ / cmd_ or in main().
+"""
+import argparse
+import glob
+import json
+import os
+import random
+import re
+import shutil
+import signal
+import subprocess
+import sys
+import time
+import uuid
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+REPO_ROOT = os.path.abspath(os.path.join(HERE, "..", ".."))
+ARMS_JSON = os.path.join(HERE, "arms.json")
+FIXTURE_DIR = os.path.join(HERE, "fixture")
+OVERLAY_SWE_DIR = os.path.join(HERE, "overlays", "swe")
+HIDDEN_TESTS_DIR = os.path.join(HERE, "hidden_tests")
+REFERENCE_SOLUTION_DIR = os.path.join(HERE, "reference_solution")
+TASK_MD = os.path.join(HERE, "task.md")
+WORK_ROOT = os.path.join(HERE, ".work")
+ARMS_WORK_DIR = os.path.join(WORK_ROOT, "arms")
+DEFAULT_OUT = os.path.join(HERE, "results")
+
+HOOK_DENIAL_RE = re.compile(
+    r"hook error|PreToolUse|BLOCKED|permissionDecision|denied by hook|\U0001F6D1|\U0001F6AB",
+    re.IGNORECASE,
+)
+STOP_HOOK_RE = re.compile(r"Stop hook", re.IGNORECASE)
+
+
+# --------------------------------------------------------------------------
+# Pure functions (unit tested)
+# --------------------------------------------------------------------------
+
+def parse_unittest_output(text):
+    """Parse the tail of `python -m unittest` output.
+
+    Returns {"total": int, "passed": int, "failures": int, "errors": int,
+             "skipped": int, "ok": bool} best-effort; missing/unparseable
+    fields default to 0 / False. Handles: "Ran N tests", "OK", "OK (skipped=K)",
+    "FAILED (failures=A)", "FAILED (errors=B)", "FAILED (failures=A, errors=B)",
+    and the no-tests-ran case.
+    """
+    result = {"total": 0, "passed": 0, "failures": 0, "errors": 0,
+              "skipped": 0, "ok": False}
+    if not text:
+        return result
+
+    m = re.search(r"Ran (\d+) tests?", text)
+    if m:
+        result["total"] = int(m.group(1))
+
+    ok_m = re.search(r"^OK(\s*\(([^)]*)\))?\s*$", text, re.MULTILINE)
+    failed_m = re.search(r"^FAILED\s*\(([^)]*)\)\s*$", text, re.MULTILINE)
+
+    def _extract(pattern, blob):
+        mm = re.search(pattern, blob)
+        return int(mm.group(1)) if mm else 0
+
+    if ok_m:
+        result["ok"] = True
+        extras = ok_m.group(2) or ""
+        result["skipped"] = _extract(r"skipped=(\d+)", extras)
+        result["failures"] = 0
+        result["errors"] = 0
+    elif failed_m:
+        result["ok"] = False
+        extras = failed_m.group(1)
+        result["failures"] = _extract(r"failures=(\d+)", extras)
+        result["errors"] = _extract(r"errors=(\d+)", extras)
+        result["skipped"] = _extract(r"skipped=(\d+)", extras)
+    # else: neither OK nor FAILED line found (e.g. "Ran 0 tests" with no
+    # trailing status, or output truncated) -> ok stays False, counts 0.
+
+    result["passed"] = max(0, result["total"] - result["failures"] - result["errors"] - result["skipped"])
+    return result
+
+
+def parse_transcript(lines):
+    """Parse stream-json lines from a `claude -p --output-format stream-json`
+    transcript into a metrics dict. Robust to missing/malformed lines.
+
+    `lines` is an iterable of raw JSON-text lines (already split, no
+    trailing newline required).
+    """
+    metrics = {
+        "subtype": None,
+        "is_error": None,
+        "num_turns": None,
+        "duration_ms": None,
+        "duration_api_ms": None,
+        "total_cost_usd": None,
+        "usage": {
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 0,
+        },
+        "total_tokens": 0,
+        "distinct_models_used": 0,
+        "assistant_message_count": 0,
+        "tool_calls_by_name": {},
+        "total_tool_calls": 0,
+        "subagent_launches": 0,
+        "tool_result_errors": 0,
+        "hook_denials": 0,
+        "stop_hook_blocks": 0,
+        "mcp_servers": [],
+        "plugins": [],
+    }
+
+    for raw in lines:
+        raw = raw.strip() if isinstance(raw, str) else raw
+        if not raw:
+            continue
+        try:
+            event = json.loads(raw)
+        except (ValueError, TypeError):
+            continue
+        if not isinstance(event, dict):
+            continue
+
+        etype = event.get("type")
+
+        if etype == "system" and event.get("subtype") == "init":
+            servers = event.get("mcp_servers") or event.get("mcpServers") or []
+            plugins = event.get("plugins") or []
+            metrics["mcp_servers"] = servers
+            metrics["plugins"] = plugins
+
+        elif etype == "assistant":
+            metrics["assistant_message_count"] += 1
+            message = event.get("message") or {}
+            content = message.get("content") or []
+            if isinstance(content, list):
+                for block in content:
+                    if not isinstance(block, dict):
+                        continue
+                    if block.get("type") == "tool_use":
+                        name = block.get("name") or "unknown"
+                        metrics["tool_calls_by_name"][name] = (
+                            metrics["tool_calls_by_name"].get(name, 0) + 1
+                        )
+                        metrics["total_tool_calls"] += 1
+                        if name in ("Agent", "Task"):
+                            metrics["subagent_launches"] += 1
+
+        elif etype == "user":
+            message = event.get("message") or {}
+            content = message.get("content") or []
+            if isinstance(content, list):
+                for block in content:
+                    if not isinstance(block, dict):
+                        continue
+                    if block.get("type") == "tool_result" and block.get("is_error"):
+                        metrics["tool_result_errors"] += 1
+                        text = _tool_result_text(block)
+                        if HOOK_DENIAL_RE.search(text or ""):
+                            metrics["hook_denials"] += 1
+                    if block.get("type") == "text":
+                        text = block.get("text") or ""
+                        if STOP_HOOK_RE.search(text):
+                            metrics["stop_hook_blocks"] += 1
+
+        elif etype == "result":
+            metrics["subtype"] = event.get("subtype")
+            metrics["is_error"] = event.get("is_error")
+            metrics["num_turns"] = event.get("num_turns")
+            metrics["duration_ms"] = event.get("duration_ms")
+            metrics["duration_api_ms"] = event.get("duration_api_ms")
+            metrics["total_cost_usd"] = event.get("total_cost_usd")
+            usage = event.get("usage") or {}
+            for key in metrics["usage"]:
+                val = usage.get(key)
+                if isinstance(val, (int, float)):
+                    metrics["usage"][key] = val
+            model_usage = event.get("modelUsage") or event.get("model_usage") or {}
+            if isinstance(model_usage, dict):
+                metrics["distinct_models_used"] = len(model_usage)
+
+    metrics["total_tokens"] = sum(metrics["usage"].values())
+    return metrics
+
+
+def _tool_result_text(block):
+    """Extract text from a tool_result content block (string or block list)."""
+    content = block.get("content")
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts = []
+        for c in content:
+            if isinstance(c, dict) and c.get("type") == "text":
+                parts.append(c.get("text") or "")
+            elif isinstance(c, str):
+                parts.append(c)
+        return "\n".join(parts)
+    return ""
+
+
+def clean_env(source_env):
+    """Return a copy of source_env with CLAUDE*/SWE_* keys removed (except
+    CLAUDE_CONFIG_DIR), MCP_TIMEOUT set, and ANTHROPIC_* preserved."""
+    env = {}
+    for key, val in source_env.items():
+        if key == "CLAUDE_CONFIG_DIR":
+            env[key] = val
+            continue
+        if key.startswith("CLAUDE") or key.startswith("SWE_"):
+            continue
+        env[key] = val
+    env["MCP_TIMEOUT"] = "300000"
+    return env
+
+
+def build_command(task_text, model, budget_usd, plugin_dir=None, effort=None):
+    """Build the `claude -p ...` argv list (no shell)."""
+    cmd = [
+        "claude", "-p", task_text,
+        "--output-format", "stream-json",
+        "--verbose",
+        "--model", model,
+        "--setting-sources", "project,local",
+        "--dangerously-skip-permissions",
+        "--max-budget-usd", str(budget_usd),
+        "--no-session-persistence",
+    ]
+    if plugin_dir:
+        cmd += ["--plugin-dir", plugin_dir]
+    if effort:
+        cmd += ["--effort", str(effort)]
+    return cmd
+
+
+def shuffled_arm_order(arm_names, trials, seed):
+    """Deterministic per-trial shuffled arm order.
+
+    Returns a list of length `trials`, each element a list of arm names
+    (a permutation of arm_names) — same seed + inputs always reproduces the
+    same interleaving.
+    """
+    rng = random.Random(seed)
+    order = []
+    for _ in range(trials):
+        arms = list(arm_names)
+        rng.shuffle(arms)
+        order.append(arms)
+    return order
+
+
+def count_stream_events(lines):
+    """Count SWE .serena/streams/*.jsonl events by their `type` field."""
+    counts = {}
+    for raw in lines:
+        raw = raw.strip() if isinstance(raw, str) else raw
+        if not raw:
+            continue
+        try:
+            event = json.loads(raw)
+        except (ValueError, TypeError):
+            continue
+        if not isinstance(event, dict):
+            continue
+        etype = event.get("type") or "unknown"
+        counts[etype] = counts.get(etype, 0) + 1
+    return counts
+
+
+def median(values):
+    values = sorted(v for v in values if v is not None)
+    n = len(values)
+    if n == 0:
+        return None
+    mid = n // 2
+    if n % 2:
+        return values[mid]
+    return (values[mid - 1] + values[mid]) / 2
+
+
+# --------------------------------------------------------------------------
+# Orchestration
+# --------------------------------------------------------------------------
+
+def load_arms():
+    with open(ARMS_JSON) as f:
+        return json.load(f)
+
+
+def read_task_text():
+    if not os.path.exists(TASK_MD):
+        raise SystemExit(f"missing {TASK_MD} (fixture track not ready)")
+    with open(TASK_MD) as f:
+        return f.read()
+
+
+def _run(cmd, cwd=None, check=True):
+    print("+ " + " ".join(cmd), file=sys.stderr)
+    result = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True)
+    if check and result.returncode != 0:
+        raise RuntimeError(
+            f"command failed ({result.returncode}): {' '.join(cmd)}\n"
+            f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
+        )
+    return result
+
+
+def prepare_arm(arm, force=False):
+    """Prepare a plugin arm's working clone. Returns dict with dir, sha, version."""
+    name = arm["name"]
+    ref = arm["ref"]
+    arm_dir = os.path.join(ARMS_WORK_DIR, name)
+
+    need_clone = force or not os.path.isdir(arm_dir)
+    if not need_clone:
+        # Re-use if .git is a directory and HEAD matches resolved ref.
+        git_path = os.path.join(arm_dir, ".git")
+        if not os.path.isdir(git_path):
+            need_clone = True
+        else:
+            try:
+                current = _run(["git", "-C", arm_dir, "rev-parse", "HEAD"]).stdout.strip()
+                resolved = _run(["git", "-C", REPO_ROOT, "rev-parse", ref]).stdout.strip()
+                if current != resolved:
+                    need_clone = True
+            except Exception:
+                need_clone = True
+
+    if need_clone:
+        if os.path.isdir(arm_dir):
+            shutil.rmtree(arm_dir)
+        os.makedirs(os.path.dirname(arm_dir), exist_ok=True)
+        # Resolve the ref to a concrete commit SHA in the SOURCE repo first.
+        # `git clone` only creates a local branch for the default branch;
+        # other branches land solely as remote-tracking refs
+        # (origin/<branch>), so checking out the bare ref name in the clone
+        # can fail even though the commit itself was fetched. A SHA always
+        # resolves regardless of branch-name plumbing.
+        resolved_sha = _run(["git", "-C", REPO_ROOT, "rev-parse", ref]).stdout.strip()
+        _run(["git", "clone", "--no-hardlinks", REPO_ROOT, arm_dir])
+        _run(["git", "-C", arm_dir, "checkout", "-q", "-B", f"exp-{name}", resolved_sha])
+        _run(["git", "-C", arm_dir, "remote", "remove", "origin"])
+
+    assert os.path.isdir(os.path.join(arm_dir, ".git")), (
+        f"{arm_dir}/.git must be a directory (full clone), not a worktree gitfile"
+    )
+
+    sha = _run(["git", "-C", arm_dir, "rev-parse", "HEAD"]).stdout.strip()
+    version = None
+    plugin_json = os.path.join(arm_dir, ".claude-plugin", "plugin.json")
+    if os.path.exists(plugin_json):
+        with open(plugin_json) as f:
+            version = json.load(f).get("version")
+
+    return {"dir": arm_dir, "sha": sha, "version": version}
+
+
+def prepare_all_arms(arms, force=False):
+    prepared = {}
+    for arm in arms:
+        if arm.get("plugin"):
+            prepared[arm["name"]] = prepare_arm(arm, force=force)
+        else:
+            prepared[arm["name"]] = {"dir": None, "sha": None, "version": None}
+    return prepared
+
+
+def make_run_workdir(run_dir, arm):
+    work_dir = os.path.join(run_dir, "work")
+    if os.path.exists(work_dir):
+        shutil.rmtree(work_dir)
+    shutil.copytree(FIXTURE_DIR, work_dir)
+    if arm.get("plugin") and os.path.isdir(OVERLAY_SWE_DIR):
+        _copy_overlay(OVERLAY_SWE_DIR, work_dir)
+    _run(["git", "init", "-q"], cwd=work_dir)
+    _run(["git", "-c", "user.name=harness-ab", "-c", "user.email=harness-ab@localhost",
+          "add", "-A"], cwd=work_dir)
+    _run(["git", "-c", "user.name=harness-ab", "-c", "user.email=harness-ab@localhost",
+          "commit", "-qm", "fixture"], cwd=work_dir)
+    return work_dir
+
+
+def _copy_overlay(src, dst):
+    for root, dirs, files in os.walk(src):
+        rel = os.path.relpath(root, src)
+        target_dir = os.path.join(dst, rel) if rel != "." else dst
+        os.makedirs(target_dir, exist_ok=True)
+        for fname in files:
+            shutil.copy2(os.path.join(root, fname), os.path.join(target_dir, fname))
+
+
+def run_claude(cmd, cwd, env, timeout_min, transcript_path, stderr_path):
+    """Run the claude CLI, streaming stdout to transcript_path, killing the
+    whole process group on timeout. Returns (returncode, timed_out, wall_s)."""
+    start = time.time()
+    timed_out = False
+    with open(transcript_path, "w") as out_f, open(stderr_path, "w") as err_f:
+        proc = subprocess.Popen(
+            cmd, cwd=cwd, env=env, stdout=out_f, stderr=err_f,
+            start_new_session=True,
+        )
+        try:
+            proc.wait(timeout=timeout_min * 60)
+        except subprocess.TimeoutExpired:
+            timed_out = True
+            _kill_process_group(proc)
+    wall_s = time.time() - start
+    return proc.returncode, timed_out, wall_s
+
+
+def _kill_process_group(proc):
+    try:
+        pgid = os.getpgid(proc.pid)
+        os.killpg(pgid, signal.SIGTERM)
+    except ProcessLookupError:
+        return
+    except Exception:
+        pass
+    try:
+        proc.wait(timeout=10)
+        return
+    except subprocess.TimeoutExpired:
+        pass
+    try:
+        pgid = os.getpgid(proc.pid)
+        os.killpg(pgid, signal.SIGKILL)
+    except Exception:
+        pass
+    try:
+        proc.wait(timeout=10)
+    except Exception:
+        pass
+
+
+def run_unittest_dir(run_root, test_dir_rel, top_level, timeout_s=300):
+    """Run `python3 -m unittest discover` and return (rc, stdout, stderr)."""
+    cmd = [sys.executable, "-m", "unittest", "discover", "-s", test_dir_rel,
+           "-t", top_level, "-p", "test_*.py"]
+    try:
+        result = subprocess.run(cmd, cwd=run_root, capture_output=True, text=True,
+                                 timeout=timeout_s)
+        return result.returncode, result.stdout, result.stderr
+    except subprocess.TimeoutExpired as e:
+        return -1, e.stdout or "", (e.stderr or "") + "\nTIMEOUT"
+
+
+def score_run(work_dir):
+    """Copy hidden tests -> _acceptance/, run acceptance + regression tests."""
+    acceptance_dir = os.path.join(work_dir, "_acceptance")
+    if os.path.isdir(HIDDEN_TESTS_DIR):
+        if os.path.exists(acceptance_dir):
+            shutil.rmtree(acceptance_dir)
+        shutil.copytree(HIDDEN_TESTS_DIR, acceptance_dir)
+        rc, out, err = run_unittest_dir(work_dir, "_acceptance", ".")
+    else:
+        rc, out, err = (-1, "", "hidden_tests/ not present")
+    acceptance = parse_unittest_output(out + "\n" + err)
+    acceptance["exit_code"] = rc
+
+    reg_test_dir = os.path.join(work_dir, "tests")
+    if os.path.isdir(reg_test_dir):
+        rrc, rout, rerr = run_unittest_dir(work_dir, "tests", ".")
+        regression = parse_unittest_output(rout + "\n" + rerr)
+        regression["exit_code"] = rrc
+    else:
+        regression = {"total": 0, "passed": 0, "failures": 0, "errors": 0,
+                      "skipped": 0, "ok": True, "exit_code": 0}
+
+    return acceptance, regression
+
+
+def read_stream_metrics(work_dir):
+    stream_glob = os.path.join(work_dir, ".serena", "streams", "*.jsonl")
+    counts = {}
+    for path in glob.glob(stream_glob):
+        try:
+            with open(path) as f:
+                lines = f.readlines()
+        except IOError:
+            continue
+        for k, v in count_stream_events(lines).items():
+            counts[k] = counts.get(k, 0) + v
+
+    state = None
+    state_glob = os.path.join(work_dir, ".serena", "swe-state", "*.state")
+    state_files = glob.glob(state_glob)
+    if state_files:
+        latest = max(state_files, key=os.path.getmtime)
+        try:
+            with open(latest) as f:
+                content = f.read().strip()
+            data = json.loads(content)
+            state = data.get("current_state")
+        except Exception:
+            state = None
+    return {"stream_event_counts": counts, "final_workflow_state": state}
+
+
+def isolation_check(arm, transcript_metrics):
+    """Check that plugin presence in system-init matches the arm's expectation."""
+    servers = transcript_metrics.get("mcp_servers") or []
+    plugins = transcript_metrics.get("plugins") or []
+
+    def _name(x):
+        if isinstance(x, dict):
+            return x.get("name") or ""
+        return str(x)
+
+    server_names = [_name(s) for s in servers]
+    plugin_names = [_name(p) for p in plugins]
+    has_swe = any("swe" in n.lower() for n in server_names + plugin_names)
+
+    expected_plugin = bool(arm.get("plugin"))
+    ok = (has_swe == expected_plugin)
+    return {"ok": ok, "expected_plugin": expected_plugin, "has_swe": has_swe,
+            "mcp_server_names": server_names, "plugin_names": plugin_names}
+
+
+def run_one(stamp_dir, arm, arms_prepared, trial, model, effort, budget_usd,
+            timeout_min, out_lock=None):
+    arm_name = arm["name"]
+    run_id = f"{arm_name}-t{trial}"
+    run_dir = os.path.join(stamp_dir, "runs", run_id)
+    os.makedirs(run_dir, exist_ok=True)
+
+    work_dir = make_run_workdir(run_dir, arm)
+    task_text = read_task_text()
+
+    plugin_dir = arms_prepared[arm_name]["dir"] if arm.get("plugin") else None
+    cmd = build_command(task_text, model, budget_usd, plugin_dir=plugin_dir, effort=effort)
+
+    env = clean_env(dict(os.environ))
+
+    transcript_path = os.path.join(run_dir, "transcript.jsonl")
+    stderr_path = os.path.join(run_dir, "stderr.log")
+
+    rc, timed_out, wall_s = run_claude(cmd, work_dir, env, timeout_min,
+                                        transcript_path, stderr_path)
+
+    with open(transcript_path) as f:
+        lines = f.readlines()
+    metrics = parse_transcript(lines)
+
+    acceptance, regression = score_run(work_dir)
+    stream_metrics = read_stream_metrics(work_dir) if arm.get("plugin") else \
+        {"stream_event_counts": {}, "final_workflow_state": None}
+    isolation = isolation_check(arm, metrics)
+
+    row = {
+        "run_id": run_id,
+        "arm": arm_name,
+        "trial": trial,
+        "seed": None,  # filled by caller
+        "model": model,
+        "effort": effort,
+        "arm_commit": arms_prepared[arm_name]["sha"],
+        "arm_plugin_version": arms_prepared[arm_name]["version"],
+        "exit_code": rc,
+        "timed_out": timed_out,
+        "wall_s": wall_s,
+        "metrics": metrics,
+        "stream_metrics": stream_metrics,
+        "acceptance": acceptance,
+        "regression": regression,
+        "isolation": isolation,
+    }
+    return row
+
+
+# --------------------------------------------------------------------------
+# Commands
+# --------------------------------------------------------------------------
+
+def cmd_selftest():
+    if not os.path.isdir(FIXTURE_DIR) or not os.path.isdir(REFERENCE_SOLUTION_DIR):
+        print("SELFTEST SKIP: fixture/ or reference_solution/ not present yet", file=sys.stderr)
+        return 1
+    if not os.path.isdir(HIDDEN_TESTS_DIR):
+        print("SELFTEST SKIP: hidden_tests/ not present yet", file=sys.stderr)
+        return 1
+
+    tmp = os.path.join(WORK_ROOT, "selftest-" + uuid.uuid4().hex[:8])
+    os.makedirs(tmp, exist_ok=True)
+    work_dir = os.path.join(tmp, "work")
+    shutil.copytree(FIXTURE_DIR, work_dir)
+    _copy_overlay(REFERENCE_SOLUTION_DIR, work_dir)
+
+    acceptance, regression = score_run(work_dir)
+    print(json.dumps({"acceptance": acceptance, "regression": regression}, indent=2))
+
+    ok = acceptance.get("ok") and acceptance.get("total", 0) > 0 and regression.get("ok")
+    if not ok:
+        print("SELFTEST FAILED", file=sys.stderr)
+        return 1
+    print("SELFTEST OK", file=sys.stderr)
+    return 0
+
+
+def cmd_dry_run(args, arms):
+    if not os.path.exists(TASK_MD):
+        print("DRY-RUN SKIP: task.md not present yet (fixture track not ready)", file=sys.stderr)
+        return 1
+    if not os.path.isdir(FIXTURE_DIR):
+        print("DRY-RUN SKIP: fixture/ not present yet", file=sys.stderr)
+        return 1
+
+    prepared = prepare_all_arms(arms)
+    task_text = read_task_text()
+
+    stamp = time.strftime("%Y%m%d-%H%M%S") + "-dryrun"
+    stamp_dir = os.path.join(args.out, stamp)
+    for arm in arms:
+        arm_name = arm["name"]
+        run_dir = os.path.join(stamp_dir, "runs", f"{arm_name}-t0")
+        os.makedirs(run_dir, exist_ok=True)
+        work_dir = make_run_workdir(run_dir, arm)
+        plugin_dir = prepared[arm_name]["dir"] if arm.get("plugin") else None
+        cmd = build_command(task_text, args.model, args.budget_usd,
+                             plugin_dir=plugin_dir, effort=args.effort)
+        print(f"=== {arm_name} ===")
+        print(" ".join(cmd))
+
+        if os.path.isdir(HIDDEN_TESTS_DIR):
+            acceptance, regression = score_run(work_dir)
+            print(f"  acceptance vs unmodified fixture: "
+                  f"{acceptance['passed']}/{acceptance['total']} ok={acceptance['ok']} "
+                  f"(expected failures)")
+            print(f"  regression: {regression['passed']}/{regression['total']} ok={regression['ok']}")
+        else:
+            print("  (hidden_tests/ not present yet, skipping acceptance check)")
+    print(f"\ndry-run artifacts under {stamp_dir}")
+    return 0
+
+
+def cmd_preflight(args):
+    print("+ claude --version", file=sys.stderr)
+    v = subprocess.run(["claude", "--version"], capture_output=True, text=True)
+    print(v.stdout.strip() or v.stderr.strip())
+
+    env = clean_env(dict(os.environ))
+    tmp = os.path.join(WORK_ROOT, "preflight-" + uuid.uuid4().hex[:8])
+    os.makedirs(tmp, exist_ok=True)
+
+    cmd = ["claude", "-p", "Reply with the single word OK",
+           "--output-format", "json", "--model", args.model,
+           "--setting-sources", "project,local",
+           "--max-budget-usd", "0.05", "--no-session-persistence"]
+    print("+ " + " ".join(cmd), file=sys.stderr)
+    result = subprocess.run(cmd, cwd=tmp, env=env, capture_output=True, text=True)
+    print("stdout:", result.stdout.strip())
+    print("stderr:", result.stderr.strip())
+
+    plugin_arms = [a for a in load_arms() if a.get("plugin")]
+    if plugin_arms:
+        arm = plugin_arms[0]
+        prepared = prepare_arm(arm)
+        cmd2 = ["claude", "-p", "Reply with the single word OK",
+                "--output-format", "json", "--model", args.model,
+                "--setting-sources", "project,local",
+                "--max-budget-usd", "0.05", "--no-session-persistence",
+                "--plugin-dir", prepared["dir"]]
+        print("+ " + " ".join(cmd2), file=sys.stderr)
+        result2 = subprocess.run(cmd2, cwd=tmp, env=env, capture_output=True, text=True)
+        print(f"plugin arm ({arm['name']}) stdout:", result2.stdout.strip())
+        print(f"plugin arm ({arm['name']}) stderr:", result2.stderr.strip())
+    return 0
+
+
+def cmd_full_run(args, arms):
+    if not os.path.exists(TASK_MD):
+        raise SystemExit("task.md not present yet (fixture track not ready)")
+
+    prepared = prepare_all_arms(arms, force=False)
+
+    if args.only_prepare:
+        print(json.dumps(prepared, indent=2))
+        return 0
+
+    if args.resume:
+        stamp = args.resume
+        stamp_dir = os.path.join(args.out, stamp)
+        if not os.path.isdir(stamp_dir):
+            raise SystemExit(f"--resume {stamp}: {stamp_dir} not found")
+    else:
+        stamp = time.strftime("%Y%m%d-%H%M%S")
+        stamp_dir = os.path.join(args.out, stamp)
+        os.makedirs(stamp_dir, exist_ok=True)
+
+    runs_jsonl = os.path.join(stamp_dir, "runs.jsonl")
+    done_ids = set()
+    if os.path.exists(runs_jsonl):
+        with open(runs_jsonl) as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    done_ids.add(json.loads(line)["run_id"])
+                except Exception:
+                    continue
+
+    arm_names = [a["name"] for a in arms]
+    order = shuffled_arm_order(arm_names, args.trials, args.seed)
+    arms_by_name = {a["name"]: a for a in arms}
+
+    meta = {
+        "args": vars(args),
+        "arms": arms,
+        "prepared": prepared,
+        "claude_version": subprocess.run(["claude", "--version"], capture_output=True,
+                                          text=True).stdout.strip(),
+        "machine": {"platform": sys.platform},
+        "stamp": stamp,
+    }
+    with open(os.path.join(stamp_dir, "meta.json"), "w") as f:
+        json.dump(meta, f, indent=2)
+
+    with open(runs_jsonl, "a") as out_f:
+        for trial, arm_seq in enumerate(order):
+            for arm_name in arm_seq:
+                run_id = f"{arm_name}-t{trial}"
+                if run_id in done_ids:
+                    print(f"skip (resume): {run_id}", file=sys.stderr)
+                    continue
+                arm = arms_by_name[arm_name]
+                row = run_one(stamp_dir, arm, prepared, trial, args.model,
+                              args.effort, args.budget_usd, args.timeout_min)
+                row["seed"] = args.seed
+                out_f.write(json.dumps(row) + "\n")
+                out_f.flush()
+                print(f"done: {run_id} acceptance={row['acceptance']['passed']}/"
+                      f"{row['acceptance']['total']} wall_s={row['wall_s']:.1f}",
+                      file=sys.stderr)
+
+    print(stamp_dir)
+    return 0
+
+
+def build_arg_parser():
+    p = argparse.ArgumentParser(description="Harness A/B experiment runner")
+    p.add_argument("--trials", type=int, default=3)
+    p.add_argument("--arms", type=str, default=None,
+                    help="comma-separated subset of arm names")
+    p.add_argument("--model", type=str, default="claude-sonnet-5")
+    p.add_argument("--effort", type=str, default=None)
+    p.add_argument("--budget-usd", type=float, default=5.0)
+    p.add_argument("--timeout-min", type=float, default=45.0)
+    p.add_argument("--parallel", type=int, default=1)
+    p.add_argument("--seed", type=int, default=42)
+    p.add_argument("--out", type=str, default=DEFAULT_OUT)
+    p.add_argument("--resume", type=str, default=None)
+    p.add_argument("--dry-run", action="store_true")
+    p.add_argument("--selftest", action="store_true")
+    p.add_argument("--preflight", action="store_true")
+    p.add_argument("--only-prepare", action="store_true")
+    return p
+
+
+def main(argv=None):
+    args = build_arg_parser().parse_args(argv)
+
+    all_arms = load_arms()
+    if args.arms:
+        wanted = set(args.arms.split(","))
+        arms = [a for a in all_arms if a["name"] in wanted]
+    else:
+        arms = all_arms
+
+    if args.selftest:
+        return cmd_selftest()
+    if args.preflight:
+        return cmd_preflight(args)
+    if args.dry_run:
+        return cmd_dry_run(args, arms)
+    return cmd_full_run(args, arms)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -1,0 +1,5 @@
+[
+  {"name": "baseline", "ref": "23ec65d", "plugin": true},
+  {"name": "v5", "ref": "harness-v5-prototype", "plugin": true},
+  {"name": "control", "ref": null, "plugin": false}
+]
