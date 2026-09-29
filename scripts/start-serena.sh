@@ -3,6 +3,15 @@
 # Reads paths from .serena/memory-paths.conf (one per line) if it exists,
 # otherwise falls back to ./.serena/memories.
 # Always appends plugin bundled memories from the INSTALLED plugin root.
+#
+# Each line in the conf file is `[alias=]path[:ro]`:
+#   ./.serena/memory                         — primary path, no alias, read/write
+#   em=../em-serena/.serena/memory           — aliased path; its memories are
+#                                               addressed ONLY as em/<rel>
+#   other=../shared/.serena/memory:ro        — aliased AND read-only
+# Lines are passed through this script's grep/tr/sed pipeline unchanged — `=`
+# and `:` are not delimiters to any of those tools here, so `alias=path:ro`
+# reaches Serena's --memory-path exactly as written in the conf file.
 
 CONF_FILE=".serena/memory-paths.conf"
 DEFAULT_PATH="./.serena/memories"

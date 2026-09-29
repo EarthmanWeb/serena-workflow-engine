@@ -29,9 +29,13 @@ except ImportError as e:
 
 
 # Memory names in search results look like "dir/NAME" (e.g.
-# "feedback/FEEDBACK_DOCS_FIRST_ALWAYS"). Matched anywhere in the serialized
-# tool result; normalization happens in _extract_memory_names.
-MEMORY_NAME_RE = re.compile(r'\b[a-z][a-z0-9_.-]*/[A-Za-z0-9][A-Za-z0-9_.-]*')
+# "feedback/FEEDBACK_DOCS_FIRST_ALWAYS") or, for an aliased memory path
+# (`--memory-path`/.serena/memory-paths.conf `alias=path` entries),
+# "alias/dir/NAME" (e.g. "em/feature/FEATURE_TESTS") — one optional extra
+# "/segment" accounts for the alias. Matched anywhere in the serialized tool
+# result; normalization happens in _extract_memory_names.
+MEMORY_NAME_RE = re.compile(
+    r'\b[a-z][a-z0-9_.-]*/(?:[a-z][a-z0-9_.-]*/)?[A-Za-z0-9][A-Za-z0-9_.-]*')
 
 # Explicit memory links INSIDE a read memory's content: `mem:dir/NAME` and
 # `[[dir/NAME]]`. Bare dir/NAME mentions are NOT links.
@@ -47,14 +51,20 @@ LINK_EXCLUDED_PREFIXES = (
 
 
 def _related_links(text: str) -> set:
-    """Normalized memory names explicitly linked from read memory content."""
-    from swe_hooks.core.stream import normalize_memory_name
+    """Normalized memory names explicitly linked from read memory content.
+
+    Filters through is_valid_memory_name so a truncated/placeholder token — e.g.
+    a literal "FEATURE_[KEY]" placeholder in memory prose, which the link regex
+    matches as the garbage name "feature/feature_" — never becomes a docpending
+    link the sweep gate demands be read; it names no real memory.
+    """
+    from swe_hooks.core.stream import normalize_memory_name, is_valid_memory_name
     if not text:
         return set()
     links = set()
     for match in MEMORY_LINK_RE.findall(str(text)):
         name = normalize_memory_name(match)
-        if not name.startswith(LINK_EXCLUDED_PREFIXES):
+        if is_valid_memory_name(name) and not name.startswith(LINK_EXCLUDED_PREFIXES):
             links.add(name)
     return links
 

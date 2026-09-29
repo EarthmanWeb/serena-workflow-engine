@@ -60,6 +60,33 @@ _PREFIX_TO_TYPE = {
 _NO_FRONTMATTER_PREFIXES = frozenset(["wm", "lite", "wf", "claude"])
 
 
+def _split_alias(self, name):
+    """Split an aliased memory name into ``(alias, remainder)``.
+
+    An aliased memory (from ``--memory-path``/``.serena/memory-paths.conf`` entries
+    of the form ``alias=path[:ro]``) is addressed ONLY as ``<alias>/<rel>``, e.g.
+    ``em/feature/FEATURE_TESTS``. The alias segment must never be treated as a
+    directory prefix by ``_normalize_name``/``_derive_type`` — those apply only to
+    the remainder after the alias.
+
+    Uses ``getattr(self, "_memory_aliases", {})`` so this keeps working against an
+    older Serena fork that predates the aliasing feature (version-compat guard, not
+    a behavioral fallback): with no ``_memory_aliases`` attribute, every name is
+    treated as non-aliased, matching the pre-alias behavior exactly.
+
+    Returns ``(None, clean_name)`` when ``name`` is not aliased, or
+    ``(alias, remainder)`` when its first segment is a registered alias.
+    """
+    clean = name.replace(".md", "")
+    aliases = getattr(self, "_memory_aliases", None)
+    if not aliases or "/" not in clean:
+        return None, clean
+    first, remainder = clean.split("/", 1)
+    if first in aliases:
+        return first, remainder
+    return None, clean
+
+
 def _derive_prefix(name):
     """Derive the directory prefix from a memory name convention.
 
@@ -126,17 +153,17 @@ def _ensure_front_matter(name, content):
     return block + content
 
 
-def _normalize_name(name):
-    """Normalize a memory name to use the correct directory prefix.
+def _normalize_remainder(clean):
+    """Normalize a (possibly already alias-stripped) name to the correct prefix.
 
-    Handles:
+    ``clean`` must already have ``.md`` stripped and, for an aliased name, the
+    ``<alias>/`` segment already removed. Handles:
       DOM_X              -> dom/DOM_X        (missing prefix, swe subdir)
       feature/DOM_X      -> dom/DOM_X        (wrong prefix)
       dom/DOM_X          -> dom/DOM_X        (already correct)
       WM_abc123          -> WM_abc123        (flat in memories/, no subdir)
       LITE_MODE_abc123   -> LITE_MODE_abc123 (flat in memories/, no subdir)
     """
-    clean = name.replace(".md", "")
     # Get the base filename without any directory
     base = clean.split("/")[-1] if "/" in clean else clean
     prefix = _derive_prefix(base)
@@ -145,11 +172,28 @@ def _normalize_name(name):
     # WM and LITE files live flat in .serena/memories/ — no subdirectory
     if prefix in _MEMORIES_DIR_PREFIXES:
         return base
-    correct = f"{prefix}/{base}"
-    return correct
+    return f"{prefix}/{base}"
+
+
+def _normalize_name(self, name):
+    """Normalize a memory name, preserving an ``<alias>/`` prefix untouched.
+
+    Non-aliased names (or when ``self`` predates ``_memory_aliases``) behave
+    exactly as before: the whole name is normalized by ``_normalize_remainder``.
+    An aliased name (``em/feature/FEATURE_X``) keeps its ``em/`` segment and
+    normalizes only the remainder, so aliased and primary copies of a
+    same-named memory (``feature/FEATURE_X``) never collide.
+    """
+    alias, remainder = _split_alias(self, name)
+    normalized_remainder = _normalize_remainder(remainder)
+    if alias is None:
+        return normalized_remainder
+    return f"{alias}/{normalized_remainder}"
 
 
 def _patched_find_memory(self, name):
+    alias, _remainder = _split_alias(self, name)
+
     # Try the name as-is first (handles already-correct paths)
     try:
         result = _original_find_memory(self, name)
@@ -159,7 +203,7 @@ def _patched_find_memory(self, name):
         pass
 
     # Auto-resolve: normalize to correct prefix and retry
-    normalized = _normalize_name(name)
+    normalized = _normalize_name(self, name)
     if normalized != name.replace(".md", ""):
         try:
             result = _original_find_memory(self, normalized)
@@ -168,7 +212,12 @@ def _patched_find_memory(self, name):
         except Exception:
             pass
 
-    # Also try the bare name without any prefix (for root-level files)
+    # Bare base-name fallback is for non-aliased root-level files only — an
+    # aliased name must never fall back to a non-aliased (primary) lookup, or
+    # an aliased read/write would silently redirect to the primary copy.
+    if alias is not None:
+        return None
+
     clean = name.replace(".md", "")
     base = clean.split("/")[-1] if "/" in clean else None
     if base and base != clean:
@@ -189,25 +238,34 @@ def _patched_get_memory_file_path(self, name):
         return existing
 
     # New memory: auto-resolve to correct prefix directory
-    normalized = _normalize_name(name)
-    # Delegate to original with the normalized (prefixed) name
+    normalized = _normalize_name(self, name)
+    # Delegate to original with the normalized (alias-preserving) name
     return _original_get_memory_file_path(self, normalized)
 
 
 def _patched_load_memory(self, name):
     """Normalize name before reading."""
+    alias, _remainder = _split_alias(self, name)
+
     # Try as-is first
     try:
         return _original_load_memory(self, name)
     except Exception:
         pass
     # Try normalized
-    normalized = _normalize_name(name)
+    normalized = _normalize_name(self, name)
     if normalized != name.replace(".md", ""):
         try:
             return _original_load_memory(self, normalized)
         except Exception:
             pass
+
+    # Bare base-name fallback is for non-aliased names only — see
+    # _patched_find_memory for why an aliased name must never fall back to a
+    # non-aliased (primary) lookup.
+    if alias is not None:
+        return _original_load_memory(self, normalized)
+
     # Try bare name
     clean = name.replace(".md", "")
     base = clean.split("/")[-1] if "/" in clean else None
@@ -222,10 +280,13 @@ def _patched_load_memory(self, name):
 
 def _patched_save_memory(self, name, content, is_tool_context=False):
     """Normalize name before writing, and guarantee standard front matter on the content."""
-    normalized = _normalize_name(name)
-    prefix = _derive_prefix(normalized)
+    normalized = _normalize_name(self, name)
+    _alias, remainder = _split_alias(self, normalized)
+    prefix = _derive_prefix(remainder)
     if prefix not in _NO_FRONTMATTER_PREFIXES:
-        content = _ensure_front_matter(normalized, content)
+        # Front-matter type derivation must use the remainder (post-alias-strip),
+        # not the alias segment, so it never uses an alias name as its prefix.
+        content = _ensure_front_matter(remainder, content)
     return _original_save_memory(self, normalized, content, is_tool_context)
 
 
@@ -235,14 +296,14 @@ def _patched_delete_memory(self, name, is_tool_context=False):
         return _original_delete_memory(self, name, is_tool_context)
     except Exception:
         pass
-    normalized = _normalize_name(name)
+    normalized = _normalize_name(self, name)
     return _original_delete_memory(self, normalized, is_tool_context)
 
 
 def _patched_move_memory(self, old_name, new_name, is_tool_context=False):
     """Normalize names before moving/renaming."""
-    normalized_old = _normalize_name(old_name)
-    normalized_new = _normalize_name(new_name)
+    normalized_old = _normalize_name(self, old_name)
+    normalized_new = _normalize_name(self, new_name)
     return _original_move_memory(self, normalized_old, normalized_new, is_tool_context)
 
 

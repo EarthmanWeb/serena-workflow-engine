@@ -22,4 +22,8 @@ Serena reads `.serena/memory-paths.conf` ONCE, at MCP connection time. On a fres
 
 **Two-pass / resume:** `/swe-init` is idempotent — bootstrap guards on `bootstrapped: true`. Resume detection: `bootstrapped:true` + `complete:false` ⇒ resume pass ⇒ skip Tasks 2–3.5, run Tasks 4–11 with Serena reading correct paths. Documented in `commands/swe-init.md`.
 
+## Importing Other Trees
+
+- Add sibling-project trees ONLY as aliased entries: `em=../em-serena/.serena/memory` → addressed as `em/<rel>`. NEVER add an unaliased sibling tree — same-named memories get shadowed by the primary. Syntax + rules: `mem:feature/FEATURE_SWE` "Memory Paths".
+
 Related: `mem:feature/FEATURE_SWE`, `mem:feedback/FEEDBACK_PLUGIN_SOURCE_LOCATION`.

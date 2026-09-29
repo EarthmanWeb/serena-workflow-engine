@@ -285,6 +285,14 @@ Docpending window (narrower than the task window): a SUCCESSFUL sweep stamps a `
 | `start-wm-mcp.sh`     | Start WM MCP server                        |
 | `serena_memory_patch.py` | Serena memory path patching             |
 
+## Memory Paths (multi-source, `.serena/memory-paths.conf`)
+
+- Entry syntax: `[alias=]path[:ro]`, one per line. First line = primary write dir (NEVER aliased). `start-serena.sh` appends the plugin `memories:ro` dir unaliased.
+- Aliased entry (`em=../em-serena/.serena/memory`): memories addressed ONLY as `<alias>/<rel>` (`em/feature/FEATURE_TESTS`) for list/read/write/edit/delete/move/search. NEVER merged into the flat namespace — same-named memories across sources cannot shadow each other. Use an alias for EVERY imported sibling-project tree.
+- Unaliased extra: flat merge, primary wins; Serena logs a warning per shadowed name.
+- Alias rules (Serena raises ValueError at startup): `[A-Za-z0-9_-]+`, not `global`, unique, not the name of a top-level dir in the primary tree.
+- Implementation: fork `serena/memories/memory_manager.py` (`_memory_aliases`, `split_alias`); `serena_memory_patch.py` preserves the `<alias>/` segment and normalizes only the remainder, and NEVER falls back to a non-aliased lookup for an aliased name.
+
 ## Dependencies
 
 - Internal: Serena MCP (memory), swe-wm MCP (Working Memory updates).

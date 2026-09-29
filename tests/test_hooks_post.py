@@ -189,6 +189,71 @@ class TestGetContinuation(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
+# swe_post_read_state — memory-name extraction/link parsing (alias-aware)
+# ---------------------------------------------------------------------------
+class TestMemoryNameRegexAliasAware(unittest.TestCase):
+    def test_two_segment_name_matched(self):
+        self.assertEqual(
+            read_state_mod.MEMORY_NAME_RE.findall("see feature/FEATURE_X here"),
+            ["feature/FEATURE_X"],
+        )
+
+    def test_three_segment_aliased_name_not_truncated(self):
+        # A 3-segment aliased name (alias/dir/NAME) matches in full.
+        self.assertEqual(
+            read_state_mod.MEMORY_NAME_RE.findall("see em/feature/FEATURE_X here"),
+            ["em/feature/FEATURE_X"],
+        )
+
+    def test_multiple_names_including_aliased(self):
+        text = "em/feature/FEATURE_X, dom/DOM_Y"
+        self.assertEqual(
+            read_state_mod.MEMORY_NAME_RE.findall(text),
+            ["em/feature/FEATURE_X", "dom/DOM_Y"],
+        )
+
+
+class TestExtractMemoryNamesAliasAware(unittest.TestCase):
+    def test_aliased_name_extracted_whole(self):
+        names = read_state_mod._extract_memory_names(
+            "Found: em/feature/FEATURE_X (score 0.9)")
+        self.assertIn("em/feature/feature_x", names)
+        self.assertNotIn("em/feature", names)
+
+
+class TestRelatedLinksFiltersInvalidTokens(unittest.TestCase):
+    def test_placeholder_feature_key_link_is_dropped(self):
+        # A literal "FEATURE_[KEY]" placeholder in memory prose must never
+        # surface as the truncated garbage link "feature/feature_".
+        text = "See mem:feature/FEATURE_[KEY] for the primary feature memory."
+        self.assertEqual(read_state_mod._related_links(text), set())
+
+    def test_valid_mem_link_is_kept(self):
+        text = "Related: mem:feature/FEATURE_SWE and more prose."
+        self.assertEqual(
+            read_state_mod._related_links(text), {"feature/feature_swe"})
+
+    def test_valid_bracket_link_is_kept(self):
+        text = "See [[dom/DOM_X]] for details."
+        self.assertEqual(read_state_mod._related_links(text), {"dom/dom_x"})
+
+    def test_aliased_link_is_kept(self):
+        text = "See mem:em/feature/FEATURE_TESTS for the em-serena feature doc."
+        self.assertEqual(
+            read_state_mod._related_links(text), {"em/feature/feature_tests"})
+
+    def test_excluded_prefix_link_is_dropped(self):
+        text = "See mem:wf/WF_INIT for the entry point."
+        self.assertEqual(read_state_mod._related_links(text), set())
+
+    def test_placeholder_mixed_with_valid_link_only_valid_kept(self):
+        text = ("Primary: mem:feature/FEATURE_[KEY]. Related: "
+                "mem:dom/DOM_BUILDER_BLOCKS and more prose")
+        self.assertEqual(
+            read_state_mod._related_links(text), {"dom/dom_builder_blocks"})
+
+
+# ---------------------------------------------------------------------------
 # swe_post_tool_failure.unresolved_serena_correction + constants
 # ---------------------------------------------------------------------------
 class TestUnresolvedSerenaCorrection(unittest.TestCase):

@@ -133,6 +133,12 @@ class TestIsValidMemoryName(unittest.TestCase):
         for n in ("feature/feature_x", "ref/ref_deploy", "dom/dom_crm_journey"):
             self.assertTrue(stream.is_valid_memory_name(n), n)
 
+    def test_accepts_three_segment_aliased_paths(self):
+        # alias/dir/NAME (e.g. an aliased memory path's "em/feature/feature_x")
+        # is a valid shape — only the tail segment is checked for truncation.
+        for n in ("em/feature/feature_x", "em/dom/dom_real"):
+            self.assertTrue(stream.is_valid_memory_name(n), n)
+
     def test_rejects_garbage(self):
         for n in ("", "no-slash", "ref/ref_...", "dom/dom…", "ref/ref_",
                   "ref/stub-", "/", "ref/"):
@@ -535,6 +541,30 @@ class TestCheckMemorySweep(unittest.TestCase):
         content = "- **Memories loaded**: feature/FEATURE_X\n"
         err = wm._check_memory_sweep(self.session, content)
         self.assertIsNone(err)
+
+    def test_aliased_three_segment_name_listed_and_read_passes(self):
+        # An aliased memory (em/feature/FEATURE_X) is a plain string as far as
+        # the sweep verifier is concerned — normalize/compare treats it like
+        # any other name and does not truncate or mis-normalize it.
+        _write_stream(self.stream_path, [
+            {"type": "docread", "name": "feature/FEATURE_X"},
+            {"type": "docread", "name": "em/feature/FEATURE_TESTS"},
+        ])
+        content = ("- **Memories loaded**: feature/FEATURE_X, "
+                   "em/feature/FEATURE_TESTS\n")
+        err = wm._check_memory_sweep(self.session, content)
+        self.assertIsNone(err)
+        self.assertTrue(os.path.exists(self._sentinel()))
+
+    def test_aliased_three_segment_name_listed_but_unread_rejected(self):
+        _write_stream(self.stream_path, [
+            {"type": "docread", "name": "feature/FEATURE_X"},
+        ])
+        content = ("- **Memories loaded**: feature/FEATURE_X, "
+                   "em/feature/FEATURE_TESTS\n")
+        err = wm._check_memory_sweep(self.session, content)
+        self.assertIsNotNone(err)
+        self.assertIn("em/feature/feature_tests", err.lower())
 
 
 class TestParseDeferredNames(unittest.TestCase):

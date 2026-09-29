@@ -1,12 +1,12 @@
 """Tests for scripts/serena_memory_patch.py pure helpers.
 
 Loaded via load_serena_patch() which stubs serena.* and neutralizes top_level so
-no MCP server starts. Only the four pure helpers and module-level constants are
-exercised:
+no MCP server starts. Exercises the pure helpers and module-level constants:
   - _derive_prefix
   - _derive_type
-  - _normalize_name
+  - _normalize_name (now takes a MemoryManager-like `self` first — see _Mgr below)
   - _ensure_front_matter
+  - _split_alias / alias-aware wrapper behavior (_patched_*)
 plus the _PREFIX_TO_TYPE and _MEMORIES_DIR_PREFIXES constants.
 
 All behavior asserted here was verified against the actual source.
@@ -21,6 +21,23 @@ from _hookutil import load_serena_patch  # noqa: E402
 # Load once at module import — the patch module has no path-resolving side effects
 # in its pure helpers, so a single shared instance is safe and deterministic.
 mod = load_serena_patch()
+
+
+class _Mgr:
+    """Minimal stand-in for a MemoryManager instance.
+
+    No `_memory_aliases` attribute at all reproduces an older Serena fork that
+    predates aliasing (version-compat path through `_split_alias`/getattr).
+    Pass `aliases={...}` to simulate a fork with aliased memory paths configured.
+    """
+
+    def __init__(self, aliases=None):
+        if aliases is not None:
+            self._memory_aliases = aliases
+
+
+NO_ALIAS_MGR = _Mgr()  # simulates a manager with no _memory_aliases attribute
+ALIASED_MGR = _Mgr(aliases={"em": "/fake/em-serena/.serena/memory"})
 
 
 class SmokeImportTest(unittest.TestCase):
@@ -119,31 +136,31 @@ class DeriveTypeTest(unittest.TestCase):
 
 class NormalizeNameTest(unittest.TestCase):
     def test_missing_prefix_gets_swe_subdir(self):
-        self.assertEqual(mod._normalize_name("DOM_X"), "dom/DOM_X")
-        self.assertEqual(mod._normalize_name("FEATURE_SWE"), "feature/FEATURE_SWE")
+        self.assertEqual(mod._normalize_name(NO_ALIAS_MGR, "DOM_X"), "dom/DOM_X")
+        self.assertEqual(mod._normalize_name(NO_ALIAS_MGR, "FEATURE_SWE"), "feature/FEATURE_SWE")
 
     def test_wrong_prefix_corrected(self):
-        self.assertEqual(mod._normalize_name("feature/DOM_X"), "dom/DOM_X")
+        self.assertEqual(mod._normalize_name(NO_ALIAS_MGR, "feature/DOM_X"), "dom/DOM_X")
 
     def test_already_correct_unchanged(self):
-        self.assertEqual(mod._normalize_name("dom/DOM_X"), "dom/DOM_X")
-        self.assertEqual(mod._normalize_name("ref/REF_WM"), "ref/REF_WM")
+        self.assertEqual(mod._normalize_name(NO_ALIAS_MGR, "dom/DOM_X"), "dom/DOM_X")
+        self.assertEqual(mod._normalize_name(NO_ALIAS_MGR, "ref/REF_WM"), "ref/REF_WM")
 
     def test_wm_and_lite_stay_flat(self):
         # WM_ and LITE_ live flat in .serena/memories/ — base name only, no subdir.
-        self.assertEqual(mod._normalize_name("WM_abc123"), "WM_abc123")
-        self.assertEqual(mod._normalize_name("LITE_MODE_abc123"), "LITE_MODE_abc123")
+        self.assertEqual(mod._normalize_name(NO_ALIAS_MGR, "WM_abc123"), "WM_abc123")
+        self.assertEqual(mod._normalize_name(NO_ALIAS_MGR, "LITE_MODE_abc123"), "LITE_MODE_abc123")
 
     def test_md_suffix_stripped(self):
-        self.assertEqual(mod._normalize_name("LITE_MODE_abc123.md"), "LITE_MODE_abc123")
-        self.assertEqual(mod._normalize_name("MEMORY.md"), "MEMORY")
-        self.assertEqual(mod._normalize_name("dom/DOM_X.md"), "dom/DOM_X")
+        self.assertEqual(mod._normalize_name(NO_ALIAS_MGR, "LITE_MODE_abc123.md"), "LITE_MODE_abc123")
+        self.assertEqual(mod._normalize_name(NO_ALIAS_MGR, "MEMORY.md"), "MEMORY")
+        self.assertEqual(mod._normalize_name(NO_ALIAS_MGR, "dom/DOM_X.md"), "dom/DOM_X")
 
     def test_unclassifiable_passthrough(self):
         # No derivable prefix -> return the cleaned name unchanged (minus .md).
-        self.assertEqual(mod._normalize_name("MEMORY"), "MEMORY")
-        self.assertEqual(mod._normalize_name("_private"), "_private")
-        self.assertEqual(mod._normalize_name("nounderscoreatall"), "nounderscoreatall")
+        self.assertEqual(mod._normalize_name(NO_ALIAS_MGR, "MEMORY"), "MEMORY")
+        self.assertEqual(mod._normalize_name(NO_ALIAS_MGR, "_private"), "_private")
+        self.assertEqual(mod._normalize_name(NO_ALIAS_MGR, "nounderscoreatall"), "nounderscoreatall")
 
 
 class EnsureFrontMatterTest(unittest.TestCase):
@@ -227,6 +244,171 @@ class EnsureFrontMatterTest(unittest.TestCase):
         content = "body"
         result = mod._ensure_front_matter("UNKNOWNPFX_Y", content)
         self.assertIn("metadata:\n  type: unknownpfx", result)
+
+
+class SplitAliasTest(unittest.TestCase):
+    def test_no_memory_aliases_attribute_never_splits(self):
+        # Version-compat guard: an older fork's manager has no _memory_aliases at
+        # all -> every name is treated as non-aliased, exactly like before.
+        self.assertEqual(mod._split_alias(NO_ALIAS_MGR, "em/feature/FEATURE_X"),
+                          (None, "em/feature/FEATURE_X"))
+        self.assertEqual(mod._split_alias(NO_ALIAS_MGR, "DOM_X"), (None, "DOM_X"))
+
+    def test_registered_alias_is_split_off(self):
+        self.assertEqual(
+            mod._split_alias(ALIASED_MGR, "em/feature/FEATURE_X"),
+            ("em", "feature/FEATURE_X"),
+        )
+        self.assertEqual(
+            mod._split_alias(ALIASED_MGR, "em/FEATURE_X"),
+            ("em", "FEATURE_X"),
+        )
+
+    def test_unregistered_first_segment_not_treated_as_alias(self):
+        # "feature" is not a registered alias -> whole name is the remainder.
+        self.assertEqual(
+            mod._split_alias(ALIASED_MGR, "feature/FEATURE_X"),
+            (None, "feature/FEATURE_X"),
+        )
+
+    def test_md_suffix_stripped_before_split(self):
+        self.assertEqual(
+            mod._split_alias(ALIASED_MGR, "em/feature/FEATURE_X.md"),
+            ("em", "feature/FEATURE_X"),
+        )
+
+    def test_name_with_no_slash_never_aliased(self):
+        self.assertEqual(mod._split_alias(ALIASED_MGR, "DOM_X"), (None, "DOM_X"))
+
+
+class NormalizeNameAliasAwareTest(unittest.TestCase):
+    def test_aliased_missing_prefix_gets_subdir_under_alias(self):
+        self.assertEqual(
+            mod._normalize_name(ALIASED_MGR, "em/FEATURE_X"),
+            "em/feature/FEATURE_X",
+        )
+
+    def test_aliased_already_correct_unchanged(self):
+        self.assertEqual(
+            mod._normalize_name(ALIASED_MGR, "em/feature/FEATURE_X"),
+            "em/feature/FEATURE_X",
+        )
+
+    def test_aliased_wrong_prefix_corrected_under_alias(self):
+        self.assertEqual(
+            mod._normalize_name(ALIASED_MGR, "em/dom/FEATURE_X"),
+            "em/feature/FEATURE_X",
+        )
+
+    def test_non_aliased_name_on_aliased_manager_unchanged_behavior(self):
+        # A manager WITH aliases configured must still normalize a non-aliased
+        # name exactly as a manager with no aliases would.
+        self.assertEqual(mod._normalize_name(ALIASED_MGR, "DOM_X"), "dom/DOM_X")
+        self.assertEqual(
+            mod._normalize_name(ALIASED_MGR, "feature/DOM_X"), "dom/DOM_X"
+        )
+
+    def test_manager_without_aliases_matches_pre_alias_behavior(self):
+        self.assertEqual(mod._normalize_name(NO_ALIAS_MGR, "DOM_X"), "dom/DOM_X")
+        self.assertEqual(
+            mod._normalize_name(NO_ALIAS_MGR, "em/feature/FEATURE_X"),
+            # No _memory_aliases -> "em" is just an ordinary (wrong) prefix,
+            # corrected from the base name FEATURE_X's own derived prefix.
+            "feature/FEATURE_X",
+        )
+
+
+class PatchedWrapperAliasAwareTest(unittest.TestCase):
+    """Exercise the _patched_* wrappers directly (not through MemoryManager),
+    since load_serena_patch() only stubs serena.* — the functions themselves are
+    plain module-level callables taking `self` as their first argument."""
+
+    def test_aliased_save_passes_alias_preserving_name_to_original_save(self):
+        calls = []
+
+        def fake_original_save(self, name, content, is_tool_context=False):
+            calls.append((name, content))
+            return "saved"
+
+        old = mod._original_save_memory
+        mod._original_save_memory = fake_original_save
+        try:
+            result = mod._patched_save_memory(
+                ALIASED_MGR, "em/FEATURE_X", "plain body"
+            )
+        finally:
+            mod._original_save_memory = old
+
+        self.assertEqual(result, "saved")
+        self.assertEqual(len(calls), 1)
+        saved_name, saved_content = calls[0]
+        # Alias segment preserved, remainder normalized under it.
+        self.assertEqual(saved_name, "em/feature/FEATURE_X")
+        # Front-matter type derived from the remainder (feature), not from "em".
+        self.assertIn("metadata:\n  type: feature", saved_content)
+
+    def test_aliased_find_does_not_fall_back_to_primary_base_name(self):
+        # _original_find_memory always "misses" (returns None) both for the
+        # aliased name and its normalized form, simulating a memory that exists
+        # only under the primary (non-aliased) directory, e.g. feature/FEATURE_X.
+        calls = []
+
+        def fake_original_find(self, name):
+            calls.append(name)
+            if name == "FEATURE_X":
+                # Would only be hit by a wrongful bare-base-name fallback.
+                return "/primary/feature/FEATURE_X.md"
+            return None
+
+        old = mod._original_find_memory
+        mod._original_find_memory = fake_original_find
+        try:
+            result = mod._patched_find_memory(ALIASED_MGR, "em/FEATURE_X")
+        finally:
+            mod._original_find_memory = old
+
+        self.assertIsNone(result)
+        # Must never have tried the bare base name "FEATURE_X" — that would
+        # silently redirect an aliased lookup to the primary copy.
+        self.assertNotIn("FEATURE_X", calls)
+
+    def test_non_aliased_find_still_falls_back_to_bare_base_name(self):
+        calls = []
+
+        def fake_original_find(self, name):
+            calls.append(name)
+            if name == "FEATURE_X":
+                return "/primary/feature/FEATURE_X.md"
+            return None
+
+        old = mod._original_find_memory
+        mod._original_find_memory = fake_original_find
+        try:
+            result = mod._patched_find_memory(ALIASED_MGR, "wrongdir/FEATURE_X")
+        finally:
+            mod._original_find_memory = old
+
+        self.assertEqual(result, "/primary/feature/FEATURE_X.md")
+        self.assertIn("FEATURE_X", calls)
+
+    def test_manager_without_memory_aliases_attribute_works_as_before(self):
+        calls = []
+
+        def fake_original_find(self, name):
+            calls.append(name)
+            if name == "DOM_X":
+                return "/primary/dom/DOM_X.md"
+            return None
+
+        old = mod._original_find_memory
+        mod._original_find_memory = fake_original_find
+        try:
+            result = mod._patched_find_memory(NO_ALIAS_MGR, "wrongdir/DOM_X")
+        finally:
+            mod._original_find_memory = old
+
+        self.assertEqual(result, "/primary/dom/DOM_X.md")
+        self.assertIn("DOM_X", calls)
 
 
 if __name__ == "__main__":
