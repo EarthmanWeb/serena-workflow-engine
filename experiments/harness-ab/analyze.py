@@ -66,6 +66,116 @@ METRIC_LABELS = {
 }
 
 
+def _acceptance_category_pct(r, category):
+    """Pass % (0-100) for one acceptance category ('spec'/'doc'/'other') on
+    one run row, or None when that category has no tests recorded (older
+    rows predating the category breakdown, or a task with none of that
+    category)."""
+    acc = r.get("acceptance") or {}
+    cat = acc.get(category) or {}
+    total = cat.get("total") or 0
+    if not total:
+        return None
+    return 100.0 * (cat.get("passed") or 0) / total
+
+
+def _gate_bool(r, key):
+    gates = r.get("gates") or {}
+    val = gates.get(key)
+    return val if isinstance(val, bool) else None
+
+
+def _gate_int(r, key):
+    gates = r.get("gates") or {}
+    val = gates.get(key)
+    return val if isinstance(val, (int, float)) else None
+
+
+def _doc_rule_coverage(r):
+    gates = r.get("gates") or {}
+    val = gates.get("doc_rule_memories_coverage")
+    return val if isinstance(val, (int, float)) else None
+
+
+def spec_doc_pass_stats(rows):
+    """Per-arm spec/doc pass % (mean across runs that had tests in that
+    category). Returns {arm: {"spec_pass_pct_mean": float|None,
+    "doc_pass_pct_mean": float|None}}. Pure."""
+    by_arm = {}
+    for r in rows:
+        by_arm.setdefault(r.get("arm"), []).append(r)
+    out = {}
+    for arm, arm_rows in by_arm.items():
+        spec_vals = [v for v in (_acceptance_category_pct(r, "spec") for r in arm_rows) if v is not None]
+        doc_vals = [v for v in (_acceptance_category_pct(r, "doc") for r in arm_rows) if v is not None]
+        out[arm] = {
+            "spec_pass_pct_mean": mean(spec_vals),
+            "doc_pass_pct_mean": mean(doc_vals),
+        }
+    return out
+
+
+def gate_conformance_stats(rows):
+    """Per-arm gate-conformance rollup: init_chain_complete rate,
+    sweep_verified rate, mean edits_before_sweep, mean
+    doc_rule_memories_coverage. Returns {arm: {...}}. Pure. A run with no
+    "gates" field at all (pre-conformance-feature row) is excluded from the
+    rate/mean denominators for that row's arm rather than counted as a
+    failure, so an un-reparsed old stamp doesn't silently read as 0%
+    conformant."""
+    by_arm = {}
+    for r in rows:
+        by_arm.setdefault(r.get("arm"), []).append(r)
+    out = {}
+    for arm, arm_rows in by_arm.items():
+        with_gates = [r for r in arm_rows if isinstance(r.get("gates"), dict)]
+        n = len(with_gates)
+        init_vals = [_gate_bool(r, "init_chain_complete") for r in with_gates]
+        init_vals = [v for v in init_vals if v is not None]
+        sweep_vals = [_gate_bool(r, "sweep_verified") for r in with_gates]
+        sweep_vals = [v for v in sweep_vals if v is not None]
+        edits_vals = [v for v in (_gate_int(r, "edits_before_sweep") for r in with_gates) if v is not None]
+        coverage_vals = [v for v in (_doc_rule_coverage(r) for r in with_gates) if v is not None]
+
+        out[arm] = {
+            "n_with_gates": n,
+            "init_chain_complete_rate": (sum(1 for v in init_vals if v) / len(init_vals)) if init_vals else None,
+            "sweep_verified_rate": (sum(1 for v in sweep_vals if v) / len(sweep_vals)) if sweep_vals else None,
+            "edits_before_sweep_mean": mean(edits_vals),
+            "doc_rule_memories_coverage_mean": mean(coverage_vals),
+        }
+    return out
+
+
+def doc_rule_pass_matrix(rows):
+    """arm x rule pass matrix from each row's acceptance["doc_rules"] (see
+    acceptance.doc_rule_pass_matrix). Returns
+    {arm: {rule_id: {"passed": n, "total": n, "ok": bool|None,
+                      "memory": str}}} aggregated (summed) across every run
+    of that arm. A rule absent from a given row (task has no doc_rules, or
+    an old row predating this field) contributes nothing for that row.
+    Pure."""
+    matrix = {}
+    for r in rows:
+        arm = r.get("arm")
+        acc = r.get("acceptance") or {}
+        rules = acc.get("doc_rules") or {}
+        if not isinstance(rules, dict):
+            continue
+        arm_matrix = matrix.setdefault(arm, {})
+        for rule_id, rule_result in rules.items():
+            if not isinstance(rule_result, dict):
+                continue
+            entry = arm_matrix.setdefault(rule_id, {"passed": 0, "total": 0, "memory": rule_result.get("memory")})
+            entry["passed"] += rule_result.get("passed") or 0
+            entry["total"] += rule_result.get("total") or 0
+            entry["memory"] = entry["memory"] or rule_result.get("memory")
+    for arm_matrix in matrix.values():
+        for entry in arm_matrix.values():
+            entry["ok"] = (entry["passed"] == entry["total"]) if entry["total"] > 0 else None
+    return matrix
+
+
 def _swe_gate_count(r):
     """Count of `gated` events in this run's SWE stream (internal
     init/docs/edit gate firings recorded by the plugin itself), from
@@ -165,16 +275,34 @@ def aggregate(rows):
         swe_gate_counts = [_swe_gate_count(r) for r in arm_rows]
         swe_gate_counts = [v for v in swe_gate_counts if v is not None]
 
+        spec_vals = [v for v in (_acceptance_category_pct(r, "spec") for r in arm_rows) if v is not None]
+        doc_vals = [v for v in (_acceptance_category_pct(r, "doc") for r in arm_rows) if v is not None]
+
+        with_gates = [r for r in arm_rows if isinstance(r.get("gates"), dict)]
+        init_vals = [v for v in (_gate_bool(r, "init_chain_complete") for r in with_gates) if v is not None]
+        sweep_vals = [v for v in (_gate_bool(r, "sweep_verified") for r in with_gates) if v is not None]
+        edits_before_sweep_vals = [v for v in (_gate_int(r, "edits_before_sweep") for r in with_gates) if v is not None]
+        coverage_vals = [v for v in (_doc_rule_coverage(r) for r in with_gates) if v is not None]
+
         summary[arm] = {
             "n": n,
             "success_rate": success_rate,
             "acceptance_pass_pct_mean": acc_pass_pct_mean,
+            "spec_pass_pct_mean": mean(spec_vals),
+            "doc_pass_pct_mean": mean(doc_vals),
             "regression_ok_rate": regression_ok_rate,
             "timeouts": timeouts,
             "timeout_rate": timeout_rate,
             "stats": stats,
             "swe_gated_events_total": sum(swe_gate_counts) if swe_gate_counts else 0,
             "swe_top_event_types": _swe_top_event_types(arm_rows),
+            "gate_conformance": {
+                "n_with_gates": len(with_gates),
+                "init_chain_complete_rate": (sum(1 for v in init_vals if v) / len(init_vals)) if init_vals else None,
+                "sweep_verified_rate": (sum(1 for v in sweep_vals if v) / len(sweep_vals)) if sweep_vals else None,
+                "edits_before_sweep_mean": mean(edits_before_sweep_vals),
+                "doc_rule_memories_coverage_mean": mean(coverage_vals),
+            },
         }
 
     # vs-baseline deltas (% change of medians), for every arm except baseline
@@ -193,7 +321,7 @@ def aggregate(rows):
                     deltas[field] = 100.0 * (arm_med - base_med) / base_med
             s["vs_baseline_pct"] = deltas
 
-    return {"arms": summary, "arm_order": arm_order}
+    return {"arms": summary, "arm_order": arm_order, "doc_rule_matrix": doc_rule_pass_matrix(rows)}
 
 
 def format_markdown(agg):
@@ -201,17 +329,51 @@ def format_markdown(agg):
     arms = agg["arms"]
     arm_names = sorted(arms.keys(), key=lambda a: (a != "baseline", a))
 
-    lines.append("| arm | n | success_rate | acceptance_pass% | regression_ok_rate | timeouts |")
-    lines.append("|---|---|---|---|---|---|")
+    lines.append("| arm | n | success_rate | acceptance_pass% | spec_pass% | doc_pass% | regression_ok_rate | timeouts |")
+    lines.append("|---|---|---|---|---|---|---|---|")
     for arm in arm_names:
         s = arms[arm]
         lines.append(
             f"| {arm} | {s['n']} | "
             f"{_fmt_pct(s['success_rate'])} | "
             f"{_fmt(s['acceptance_pass_pct_mean'])} | "
+            f"{_fmt(s.get('spec_pass_pct_mean'))} | "
+            f"{_fmt(s.get('doc_pass_pct_mean'))} | "
             f"{_fmt_pct(s['regression_ok_rate'])} | "
             f"{s['timeouts']} |"
         )
+
+    lines.append("")
+    lines.append("| arm | n w/ gates | init_chain_complete% | sweep_verified% | edits_before_sweep (mean) | doc_rule_coverage (mean) |")
+    lines.append("|---|---|---|---|---|---|")
+    for arm in arm_names:
+        gc = arms[arm].get("gate_conformance") or {}
+        lines.append(
+            f"| {arm} | {gc.get('n_with_gates', 0)} | "
+            f"{_fmt_pct(gc.get('init_chain_complete_rate'))} | "
+            f"{_fmt_pct(gc.get('sweep_verified_rate'))} | "
+            f"{_fmt(gc.get('edits_before_sweep_mean'))} | "
+            f"{_fmt_pct(gc.get('doc_rule_memories_coverage_mean'))} |"
+        )
+
+    doc_matrix = agg.get("doc_rule_matrix") or {}
+    if doc_matrix:
+        rule_ids = sorted({rid for arm_matrix in doc_matrix.values() for rid in arm_matrix})
+        if rule_ids:
+            lines.append("")
+            lines.append("| arm | " + " | ".join(rule_ids) + " |")
+            lines.append("|---|" + "---|" * len(rule_ids))
+            for arm in arm_names:
+                arm_matrix = doc_matrix.get(arm, {})
+                cells = []
+                for rid in rule_ids:
+                    entry = arm_matrix.get(rid)
+                    if not entry:
+                        cells.append("-")
+                    else:
+                        mark = "OK" if entry.get("ok") else ("FAIL" if entry.get("ok") is False else "-")
+                        cells.append(f"{mark} ({entry['passed']}/{entry['total']})")
+                lines.append(f"| {arm} | " + " | ".join(cells) + " |")
 
     lines.append("")
     lines.append("| arm | metric | median | mean | min | max | vs baseline % |")

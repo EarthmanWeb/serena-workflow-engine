@@ -381,12 +381,126 @@ def tool_mix_rows(rows, top_n=TOOL_TOP_N):
     return tool_order, per_arm
 
 
+def spec_doc_bar_rows(rows):
+    """Per arm: {"spec": pct|None, "doc": pct|None} mean pass rate, for the
+    grouped spec-vs-doc bar chart. Pure."""
+    analyze = get_analyze()
+    stats = analyze.spec_doc_pass_stats(rows)
+    out = {}
+    for arm in ARM_ORDER:
+        s = stats.get(arm, {})
+        out[arm] = {
+            "spec": s.get("spec_pass_pct_mean"),
+            "doc": s.get("doc_pass_pct_mean"),
+        }
+    return out
+
+
+def doc_rule_heatmap_rows(rows):
+    """(rule_ids, {(arm, run_id): {rule_id: bool|None}}) for the arm-run x
+    doc-rule heatmap. bool is the per-run per-rule pass/fail (rule_result
+    "ok"); None means that rule had no tests recorded for that run (task has
+    no doc_rules, or an older row predating the field). Pure."""
+    rule_ids = set()
+    per_cell = {}
+    for r in rows:
+        arm = r.get("arm")
+        if arm not in ARM_ORDER:
+            continue
+        run_id = r.get("run_id") or f"{arm}-t{r.get('trial')}"
+        acc = r.get("acceptance") or {}
+        doc_rules = acc.get("doc_rules") or {}
+        if not isinstance(doc_rules, dict) or not doc_rules:
+            continue
+        cell = per_cell.setdefault((arm, run_id), {})
+        for rule_id, rule_result in doc_rules.items():
+            if not isinstance(rule_result, dict):
+                continue
+            rule_ids.add(rule_id)
+            cell[rule_id] = rule_result.get("ok")
+    return sorted(rule_ids), per_cell
+
+
+def gate_conformance_rows(rows):
+    """Per run: gate-conformance table row (init/sweep/edits-before-sweep/
+    doc-rule-coverage), for the conformance table chart. Pure."""
+    out = []
+    for r in rows:
+        arm = r.get("arm")
+        if arm not in ARM_ORDER:
+            continue
+        gates = r.get("gates") or {}
+        out.append({
+            "run_id": r.get("run_id") or f"{arm}-t{r.get('trial')}",
+            "arm": arm,
+            "trial": r.get("trial"),
+            "has_gates": isinstance(r.get("gates"), dict),
+            "init_chain_complete": gates.get("init_chain_complete"),
+            "sweep_verified": gates.get("sweep_verified"),
+            "edits_before_sweep": gates.get("edits_before_sweep"),
+            "doc_rule_memories_coverage": gates.get("doc_rule_memories_coverage"),
+            "memories_read_channel": gates.get("memories_read_channel"),
+        })
+    return out
+
+
+def memory_coverage_rows(rows):
+    """Per run: (arm, trial, n_memories_read, doc_rule_coverage) for the
+    memory-coverage dot plot. Pure."""
+    out = []
+    for r in rows:
+        arm = r.get("arm")
+        if arm not in ARM_ORDER:
+            continue
+        gates = r.get("gates") or {}
+        memories_read = gates.get("memories_read") or []
+        out.append({
+            "run_id": r.get("run_id") or f"{arm}-t{r.get('trial')}",
+            "arm": arm,
+            "trial": r.get("trial"),
+            "n_memories_read": len(memories_read) if isinstance(memories_read, list) else 0,
+            "doc_rule_memories_coverage": gates.get("doc_rule_memories_coverage"),
+            "channel": gates.get("memories_read_channel"),
+        })
+    return out
+
+
 def compute_verdict(agg):
-    """Plain-language one-sentence verdict from aggregate() output. Pure."""
+    """Plain-language one-sentence verdict from aggregate() output. Pure.
+
+    Prioritizes doc pass % and gate conformance (section 5's steer: proving
+    the plugin's docs-driven domain-rule compliance and gate usage matters
+    more here than the raw acceptance success rate) — leads with the best
+    doc_pass_pct_mean arm and its init_chain_complete/sweep_verified rates
+    when any arm has gate/doc data, falling back to the plain
+    acceptance-success-rate verdict (the pre-existing behavior) when neither
+    is present (e.g. a v1-shaped stamp reparsed before doc_rules existed)."""
     arms = agg.get("arms", {})
     present = [a for a in ARM_ORDER if a in arms]
     if not present:
         return "No runs to report."
+
+    best_doc_arm, best_doc_pct = None, -1
+    for a in present:
+        pct = arms[a].get("doc_pass_pct_mean")
+        if pct is not None and pct > best_doc_pct:
+            best_doc_pct, best_doc_arm = pct, a
+
+    parts = []
+    if best_doc_arm is not None:
+        gc = arms[best_doc_arm].get("gate_conformance") or {}
+        init_rate = gc.get("init_chain_complete_rate")
+        sweep_rate = gc.get("sweep_verified_rate")
+        gate_bits = []
+        if init_rate is not None:
+            gate_bits.append(f"init-chain complete {init_rate * 100:.0f}%")
+        if sweep_rate is not None:
+            gate_bits.append(f"sweep verified {sweep_rate * 100:.0f}%")
+        gate_str = f" ({', '.join(gate_bits)})" if gate_bits else ""
+        parts.append(
+            f"{ARM_LABELS.get(best_doc_arm, best_doc_arm)} had the highest doc-rule pass rate "
+            f"({best_doc_pct:.0f}%){gate_str}."
+        )
 
     best_arm, best_rate = None, -1
     for a in present:
@@ -394,13 +508,12 @@ def compute_verdict(agg):
         if rate is not None and rate > best_rate:
             best_rate, best_arm = rate, a
 
-    parts = []
     if best_arm is not None:
         parts.append(
             f"{ARM_LABELS.get(best_arm, best_arm)} had the highest acceptance success rate "
             f"({best_rate * 100:.0f}%)."
         )
-    else:
+    elif not parts:
         parts.append("No arm had measurable acceptance results.")
 
     if "baseline" in arms:
@@ -783,6 +896,170 @@ def stream_event_heatmap(table):
     )
 
 
+def spec_doc_grouped_bar_chart(spec_doc_by_arm, width=640, row_h=20, gap=8, pair_gap=4):
+    """Grouped bars: spec vs doc pass % per arm. Arm color distinguishes the
+    arm; spec vs doc distinguished by fill lightness (spec = full arm color,
+    doc = lightened via opacity) with a legend + direct row labels, never
+    relying on hue alone."""
+    pad_left = 190
+    pad_right = 60
+    pad_top = 30
+    pad_bottom = 10
+    arms_present = [a for a in ARM_ORDER if a in spec_doc_by_arm]
+    n = len(arms_present)
+    height = pad_top + pad_bottom + n * (2 * row_h + pair_gap + gap)
+    plot_w = width - pad_left - pad_right
+    xscale = linear_scale((0, 100), (0, plot_w))
+
+    parts = [svg_open(width, height)]
+    parts.append('<text x="0" y="12" class="chart-title" font-size="11">Spec vs doc-rule pass % per arm (mean across runs)</text>')
+    # legend
+    parts.append(f'<rect x="{pad_left - 178}" y="18" width="10" height="10" fill="var(--arm-baseline)" />')
+    parts.append(f'<text x="{pad_left - 164}" y="27" class="legend-label" font-size="9">spec</text>')
+    parts.append(f'<rect x="{pad_left - 130}" y="18" width="10" height="10" fill="var(--arm-baseline)" opacity="0.45" />')
+    parts.append(f'<text x="{pad_left - 116}" y="27" class="legend-label" font-size="9">doc</text>')
+
+    y = pad_top + 6
+    for arm in arms_present:
+        vals = spec_doc_by_arm[arm]
+        color = f'var(--arm-{arm})'
+        parts.append(f'<text x="{pad_left - 8}" y="{y + row_h - 4:.1f}" text-anchor="end" class="row-label" font-size="9.5">{esc(ARM_LABELS.get(arm, arm))}</text>')
+        for key, opacity, label in (("spec", 1.0, "spec"), ("doc", 0.45, "doc")):
+            v = vals.get(key)
+            cy = y
+            if v is None:
+                parts.append(f'<text x="{pad_left}" y="{cy + row_h/2:.1f}" class="tick-label" font-size="9">no {label} tests</text>')
+            else:
+                w = max(xscale(v), 0)
+                parts.append(
+                    f'<rect x="{pad_left}" y="{cy:.1f}" width="{w:.1f}" height="{row_h - 4}" '
+                    f'fill="{color}" opacity="{opacity}" rx="3" class="mark-bar" '
+                    f'data-tip="{esc(ARM_LABELS.get(arm, arm))} {label}: {fmt_pct(v)}">'
+                    f'<title>{esc(ARM_LABELS.get(arm, arm))} {label}: {fmt_pct(v)}</title></rect>'
+                )
+                parts.append(f'<text x="{pad_left + w + 6:.1f}" y="{cy + row_h/2 + 3:.1f}" class="tick-label" font-size="9">{label} {fmt_pct(v)}</text>')
+            y += row_h
+        y += pair_gap + gap
+
+    parts.append("</svg>")
+    return "".join(parts), height
+
+
+def doc_rule_heatmap_table(rule_ids, per_cell):
+    """Sequential single-hue (blue) heatmap table: rows = arm-run, columns =
+    doc rule id, cell = pass (✓)/fail (✗)/no-data (–) with a text label
+    always shown alongside the icon (never icon-only)."""
+    if not rule_ids:
+        return '<p class="muted">No doc_rules.json for this task, or no runs have per-rule results yet.</p>'
+    cells_keys = sorted(per_cell.keys(), key=lambda k: (ARM_ORDER.index(k[0]) if k[0] in ARM_ORDER else 99, k[1]))
+    if not cells_keys:
+        return '<p class="muted">No doc-rule results recorded for any run.</p>'
+
+    head = "".join(f'<th scope="col">{esc(rid)}</th>' for rid in rule_ids)
+    rows_html = []
+    for (arm, run_id) in cells_keys:
+        cell_vals = per_cell[(arm, run_id)]
+        tds = []
+        for rid in rule_ids:
+            ok = cell_vals.get(rid)
+            if ok is True:
+                t, icon, label = 1.0, "✓", "pass"
+            elif ok is False:
+                t, icon, label = 0.15, "✗", "fail"
+            else:
+                t, icon, label = 0.0, "–", "no data"
+            tds.append(
+                f'<td class="heat-cell" style="--heat-t:{t:.3f}" '
+                f'data-tip="{esc(rid)} ({esc(run_id)}): {label}">'
+                f'<span class="sr-only">{esc(rid)}: </span>{icon} {label}</td>'
+            )
+        rows_html.append(f'<tr><th scope="row">{esc(ARM_LABELS.get(arm, arm))} {esc(run_id)}</th>{"".join(tds)}</tr>')
+
+    return (
+        '<table class="heatmap-table"><thead><tr><th scope="col">run</th>'
+        f'{head}</tr></thead><tbody>{"".join(rows_html)}</tbody></table>'
+    )
+
+
+def gate_conformance_table(gate_rows):
+    """Per-run gate-conformance table: init chain / sweep verified / edits
+    before sweep / doc-rule coverage, each cell a checkmark/cross PLUS a
+    text label (never icon-only)."""
+    ordered = sorted(gate_rows, key=lambda r: (ARM_ORDER.index(r["arm"]) if r["arm"] in ARM_ORDER else 99, r["trial"] if r["trial"] is not None else 0))
+
+    def _bool_cell(v):
+        if v is True:
+            return '<td class="gate-ok">✓ yes</td>'
+        if v is False:
+            return '<td class="gate-fail">✗ no</td>'
+        return '<td class="muted">– n/a</td>'
+
+    rows_html = []
+    for r in ordered:
+        edits = r.get("edits_before_sweep")
+        edits_cell = (
+            f'<td class="gate-ok">✓ 0</td>' if edits == 0
+            else (f'<td class="gate-fail">✗ {edits}</td>' if isinstance(edits, (int, float)) else '<td class="muted">– n/a</td>')
+        )
+        cov = r.get("doc_rule_memories_coverage")
+        cov_cell = f'<td>{fmt_pct(cov * 100 if isinstance(cov, (int, float)) else None)}</td>' if cov is not None else '<td class="muted">– n/a</td>'
+        rows_html.append(
+            f'<tr><td>{esc(ARM_LABELS.get(r["arm"], r["arm"]))}</td><td>{esc(r["trial"])}</td>'
+            f'{_bool_cell(r.get("init_chain_complete"))}{_bool_cell(r.get("sweep_verified"))}'
+            f'{edits_cell}{cov_cell}<td>{esc(r.get("memories_read_channel") or "–")}</td></tr>'
+        )
+
+    return (
+        '<table class="fallback-table"><thead><tr><th>arm</th><th>trial</th>'
+        '<th>init chain complete</th><th>sweep verified</th>'
+        '<th>edits before sweep</th><th>doc-rule coverage</th><th>memory channel</th></tr></thead>'
+        f'<tbody>{"".join(rows_html)}</tbody></table>'
+    )
+
+
+def memory_coverage_dot_chart(mem_rows, width=640, height=170):
+    """Dot plot: doc-rule memory coverage (%) per run, arm-colored, with
+    n_memories_read shown in the tooltip/fallback table."""
+    pad_left = 150
+    pad_right = 24
+    pad_top = 14
+    pad_bottom = 30
+    plot_w = width - pad_left - pad_right
+    arms_present = [a for a in ARM_ORDER if any(r["arm"] == a for r in mem_rows)]
+    row_h = (height - pad_top - pad_bottom) / max(len(arms_present) or 1, 1)
+    xscale = linear_scale((0, 100), (pad_left, width - pad_right))
+
+    parts = [svg_open(width, height)]
+    parts.append('<text x="0" y="10" class="chart-title" font-size="11">Doc-rule memory coverage per run (% of task doc_rules memories read)</text>')
+    for tv in (0, 25, 50, 75, 100):
+        x = xscale(tv)
+        parts.append(f'<line x1="{x:.1f}" y1="{pad_top}" x2="{x:.1f}" y2="{height - pad_bottom}" class="grid-line" />')
+        parts.append(f'<text x="{x:.1f}" y="{height - pad_bottom + 14}" class="tick-label" font-size="9" text-anchor="middle">{tv}%</text>')
+
+    by_arm = {a: [] for a in arms_present}
+    for r in mem_rows:
+        if r["arm"] in by_arm:
+            by_arm[r["arm"]].append(r)
+
+    for i, arm in enumerate(arms_present):
+        cy = pad_top + row_h * i + row_h / 2
+        parts.append(f'<text x="{pad_left - 10}" y="{cy + 3:.1f}" text-anchor="end" class="row-label" font-size="10">{esc(ARM_LABELS.get(arm, arm))}</text>')
+        for r in by_arm.get(arm, []):
+            cov = r.get("doc_rule_memories_coverage")
+            if cov is None:
+                continue
+            cx = xscale(cov * 100)
+            color = f'var(--arm-{arm})'
+            parts.append(
+                f'<circle cx="{cx:.1f}" cy="{cy:.1f}" r="5" fill="{color}" stroke="var(--surface-1)" '
+                f'stroke-width="2" class="mark-dot" '
+                f'data-tip="{esc(ARM_LABELS.get(arm, arm))} t{esc(r["trial"])}: {fmt_pct(cov*100)} coverage, {r["n_memories_read"]} memories read">'
+                f'<title>{esc(ARM_LABELS.get(arm, arm))} t{esc(r["trial"])}: {fmt_pct(cov*100)} coverage, {r["n_memories_read"]} memories read</title></circle>'
+            )
+    parts.append("</svg>")
+    return "".join(parts)
+
+
 # --------------------------------------------------------------------------
 # Per-run table.
 # --------------------------------------------------------------------------
@@ -1047,6 +1324,8 @@ table.run-table thead th:hover { color: var(--text-primary); }
 .sort-indicator.desc::after { content: " \\2193"; }
 .success-yes { color: var(--success-good); font-weight: 600; }
 .success-no { color: var(--status-critical); font-weight: 600; }
+.gate-ok { color: var(--success-good); font-weight: 600; }
+.gate-fail { color: var(--status-critical); font-weight: 600; }
 
 .method-section ul { padding-left: 18px; color: var(--text-secondary); font-size: 0.88rem; line-height: 1.5; }
 
@@ -1216,6 +1495,34 @@ def render_report(rows, meta, title="Harness A/B Results", notes_html=None):
         tool_fallback_rows.append([ARM_LABELS.get(arm, arm)] + [fmt_num(row.get(t, 0)) for t in tool_order])
     tool_fallback = build_fallback_table(tool_fallback_rows, ["arm"] + tool_order)
 
+    # --- spec vs doc pass % (section 5, chart a) ---
+    spec_doc_by_arm = spec_doc_bar_rows(rows)
+    spec_doc_svg, _spec_doc_h = spec_doc_grouped_bar_chart(spec_doc_by_arm)
+    spec_doc_fallback = build_fallback_table(
+        [(ARM_LABELS.get(a, a), fmt_pct(spec_doc_by_arm[a]["spec"]), fmt_pct(spec_doc_by_arm[a]["doc"]))
+         for a in ARM_ORDER if a in spec_doc_by_arm],
+        ["arm", "spec pass %", "doc pass %"]
+    )
+
+    # --- doc-rule heatmap (chart b) ---
+    rule_ids, per_cell = doc_rule_heatmap_rows(rows)
+    doc_rule_heatmap_html = doc_rule_heatmap_table(rule_ids, per_cell)
+
+    # --- gate conformance table (chart c) ---
+    gate_rows_data = gate_conformance_rows(rows)
+    gate_table_html = gate_conformance_table(gate_rows_data)
+
+    # --- memory coverage dot plot (chart d) ---
+    mem_rows_data = memory_coverage_rows(rows)
+    mem_coverage_svg = memory_coverage_dot_chart(mem_rows_data)
+    mem_coverage_fallback = build_fallback_table(
+        [(ARM_LABELS.get(r["arm"], r["arm"]), r["trial"], r["n_memories_read"],
+          fmt_pct(r["doc_rule_memories_coverage"] * 100 if r["doc_rule_memories_coverage"] is not None else None),
+          r.get("channel") or "–")
+         for r in sorted(mem_rows_data, key=lambda r: (ARM_ORDER.index(r["arm"]) if r["arm"] in ARM_ORDER else 99, r["trial"] or 0))],
+        ["arm", "trial", "memories read (n)", "doc-rule coverage", "channel"]
+    )
+
     # --- per-run table ---
     run_table_html = per_run_table(rows)
 
@@ -1304,6 +1611,28 @@ body {{ font-family: 'Inter', system-ui, -apple-system, "Segoe UI", sans-serif; 
     <h2>Tool mix</h2>
     {tool_svg}
     <details class="table-fallback"><summary>Data table</summary>{tool_fallback}</details>
+  </section>
+
+  <section class="chart-section">
+    <h2>Spec vs doc-rule pass rate</h2>
+    {spec_doc_svg}
+    <details class="table-fallback"><summary>Data table</summary>{spec_doc_fallback}</details>
+  </section>
+
+  <section class="chart-section">
+    <h2>Doc-rule pass/fail by run</h2>
+    <div class="table-wrap">{doc_rule_heatmap_html}</div>
+  </section>
+
+  <section class="chart-section">
+    <h2>Gate conformance per run</h2>
+    <div class="table-wrap">{gate_table_html}</div>
+  </section>
+
+  <section class="chart-section">
+    <h2>Memory consultation coverage</h2>
+    {mem_coverage_svg}
+    <details class="table-fallback"><summary>Data table</summary>{mem_coverage_fallback}</details>
   </section>
 
   <section class="chart-section">

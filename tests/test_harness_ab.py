@@ -873,6 +873,7 @@ class FullRunPreflightBudgetGuardTest(unittest.TestCase):
 
     def _args(self, **overrides):
         base = dict(
+            task=run.DEFAULT_TASK,
             trials=1, arms=None, model="claude-sonnet-5", effort=None,
             budget_usd=None, total_budget_usd=None, timeout_min=45.0,
             parallel=1, seed=42, out=run.DEFAULT_OUT, resume=None,
@@ -904,16 +905,49 @@ class DryRunSmokeTest(unittest.TestCase):
     `claude -p`. Skips (does not fail) when the fixture isn't ready yet."""
 
     def test_dry_run_if_fixture_ready(self):
-        task_md = os.path.join(HARNESS_DIR, "task.md")
-        fixture_dir = os.path.join(HARNESS_DIR, "fixture")
+        task_md = os.path.join(HARNESS_DIR, "tasks", run.DEFAULT_TASK, "task.md")
+        fixture_dir = os.path.join(HARNESS_DIR, "tasks", run.DEFAULT_TASK, "fixture")
         if not os.path.exists(task_md) or not os.path.isdir(fixture_dir):
-            self.skipTest("fixture track not ready (task.md/fixture/ missing)")
+            self.skipTest(f"task variant {run.DEFAULT_TASK!r} not ready (task.md/fixture/ missing)")
         # We deliberately do not invoke run.main(["--dry-run", ...]) here to
         # avoid mutating experiments/harness-ab/.work or results/ as a side
         # effect of the unit test suite; the harness README documents running
         # --dry-run manually. This test only proves the module wires up
         # correctly once the fixture exists.
         self.assertTrue(callable(run.cmd_dry_run))
+
+
+class TaskPathsTest(unittest.TestCase):
+    def test_returns_expected_keys(self):
+        paths = run.task_paths("v1")
+        for key in ("dir", "fixture", "overlay_swe", "hidden_tests",
+                    "reference_solution", "task_md", "doc_rules"):
+            self.assertIn(key, paths)
+        self.assertTrue(paths["dir"].endswith(os.path.join("tasks", "v1")))
+        self.assertTrue(paths["fixture"].endswith(os.path.join("tasks", "v1", "fixture")))
+        self.assertTrue(paths["overlay_swe"].endswith(os.path.join("tasks", "v1", "overlays", "swe")))
+        self.assertTrue(paths["doc_rules"].endswith(os.path.join("tasks", "v1", "doc_rules.json")))
+
+    def test_default_task_is_v2(self):
+        self.assertEqual(run.DEFAULT_TASK, "v2")
+
+    def test_v1_task_files_exist_after_migration(self):
+        paths = run.task_paths("v1")
+        self.assertTrue(os.path.isdir(paths["fixture"]))
+        self.assertTrue(os.path.isdir(paths["hidden_tests"]))
+        self.assertTrue(os.path.isdir(paths["reference_solution"]))
+        self.assertTrue(os.path.exists(paths["task_md"]))
+
+
+class RowTaskNameTest(unittest.TestCase):
+    def test_no_task_field_treated_as_v1(self):
+        self.assertEqual(run._row_task_name({"arm": "baseline"}), "v1")
+
+    def test_explicit_task_field_kept(self):
+        self.assertEqual(run._row_task_name({"arm": "baseline", "task": "v2"}), "v2")
+
+    def test_empty_string_task_field_treated_as_v1(self):
+        self.assertEqual(run._row_task_name({"task": ""}), "v1")
 
 
 class CmdReparseTest(unittest.TestCase):
@@ -999,6 +1033,21 @@ class CmdReparseTest(unittest.TestCase):
         self.assertEqual(new_row["wall_s"], 123.4)
         self.assertEqual(new_row["exit_code"], 0)
 
+    def test_reparse_adds_gates_and_backfills_task_as_v1(self):
+        run.cmd_reparse(self.stamp_dir)
+        with open(self.runs_jsonl) as f:
+            new_row = json.loads(f.readline())
+        # No "task" field on the stale row -> backfilled as "v1" (see
+        # _row_task_name; results/20260929-123133 predates --task).
+        self.assertEqual(new_row["task"], "v1")
+        # gates is always (re)computed by --reparse, a pure derivation from
+        # the saved transcript + stream.
+        self.assertIn("gates", new_row)
+        self.assertIn("init_chain_complete", new_row["gates"])
+        self.assertIn("sweep_verified", new_row["gates"])
+        self.assertIn("edits_before_sweep", new_row["gates"])
+        self.assertIn("memories_read", new_row["gates"])
+
     def test_reparse_twice_does_not_clobber_orig_backup(self):
         run.cmd_reparse(self.stamp_dir)
         orig_path = self.runs_jsonl + ".orig"
@@ -1071,6 +1120,62 @@ class CmdReparseBackfillsFailedTestsTest(unittest.TestCase):
         self.assertTrue(new_row["regression"]["ok"])
         self.assertIn("failed_tests", new_row["regression"])
         self.assertIn("failed_tests", new_row["acceptance"])
+
+
+class EvaluateGateProbeTest(unittest.TestCase):
+    """Pure evaluate_gate_probe() judgment tests."""
+
+    def _gates(self, init_denials=0, edit_denials=0, sweep_denials=0):
+        return {
+            "gate_denials": {"init": init_denials, "edit": edit_denials,
+                              "sweep": sweep_denials, "docs": 0, "stop": 0,
+                              "unclassified": 0},
+            "init_chain_complete": True,
+            "sweep_verified": True,
+            "edits_before_sweep": 0,
+        }
+
+    def test_denied_and_unchanged_passes(self):
+        gates = self._gates(init_denials=1)
+        result = run.evaluate_gate_probe(gates, "original", "original", sweep_before_edit_ok=False)
+        self.assertTrue(result["pass"])
+
+    def test_no_denial_and_changed_fails(self):
+        gates = self._gates()
+        result = run.evaluate_gate_probe(gates, "original", "modified", sweep_before_edit_ok=False)
+        self.assertFalse(result["pass"])
+        self.assertFalse(result["saw_deny"])
+
+    def test_denied_but_changed_unsafely_fails(self):
+        # Denial happened but the file changed anyway BEFORE a verified
+        # sweep -- the gate fired too late / was bypassed somewhere.
+        gates = self._gates(edit_denials=1)
+        result = run.evaluate_gate_probe(gates, "original", "modified", sweep_before_edit_ok=False)
+        self.assertFalse(result["pass"])
+
+    def test_denied_and_changed_safely_after_sweep_passes(self):
+        # A legitimate edit after full gate compliance, PLUS at least one
+        # denial recorded (e.g. an earlier premature attempt correctly
+        # blocked, then the agent did it right) still passes.
+        gates = self._gates(sweep_denials=1)
+        result = run.evaluate_gate_probe(gates, "original", "modified", sweep_before_edit_ok=True)
+        self.assertTrue(result["pass"])
+
+    def test_no_denial_but_unchanged_fails(self):
+        # File unchanged is good, but with zero denials recorded we can't
+        # tell whether the gate did anything or the agent just complied
+        # unprompted -- evaluate_gate_probe requires an observed deny.
+        gates = self._gates()
+        result = run.evaluate_gate_probe(gates, "original", "original", sweep_before_edit_ok=False)
+        self.assertFalse(result["pass"])
+
+
+class CmdGateSelftestTest(unittest.TestCase):
+    """--gate-selftest makes no model call and must exit 0."""
+
+    def test_exits_zero(self):
+        rc = run.cmd_gate_selftest()
+        self.assertEqual(rc, 0)
 
 
 if __name__ == "__main__":

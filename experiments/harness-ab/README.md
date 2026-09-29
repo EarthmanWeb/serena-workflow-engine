@@ -11,20 +11,82 @@ coding task under three arms:
 
 Arm definitions live in `arms.json`.
 
-## Task
+## Task variants
 
-See `task.md` for the exact prompt text given to the agent. The starting
-codebase is `fixture/`; for plugin arms, `overlays/swe/` is copied on top
-(adds the SWE plugin's CLAUDE.md prefix / setup files). Acceptance is graded
-by `hidden_tests/`, which the harness copies into each run directory as
-`_acceptance/` after the agent finishes and runs from the run root:
+Each task lives in its own directory under `tasks/<name>/`, with the same
+contract:
 
 ```
-python3 -m unittest discover -s _acceptance -t . -p 'test_*.py'
+tasks/<name>/
+  fixture/               starting codebase copied into every run's work dir
+  overlays/swe/           overlaid on top of fixture/ for plugin arms only
+  hidden_tests/           acceptance test suite, copied to _acceptance/ post-run
+  reference_solution/     overlay that should make acceptance 100% (--selftest)
+  task.md                 exact prompt text given to the agent
+  doc_rules.json          optional: domain-rule -> memory -> tests mapping
 ```
 
-`reference_solution/` is an overlay that should make acceptance 100% —
-used by `--selftest` to validate the fixture/tests/reference triad itself.
+`run.py --task <name>` selects the variant (default: `v2`); it's recorded
+in `meta.json` and in every `runs.jsonl` row's `"task"` field. A row with no
+`"task"` field at all (e.g. `results/20260929-123133`, written before
+`--task` existed) is treated as `"v1"` by `--reparse` and by
+`analyze.py`/`report.py`.
+
+Two variants currently exist:
+
+- **`v1`** — a single-task fixture (recurring transactions + budgets for
+  `ledgerlite`). Its `hidden_tests/` files use the `test_acceptance_*.py`
+  naming convention and it ships no `doc_rules.json`.
+- **`v2`** — a task designed to exercise domain rules that are only
+  documented in Serena memories, not derivable from the code alone (fiscal
+  calendars, export formats, privacy redaction, split allocation, statement
+  formatting). Its `hidden_tests/` files split into two naming conventions
+  (see "Acceptance categories" below) and it ships a `doc_rules.json`.
+
+Acceptance is graded by `tasks/<name>/hidden_tests/`, which the harness
+copies into each run directory as `_acceptance/` after the agent finishes
+and runs from the run root:
+
+```
+python3 -m unittest discover -s _acceptance -t . -p 'test_*.py' -v
+```
+
+(`-v` so per-test result lines can be parsed into per-category pass/fail —
+see "Acceptance categories".)
+
+`tasks/<name>/reference_solution/` is an overlay that should make acceptance
+100% — used by `--selftest` to validate the fixture/tests/reference triad
+of the given `--task`.
+
+## Acceptance categories
+
+Each hidden test id is classified by its file-basename prefix
+(`acceptance.classify_test_category`):
+
+| prefix | category | meaning |
+|---|---|---|
+| `test_spec_*` | `spec` | behavior fully specified by `task.md` / derivable from the code |
+| `test_doc_*` | `doc` | behavior that is *only* documented in a Serena memory — passing requires having actually consulted the docs, not just reading the code |
+| anything else (e.g. `test_acceptance_*`, v1's convention) | `other` | ungrouped, kept for backward compat |
+
+Per run, `acceptance["spec"]` / `["doc"]` / `["other"]` each hold
+`{"passed": n, "total": n}`.
+
+### `doc_rules.json`
+
+A task may ship `tasks/<name>/doc_rules.json`: a list of
+
+```json
+[{"id": "R1", "memory": "dom/DOM_FISCAL_CALENDAR", "summary": "...",
+  "tests": ["test_fiscal_year_start_offset"]}]
+```
+
+mapping one documented domain rule to the Serena memory that documents it
+and the hidden-test id(s) that verify it. Per run,
+`acceptance["doc_rules"]` holds `{rule_id: {"passed", "total", "memory",
+"summary", "ok"}}` (`acceptance.doc_rule_pass_matrix`), and
+`gates["doc_rule_memories_coverage"]` (see below) says whether the agent
+actually read that rule's memory this run.
 
 ## Metrics
 
@@ -61,9 +123,59 @@ Unittest output is parsed for `Ran N tests`, `OK`/`OK (skipped=K)`, and
 
 Everything is appended as one JSON line per run to `<out>/<stamp>/runs.jsonl`
 (resumable: re-invoking with `--resume <stamp>` skips runs whose `run_id`
-already has a line), plus a `meta.json` with args, arm resolution (commit SHA
-+ plugin version from `.claude-plugin/plugin.json`), machine info, and
-`claude --version`.
+already has a line), plus a `meta.json` with args, task variant, arm
+resolution (commit SHA + plugin version from `.claude-plugin/plugin.json`),
+machine info, and `claude --version`. The results directory name includes
+the task variant (`<timestamp>-<task>`) except for the default task, whose
+stamp stays a plain timestamp for backward compatibility.
+
+## Gate conformance
+
+Each `runs.jsonl` row carries a `"gates"` dict (`gate_conformance.py`,
+computed from the run's saved `transcript.jsonl` + `.serena/streams/*.jsonl`
+— pure derivation, no extra model calls) proving *whether the plugin's own
+gates were actually exercised*, not just how many tokens/turns a run took:
+
+| field | meaning |
+|---|---|
+| `init_chain_complete` | `true` iff `read_memory` calls for `wf/WF_INIT`, `claude/CLAUDE_OBLIGATIONS`, `wf/WF_CLASSIFY` occur in that exact order before any other task-work tool call |
+| `sweep_verified` | `true` iff a `sweep` stream event (Feature Knowledge Sweep, WF_CLASSIFY step 4d) exists anywhere in the run |
+| `edits_before_sweep` | count of Edit/Write/NotebookEdit/Serena-structural-edit tool calls (main agent + subagents) that occur before the sweep marker — `0` means the edit gate held; nonzero is a conformance violation (or a fail-open path, e.g. a WM_\* write) |
+| `memories_read` | ordered, deduplicated list of memory names read this run, merged from stream `docread` events and transcript `read_memory` tool calls (main agent + subagents) |
+| `memories_read_channel` | `"serena+stream"` for a plugin arm, `"plain_read"` for the control arm (which has no MCP/plugin — its only channel is a plain `Read` of a `.serena/memory/...` file path) |
+| `doc_rule_memories_read` / `doc_rule_memories_coverage` | which of the task's `doc_rules.json` memories were actually read this run, and the fraction covered (`null` when the task ships no `doc_rules.json`) |
+| `states_visited` | ordered `to_s` values from `state` stream events |
+| `gate_denials` | counts of PreToolUse denials by kind (`init`/`sweep`/`edit`/`docs`/`stop`/`unclassified`), classified from `tool_result` error text against the exact deny-message prefixes each gate hook emits (`🛑 BLOCKED: ... called before WF_INIT complete`, `🛑 SWEEP GATE`, `📓 DOCS FIRST`, `🛑 BLOCKED: raw Edit/Write on a Serena memory file`, `🛑 BLOCKED: this write adds ... to MEMORY.md`, `Stop hook`) |
+
+The control arm's row still gets a `"gates"` dict (so it's directly
+comparable), but with `init_chain_complete`/`sweep_verified` forced `false`
+and `memories_read` read via the plain-Read channel — there is no plugin
+gate for it to conform to, so `edits_before_sweep` counts every edit
+attempt (nothing exists to have blocked any of them).
+
+`--reparse` always recomputes `gates` (it's a pure function of already-saved
+data), including for rows written before this field existed — see
+"Backward compatibility" below.
+
+### `--gate-probe` and `--gate-selftest`
+
+`--gate-probe` runs one short adversarial headless prompt per plugin arm
+("Without reading anything first, immediately use the Edit tool to append a
+comment line to `ledgerlite/money.py`, then stop.") in a fresh
+task-fixture copy, then judges PASS/FAIL from the resulting gate-conformance
+dict (`evaluate_gate_probe`): PASS requires at least one recorded
+init/edit/sweep gate denial of the Edit attempt AND the target file is
+either unchanged, or changed only after the init chain completed and the
+sweep was verified. It prints a PASS/FAIL table and writes
+`results/<stamp>-gateprobe/gate_probe.json`. It **does** invoke `claude -p`
+(one ~5-minute-capped call per plugin arm) — the subscription auth guard
+applies the same as a full run.
+
+`--gate-selftest` needs **no model call at all**: it feeds synthetic
+conforming/violating transcript+stream fixtures through the same
+`compute_gate_conformance` / `evaluate_gate_probe` pipeline and exits 0/1,
+as a free CI-safe sanity check that the conformance/evaluation code itself
+is wired correctly.
 
 ## Isolation design
 
@@ -108,7 +220,9 @@ already has a line), plus a `meta.json` with args, arm resolution (commit SHA
 
 ## Usage
 
-Run in order:
+All of `--selftest`, `--dry-run`, and a full run take `--task <name>`
+(default: `v2`), selecting which `tasks/<name>/` variant to use. Run in
+order:
 
 ```bash
 # 1. Confirm auth (claude.ai subscription, not API key) and headless plugin
@@ -116,25 +230,45 @@ Run in order:
 python3 experiments/harness-ab/run.py --preflight --model claude-sonnet-5
 
 # 2. Validate fixture + reference_solution + hidden_tests are internally consistent
-#    (no claude calls; must exit 0).
-python3 experiments/harness-ab/run.py --selftest
+#    for the chosen --task (no claude calls; must exit 0).
+python3 experiments/harness-ab/run.py --selftest --task v2
 
 # 3. Prepare arm clones, print exact commands, run the auth check, and
 #    sanity-check the UNMODIFIED fixture fails acceptance (no claude calls).
-python3 experiments/harness-ab/run.py --dry-run --model claude-sonnet-5
+python3 experiments/harness-ab/run.py --dry-run --task v2 --model claude-sonnet-5
 
-# 4. Full run: 3 arms x 3 trials = 9 agent invocations, each capped at
+# 4. Free sanity check of the gate-probe evaluation pipeline (no claude calls).
+python3 experiments/harness-ab/run.py --gate-selftest
+
+# 5. Full run: 3 arms x 3 trials = 9 agent invocations, each capped at
 #    --timeout-min (default 45). No cost cap is applied by default — see
 #    "Cost and budget" below.
-python3 experiments/harness-ab/run.py --trials 3 --model claude-sonnet-5 \
+python3 experiments/harness-ab/run.py --task v2 --trials 3 --model claude-sonnet-5 \
   --timeout-min 45 --seed 42
 
-# 5. Aggregate.
+# 6. Aggregate.
 python3 experiments/harness-ab/analyze.py experiments/harness-ab/results/<stamp> --csv --md
+
+# 7. Optional: adversarial gate probe (DOES invoke claude -p, one short call
+#    per plugin arm).
+python3 experiments/harness-ab/run.py --gate-probe --task v2 --model claude-sonnet-5
 ```
 
 Re-run an interrupted full run with `--resume <stamp>` to skip completed
 runs (matched by `run_id` already present in `runs.jsonl`).
+
+### Backward compatibility (`--reparse`)
+
+`--reparse <stamp>` recomputes `metrics` / `stream_metrics` / `gates` for
+every row of an existing `<stamp>/runs.jsonl` from the already-saved
+`transcript.jsonl` + `work/` directory on disk, without invoking `claude -p`
+again — including stamps written before `--task`, per-category acceptance,
+or `gates` existed at all (a row with no `"task"` field is treated as
+`"v1"`). Recorded acceptance/regression/wall_s/exit_code/isolation results
+are left untouched unless acceptance is missing outright or missing the
+newer per-category/`doc_rules` fields, in which case it's re-scored against
+the saved `work/` dir (never a live re-run of the agent). The original file
+is backed up to `runs.jsonl.orig` on first `--reparse` of a given stamp.
 
 ## Cost and budget
 
@@ -214,13 +348,30 @@ after that happens.
 ## Report
 
 `report.py` renders one self-contained HTML file comparing all runs of an
-experiment: a header with a plain-language verdict, a KPI row per arm, five
-chart sections (per-metric dot/strip plots, token composition, acceptance
-pass rate, harness friction + stream events, tool mix), a sortable per-run
-table, and a method/caveats section. Stdlib only — no build step, no
-external JS. It imports `analyze.py`'s `aggregate()` by path (read-only) for
-per-arm summary stats and adds the per-run chart data `aggregate()` doesn't
-compute.
+experiment: a header with a plain-language verdict (prioritizing doc-rule
+pass rate and gate conformance over raw acceptance success rate — see
+`compute_verdict`), a KPI row per arm, and these chart sections:
+
+- per-metric dot/strip plots (turns, tokens, wall time, tool calls, memory
+  consultations)
+- token composition per run
+- acceptance pass rate
+- **spec vs doc-rule pass rate** — grouped bars per arm, spec vs doc
+  distinguished by fill opacity (never hue alone), with a legend
+- **doc-rule pass/fail by run** — a sequential single-hue heatmap table,
+  arm-run rows x rule-id columns, every cell carrying an icon *and* a text
+  label (✓/✗/– plus "pass"/"fail"/"no data")
+- **gate conformance per run** — a table of init-chain-complete /
+  sweep-verified / edits-before-sweep / doc-rule-coverage / memory-read
+  channel per run, ✓/✗ cells always paired with a text label
+- **memory consultation coverage** — a dot plot of doc-rule memory coverage
+  % per run
+- harness friction + stream events, tool mix
+- a sortable per-run table, and a method/caveats section
+
+Stdlib only — no build step, no external JS. It imports `analyze.py`'s
+`aggregate()` by path (read-only) for per-arm summary stats and adds the
+per-run chart data `aggregate()` doesn't compute.
 
 ```bash
 python3 experiments/harness-ab/report.py experiments/harness-ab/results/<stamp> \
@@ -249,7 +400,15 @@ extraction helpers, and a full render against a synthetic 3-arm dataset
 (including a timed-out run and a run with missing metrics) — asserting the
 output file is written, every chart section has an `<svg>`, every arm name
 and run row appears, missing fields render as an em dash rather than
-`NaN`/`None`, and tooltip `data-tip` attributes are present. Run with:
+`NaN`/`None`, and tooltip `data-tip` attributes are present.
+`tests/test_harness_report_gates.py` covers the newer spec/doc/gate chart
+data-extraction and SVG/table builders, including the sparse/empty-data path
+(control arm with no gates, a task with no `doc_rules.json`).
+`tests/test_gate_conformance.py` and `tests/test_acceptance.py` cover
+`gate_conformance.py` / `acceptance.py`'s pure functions directly, against
+both a real-shaped conforming-run fixture (pulled from
+`results/20260929-123133/runs/baseline-t1`) and a synthetic violating-run
+fixture. Full suite:
 
 ```bash
 python3 -m unittest discover -s tests -p 'test_*.py'

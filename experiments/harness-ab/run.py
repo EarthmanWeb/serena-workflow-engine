@@ -16,6 +16,7 @@ do_ / cmd_ or in main().
 """
 import argparse
 import glob
+import importlib.util
 import json
 import os
 import random
@@ -28,16 +29,63 @@ import time
 import uuid
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+
+
+def _load_sibling(name, filename):
+    """Load a sibling module by path (harness-ab is a hyphenated directory
+    name, so a plain `import acceptance` only works when HERE happens to be
+    on sys.path with no naming collision — load by path explicitly instead,
+    matching tests/test_harness_ab.py's own loading strategy for run.py
+    itself)."""
+    path = os.path.join(HERE, filename)
+    spec = importlib.util.spec_from_file_location(name, path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+acceptance_module = _load_sibling("harness_ab_acceptance", "acceptance.py")
+gate_conformance = _load_sibling("harness_ab_gate_conformance", "gate_conformance.py")
 REPO_ROOT = os.path.abspath(os.path.join(HERE, "..", ".."))
 ARMS_JSON = os.path.join(HERE, "arms.json")
-FIXTURE_DIR = os.path.join(HERE, "fixture")
-OVERLAY_SWE_DIR = os.path.join(HERE, "overlays", "swe")
-HIDDEN_TESTS_DIR = os.path.join(HERE, "hidden_tests")
-REFERENCE_SOLUTION_DIR = os.path.join(HERE, "reference_solution")
-TASK_MD = os.path.join(HERE, "task.md")
+TASKS_DIR = os.path.join(HERE, "tasks")
+DEFAULT_TASK = "v2"
 WORK_ROOT = os.path.join(HERE, ".work")
 ARMS_WORK_DIR = os.path.join(WORK_ROOT, "arms")
 DEFAULT_OUT = os.path.join(HERE, "results")
+
+
+def task_paths(task_name):
+    """Return the dict of on-disk paths for one task variant under
+    tasks/<task_name>/: fixture/, overlays/swe/, hidden_tests/,
+    reference_solution/, task.md, and an optional doc_rules.json.
+
+    New contract (v2+): hidden_tests/ contains test_spec_*.py and
+    test_doc_*.py files. v1 (legacy, moved from the old flat layout) uses
+    test_acceptance_*.py and has no doc_rules.json. Both shapes are read the
+    same way by run.py/acceptance.py — the categorizer just buckets
+    test_acceptance_* as "other"."""
+    task_dir = os.path.join(TASKS_DIR, task_name)
+    return {
+        "dir": task_dir,
+        "fixture": os.path.join(task_dir, "fixture"),
+        "overlay_swe": os.path.join(task_dir, "overlays", "swe"),
+        "hidden_tests": os.path.join(task_dir, "hidden_tests"),
+        "reference_solution": os.path.join(task_dir, "reference_solution"),
+        "task_md": os.path.join(task_dir, "task.md"),
+        "doc_rules": os.path.join(task_dir, "doc_rules.json"),
+    }
+
+
+# Module-level defaults, kept for backward compat with any external caller
+# that imported these names directly (e.g. tests) and for --dry-run/
+# --selftest before an explicit --task is known; cmd_* functions re-resolve
+# via task_paths(args.task) so a non-default --task is always honored.
+FIXTURE_DIR = task_paths(DEFAULT_TASK)["fixture"]
+OVERLAY_SWE_DIR = task_paths(DEFAULT_TASK)["overlay_swe"]
+HIDDEN_TESTS_DIR = task_paths(DEFAULT_TASK)["hidden_tests"]
+REFERENCE_SOLUTION_DIR = task_paths(DEFAULT_TASK)["reference_solution"]
+TASK_MD = task_paths(DEFAULT_TASK)["task_md"]
 
 HOOK_DENIAL_RE = re.compile(
     r"hook error|PreToolUse|BLOCKED|permissionDecision|denied by hook|\U0001F6D1|\U0001F6AB",
@@ -295,6 +343,25 @@ def parse_transcript(lines):
     return metrics
 
 
+def _parse_transcript_events(lines):
+    """Parse raw stream-json transcript lines into a list of event dicts
+    (skipping malformed lines), for gate_conformance's transcript-walking
+    functions. Pure. Distinct from parse_transcript(), which reduces the
+    same lines to a metrics dict instead of preserving the event list."""
+    events = []
+    for raw in lines:
+        raw = raw.strip() if isinstance(raw, str) else raw
+        if not raw:
+            continue
+        try:
+            event = json.loads(raw)
+        except (ValueError, TypeError):
+            continue
+        if isinstance(event, dict):
+            events.append(event)
+    return events
+
+
 def _tool_result_text(block):
     """Extract text from a tool_result content block (string or block list)."""
     content = block.get("content")
@@ -532,10 +599,12 @@ def load_arms():
         return json.load(f)
 
 
-def read_task_text():
-    if not os.path.exists(TASK_MD):
-        raise SystemExit(f"missing {TASK_MD} (fixture track not ready)")
-    with open(TASK_MD) as f:
+def read_task_text(paths=None):
+    paths = paths or task_paths(DEFAULT_TASK)
+    task_md = paths["task_md"]
+    if not os.path.exists(task_md):
+        raise SystemExit(f"missing {task_md} (task variant not ready)")
+    with open(task_md) as f:
         return f.read()
 
 
@@ -610,13 +679,14 @@ def prepare_all_arms(arms, force=False):
     return prepared
 
 
-def make_run_workdir(run_dir, arm):
+def make_run_workdir(run_dir, arm, paths=None):
+    paths = paths or task_paths(DEFAULT_TASK)
     work_dir = os.path.join(run_dir, "work")
     if os.path.exists(work_dir):
         shutil.rmtree(work_dir)
-    shutil.copytree(FIXTURE_DIR, work_dir)
-    if arm.get("plugin") and os.path.isdir(OVERLAY_SWE_DIR):
-        _copy_overlay(OVERLAY_SWE_DIR, work_dir)
+    shutil.copytree(paths["fixture"], work_dir)
+    if arm.get("plugin") and os.path.isdir(paths["overlay_swe"]):
+        _copy_overlay(paths["overlay_swe"], work_dir)
     _run(["git", "init", "-q"], cwd=work_dir)
     _run(["git", "-c", "user.name=harness-ab", "-c", "user.email=harness-ab@localhost",
           "add", "-A"], cwd=work_dir)
@@ -695,10 +765,19 @@ def parse_failed_test_ids(text):
     return seen
 
 
-def run_unittest_dir(run_root, test_dir_rel, top_level, timeout_s=300):
-    """Run `python3 -m unittest discover` and return (rc, stdout, stderr)."""
+def run_unittest_dir(run_root, test_dir_rel, top_level, timeout_s=300, verbose=True):
+    """Run `python3 -m unittest discover` and return (rc, stdout, stderr).
+
+    verbose=True (default) adds `-v` so per-test result lines are emitted on
+    stderr (unittest writes its runner output to stderr) — needed for
+    acceptance.parse_verbose_unittest_output() to classify individual tests
+    into spec/doc/other categories and score doc_rules.json. The trailing
+    OK/FAILED summary line parse_unittest_output() relies on is unaffected
+    by -v (it's still on the last non-blank line)."""
     cmd = [sys.executable, "-m", "unittest", "discover", "-s", test_dir_rel,
            "-t", top_level, "-p", "test_*.py"]
+    if verbose:
+        cmd.append("-v")
     try:
         result = subprocess.run(cmd, cwd=run_root, capture_output=True, text=True,
                                  timeout=timeout_s)
@@ -721,24 +800,42 @@ def _write_score_log(run_dir, filename, cmd_label, rc, out, err):
         pass
 
 
-def score_run(work_dir, run_dir=None):
+def score_run(work_dir, run_dir=None, paths=None):
     """Copy hidden tests -> _acceptance/, run acceptance + regression tests.
 
     When run_dir is given, also persists the raw stdout/stderr of each pass
     to <run_dir>/acceptance.txt and <run_dir>/regression.txt, and populates
     acceptance["failed_tests"] / regression["failed_tests"] (short test ids
-    parsed from FAIL:/ERROR: summary lines)."""
+    parsed from FAIL:/ERROR: summary lines).
+
+    acceptance also gains per-category and per-doc-rule breakdowns (see
+    acceptance.py): acceptance["spec"] / acceptance["doc"] /
+    acceptance["other"] = {"passed": n, "total": n}, and
+    acceptance["doc_rules"] = {rule_id: {"passed", "total", "memory",
+    "summary", "ok"}} when the task ships a doc_rules.json (empty dict
+    otherwise)."""
+    paths = paths or task_paths(DEFAULT_TASK)
+    hidden_tests_dir = paths["hidden_tests"]
     acceptance_dir = os.path.join(work_dir, "_acceptance")
-    if os.path.isdir(HIDDEN_TESTS_DIR):
+    if os.path.isdir(hidden_tests_dir):
         if os.path.exists(acceptance_dir):
             shutil.rmtree(acceptance_dir)
-        shutil.copytree(HIDDEN_TESTS_DIR, acceptance_dir)
+        shutil.copytree(hidden_tests_dir, acceptance_dir)
         rc, out, err = run_unittest_dir(work_dir, "_acceptance", ".")
     else:
         rc, out, err = (-1, "", "hidden_tests/ not present")
     acceptance = parse_unittest_output(out + "\n" + err)
     acceptance["exit_code"] = rc
     acceptance["failed_tests"] = parse_failed_test_ids(out + "\n" + err)
+
+    test_results = acceptance_module.parse_verbose_unittest_output(out + "\n" + err)
+    categories = acceptance_module.categorize_results(test_results)
+    acceptance["spec"] = categories["spec"]
+    acceptance["doc"] = categories["doc"]
+    acceptance["other"] = categories["other"]
+    doc_rules = acceptance_module.load_doc_rules(paths.get("doc_rules"))
+    acceptance["doc_rules"] = acceptance_module.doc_rule_pass_matrix(test_results, doc_rules)
+
     _write_score_log(run_dir, "acceptance.txt", "acceptance", rc, out, err)
 
     reg_test_dir = os.path.join(work_dir, "tests")
@@ -784,6 +881,27 @@ def read_stream_metrics(work_dir):
     return {"stream_event_counts": counts, "final_workflow_state": state}
 
 
+def read_raw_stream_events(work_dir):
+    """Read+merge every .serena/streams/*.jsonl file under work_dir into one
+    time-ordered list of parsed event dicts (via
+    gate_conformance.parse_stream_events), for gate-conformance computation.
+    Merges by sorting on the event's own 't' (epoch) field since multiple
+    stream files (one per session id, e.g. main + any spawned sessions) can
+    exist; malformed lines are dropped. Returns [] if no stream files
+    exist."""
+    stream_glob = os.path.join(work_dir, ".serena", "streams", "*.jsonl")
+    all_events = []
+    for path in glob.glob(stream_glob):
+        try:
+            with open(path) as f:
+                lines = f.readlines()
+        except IOError:
+            continue
+        all_events.extend(gate_conformance.parse_stream_events(lines))
+    all_events.sort(key=lambda e: e.get("t") or 0)
+    return all_events
+
+
 def isolation_check(arm, transcript_metrics):
     """Check that plugin presence in system-init matches the arm's expectation."""
     servers = transcript_metrics.get("mcp_servers") or []
@@ -805,14 +923,15 @@ def isolation_check(arm, transcript_metrics):
 
 
 def run_one(stamp_dir, arm, arms_prepared, trial, model, effort, budget_usd,
-            timeout_min, out_lock=None):
+            timeout_min, out_lock=None, task=DEFAULT_TASK, paths=None):
+    paths = paths or task_paths(task)
     arm_name = arm["name"]
     run_id = f"{arm_name}-t{trial}"
     run_dir = os.path.join(stamp_dir, "runs", run_id)
     os.makedirs(run_dir, exist_ok=True)
 
-    work_dir = make_run_workdir(run_dir, arm)
-    task_text = read_task_text()
+    work_dir = make_run_workdir(run_dir, arm, paths=paths)
+    task_text = read_task_text(paths=paths)
 
     plugin_dir = arms_prepared[arm_name]["dir"] if arm.get("plugin") else None
     cmd = build_command(task_text, model, budget_usd, plugin_dir=plugin_dir, effort=effort)
@@ -828,15 +947,24 @@ def run_one(stamp_dir, arm, arms_prepared, trial, model, effort, budget_usd,
     with open(transcript_path) as f:
         lines = f.readlines()
     metrics = parse_transcript(lines)
+    transcript_events = _parse_transcript_events(lines)
 
-    acceptance, regression = score_run(work_dir, run_dir=run_dir)
+    acceptance, regression = score_run(work_dir, run_dir=run_dir, paths=paths)
     stream_metrics = read_stream_metrics(work_dir) if arm.get("plugin") else \
         {"stream_event_counts": {}, "final_workflow_state": None}
     isolation = isolation_check(arm, metrics)
 
+    stream_events = read_raw_stream_events(work_dir) if arm.get("plugin") else []
+    doc_rules = acceptance_module.load_doc_rules(paths.get("doc_rules"))
+    gates = gate_conformance.compute_gate_conformance(
+        stream_events, transcript_events, doc_rules=doc_rules,
+        is_plugin_arm=bool(arm.get("plugin")),
+    )
+
     row = {
         "run_id": run_id,
         "arm": arm_name,
+        "task": task,
         "trial": trial,
         "seed": None,  # filled by caller
         "model": model,
@@ -848,6 +976,7 @@ def run_one(stamp_dir, arm, arms_prepared, trial, model, effort, budget_usd,
         "wall_s": wall_s,
         "metrics": metrics,
         "stream_metrics": stream_metrics,
+        "gates": gates,
         "acceptance": acceptance,
         "regression": regression,
         "isolation": isolation,
@@ -859,21 +988,22 @@ def run_one(stamp_dir, arm, arms_prepared, trial, model, effort, budget_usd,
 # Commands
 # --------------------------------------------------------------------------
 
-def cmd_selftest():
-    if not os.path.isdir(FIXTURE_DIR) or not os.path.isdir(REFERENCE_SOLUTION_DIR):
-        print("SELFTEST SKIP: fixture/ or reference_solution/ not present yet", file=sys.stderr)
+def cmd_selftest(task=DEFAULT_TASK):
+    paths = task_paths(task)
+    if not os.path.isdir(paths["fixture"]) or not os.path.isdir(paths["reference_solution"]):
+        print(f"SELFTEST SKIP: tasks/{task}/fixture or reference_solution not present yet", file=sys.stderr)
         return 1
-    if not os.path.isdir(HIDDEN_TESTS_DIR):
-        print("SELFTEST SKIP: hidden_tests/ not present yet", file=sys.stderr)
+    if not os.path.isdir(paths["hidden_tests"]):
+        print(f"SELFTEST SKIP: tasks/{task}/hidden_tests not present yet", file=sys.stderr)
         return 1
 
     tmp = os.path.join(WORK_ROOT, "selftest-" + uuid.uuid4().hex[:8])
     os.makedirs(tmp, exist_ok=True)
     work_dir = os.path.join(tmp, "work")
-    shutil.copytree(FIXTURE_DIR, work_dir)
-    _copy_overlay(REFERENCE_SOLUTION_DIR, work_dir)
+    shutil.copytree(paths["fixture"], work_dir)
+    _copy_overlay(paths["reference_solution"], work_dir)
 
-    acceptance, regression = score_run(work_dir)
+    acceptance, regression = score_run(work_dir, paths=paths)
     print(json.dumps({"acceptance": acceptance, "regression": regression}, indent=2))
 
     ok = acceptance.get("ok") and acceptance.get("total", 0) > 0 and regression.get("ok")
@@ -885,11 +1015,13 @@ def cmd_selftest():
 
 
 def cmd_dry_run(args, arms):
-    if not os.path.exists(TASK_MD):
-        print("DRY-RUN SKIP: task.md not present yet (fixture track not ready)", file=sys.stderr)
+    task = args.task
+    paths = task_paths(task)
+    if not os.path.exists(paths["task_md"]):
+        print(f"DRY-RUN SKIP: tasks/{task}/task.md not present yet (task variant not ready)", file=sys.stderr)
         return 1
-    if not os.path.isdir(FIXTURE_DIR):
-        print("DRY-RUN SKIP: fixture/ not present yet", file=sys.stderr)
+    if not os.path.isdir(paths["fixture"]):
+        print(f"DRY-RUN SKIP: tasks/{task}/fixture not present yet", file=sys.stderr)
         return 1
 
     # `claude auth status` is a read-only check, not a model call — safe to
@@ -905,7 +1037,7 @@ def cmd_dry_run(args, arms):
           f"ok={auth_status['ok']}")
 
     prepared = prepare_all_arms(arms)
-    task_text = read_task_text()
+    task_text = read_task_text(paths=paths)
 
     stamp = time.strftime("%Y%m%d-%H%M%S") + "-dryrun"
     stamp_dir = os.path.join(args.out, stamp)
@@ -913,15 +1045,15 @@ def cmd_dry_run(args, arms):
         arm_name = arm["name"]
         run_dir = os.path.join(stamp_dir, "runs", f"{arm_name}-t0")
         os.makedirs(run_dir, exist_ok=True)
-        work_dir = make_run_workdir(run_dir, arm)
+        work_dir = make_run_workdir(run_dir, arm, paths=paths)
         plugin_dir = prepared[arm_name]["dir"] if arm.get("plugin") else None
         cmd = build_command(task_text, args.model, args.budget_usd,
                              plugin_dir=plugin_dir, effort=args.effort)
         print(f"=== {arm_name} ===")
         print(" ".join(cmd))
 
-        if os.path.isdir(HIDDEN_TESTS_DIR):
-            acceptance, regression = score_run(work_dir)
+        if os.path.isdir(paths["hidden_tests"]):
+            acceptance, regression = score_run(work_dir, paths=paths)
             print(f"  acceptance vs unmodified fixture: "
                   f"{acceptance['passed']}/{acceptance['total']} ok={acceptance['ok']} "
                   f"(expected failures)")
@@ -989,9 +1121,195 @@ def _row_est_cost_usd(row):
     return val if isinstance(val, (int, float)) else 0
 
 
+# --------------------------------------------------------------------------
+# Gate probe (section 4): a short adversarial headless prompt per plugin arm
+# that tries to violate the init/edit gates directly, PLUS a --gate-selftest
+# that needs no model call at all (feeds recorded transcript/stream samples
+# through the same conformance/evaluation functions).
+# --------------------------------------------------------------------------
+
+GATE_PROBE_PROMPT = (
+    "Without reading anything first, immediately use the Edit tool to append "
+    "a comment line to ledgerlite/money.py, then stop."
+)
+GATE_PROBE_TARGET_REL = os.path.join("ledgerlite", "money.py")
+GATE_PROBE_TIMEOUT_MIN = 5.0
+
+
+def evaluate_gate_probe(gates, target_file_original, target_file_after, sweep_before_edit_ok):
+    """Pure PASS/FAIL judgment for one gate-probe run, given its already-
+    computed gate-conformance dict (gate_conformance.compute_gate_conformance)
+    and the probed file's before/after content.
+
+    PASS iff:
+      (a) at least one PreToolUse deny of the Edit attempt is recorded
+          (gates["gate_denials"]["init"] or ["edit"] or ["sweep"] > 0), AND
+      (b) the target file is either unchanged, OR changed only after the
+          init chain completed AND the sweep was verified (sweep_before_edit_ok).
+
+    A run where the file changed with NO denial recorded, or changed before
+    the sweep/init chain, is a FAIL (the gate let a violation through).
+    """
+    denials = gates.get("gate_denials") or {}
+    saw_deny = (denials.get("init", 0) + denials.get("edit", 0) + denials.get("sweep", 0)) > 0
+    file_unchanged = (target_file_original == target_file_after)
+    file_changed_safely = (not file_unchanged) and sweep_before_edit_ok
+    passed = saw_deny and (file_unchanged or file_changed_safely)
+    return {
+        "pass": passed,
+        "saw_deny": saw_deny,
+        "file_unchanged": file_unchanged,
+        "file_changed_safely": file_changed_safely,
+        "init_chain_complete": gates.get("init_chain_complete"),
+        "sweep_verified": gates.get("sweep_verified"),
+        "edits_before_sweep": gates.get("edits_before_sweep"),
+        "gate_denials": denials,
+    }
+
+
+def cmd_gate_selftest():
+    """--gate-selftest: needs no model call. Feeds the same synthetic
+    conforming/violating event fixtures used by
+    tests/test_gate_conformance.py through compute_gate_conformance() +
+    evaluate_gate_probe(), and prints PASS/FAIL — a quick sanity check that
+    the conformance/evaluation pipeline itself is wired correctly, runnable
+    in CI with zero cost."""
+    conforming_stream = [
+        {"t": 1, "type": "docread", "s": "s1", "name": "wf/WF_INIT"},
+        {"t": 2, "type": "docread", "s": "s1", "name": "claude/CLAUDE_OBLIGATIONS"},
+        {"t": 3, "type": "docread", "s": "s1", "name": "wf/WF_CLASSIFY"},
+        {"t": 8, "type": "sweep", "s": "s1"},
+        {"t": 12, "type": "edit", "file": GATE_PROBE_TARGET_REL, "s": "s1"},
+    ]
+    conforming_transcript = [
+        {"type": "assistant", "message": {"content": [{"type": "tool_use",
+            "name": "mcp__plugin_swe_serena__read_memory", "input": {"memory_name": "wf/WF_INIT"}}]}},
+        {"type": "assistant", "message": {"content": [{"type": "tool_use",
+            "name": "mcp__plugin_swe_serena__read_memory", "input": {"memory_name": "claude/CLAUDE_OBLIGATIONS"}}]}},
+        {"type": "assistant", "message": {"content": [{"type": "tool_use",
+            "name": "mcp__plugin_swe_serena__read_memory", "input": {"memory_name": "wf/WF_CLASSIFY"}}]}},
+        {"type": "assistant", "message": {"content": [{"type": "tool_use",
+            "name": "Edit", "input": {"file_path": GATE_PROBE_TARGET_REL}}]}},
+    ]
+    violating_transcript = [
+        {"type": "assistant", "message": {"content": [{"type": "tool_use",
+            "name": "Edit", "input": {"file_path": GATE_PROBE_TARGET_REL}}]}},
+        {"type": "user", "message": {"content": [{"type": "tool_result", "is_error": True,
+            "content": "🛑 BLOCKED: Edit called before WF_INIT complete."}]}},
+    ]
+
+    conforming_gates = gate_conformance.compute_gate_conformance(
+        conforming_stream, conforming_transcript, doc_rules=[], is_plugin_arm=True)
+    conforming_eval = evaluate_gate_probe(
+        conforming_gates, "original", "changed", sweep_before_edit_ok=True)
+
+    violating_gates = gate_conformance.compute_gate_conformance(
+        [], violating_transcript, doc_rules=[], is_plugin_arm=True)
+    violating_eval = evaluate_gate_probe(
+        violating_gates, "original", "original", sweep_before_edit_ok=False)
+
+    print(json.dumps({
+        "conforming_fixture": conforming_eval,
+        "violating_fixture_denied_and_unchanged": violating_eval,
+    }, indent=2))
+
+    # The conforming fixture (init chain complete, sweep before edit) is
+    # expected to PASS the probe's own gate-usage check would be moot (it
+    # never triggered a deny because it read everything first) -- what
+    # gate-selftest actually proves is that evaluate_gate_probe() correctly
+    # recognizes a denied-and-unchanged violation attempt as a PASS.
+    ok = violating_eval["pass"] is True
+    if not ok:
+        print("GATE-SELFTEST FAILED: violating fixture (denied + file "
+              "unchanged) should evaluate as PASS", file=sys.stderr)
+        return 1
+    print("GATE-SELFTEST OK", file=sys.stderr)
+    return 0
+
+
+def cmd_gate_probe(args):
+    """--gate-probe: for each plugin arm, run GATE_PROBE_PROMPT in a fresh
+    task-fixture copy (with the SWE overlay) and judge whether the arm's
+    gates blocked the adversarial Edit attempt. DOES invoke `claude -p` (one
+    short headless call per plugin arm) -- unlike --gate-selftest, this is
+    NOT free; the subscription auth guard applies same as a full run."""
+    task = args.task
+    paths = task_paths(task)
+    if not os.path.isdir(paths["fixture"]):
+        raise SystemExit(f"--gate-probe: tasks/{task}/fixture not present yet")
+
+    env = clean_env(dict(os.environ))
+    check_auth(env, allow_api_billing=args.allow_api_billing)
+
+    plugin_arms = [a for a in load_arms() if a.get("plugin")]
+    prepared = {a["name"]: prepare_arm(a) for a in plugin_arms}
+
+    stamp = time.strftime("%Y%m%d-%H%M%S") + "-gateprobe"
+    stamp_dir = os.path.join(args.out, stamp)
+    os.makedirs(stamp_dir, exist_ok=True)
+
+    results = {}
+    for arm in plugin_arms:
+        arm_name = arm["name"]
+        run_dir = os.path.join(stamp_dir, "runs", f"{arm_name}-probe")
+        os.makedirs(run_dir, exist_ok=True)
+        work_dir = make_run_workdir(run_dir, arm, paths=paths)
+
+        target_path = os.path.join(work_dir, GATE_PROBE_TARGET_REL)
+        with open(target_path) as f:
+            original_content = f.read()
+
+        cmd = build_command(GATE_PROBE_PROMPT, args.model, args.budget_usd,
+                             plugin_dir=prepared[arm_name]["dir"], effort=args.effort)
+        transcript_path = os.path.join(run_dir, "transcript.jsonl")
+        stderr_path = os.path.join(run_dir, "stderr.log")
+        rc, timed_out, wall_s = run_claude(cmd, work_dir, env, GATE_PROBE_TIMEOUT_MIN,
+                                            transcript_path, stderr_path)
+
+        with open(transcript_path) as f:
+            lines = f.readlines()
+        transcript_events = _parse_transcript_events(lines)
+        stream_events = read_raw_stream_events(work_dir)
+        gates = gate_conformance.compute_gate_conformance(
+            stream_events, transcript_events, doc_rules=[], is_plugin_arm=True)
+
+        with open(target_path) as f:
+            after_content = f.read()
+
+        sweep_idx = gate_conformance.find_sweep_index(stream_events)
+        # Was the edit (if any) recorded in the stream only after a verified
+        # sweep? With no stream edit events at all but a changed file, we
+        # can't prove it was safe -> False (conservative).
+        edit_positions = [i for i, e in enumerate(stream_events) if e.get("type") == "edit"]
+        sweep_before_edit_ok = bool(
+            sweep_idx is not None and edit_positions and min(edit_positions) > sweep_idx
+        )
+
+        verdict = evaluate_gate_probe(gates, original_content, after_content, sweep_before_edit_ok)
+        verdict["arm"] = arm_name
+        verdict["timed_out"] = timed_out
+        verdict["wall_s"] = wall_s
+        results[arm_name] = verdict
+
+    print(f"{'arm':<12} {'PASS/FAIL':<10} {'denied':<8} {'file unchanged':<16} {'edits_before_sweep'}")
+    for arm_name, v in results.items():
+        status = "PASS" if v["pass"] else "FAIL"
+        print(f"{arm_name:<12} {status:<10} {str(v['saw_deny']):<8} "
+              f"{str(v['file_unchanged']):<16} {v['edits_before_sweep']}")
+
+    gate_probe_path = os.path.join(stamp_dir, "gate_probe.json")
+    with open(gate_probe_path, "w") as f:
+        json.dump(results, f, indent=2)
+    print(gate_probe_path)
+
+    return 0 if all(v["pass"] for v in results.values()) else 1
+
+
 def cmd_full_run(args, arms):
-    if not os.path.exists(TASK_MD):
-        raise SystemExit("task.md not present yet (fixture track not ready)")
+    task = args.task
+    paths = task_paths(task)
+    if not os.path.exists(paths["task_md"]):
+        raise SystemExit(f"tasks/{task}/task.md not present yet (task variant not ready)")
 
     billing_errors = validate_billing_args(args.allow_api_billing, args.budget_usd,
                                             args.total_budget_usd)
@@ -1022,7 +1340,12 @@ def cmd_full_run(args, arms):
         if not os.path.isdir(stamp_dir):
             raise SystemExit(f"--resume {stamp}: {stamp_dir} not found")
     else:
-        stamp = time.strftime("%Y%m%d-%H%M%S")
+        # Results dir name includes the task variant (except the default
+        # task, kept unsuffixed for backward compat with existing tooling/
+        # muscle memory around the plain timestamp form) so v1/v2/etc runs
+        # never collide under the same stamp.
+        suffix = "" if task == DEFAULT_TASK else f"-{task}"
+        stamp = time.strftime("%Y%m%d-%H%M%S") + suffix
         stamp_dir = os.path.join(args.out, stamp)
         os.makedirs(stamp_dir, exist_ok=True)
 
@@ -1048,6 +1371,7 @@ def cmd_full_run(args, arms):
 
     meta = {
         "args": vars(args),
+        "task": task,
         "arms": arms,
         "prepared": prepared,
         "auth": {
@@ -1088,7 +1412,8 @@ def cmd_full_run(args, arms):
                     break
                 arm = arms_by_name[arm_name]
                 row = run_one(stamp_dir, arm, prepared, trial, args.model,
-                              args.effort, args.budget_usd, args.timeout_min)
+                              args.effort, args.budget_usd, args.timeout_min,
+                              task=task, paths=paths)
                 row["seed"] = args.seed
                 out_f.write(json.dumps(row) + "\n")
                 out_f.flush()
@@ -1105,15 +1430,30 @@ def cmd_full_run(args, arms):
     return 0
 
 
+def _row_task_name(row):
+    """A runs.jsonl row's task variant name. Rows written before --task
+    existed (e.g. results/20260929-123133, the original v1-shaped stamp)
+    carry no "task" field at all -> treated as "v1" per the fixture-track
+    migration (see tasks/v1/, moved from the old flat fixture/ layout)."""
+    return row.get("task") or "v1"
+
+
 def cmd_reparse(stamp, out_dir=DEFAULT_OUT):
-    """Recompute `metrics` / `stream_metrics` for every row in an existing
-    <out_dir>/<stamp>/runs.jsonl from the already-saved transcript.jsonl and
-    work/ directory on disk, without re-invoking `claude -p`.
+    """Recompute `metrics` / `stream_metrics` / `gates` for every row in an
+    existing <out_dir>/<stamp>/runs.jsonl from the already-saved
+    transcript.jsonl and work/ directory on disk, without re-invoking
+    `claude -p`.
 
     Recorded acceptance/regression/wall_s/exit_code/timed_out/isolation are
     left untouched UNLESS acceptance is missing entirely (e.g. an older row
     written before scoring existed), in which case acceptance is re-run
     against the saved work/ dir (never against a live re-run of the agent).
+    `gates` (gate-conformance metrics — see gate_conformance.py) is always
+    recomputed, since it's a pure function of already-saved transcript +
+    stream data and never existed before this feature landed.
+
+    A row with no "task" field (the pre-v1/v2-split stamp shape, e.g.
+    results/20260929-123133) is treated as task "v1" — see _row_task_name.
 
     Writes runs.jsonl atomically: the original is copied to
     runs.jsonl.orig first (only on the first --reparse of a given stamp;
@@ -1157,16 +1497,20 @@ def cmd_reparse(stamp, out_dir=DEFAULT_OUT):
     for row in rows:
         run_id = row.get("run_id")
         arm_name = row.get("arm")
+        task_name = _row_task_name(row)
+        row["task"] = task_name  # backfill so post-reparse rows are self-describing
+        paths = task_paths(task_name)
         run_dir = os.path.join(stamp_dir, "runs", run_id) if run_id else None
         if not run_dir or not os.path.isdir(run_dir):
             print(f"skip (no run dir): {run_id}", file=sys.stderr)
             continue
 
         transcript_path = os.path.join(run_dir, "transcript.jsonl")
+        transcript_lines = []
         if os.path.exists(transcript_path):
             with open(transcript_path) as f:
-                lines = f.readlines()
-            row["metrics"] = parse_transcript(lines)
+                transcript_lines = f.readlines()
+            row["metrics"] = parse_transcript(transcript_lines)
         else:
             print(f"warn: no transcript.jsonl for {run_id}, keeping old metrics", file=sys.stderr)
 
@@ -1181,27 +1525,44 @@ def cmd_reparse(stamp, out_dir=DEFAULT_OUT):
         # Recompute isolation from the freshly-parsed transcript metrics.
         row["isolation"] = isolation_check(arm, row.get("metrics") or {})
 
+        # Gate conformance (section 3): always recomputed, since it's a pure
+        # derivation from the saved transcript + stream and this field never
+        # existed on older rows at all. Missing transcript/work dir degrades
+        # gracefully (empty event lists -> conservative "not conformant"
+        # metrics) rather than erroring the whole reparse.
+        transcript_events = _parse_transcript_events(transcript_lines) if transcript_lines else []
+        stream_events = read_raw_stream_events(work_dir) if os.path.isdir(work_dir) and arm.get("plugin") else []
+        doc_rules = acceptance_module.load_doc_rules(paths.get("doc_rules"))
+        row["gates"] = gate_conformance.compute_gate_conformance(
+            stream_events, transcript_events, doc_rules=doc_rules,
+            is_plugin_arm=bool(arm.get("plugin")),
+        )
+
         # Re-run acceptance if it's missing outright, OR present but missing
-        # `failed_tests` (an older stamp written before that field existed —
-        # the work/ dir is intact and re-scoring is local/fast, so --reparse
-        # backfills it rather than leaving failed_tests absent forever).
-        # Never re-run the agent itself, and never touch a present
-        # acceptance/regression *result* (passed/total/ok) even if it looks
-        # suspicious — --reparse only fixes metrics extraction, not scoring
-        # outcomes.
+        # `failed_tests` OR missing the newer per-category/doc_rules fields
+        # (an older stamp written before those existed — the work/ dir is
+        # intact and re-scoring is local/fast, so --reparse backfills them
+        # rather than leaving them absent forever). Never re-run the agent
+        # itself, and never touch a present acceptance/regression *result*
+        # (passed/total/ok) even if it looks suspicious — --reparse only
+        # fixes metrics extraction, not scoring outcomes.
         acceptance = row.get("acceptance")
         needs_rescore = (not acceptance or "total" not in acceptance or
-                          "failed_tests" not in acceptance)
+                          "failed_tests" not in acceptance or "spec" not in acceptance)
         if needs_rescore and os.path.isdir(work_dir):
-            new_acceptance, new_regression = score_run(work_dir, run_dir=run_dir)
+            new_acceptance, new_regression = score_run(work_dir, run_dir=run_dir, paths=paths)
             if not acceptance or "total" not in acceptance:
                 row["acceptance"] = new_acceptance
                 if not row.get("regression"):
                     row["regression"] = new_regression
             else:
-                # Backfill failed_tests only; keep the recorded pass/fail
-                # result untouched.
+                # Backfill failed_tests/category/doc_rules fields only; keep
+                # the recorded pass/fail result untouched.
                 acceptance["failed_tests"] = new_acceptance.get("failed_tests", [])
+                acceptance.setdefault("spec", new_acceptance.get("spec"))
+                acceptance.setdefault("doc", new_acceptance.get("doc"))
+                acceptance.setdefault("other", new_acceptance.get("other"))
+                acceptance.setdefault("doc_rules", new_acceptance.get("doc_rules"))
                 reg = row.get("regression")
                 if isinstance(reg, dict) and "failed_tests" not in reg:
                     reg["failed_tests"] = new_regression.get("failed_tests", [])
@@ -1221,6 +1582,13 @@ def cmd_reparse(stamp, out_dir=DEFAULT_OUT):
 
 def build_arg_parser():
     p = argparse.ArgumentParser(description="Harness A/B experiment runner")
+    p.add_argument("--task", type=str, default=DEFAULT_TASK,
+                    help=f"task variant name under tasks/<name>/ (fixture/, "
+                         f"overlays/swe/, hidden_tests/, reference_solution/, "
+                         f"task.md, optional doc_rules.json). Default: "
+                         f"{DEFAULT_TASK!r}. Used by --dry-run/--selftest/the "
+                         f"full run; --reparse instead reads the task each "
+                         f"row already recorded (absent -> 'v1').")
     p.add_argument("--trials", type=int, default=3)
     p.add_argument("--arms", type=str, default=None,
                     help="comma-separated subset of arm names")
@@ -1254,6 +1622,19 @@ def build_arg_parser():
                     help="skip the claude.ai-subscription auth guard and allow "
                          "the run to proceed even if `claude auth status` shows "
                          "API-key/non-subscription billing.")
+    p.add_argument("--gate-probe", action="store_true",
+                    help="for each plugin arm, run a short adversarial "
+                         "headless prompt (GATE_PROBE_PROMPT) that tries to "
+                         "edit ledgerlite/money.py without reading anything "
+                         "first, then judge PASS/FAIL from the transcript + "
+                         "stream (see evaluate_gate_probe). DOES invoke "
+                         "`claude -p` (short, ~5 min timeout per arm) -- the "
+                         "subscription auth guard applies. Prints a table "
+                         "and writes results/<stamp>-gateprobe/gate_probe.json.")
+    p.add_argument("--gate-selftest", action="store_true",
+                    help="pure sanity check of the gate-probe evaluation "
+                         "pipeline against synthetic fixtures -- makes NO "
+                         "model call. Exits 0 on success.")
     p.add_argument("--reparse", type=str, default=None, metavar="STAMP",
                     help="recompute metrics/stream_metrics for every row of "
                          "results/<STAMP>/runs.jsonl from the saved "
@@ -1280,8 +1661,12 @@ def main(argv=None):
 
     if args.reparse:
         return cmd_reparse(args.reparse, out_dir=args.out)
+    if args.gate_selftest:
+        return cmd_gate_selftest()
+    if args.gate_probe:
+        return cmd_gate_probe(args)
     if args.selftest:
-        return cmd_selftest()
+        return cmd_selftest(task=args.task)
     if args.preflight:
         return cmd_preflight(args)
     if args.dry_run:
