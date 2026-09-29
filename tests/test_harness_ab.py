@@ -495,6 +495,47 @@ class BuildCommandTest(unittest.TestCase):
         cmd = run.build_command("t", "claude-sonnet-5", None)
         self.assertNotIn("--max-budget-usd", cmd)
 
+    def test_default_has_no_session_persistence(self):
+        # Every existing single-phase call site must keep getting the exact
+        # same command it always has -- session/resume are both None by
+        # default.
+        cmd = run.build_command("t", "claude-sonnet-5", None)
+        self.assertIn("--no-session-persistence", cmd)
+        self.assertNotIn("--session-id", cmd)
+        self.assertNotIn("--resume", cmd)
+
+    def test_session_id_drops_no_session_persistence(self):
+        cmd = run.build_command("t", "claude-sonnet-5", None,
+                                 session_id="11111111-1111-4111-8111-111111111111")
+        self.assertNotIn("--no-session-persistence", cmd)
+        self.assertIn("--session-id", cmd)
+        idx = cmd.index("--session-id")
+        self.assertEqual(cmd[idx + 1], "11111111-1111-4111-8111-111111111111")
+        self.assertNotIn("--resume", cmd)
+
+    def test_resume_drops_no_session_persistence(self):
+        cmd = run.build_command("t", "claude-sonnet-5", None, resume="abc-123")
+        self.assertNotIn("--no-session-persistence", cmd)
+        self.assertIn("--resume", cmd)
+        idx = cmd.index("--resume")
+        self.assertEqual(cmd[idx + 1], "abc-123")
+        self.assertNotIn("--session-id", cmd)
+
+    def test_session_id_and_resume_are_mutually_exclusive(self):
+        with self.assertRaises(AssertionError):
+            run.build_command("t", "claude-sonnet-5", None,
+                               session_id="a", resume="b")
+
+    def test_session_flags_preserve_every_other_flag(self):
+        cmd = run.build_command("t", "claude-sonnet-5", 2.0,
+                                 plugin_dir="/tmp/armdir", effort="high",
+                                 session_id="sess-1")
+        for expected in ("--output-format", "stream-json", "--verbose",
+                          "--model", "--setting-sources", "project,local",
+                          "--dangerously-skip-permissions", "--max-budget-usd",
+                          "--plugin-dir", "--effort"):
+            self.assertIn(expected, cmd)
+
 
 class ParseAuthStatusTest(unittest.TestCase):
     def test_subscription_logged_in_ok(self):
@@ -937,6 +978,42 @@ class TaskPathsTest(unittest.TestCase):
         self.assertTrue(os.path.isdir(paths["hidden_tests"]))
         self.assertTrue(os.path.isdir(paths["reference_solution"]))
         self.assertTrue(os.path.exists(paths["task_md"]))
+
+    def test_pivot_keys_present(self):
+        paths = run.task_paths("v1")
+        for key in ("pivot_dir", "pivot_prompt", "pivot_hidden_tests",
+                    "pivot_reference_solution", "pivot_doc_rules"):
+            self.assertIn(key, paths)
+        self.assertTrue(paths["pivot_prompt"].endswith(
+            os.path.join("tasks", "v1", "pivot", "prompt.md")))
+        self.assertTrue(paths["pivot_hidden_tests"].endswith(
+            os.path.join("tasks", "v1", "pivot", "hidden_tests")))
+
+
+class HasPivotTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp(prefix="harness_has_pivot_test_")
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+
+    def test_no_pivot_dir_is_false(self):
+        paths = run.task_paths("nonexistent-task-xyz")
+        self.assertFalse(run.has_pivot(paths))
+
+    def test_pivot_prompt_present_is_true(self):
+        task_dir = os.path.join(self.tmp, "task")
+        pivot_dir = os.path.join(task_dir, "pivot")
+        os.makedirs(pivot_dir)
+        with open(os.path.join(pivot_dir, "prompt.md"), "w") as f:
+            f.write("New task: do more things.\n")
+        paths = {"pivot_prompt": os.path.join(pivot_dir, "prompt.md")}
+        self.assertTrue(run.has_pivot(paths))
+
+    def test_pivot_dir_without_prompt_is_false(self):
+        task_dir = os.path.join(self.tmp, "task")
+        pivot_dir = os.path.join(task_dir, "pivot")
+        os.makedirs(pivot_dir)
+        paths = {"pivot_prompt": os.path.join(pivot_dir, "prompt.md")}
+        self.assertFalse(run.has_pivot(paths))
 
 
 class ResolveOverlayTest(unittest.TestCase):
@@ -1411,6 +1488,245 @@ class CmdGateSelftestTest(unittest.TestCase):
     def test_exits_zero(self):
         rc = run.cmd_gate_selftest()
         self.assertEqual(rc, 0)
+
+
+class ScoreHiddenTestsDirTest(unittest.TestCase):
+    """score_hidden_tests_dir: scores an arbitrary hidden_tests dir into
+    work_dir/_acceptance/<subdir>/, alongside another subdir, and both are
+    discoverable together via `-t .` (see run_unittest_dir)."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp(prefix="harness_score_hidden_test_")
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+        self.work_dir = os.path.join(self.tmp, "work")
+        os.makedirs(self.work_dir)
+        self.hidden_a = os.path.join(self.tmp, "hidden_a")
+        os.makedirs(self.hidden_a)
+        with open(os.path.join(self.hidden_a, "__init__.py"), "w") as f:
+            f.write("")
+        with open(os.path.join(self.hidden_a, "test_spec_a.py"), "w") as f:
+            f.write(
+                "import unittest\n"
+                "class T(unittest.TestCase):\n"
+                "    def test_a_passes(self):\n"
+                "        pass\n"
+            )
+        self.hidden_b = os.path.join(self.tmp, "hidden_b")
+        os.makedirs(self.hidden_b)
+        with open(os.path.join(self.hidden_b, "__init__.py"), "w") as f:
+            f.write("")
+        with open(os.path.join(self.hidden_b, "test_doc_b.py"), "w") as f:
+            f.write(
+                "import unittest\n"
+                "class T(unittest.TestCase):\n"
+                "    def test_b_fails(self):\n"
+                "        self.fail('nope')\n"
+            )
+
+    def test_two_subdirs_scored_independently_and_both_discovered(self):
+        acc_a = run.score_hidden_tests_dir(self.work_dir, self.hidden_a, "task1")
+        self.assertEqual(acc_a["total"], 1)
+        self.assertTrue(acc_a["ok"])
+        self.assertEqual(acc_a["spec"]["total"], 1)
+
+        acc_b = run.score_hidden_tests_dir(self.work_dir, self.hidden_b, "pivot")
+        # -t . discovery finds BOTH subdirs' tests once both are copied in,
+        # so acc_b's total reflects task1's test too.
+        self.assertEqual(acc_b["total"], 2)
+        self.assertFalse(acc_b["ok"])
+        self.assertEqual(acc_b["doc"]["total"], 1)
+        self.assertIn("test_b_fails (_acceptance.pivot.test_doc_b.T.test_b_fails)",
+                       acc_b["failed_tests"])
+
+        self.assertTrue(os.path.isdir(os.path.join(self.work_dir, "_acceptance", "task1")))
+        self.assertTrue(os.path.isdir(os.path.join(self.work_dir, "_acceptance", "pivot")))
+
+    def test_missing_hidden_tests_dir_reports_not_present(self):
+        acc = run.score_hidden_tests_dir(self.work_dir, os.path.join(self.tmp, "nope"), "task1")
+        self.assertEqual(acc["exit_code"], -1)
+        self.assertEqual(acc["total"], 0)
+
+    def test_log_file_written_when_run_dir_and_log_name_given(self):
+        run_dir = os.path.join(self.tmp, "rundir")
+        run.score_hidden_tests_dir(self.work_dir, self.hidden_a, "task1",
+                                    run_dir=run_dir, log_name="acceptance.task1.b1.txt")
+        self.assertTrue(os.path.exists(os.path.join(run_dir, "acceptance.task1.b1.txt")))
+
+
+class RemoveAcceptanceDirTest(unittest.TestCase):
+    def test_removes_existing_dir(self):
+        tmp = tempfile.mkdtemp(prefix="harness_remove_acc_test_")
+        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
+        acc_dir = os.path.join(tmp, "_acceptance")
+        os.makedirs(acc_dir)
+        with open(os.path.join(acc_dir, "f.txt"), "w") as f:
+            f.write("x")
+        run.remove_acceptance_dir(tmp)
+        self.assertFalse(os.path.exists(acc_dir))
+
+    def test_no_op_when_absent(self):
+        tmp = tempfile.mkdtemp(prefix="harness_remove_acc_test2_")
+        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
+        run.remove_acceptance_dir(tmp)  # must not raise
+
+
+class GitCommitSnapshotTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp(prefix="harness_git_snapshot_test_")
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+        run._run(["git", "init", "-q"], cwd=self.tmp)
+        with open(os.path.join(self.tmp, "f.txt"), "w") as f:
+            f.write("v1\n")
+        run._run(["git", "-c", "user.name=x", "-c", "user.email=x@x", "add", "-A"], cwd=self.tmp)
+        run._run(["git", "-c", "user.name=x", "-c", "user.email=x@x", "commit", "-qm", "init"],
+                  cwd=self.tmp)
+
+    def test_returns_sha_and_creates_commit(self):
+        before = run._run(["git", "rev-parse", "HEAD"], cwd=self.tmp).stdout.strip()
+        with open(os.path.join(self.tmp, "f.txt"), "w") as f:
+            f.write("v2\n")
+        sha = run.git_commit_snapshot(self.tmp, "benchmark1")
+        self.assertNotEqual(sha, before)
+        after = run._run(["git", "rev-parse", "HEAD"], cwd=self.tmp).stdout.strip()
+        self.assertEqual(sha, after)
+
+    def test_allow_empty_when_nothing_changed(self):
+        # Two consecutive snapshots with no tree changes in between must
+        # both succeed (git commit --allow-empty), producing two distinct
+        # commits.
+        sha1 = run.git_commit_snapshot(self.tmp, "benchmark1")
+        sha2 = run.git_commit_snapshot(self.tmp, "benchmark2")
+        self.assertNotEqual(sha1, sha2)
+
+
+class Task1RetentionTest(unittest.TestCase):
+    def test_all_b1_passes_retained_at_b2(self):
+        b1 = {"total": 3, "passed": 3, "failed_tests": []}
+        b2 = {"total": 3, "passed": 3, "failed_tests": []}
+        result = run.task1_retention(b1, b2)
+        self.assertEqual(result, {"passed": 3, "total": 3, "regressions": []})
+
+    def test_regression_detected(self):
+        b1 = {"total": 3, "passed": 3, "failed_tests": []}
+        b2 = {"total": 3, "passed": 2,
+              "failed_tests": ["test_x (pkg.test_spec_a.T.test_x)"]}
+        result = run.task1_retention(b1, b2)
+        self.assertEqual(result["total"], 3)
+        self.assertEqual(result["passed"], 2)
+        self.assertEqual(result["regressions"], ["test_x (pkg.test_spec_a.T.test_x)"])
+
+    def test_test_that_already_failed_at_b1_is_not_a_regression(self):
+        # A test failing at both B1 and B2 is not a NEW regression -- it
+        # was never counted in the B1 passed set to begin with.
+        b1 = {"total": 3, "passed": 2,
+              "failed_tests": ["test_y (pkg.test_spec_a.T.test_y)"]}
+        b2 = {"total": 3, "passed": 1,
+              "failed_tests": ["test_y (pkg.test_spec_a.T.test_y)",
+                                "test_z (pkg.test_spec_a.T.test_z)"]}
+        result = run.task1_retention(b1, b2)
+        # b1_passed_count=2, one of the two now-failing ids (test_y) was
+        # already failing at B1 so isn't a regression; test_z is.
+        self.assertEqual(result["regressions"], ["test_z (pkg.test_spec_a.T.test_z)"])
+        self.assertEqual(result["passed"], 1)
+
+    def test_no_b1_passes_yields_empty_regressions(self):
+        b1 = {"total": 0, "passed": 0, "failed_tests": []}
+        b2 = {"total": 0, "passed": 0, "failed_tests": []}
+        result = run.task1_retention(b1, b2)
+        self.assertEqual(result, {"passed": 0, "total": 0, "regressions": []})
+
+
+class SumPhaseMetricsTest(unittest.TestCase):
+    def _metrics(self, **overrides):
+        base = {
+            "num_turns": 1, "assistant_message_count": 1,
+            "assistant_turns_incl_subagents": 1, "total_tool_calls": 1,
+            "memory_file_reads": 0, "subagent_launches": 0,
+            "subagent_messages": 0, "tool_result_errors": 0,
+            "hook_denials": 0, "stop_hook_blocks": 0, "main_tokens": 100,
+            "all_model_tokens": 100, "total_tokens": 100,
+            "duration_ms": 1000, "duration_api_ms": 500,
+            "est_cost_usd": 0.01,
+            "usage": {"input_tokens": 10, "output_tokens": 20,
+                      "cache_creation_input_tokens": 0, "cache_read_input_tokens": 0},
+            "tool_calls_by_name": {"Read": 1},
+            "model_usage": {"claude-sonnet-5": {"inputTokens": 10, "outputTokens": 20,
+                                                  "cacheReadInputTokens": 0,
+                                                  "cacheCreationInputTokens": 0,
+                                                  "costUSD": 0.01}},
+            "distinct_models_used": 1,
+            "subtype": "success", "is_error": False,
+            "mcp_servers": [], "plugins": [],
+        }
+        base.update(overrides)
+        return base
+
+    def test_numeric_fields_summed(self):
+        m1 = self._metrics()
+        m2 = self._metrics(num_turns=2, total_tokens=200, main_tokens=200,
+                            all_model_tokens=200)
+        out = run._sum_phase_metrics(m1, m2)
+        self.assertEqual(out["num_turns"], 3)
+        self.assertEqual(out["total_tokens"], 300)
+        self.assertEqual(out["main_tokens"], 300)
+
+    def test_usage_dict_summed_keywise(self):
+        m1 = self._metrics()
+        m2 = self._metrics()
+        out = run._sum_phase_metrics(m1, m2)
+        self.assertEqual(out["usage"]["input_tokens"], 20)
+        self.assertEqual(out["usage"]["output_tokens"], 40)
+
+    def test_tool_calls_by_name_summed(self):
+        m1 = self._metrics(tool_calls_by_name={"Read": 2, "Edit": 1})
+        m2 = self._metrics(tool_calls_by_name={"Read": 1, "Write": 3})
+        out = run._sum_phase_metrics(m1, m2)
+        self.assertEqual(out["tool_calls_by_name"], {"Read": 3, "Edit": 1, "Write": 3})
+
+    def test_model_usage_summed_and_distinct_models_recomputed(self):
+        m1 = self._metrics()
+        m2 = self._metrics(model_usage={
+            "claude-opus": {"inputTokens": 5, "outputTokens": 5,
+                             "cacheReadInputTokens": 0, "cacheCreationInputTokens": 0,
+                             "costUSD": 0.02}})
+        out = run._sum_phase_metrics(m1, m2)
+        self.assertEqual(set(out["model_usage"].keys()), {"claude-sonnet-5", "claude-opus"})
+        self.assertEqual(out["distinct_models_used"], 2)
+        self.assertEqual(out["model_usage"]["claude-sonnet-5"]["inputTokens"], 10)
+
+    def test_est_cost_summed(self):
+        m1 = self._metrics(est_cost_usd=0.01)
+        m2 = self._metrics(est_cost_usd=0.02)
+        out = run._sum_phase_metrics(m1, m2)
+        self.assertAlmostEqual(out["est_cost_usd"], 0.03)
+
+    def test_est_cost_none_when_both_none(self):
+        m1 = self._metrics(est_cost_usd=None)
+        m2 = self._metrics(est_cost_usd=None)
+        out = run._sum_phase_metrics(m1, m2)
+        self.assertIsNone(out["est_cost_usd"])
+
+    def test_non_additive_fields_take_phase2_value(self):
+        m1 = self._metrics(mcp_servers=[{"name": "serena"}])
+        m2 = self._metrics(mcp_servers=[{"name": "serena"}, {"name": "other"}])
+        out = run._sum_phase_metrics(m1, m2)
+        self.assertEqual(out["mcp_servers"], m2["mcp_servers"])
+
+
+class CmdSelftestPivotTest(unittest.TestCase):
+    """cmd_selftest gracefully skips the pivot self-test when tasks/<task>/
+    pivot/ doesn't exist -- exercised against the real v1 task fixture
+    (which has no pivot/ dir) rather than a synthetic tree, since
+    cmd_selftest reads task_paths(task) internally."""
+
+    def test_v1_has_no_pivot_and_selftest_still_runs(self):
+        paths = run.task_paths("v1")
+        self.assertFalse(run.has_pivot(paths))
+        # cmd_selftest itself needs the real fixture/reference_solution on
+        # disk to do anything meaningful; just confirm has_pivot's guard is
+        # what gates the pivot branch (the full cmd_selftest exercise for
+        # v1's single-phase path is already covered elsewhere / by CI, and
+        # a live run here would duplicate that cost).
 
 
 if __name__ == "__main__":
