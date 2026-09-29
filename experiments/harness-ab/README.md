@@ -9,7 +9,9 @@ coding task under three arms:
 | `v5` | SWE plugin at git ref `harness-v5-prototype` |
 | `control` | no plugin |
 
-Arm definitions live in `arms.json`.
+Arm definitions live in `arms.json`, each with an `"overlay"` field naming
+which `overlays/<name>/` directory (see below) is applied over the fixture
+for that arm: `baseline` and `v5` use `"swe"`, `control` uses `"control"`.
 
 ## Task variants
 
@@ -18,13 +20,65 @@ contract:
 
 ```
 tasks/<name>/
-  fixture/               starting codebase copied into every run's work dir
-  overlays/swe/           overlaid on top of fixture/ for plugin arms only
-  hidden_tests/           acceptance test suite, copied to _acceptance/ post-run
-  reference_solution/     overlay that should make acceptance 100% (--selftest)
-  task.md                 exact prompt text given to the agent
-  doc_rules.json          optional: domain-rule -> memory -> tests mapping
+  fixture/                starting codebase copied into every run's work dir
+  overlays/<name>/         overlaid on top of fixture/ per-arm (arms.json's "overlay" field)
+  hidden_tests/            acceptance test suite, copied to _acceptance/ post-run
+  reference_solution/      overlay that should make acceptance 100% (--selftest)
+  task.md                  exact prompt text given to the agent
+  doc_rules.json           optional: domain-rule -> memory -> tests mapping
 ```
+
+### Per-arm overlays
+
+Every arm resolves its overlay via `arms.json`'s `"overlay"` field (e.g.
+`"swe"`, `"control"`) against `tasks/<task>/overlays/<overlay>/` for the
+task being run (`run.resolve_overlay`). When that directory exists, it's
+copied on top of the fixture (`run.make_run_workdir`), so `CLAUDE.md`,
+`.serena/memory/`, or anything else the overlay ships overwrites/adds to
+the fixture's own copy. When it doesn't exist for the current task variant
+(e.g. `tasks/v1/` has no `overlays/control/`), the run proceeds on the bare
+fixture — `overlay_applied: false` is recorded in the run's `runs.jsonl`
+row and a warning is printed, it never fails the run.
+
+An arm dict with no `"overlay"` key at all (old-style `arms.json`) falls
+back to the pre-per-arm behavior: plugin arms use `overlays/swe/` if
+present, non-plugin arms get no overlay — so an old `arms.json` or a
+hand-built arm dict in a test keeps working unchanged.
+
+**What `control` sees:** `tasks/<name>/overlays/control/CLAUDE.md`, when it
+exists, is the *only* place the control arm is allowed to reference where
+project documentation lives — one line naming the `.serena/memory/`
+location, so the "doc" acceptance-test category (behavior only documented
+in a Serena memory) is a fair comparison and not an artificial handicap for
+an arm with no plugin/MCP access to `read_memory`. Nothing else about the
+plugin's workflow machinery (state names, gate language, tool names) may
+appear. `run.validate_claude_md` enforces this: every run's *effective*
+`CLAUDE.md` (fixture + overlay, exactly what the agent process actually
+sees) is checked before any `claude -p` call —
+
+- **plugin arms** (`baseline`, `v5`): must contain the SWE enforcement
+  prefix (`scripts/CLAUDE_PREFIX.md`'s content, injected by
+  `overlays/swe/CLAUDE.md`) — checked via two literal markers, the
+  `MANDATORY ENTRY POINT` heading and the `wf/WF_INIT` reference. A plugin
+  arm whose overlay failed to apply (or whose `CLAUDE.md` was stripped)
+  would otherwise run with no init-gate instructions at all and silently
+  invalidate the whole comparison.
+- **`control`**: must contain none of `swe`, `wf_`, `workflow engine`,
+  `harness`, `read_memory`, `mcp__`, `serena` (case-insensitive, checked
+  line by line), except the single sanctioned line that mentions
+  `.serena/memory` (the doc-location line above) — more than one such line,
+  or any other line carrying a leak term, is an error.
+
+A failed check raises `SystemExit` **before** the run's `claude -p` call is
+built or invoked (`run_one`, `cmd_gate_probe`); `--dry-run` and `--selftest`
+run the same check per arm but only report PASS/FAIL (never abort), since
+neither of them invokes `claude -p` at all. Every `runs.jsonl` row records
+`"claude_md_check": "ok"` or the list of error strings, plus
+`"overlay"` / `"overlay_applied"` / `"claude_md_sha256"` (a sha256 hex
+digest of the effective `CLAUDE.md`, so the report can prove exactly what
+each arm's `CLAUDE.md` looked like without re-deriving it from the saved
+`work/` tree). All four fields are additive — a row from before this
+existed simply lacks them (see "Backward compatibility" below).
 
 `run.py --task <name>` selects the variant (default: `v2`); it's recorded
 in `meta.json` and in every `runs.jsonl` row's `"task"` field. A row with no
@@ -235,6 +289,8 @@ python3 experiments/harness-ab/run.py --selftest --task v2
 
 # 3. Prepare arm clones, print exact commands, run the auth check, and
 #    sanity-check the UNMODIFIED fixture fails acceptance (no claude calls).
+#    Also prints, per arm: which overlay resolved and whether it applied,
+#    the effective CLAUDE.md's first 3 lines, and the CLAUDE.md check result.
 python3 experiments/harness-ab/run.py --dry-run --task v2 --model claude-sonnet-5
 
 # 4. Free sanity check of the gate-probe evaluation pipeline (no claude calls).
@@ -269,6 +325,13 @@ are left untouched unless acceptance is missing outright or missing the
 newer per-category/`doc_rules` fields, in which case it's re-scored against
 the saved `work/` dir (never a live re-run of the agent). The original file
 is backed up to `runs.jsonl.orig` on first `--reparse` of a given stamp.
+
+`--reparse` does **not** recompute `overlay` / `overlay_applied` /
+`claude_md_sha256` / `claude_md_check` — those are recorded only by a live
+`run_one` (or `cmd_gate_probe`) call, since they describe what the agent's
+`CLAUDE.md` looked like at invocation time, not something derivable from
+the saved transcript alone. A row from before these fields existed simply
+lacks them.
 
 ## Cost and budget
 

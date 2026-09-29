@@ -16,6 +16,7 @@ do_ / cmd_ or in main().
 """
 import argparse
 import glob
+import hashlib
 import importlib.util
 import json
 import os
@@ -57,24 +58,38 @@ DEFAULT_OUT = os.path.join(HERE, "results")
 
 def task_paths(task_name):
     """Return the dict of on-disk paths for one task variant under
-    tasks/<task_name>/: fixture/, overlays/swe/, hidden_tests/,
+    tasks/<task_name>/: fixture/, overlays/<name>/, hidden_tests/,
     reference_solution/, task.md, and an optional doc_rules.json.
 
     New contract (v2+): hidden_tests/ contains test_spec_*.py and
     test_doc_*.py files. v1 (legacy, moved from the old flat layout) uses
     test_acceptance_*.py and has no doc_rules.json. Both shapes are read the
     same way by run.py/acceptance.py — the categorizer just buckets
-    test_acceptance_* as "other"."""
+    test_acceptance_* as "other".
+
+    `overlay_swe` is kept for backward compat with any external caller that
+    imported it directly; `overlays_dir` is the new generic base (see
+    overlay_dir_for()) used for per-arm overlays (arms.json's "overlay"
+    field)."""
     task_dir = os.path.join(TASKS_DIR, task_name)
     return {
         "dir": task_dir,
         "fixture": os.path.join(task_dir, "fixture"),
+        "overlays_dir": os.path.join(task_dir, "overlays"),
         "overlay_swe": os.path.join(task_dir, "overlays", "swe"),
         "hidden_tests": os.path.join(task_dir, "hidden_tests"),
         "reference_solution": os.path.join(task_dir, "reference_solution"),
         "task_md": os.path.join(task_dir, "task.md"),
         "doc_rules": os.path.join(task_dir, "doc_rules.json"),
     }
+
+
+def overlay_dir_for(paths, overlay_name):
+    """Path to tasks/<task>/overlays/<overlay_name>/, or None if
+    overlay_name is falsy."""
+    if not overlay_name:
+        return None
+    return os.path.join(paths["overlays_dir"], overlay_name)
 
 
 # Module-level defaults, kept for backward compat with any external caller
@@ -679,20 +694,64 @@ def prepare_all_arms(arms, force=False):
     return prepared
 
 
+def resolve_overlay(arm, paths):
+    """Resolve which overlay (if any) applies to `arm` for this task, and
+    whether it actually exists on disk. Pure (no filesystem writes).
+
+    Returns {"overlay": name|None, "overlay_dir": path|None,
+             "overlay_applied": bool, "warning": str|None}.
+
+    Back-compat: an arm dict with no "overlay" key falls back to
+    plugin-gated behavior — plugin arms use overlays/swe/ if present on
+    disk, non-plugin arms get no overlay — so an arms.json (or a
+    caller-constructed arm dict) that omits "overlay" entirely keeps
+    working unchanged."""
+    overlay_name = arm.get("overlay")
+    if overlay_name is None:
+        # Legacy fallback: only plugin arms got the swe overlay before
+        # per-arm overlays existed.
+        overlay_name = "swe" if arm.get("plugin") else None
+
+    if not overlay_name:
+        return {"overlay": None, "overlay_dir": None,
+                "overlay_applied": False, "warning": None}
+
+    overlay_dir = overlay_dir_for(paths, overlay_name)
+    exists = bool(overlay_dir and os.path.isdir(overlay_dir))
+    warning = None
+    if not exists:
+        warning = (f"overlay {overlay_name!r} not found at {overlay_dir} "
+                    f"for task {paths.get('dir')!r} — proceeding without it")
+    return {"overlay": overlay_name, "overlay_dir": overlay_dir if exists else overlay_dir,
+            "overlay_applied": exists, "warning": warning}
+
+
 def make_run_workdir(run_dir, arm, paths=None):
+    """Copy the fixture into run_dir/work/, apply the arm's resolved overlay
+    (see resolve_overlay) if it exists on disk, and commit as the run's
+    starting point.
+
+    Returns (work_dir, overlay_info) — overlay_info is resolve_overlay()'s
+    dict, so callers can record overlay/overlay_applied/warnings per run
+    without re-deriving them."""
     paths = paths or task_paths(DEFAULT_TASK)
     work_dir = os.path.join(run_dir, "work")
     if os.path.exists(work_dir):
         shutil.rmtree(work_dir)
     shutil.copytree(paths["fixture"], work_dir)
-    if arm.get("plugin") and os.path.isdir(paths["overlay_swe"]):
-        _copy_overlay(paths["overlay_swe"], work_dir)
+
+    overlay_info = resolve_overlay(arm, paths)
+    if overlay_info["warning"]:
+        print(f"warning: {overlay_info['warning']}", file=sys.stderr)
+    if overlay_info["overlay_applied"]:
+        _copy_overlay(overlay_info["overlay_dir"], work_dir)
+
     _run(["git", "init", "-q"], cwd=work_dir)
     _run(["git", "-c", "user.name=harness-ab", "-c", "user.email=harness-ab@localhost",
           "add", "-A"], cwd=work_dir)
     _run(["git", "-c", "user.name=harness-ab", "-c", "user.email=harness-ab@localhost",
           "commit", "-qm", "fixture"], cwd=work_dir)
-    return work_dir
+    return work_dir, overlay_info
 
 
 def _copy_overlay(src, dst):
@@ -702,6 +761,98 @@ def _copy_overlay(src, dst):
         os.makedirs(target_dir, exist_ok=True)
         for fname in files:
             shutil.copy2(os.path.join(root, fname), os.path.join(target_dir, fname))
+
+
+def sha256_of_claude_md(work_dir):
+    """sha256 hex digest of work_dir/CLAUDE.md, or None if it doesn't
+    exist. Used to prove (in each runs.jsonl row) exactly what CLAUDE.md
+    content an arm's agent saw, independent of which overlay produced it."""
+    claude_md = os.path.join(work_dir, "CLAUDE.md")
+    if not os.path.isfile(claude_md):
+        return None
+    h = hashlib.sha256()
+    with open(claude_md, "rb") as f:
+        h.update(f.read())
+    return h.hexdigest()
+
+
+def read_effective_claude_md(work_dir):
+    """Read work_dir/CLAUDE.md text, or "" if it doesn't exist."""
+    claude_md = os.path.join(work_dir, "CLAUDE.md")
+    if not os.path.isfile(claude_md):
+        return ""
+    with open(claude_md, encoding="utf-8", errors="replace") as f:
+        return f.read()
+
+
+# Literal markers proving the SWE enforcement prefix (scripts/CLAUDE_PREFIX.md,
+# injected into overlays/swe/CLAUDE.md) is present in a plugin arm's
+# effective CLAUDE.md.
+SWE_PREFIX_MARKERS = ("MANDATORY ENTRY POINT", "wf/WF_INIT")
+
+# Harness-leak terms that must NOT appear in the control arm's effective
+# CLAUDE.md (case-insensitive), except inside the one allowed doc-location
+# line, which is the only place ".serena/memory" may legitimately appear
+# (the other agent's overlays/control/CLAUDE.md adds a single line naming
+# where docs live, for the "doc" acceptance-test category to be fair).
+CONTROL_LEAK_TERMS = ("swe", "wf_", "workflow engine", "harness",
+                       "read_memory", "mcp__", "serena")
+CONTROL_ALLOWED_DOC_LINE_RE = re.compile(r"\.serena/memory", re.IGNORECASE)
+
+
+def validate_claude_md(arm_name, plugin, text):
+    """Pure validation of one arm's effective CLAUDE.md content. Returns a
+    list of error message strings (empty = valid).
+
+    - plugin arms (baseline, v5): must contain the SWE enforcement prefix
+      (see SWE_PREFIX_MARKERS) — a plugin arm whose overlay failed to apply,
+      or whose CLAUDE.md was silently stripped, would otherwise run with no
+      init-gate instructions and invalidate the comparison.
+    - control arm: must contain NONE of CONTROL_LEAK_TERMS (case-insensitive),
+      checked line by line, except the single line that matches
+      CONTROL_ALLOWED_DOC_LINE_RE (".serena/memory") — the one sanctioned
+      doc-location line the control overlay is allowed to add. Any other
+      line containing a leak term, OR more than one line matching the
+      allowed-doc-line pattern, is an error.
+    """
+    errors = []
+    text = text or ""
+
+    if plugin:
+        for marker in SWE_PREFIX_MARKERS:
+            if marker not in text:
+                errors.append(
+                    f"{arm_name}: missing SWE enforcement prefix marker "
+                    f"{marker!r} in effective CLAUDE.md (overlay not applied "
+                    f"or prefix stripped)")
+        return errors
+
+    # control (and any other non-plugin arm): must not leak harness
+    # internals, except the single allowed doc-location line.
+    lines = text.splitlines()
+    allowed_doc_lines = 0
+    for lineno, line in enumerate(lines, start=1):
+        is_allowed_doc_line = bool(CONTROL_ALLOWED_DOC_LINE_RE.search(line))
+        if is_allowed_doc_line:
+            allowed_doc_lines += 1
+        lower = line.lower()
+        for term in CONTROL_LEAK_TERMS:
+            if term in lower:
+                if is_allowed_doc_line:
+                    # The allowed doc-location line is permitted to mention
+                    # ".serena/memory" itself, but not any OTHER leak term
+                    # on that same line.
+                    if term == "serena" and CONTROL_ALLOWED_DOC_LINE_RE.search(line):
+                        continue
+                errors.append(
+                    f"{arm_name}: leaked harness term {term!r} on CLAUDE.md "
+                    f"line {lineno}: {line!r}")
+    if allowed_doc_lines > 1:
+        errors.append(
+            f"{arm_name}: more than one line ({allowed_doc_lines}) matches "
+            f"the allowed doc-location pattern in CLAUDE.md — only a single "
+            f"sanctioned line may mention .serena/memory")
+    return errors
 
 
 def run_claude(cmd, cwd, env, timeout_min, transcript_path, stderr_path):
@@ -930,7 +1081,16 @@ def run_one(stamp_dir, arm, arms_prepared, trial, model, effort, budget_usd,
     run_dir = os.path.join(stamp_dir, "runs", run_id)
     os.makedirs(run_dir, exist_ok=True)
 
-    work_dir = make_run_workdir(run_dir, arm, paths=paths)
+    work_dir, overlay_info = make_run_workdir(run_dir, arm, paths=paths)
+    claude_md_text = read_effective_claude_md(work_dir)
+    claude_md_sha256 = sha256_of_claude_md(work_dir)
+    claude_md_errors = validate_claude_md(arm_name, bool(arm.get("plugin")), claude_md_text)
+    if claude_md_errors:
+        raise SystemExit(
+            f"{run_id}: effective CLAUDE.md failed validation before any "
+            f"`claude -p` call:\n" + "\n".join(f"  - {e}" for e in claude_md_errors)
+        )
+
     task_text = read_task_text(paths=paths)
 
     plugin_dir = arms_prepared[arm_name]["dir"] if arm.get("plugin") else None
@@ -980,6 +1140,10 @@ def run_one(stamp_dir, arm, arms_prepared, trial, model, effort, budget_usd,
         "acceptance": acceptance,
         "regression": regression,
         "isolation": isolation,
+        "overlay": overlay_info["overlay"],
+        "overlay_applied": overlay_info["overlay_applied"],
+        "claude_md_sha256": claude_md_sha256,
+        "claude_md_check": "ok" if not claude_md_errors else claude_md_errors,
     }
     return row
 
@@ -997,6 +1161,32 @@ def cmd_selftest(task=DEFAULT_TASK):
         print(f"SELFTEST SKIP: tasks/{task}/hidden_tests not present yet", file=sys.stderr)
         return 1
 
+    claude_md_all_ok = True
+    try:
+        arms = load_arms()
+    except Exception as e:
+        arms = []
+        print(f"SELFTEST WARN: could not load arms.json for CLAUDE.md check: {e}", file=sys.stderr)
+    for arm in arms:
+        arm_tmp = os.path.join(WORK_ROOT, "selftest-claudemd-" + uuid.uuid4().hex[:8])
+        os.makedirs(arm_tmp, exist_ok=True)
+        arm_work_dir = os.path.join(arm_tmp, "work")
+        shutil.copytree(paths["fixture"], arm_work_dir)
+        overlay_info = resolve_overlay(arm, paths)
+        if overlay_info["warning"]:
+            print(f"SELFTEST WARN: {overlay_info['warning']}", file=sys.stderr)
+        if overlay_info["overlay_applied"]:
+            _copy_overlay(overlay_info["overlay_dir"], arm_work_dir)
+        claude_md_errors = validate_claude_md(
+            arm["name"], bool(arm.get("plugin")), read_effective_claude_md(arm_work_dir))
+        if claude_md_errors:
+            claude_md_all_ok = False
+            print(f"SELFTEST: CLAUDE.md check FAILED for arm {arm['name']!r}:", file=sys.stderr)
+            for e in claude_md_errors:
+                print(f"  - {e}", file=sys.stderr)
+        else:
+            print(f"SELFTEST: CLAUDE.md check ok for arm {arm['name']!r}", file=sys.stderr)
+
     tmp = os.path.join(WORK_ROOT, "selftest-" + uuid.uuid4().hex[:8])
     os.makedirs(tmp, exist_ok=True)
     work_dir = os.path.join(tmp, "work")
@@ -1006,7 +1196,8 @@ def cmd_selftest(task=DEFAULT_TASK):
     acceptance, regression = score_run(work_dir, paths=paths)
     print(json.dumps({"acceptance": acceptance, "regression": regression}, indent=2))
 
-    ok = acceptance.get("ok") and acceptance.get("total", 0) > 0 and regression.get("ok")
+    ok = (acceptance.get("ok") and acceptance.get("total", 0) > 0 and
+          regression.get("ok") and claude_md_all_ok)
     if not ok:
         print("SELFTEST FAILED", file=sys.stderr)
         return 1
@@ -1045,12 +1236,28 @@ def cmd_dry_run(args, arms):
         arm_name = arm["name"]
         run_dir = os.path.join(stamp_dir, "runs", f"{arm_name}-t0")
         os.makedirs(run_dir, exist_ok=True)
-        work_dir = make_run_workdir(run_dir, arm, paths=paths)
+        work_dir, overlay_info = make_run_workdir(run_dir, arm, paths=paths)
         plugin_dir = prepared[arm_name]["dir"] if arm.get("plugin") else None
         cmd = build_command(task_text, args.model, args.budget_usd,
                              plugin_dir=plugin_dir, effort=args.effort)
         print(f"=== {arm_name} ===")
         print(" ".join(cmd))
+        print(f"  overlay={overlay_info['overlay']!r} applied={overlay_info['overlay_applied']}")
+
+        claude_md_text = read_effective_claude_md(work_dir)
+        claude_md_lines = claude_md_text.splitlines()
+        print("  effective CLAUDE.md (first 3 lines):")
+        for line in claude_md_lines[:3]:
+            print(f"    | {line}")
+        if not claude_md_lines:
+            print("    | (no CLAUDE.md in work dir)")
+        claude_md_errors = validate_claude_md(arm_name, bool(arm.get("plugin")), claude_md_text)
+        if claude_md_errors:
+            print("  CLAUDE.md check: FAIL")
+            for e in claude_md_errors:
+                print(f"    - {e}")
+        else:
+            print("  CLAUDE.md check: ok")
 
         if os.path.isdir(paths["hidden_tests"]):
             acceptance, regression = score_run(work_dir, paths=paths)
@@ -1253,7 +1460,14 @@ def cmd_gate_probe(args):
         arm_name = arm["name"]
         run_dir = os.path.join(stamp_dir, "runs", f"{arm_name}-probe")
         os.makedirs(run_dir, exist_ok=True)
-        work_dir = make_run_workdir(run_dir, arm, paths=paths)
+        work_dir, overlay_info = make_run_workdir(run_dir, arm, paths=paths)
+        claude_md_errors = validate_claude_md(
+            arm_name, bool(arm.get("plugin")), read_effective_claude_md(work_dir))
+        if claude_md_errors:
+            raise SystemExit(
+                f"{arm_name}-probe: effective CLAUDE.md failed validation "
+                f"before any `claude -p` call:\n" +
+                "\n".join(f"  - {e}" for e in claude_md_errors))
 
         target_path = os.path.join(work_dir, GATE_PROBE_TARGET_REL)
         with open(target_path) as f:

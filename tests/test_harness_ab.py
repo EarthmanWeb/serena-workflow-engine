@@ -939,6 +939,241 @@ class TaskPathsTest(unittest.TestCase):
         self.assertTrue(os.path.exists(paths["task_md"]))
 
 
+class ResolveOverlayTest(unittest.TestCase):
+    """resolve_overlay: per-arm overlay resolution against a synthetic
+    tasks/<name>/overlays/ tree on disk. Pure except for os.path.isdir
+    checks against the temp dir this test builds."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp(prefix="harness_overlay_test_")
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+        overlays_dir = os.path.join(self.tmp, "overlays")
+        os.makedirs(os.path.join(overlays_dir, "swe"), exist_ok=True)
+        with open(os.path.join(overlays_dir, "swe", "CLAUDE.md"), "w") as f:
+            f.write("swe overlay content\n")
+        self.paths = {"dir": self.tmp, "overlays_dir": overlays_dir}
+
+    def test_arm_with_existing_overlay_dir_resolves_applied(self):
+        arm = {"name": "baseline", "plugin": True, "overlay": "swe"}
+        info = run.resolve_overlay(arm, self.paths)
+        self.assertEqual(info["overlay"], "swe")
+        self.assertTrue(info["overlay_applied"])
+        self.assertIsNone(info["warning"])
+        self.assertTrue(os.path.isdir(info["overlay_dir"]))
+
+    def test_arm_with_missing_overlay_dir_not_applied_but_no_raise(self):
+        arm = {"name": "control", "plugin": False, "overlay": "control"}
+        info = run.resolve_overlay(arm, self.paths)
+        self.assertEqual(info["overlay"], "control")
+        self.assertFalse(info["overlay_applied"])
+        self.assertIsNotNone(info["warning"])
+        self.assertIn("control", info["warning"])
+
+    def test_arm_with_no_overlay_key_falls_back_plugin_true_uses_swe(self):
+        # v1-style arms.json (no "overlay" field at all): plugin arms fall
+        # back to overlays/swe/ if present, matching pre-per-arm behavior.
+        arm = {"name": "baseline", "plugin": True}
+        info = run.resolve_overlay(arm, self.paths)
+        self.assertEqual(info["overlay"], "swe")
+        self.assertTrue(info["overlay_applied"])
+
+    def test_arm_with_no_overlay_key_and_no_plugin_gets_no_overlay(self):
+        arm = {"name": "control", "plugin": False}
+        info = run.resolve_overlay(arm, self.paths)
+        self.assertIsNone(info["overlay"])
+        self.assertFalse(info["overlay_applied"])
+        self.assertIsNone(info["warning"])
+
+    def test_arm_overlay_explicitly_null_gets_no_overlay(self):
+        arm = {"name": "control", "plugin": False, "overlay": None}
+        info = run.resolve_overlay(arm, self.paths)
+        self.assertIsNone(info["overlay"])
+        self.assertFalse(info["overlay_applied"])
+
+
+class MakeRunWorkdirOverlayTest(unittest.TestCase):
+    """make_run_workdir: applies the resolved overlay over a fixture copy
+    and returns (work_dir, overlay_info)."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp(prefix="harness_workdir_test_")
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+        task_dir = os.path.join(self.tmp, "task")
+        fixture_dir = os.path.join(task_dir, "fixture")
+        os.makedirs(fixture_dir, exist_ok=True)
+        with open(os.path.join(fixture_dir, "CLAUDE.md"), "w") as f:
+            f.write("base project guidance\n")
+        overlays_dir = os.path.join(task_dir, "overlays")
+        swe_dir = os.path.join(overlays_dir, "swe")
+        os.makedirs(swe_dir, exist_ok=True)
+        with open(os.path.join(swe_dir, "CLAUDE.md"), "w") as f:
+            f.write("swe overlay CLAUDE.md\n")
+        self.paths = {"dir": task_dir, "fixture": fixture_dir,
+                       "overlays_dir": overlays_dir,
+                       "overlay_swe": swe_dir}
+        self.run_dir = os.path.join(self.tmp, "run")
+        os.makedirs(self.run_dir, exist_ok=True)
+
+    def test_overlay_applied_overwrites_fixture_claude_md(self):
+        arm = {"name": "baseline", "plugin": True, "overlay": "swe"}
+        work_dir, overlay_info = run.make_run_workdir(self.run_dir, arm, paths=self.paths)
+        self.assertTrue(overlay_info["overlay_applied"])
+        with open(os.path.join(work_dir, "CLAUDE.md")) as f:
+            self.assertEqual(f.read(), "swe overlay CLAUDE.md\n")
+
+    def test_missing_overlay_leaves_fixture_claude_md_and_warns(self):
+        arm = {"name": "control", "plugin": False, "overlay": "control"}
+        work_dir, overlay_info = run.make_run_workdir(self.run_dir, arm, paths=self.paths)
+        self.assertFalse(overlay_info["overlay_applied"])
+        self.assertIsNotNone(overlay_info["warning"])
+        with open(os.path.join(work_dir, "CLAUDE.md")) as f:
+            self.assertEqual(f.read(), "base project guidance\n")
+
+    def test_v1_style_arm_with_no_overlay_key_still_works(self):
+        # v1 arms.json shape (no "overlay"), plugin arm -> falls back to
+        # overlays/swe/ per resolve_overlay's back-compat path.
+        arm = {"name": "baseline", "plugin": True, "ref": "23ec65d"}
+        work_dir, overlay_info = run.make_run_workdir(self.run_dir, arm, paths=self.paths)
+        self.assertEqual(overlay_info["overlay"], "swe")
+        self.assertTrue(overlay_info["overlay_applied"])
+        with open(os.path.join(work_dir, "CLAUDE.md")) as f:
+            self.assertEqual(f.read(), "swe overlay CLAUDE.md\n")
+
+
+class Sha256OfClaudeMdTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp(prefix="harness_sha_test_")
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+
+    def test_hash_matches_hashlib_of_content(self):
+        import hashlib
+        with open(os.path.join(self.tmp, "CLAUDE.md"), "wb") as f:
+            f.write(b"hello world\n")
+        digest = run.sha256_of_claude_md(self.tmp)
+        self.assertEqual(digest, hashlib.sha256(b"hello world\n").hexdigest())
+
+    def test_missing_file_returns_none(self):
+        self.assertIsNone(run.sha256_of_claude_md(self.tmp))
+
+    def test_different_content_different_hash(self):
+        with open(os.path.join(self.tmp, "CLAUDE.md"), "w") as f:
+            f.write("a")
+        h1 = run.sha256_of_claude_md(self.tmp)
+        with open(os.path.join(self.tmp, "CLAUDE.md"), "w") as f:
+            f.write("b")
+        h2 = run.sha256_of_claude_md(self.tmp)
+        self.assertNotEqual(h1, h2)
+
+
+class ValidateClaudeMdTest(unittest.TestCase):
+    """validate_claude_md: pure per-arm text validation."""
+
+    CONTROL_CLEAN = (
+        "# ledgerlite — project guidance\n"
+        "- Run tests: `python3 -m unittest discover -s tests`\n"
+        "- Python 3.11+, standard library only.\n"
+    )
+    CONTROL_WITH_DOC_LINE = CONTROL_CLEAN + (
+        "- Domain rules are documented under `.serena/memory/`.\n"
+    )
+    PLUGIN_OK = (
+        "## ⛔ MANDATORY ENTRY POINT — FIRST MESSAGE ONLY ⛔\n\n"
+        "mcp__plugin_swe_serena__read_memory(memory_name=\"wf/WF_INIT\")\n\n"
+        "# ledgerlite — project guidance\n"
+    )
+
+    def test_control_clean_text_is_valid(self):
+        errors = run.validate_claude_md("control", False, self.CONTROL_CLEAN)
+        self.assertEqual(errors, [])
+
+    def test_control_with_single_allowed_doc_line_is_valid(self):
+        errors = run.validate_claude_md("control", False, self.CONTROL_WITH_DOC_LINE)
+        self.assertEqual(errors, [])
+
+    def test_control_leaking_wf_init_is_invalid(self):
+        text = self.CONTROL_CLEAN + "- See wf/WF_INIT for workflow routing.\n"
+        errors = run.validate_claude_md("control", False, text)
+        self.assertTrue(any("wf_" in e for e in errors))
+
+    def test_control_leaking_swe_term_is_invalid(self):
+        text = self.CONTROL_CLEAN + "- This project uses the swe plugin.\n"
+        errors = run.validate_claude_md("control", False, text)
+        self.assertTrue(len(errors) >= 1)
+
+    def test_control_leaking_harness_term_is_invalid(self):
+        text = self.CONTROL_CLEAN + "- Part of the harness experiment.\n"
+        errors = run.validate_claude_md("control", False, text)
+        self.assertTrue(len(errors) >= 1)
+
+    def test_control_two_doc_location_lines_is_invalid(self):
+        text = (self.CONTROL_WITH_DOC_LINE +
+                "- Also see `.serena/memory/` for more.\n")
+        errors = run.validate_claude_md("control", False, text)
+        self.assertTrue(any("allowed doc-location" in e for e in errors))
+
+    def test_plugin_missing_prefix_is_invalid(self):
+        errors = run.validate_claude_md("baseline", True, "# ledgerlite\nplain guidance only\n")
+        self.assertTrue(len(errors) >= 1)
+        self.assertTrue(any("MANDATORY ENTRY POINT" in e or "wf/WF_INIT" in e for e in errors))
+
+    def test_plugin_with_prefix_is_valid(self):
+        errors = run.validate_claude_md("baseline", True, self.PLUGIN_OK)
+        self.assertEqual(errors, [])
+
+    def test_plugin_empty_text_is_invalid(self):
+        errors = run.validate_claude_md("v5", True, "")
+        self.assertEqual(len(errors), 2)
+
+    def test_control_empty_text_is_valid(self):
+        errors = run.validate_claude_md("control", False, "")
+        self.assertEqual(errors, [])
+
+
+class RunOneOverlayFieldsTest(unittest.TestCase):
+    """run_one aborts before any claude -p call when the effective CLAUDE.md
+    fails validate_claude_md, and records overlay/overlay_applied/
+    claude_md_sha256/claude_md_check on a successful row. Exercised via
+    make_run_workdir + the row-building shape directly (no live subprocess),
+    matching CmdReparseTest's no-live-agent-call convention."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp(prefix="harness_runone_claudemd_test_")
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+        task_dir = os.path.join(self.tmp, "task")
+        fixture_dir = os.path.join(task_dir, "fixture")
+        os.makedirs(fixture_dir, exist_ok=True)
+        with open(os.path.join(fixture_dir, "CLAUDE.md"), "w") as f:
+            f.write("base project guidance\n")
+        overlays_dir = os.path.join(task_dir, "overlays")
+        control_dir = os.path.join(overlays_dir, "control")
+        os.makedirs(control_dir, exist_ok=True)
+        with open(os.path.join(control_dir, "CLAUDE.md"), "w") as f:
+            f.write("base project guidance\n- Docs live under `.serena/memory/`.\n")
+        self.paths = {"dir": task_dir, "fixture": fixture_dir,
+                       "overlays_dir": overlays_dir, "overlay_swe": os.path.join(overlays_dir, "swe")}
+        self.run_dir = os.path.join(self.tmp, "run")
+        os.makedirs(self.run_dir, exist_ok=True)
+
+    def test_control_arm_with_clean_overlay_passes_validation(self):
+        arm = {"name": "control", "plugin": False, "overlay": "control"}
+        work_dir, overlay_info = run.make_run_workdir(self.run_dir, arm, paths=self.paths)
+        text = run.read_effective_claude_md(work_dir)
+        errors = run.validate_claude_md("control", False, text)
+        self.assertEqual(errors, [])
+        self.assertTrue(overlay_info["overlay_applied"])
+        self.assertIsNotNone(run.sha256_of_claude_md(work_dir))
+
+    def test_plugin_arm_missing_overlay_fails_validation(self):
+        # overlays/swe/ doesn't exist in this fixture -> fixture's bare
+        # CLAUDE.md is left in place, which has no SWE prefix -> invalid.
+        arm = {"name": "baseline", "plugin": True, "overlay": "swe"}
+        work_dir, overlay_info = run.make_run_workdir(self.run_dir, arm, paths=self.paths)
+        self.assertFalse(overlay_info["overlay_applied"])
+        text = run.read_effective_claude_md(work_dir)
+        errors = run.validate_claude_md("baseline", True, text)
+        self.assertTrue(len(errors) >= 1)
+
+
 class RowTaskNameTest(unittest.TestCase):
     def test_no_task_field_treated_as_v1(self):
         self.assertEqual(run._row_task_name({"arm": "baseline"}), "v1")
