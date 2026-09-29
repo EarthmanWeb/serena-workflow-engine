@@ -465,6 +465,195 @@ def memory_coverage_rows(rows):
     return out
 
 
+# --------------------------------------------------------------------------
+# Two-phase (pivot) data extraction.
+#
+# A pivot row carries phases.task1.{metrics,benchmark,gates} and
+# phases.pivot.{metrics,benchmark,gates,task1_retention} (see run.py's
+# run_one_pivot / analyze.py's pivot_benchmark_stats+pivot_gate_stats
+# docstrings for the exact field names this reads). A single-phase row (or
+# one from a task with no pivot/) has no "phases" key at all and is
+# excluded from every function below rather than treated as zero data.
+# --------------------------------------------------------------------------
+
+
+def has_phase_rows(rows):
+    """True iff at least one row in `rows` is two-phase (carries a
+    `phases` dict with both task1 and pivot). Pure."""
+    return any(isinstance(r.get("phases"), dict) and "task1" in r["phases"] and "pivot" in r["phases"]
+               for r in rows)
+
+
+def _phase_benchmark_pct(benchmark, category):
+    """Pass % (0-100) for one acceptance category on a
+    phases.<phase>.benchmark dict, or None when that category recorded no
+    tests. Pure."""
+    if not isinstance(benchmark, dict):
+        return None
+    cat = benchmark.get(category) or {}
+    total = cat.get("total") or 0
+    if not total:
+        return None
+    return 100.0 * (cat.get("passed") or 0) / total
+
+
+def phase_benchmark_rows(rows):
+    """Per two-phase run: {"run_id", "arm", "trial", "b1": {"spec","doc",
+    "success_x_n","doc_rules"}, "b2": {...same..., "retention": {"passed",
+    "total","regressions"}}}. Non-pivot rows are excluded. Pure."""
+    out = []
+    for r in rows:
+        arm = r.get("arm")
+        if arm not in ARM_ORDER:
+            continue
+        phases = r.get("phases")
+        if not isinstance(phases, dict) or "task1" not in phases or "pivot" not in phases:
+            continue
+        t1 = phases.get("task1") or {}
+        pv = phases.get("pivot") or {}
+        b1 = t1.get("benchmark") or {}
+        b2 = pv.get("benchmark") or {}
+        retention = pv.get("task1_retention") or {}
+
+        def _success_x_n(b):
+            total = b.get("total") or 0
+            passed = b.get("passed") or 0
+            return f"{passed}/{total}" if total else None
+
+        out.append({
+            "run_id": r.get("run_id") or f"{arm}-t{r.get('trial')}",
+            "arm": arm,
+            "trial": r.get("trial"),
+            "b1": {
+                "spec": _phase_benchmark_pct(b1, "spec"),
+                "doc": _phase_benchmark_pct(b1, "doc"),
+                "success_x_n": _success_x_n(b1),
+                "ok": bool(b1.get("ok")) if b1.get("total") else None,
+                "doc_rules": b1.get("doc_rules") or {},
+            },
+            "b2": {
+                "spec": _phase_benchmark_pct(b2, "spec"),
+                "doc": _phase_benchmark_pct(b2, "doc"),
+                "success_x_n": _success_x_n(b2),
+                "ok": bool(b2.get("ok")) if b2.get("total") else None,
+                "doc_rules": b2.get("doc_rules") or {},
+                "retention": {
+                    "passed": retention.get("passed"),
+                    "total": retention.get("total"),
+                    "regressions": retention.get("regressions") or [],
+                },
+            },
+        })
+    return out
+
+
+def two_phase_scorecard_data(agg):
+    """Per-arm Benchmark 1 / Benchmark 2 scorecard values (doc-rule pass %,
+    spec pass %, full success x/n, plus B2's task-1 retention x/n), pulled
+    from analyze.pivot_benchmark_stats() output. Pure.
+
+    Returns {"arms_present": [...], "b1": {arm: {...}}, "b2": {arm: {...}}}
+    — empty dict for an arm with no pivot rows (n_pivot == 0) rather than
+    zeros, so the caller can render "not measured" instead of "0%"."""
+    pivot_bench = agg.get("pivot_benchmarks") or {}
+    present = [a for a in ARM_ORDER if (pivot_bench.get(a) or {}).get("n_pivot")]
+
+    b1_out, b2_out = {}, {}
+    for arm in present:
+        pb = pivot_bench[arm]
+        n = pb["n_pivot"]
+        b1 = pb["b1"]
+        b2 = pb["b2"]
+        ret = pb["task1_retention"]
+        b1_out[arm] = {
+            "doc_pass_pct": b1.get("doc_pass_pct_mean"),
+            "spec_pass_pct": b1.get("spec_pass_pct_mean"),
+            "success_rate": b1.get("success_rate"),
+            "success_x_n": (f"{round(b1['success_rate'] * n)}/{n}" if b1.get("success_rate") is not None else None),
+        }
+        b2_out[arm] = {
+            "doc_pass_pct": b2.get("doc_pass_pct_mean"),
+            "spec_pass_pct": b2.get("spec_pass_pct_mean"),
+            "success_rate": b2.get("success_rate"),
+            "success_x_n": (f"{round(b2['success_rate'] * n)}/{n}" if b2.get("success_rate") is not None else None),
+            "retention_rate": ret.get("rate_mean"),
+            "retention_regressions": ret.get("total_regressions"),
+        }
+    return {"arms_present": present, "b1": b1_out, "b2": b2_out}
+
+
+def pivot_gate_matrix_rows(rows):
+    """Per two-phase run: task1 gate checks + pivot gate checks, for the
+    combined task-1/pivot gate-conformance ✓/✗ matrix. Pure. Non-pivot rows
+    excluded."""
+    out = []
+    for r in rows:
+        arm = r.get("arm")
+        if arm not in ARM_ORDER:
+            continue
+        phases = r.get("phases")
+        if not isinstance(phases, dict) or "task1" not in phases or "pivot" not in phases:
+            continue
+        t1_gates = (phases.get("task1") or {}).get("gates") or {}
+        pv_gates = (phases.get("pivot") or {}).get("gates") or {}
+        reclass = pv_gates.get("pivot_reclassified") or {}
+        out.append({
+            "run_id": r.get("run_id") or f"{arm}-t{r.get('trial')}",
+            "arm": arm,
+            "trial": r.get("trial"),
+            "t1_init_chain_complete": t1_gates.get("init_chain_complete"),
+            "t1_sweep_verified": t1_gates.get("sweep_verified"),
+            "t1_edits_before_sweep": t1_gates.get("edits_before_sweep"),
+            "pivot_reclassified_attempted": reclass.get("attempted"),
+            "pivot_reclassified_succeeded": reclass.get("succeeded"),
+            "pivot_resweep_verified": pv_gates.get("pivot_resweep_verified"),
+            "pivot_edits_before_sweep": pv_gates.get("pivot_edits_before_sweep"),
+            "pivot_doc_rule_memories_coverage": pv_gates.get("pivot_doc_rule_memories_coverage"),
+        })
+    return out
+
+
+def phase_cost_stack_rows(rows):
+    """Per two-phase run: (run_id, arm, trial, {"task1": tokens, "pivot":
+    tokens}) for the phase-stacked token cost chart. Pure. Non-pivot rows
+    excluded."""
+    out = []
+    for r in rows:
+        arm = r.get("arm")
+        if arm not in ARM_ORDER:
+            continue
+        phases = r.get("phases")
+        if not isinstance(phases, dict) or "task1" not in phases or "pivot" not in phases:
+            continue
+        t1_tok = g(phases, "task1", "metrics", "total_tokens") or 0
+        pv_tok = g(phases, "pivot", "metrics", "total_tokens") or 0
+        out.append((
+            r.get("run_id") or f"{arm}-t{r.get('trial')}", arm, r.get("trial"),
+            {"task1": t1_tok, "pivot": pv_tok},
+        ))
+    return out
+
+
+def two_phase_doc_rule_heatmap_rows(rows, phase, benchmark_key="doc_rules"):
+    """(rule_ids, {(arm, run_id): {rule_id: bool|None}}) for one benchmark's
+    doc-rule heatmap (phase == "b1" or "b2"), reading
+    phase_benchmark_rows()-shaped per-run b1/b2 dicts. Pure."""
+    rule_ids = set()
+    per_cell = {}
+    for pr in phase_benchmark_rows(rows):
+        key = (pr["arm"], pr["run_id"])
+        doc_rules = pr[phase].get(benchmark_key) or {}
+        if not isinstance(doc_rules, dict) or not doc_rules:
+            continue
+        cell = per_cell.setdefault(key, {})
+        for rule_id, rule_result in doc_rules.items():
+            if not isinstance(rule_result, dict):
+                continue
+            rule_ids.add(rule_id)
+            cell[rule_id] = rule_result.get("ok")
+    return sorted(rule_ids), per_cell
+
+
 def compute_verdict(agg):
     """Plain-language one-sentence verdict from aggregate() output. Pure.
 
@@ -480,13 +669,49 @@ def compute_verdict(agg):
     if not present:
         return "No runs to report."
 
+    parts = []
+
+    # Pivot lead sentence (section 2's priority: B1 & B2 doc-rule pass % by
+    # arm, then task-1 retention) — prepended before the single-phase
+    # doc-pass/success-rate/cost sentences below, which still apply (they
+    # read top-level acceptance/gates, i.e. benchmark 2's, on pivot rows).
+    pivot_bench = agg.get("pivot_benchmarks") or {}
+    pivot_present = [a for a in present if (pivot_bench.get(a) or {}).get("n_pivot")]
+    if pivot_present:
+        best_b_arm, best_b1, best_b2 = None, -1, -1
+        for a in pivot_present:
+            pb = pivot_bench[a]
+            d1 = pb["b1"].get("doc_pass_pct_mean")
+            d2 = pb["b2"].get("doc_pass_pct_mean")
+            score = max(v for v in (d1, d2, -1) if v is not None)
+            if score > best_b1:
+                best_b1, best_b_arm = score, a
+                best_b2 = d2
+        if best_b_arm is not None:
+            pb = pivot_bench[best_b_arm]
+            d1 = pb["b1"].get("doc_pass_pct_mean")
+            d2 = pb["b2"].get("doc_pass_pct_mean")
+            ret = pb["task1_retention"]
+            bits = []
+            if d1 is not None:
+                bits.append(f"B1 doc-rule pass {d1:.0f}%")
+            if d2 is not None:
+                bits.append(f"B2 doc-rule pass {d2:.0f}%")
+            ret_rate = ret.get("rate_mean")
+            ret_str = f", task-1 retention {ret_rate:.0f}%" if ret_rate is not None else ""
+            regressions = ret.get("total_regressions") or 0
+            reg_str = f" ({regressions} task-1 regression(s) across all pivot runs)" if regressions else ""
+            parts.append(
+                f"{ARM_LABELS.get(best_b_arm, best_b_arm)} led the pivot benchmarks "
+                f"({', '.join(bits)}{ret_str}){reg_str}."
+            )
+
     best_doc_arm, best_doc_pct = None, -1
     for a in present:
         pct = arms[a].get("doc_pass_pct_mean")
         if pct is not None and pct > best_doc_pct:
             best_doc_pct, best_doc_arm = pct, a
 
-    parts = []
     if best_doc_arm is not None:
         gc = arms[best_doc_arm].get("gate_conformance") or {}
         init_rate = gc.get("init_chain_complete_rate")
@@ -883,6 +1108,78 @@ def token_composition_chart(comp_rows, width=640, row_h=22, gap=6):
     return "".join(parts_html), height
 
 
+PHASE_KEYS = ("task1", "pivot")
+PHASE_LABELS = {"task1": "Task 1", "pivot": "Pivot"}
+# Sequential ramp reused for phase segments (not arm colors — arm shown via
+# row label + color chip, same convention as token_composition_chart).
+PHASE_LIGHT = {"task1": "#cde2fb", "pivot": "#2a78d6"}
+PHASE_DARK = {"task1": "#9ec5f4", "pivot": "#3987e5"}
+
+
+def phase_cost_stack_chart(stack_rows, width=640, row_h=22, gap=6):
+    """Stacked horizontal bar per two-phase run: task1 tokens | pivot
+    tokens. Same layout convention as token_composition_chart. Pure."""
+    pad_left = 190
+    pad_right = 90
+    pad_top = 46
+    pad_bottom = 10
+    ordered = sorted(stack_rows, key=lambda r: (ARM_ORDER.index(r[1]) if r[1] in ARM_ORDER else 99, r[2] if r[2] is not None else 0))
+    n = len(ordered)
+    height = pad_top + pad_bottom + n * (row_h + gap)
+    plot_w = width - pad_left - pad_right
+
+    totals = [sum(parts.values()) for (_id, _a, _t, parts) in ordered]
+    max_total = max(totals) if totals else 1
+    if max_total <= 0:
+        max_total = 1
+    xscale = linear_scale((0, max_total), (0, plot_w))
+
+    parts_html = [svg_open(width, height)]
+    parts_html.append('<text x="0" y="12" class="chart-title" font-size="11">Tokens by phase per run</text>')
+    lx = 0
+    ly = 32
+    for k in PHASE_KEYS:
+        parts_html.append(f'<rect x="{lx}" y="{ly - 8}" width="10" height="10" fill="{PHASE_LIGHT[k]}" class="legend-swatch" data-key="{k}" />')
+        parts_html.append(f'<text x="{lx + 14}" y="{ly}" class="legend-label" font-size="9">{esc(PHASE_LABELS[k])}</text>')
+        lx += 14 + len(PHASE_LABELS[k]) * 6 + 16
+
+    y = pad_top + 8
+    if not ordered:
+        parts_html.append('<text x="0" y="60" class="tick-label" font-size="10">No two-phase (pivot) runs.</text>')
+    for (run_id, arm, trial, phase_parts) in ordered:
+        cy = y
+        color = f'var(--arm-{arm})'
+        parts_html.append(f'<rect x="{pad_left - 178}" y="{cy - 9}" width="9" height="9" fill="{color}" rx="2" />')
+        parts_html.append(
+            f'<text x="{pad_left - 165}" y="{cy}" class="row-label" font-size="9.5">'
+            f'{esc(ARM_LABELS.get(arm, arm))} t{esc(trial)}</text>'
+        )
+        x = pad_left
+        total = sum(phase_parts.values()) or 0
+        for k in PHASE_KEYS:
+            v = phase_parts.get(k, 0)
+            if v <= 0:
+                continue
+            w = max(xscale(v) - 0, 0)
+            parts_html.append(
+                f'<rect x="{x:.1f}" y="{cy - row_h + 4:.1f}" width="{max(w - 2, 0):.1f}" '
+                f'height="{row_h - 8}" fill="{PHASE_LIGHT[k]}" class="comp-seg" '
+                f'data-key="{k}" '
+                f'data-tip="{esc(PHASE_LABELS[k])}: {fmt_num(v)} tokens">'
+                f'<title>{esc(ARM_LABELS.get(arm, arm))} t{esc(trial)} — {esc(PHASE_LABELS[k])}: {fmt_num(v)}</title>'
+                f'</rect>'
+            )
+            x += w
+        parts_html.append(
+            f'<text x="{x + 6:.1f}" y="{cy - row_h / 2 + 4:.1f}" class="tick-label" '
+            f'font-size="9">{fmt_num(total)}</text>'
+        )
+        y += row_h + gap
+
+    parts_html.append("</svg>")
+    return "".join(parts_html), height
+
+
 def acceptance_bar_chart(acc_rows, width=640, row_h=20, gap=6):
     pad_left = 150
     pad_right = 60
@@ -1176,6 +1473,58 @@ def gate_conformance_table(gate_rows):
     )
 
 
+def pivot_gate_matrix_table(pivot_gate_rows):
+    """Per-run task-1 + pivot gate-conformance ✓/✗ matrix (see
+    pivot_gate_matrix_rows), for two-phase runs only. Same
+    checkmark/cross-plus-text-label convention as gate_conformance_table.
+    Empty input renders an explanatory muted message rather than an empty
+    table, matching doc_rule_heatmap_table's empty-state convention."""
+    if not pivot_gate_rows:
+        return '<p class="muted">No two-phase (pivot) runs in this stamp.</p>'
+
+    ordered = sorted(pivot_gate_rows, key=lambda r: (ARM_ORDER.index(r["arm"]) if r["arm"] in ARM_ORDER else 99, r["trial"] if r["trial"] is not None else 0))
+
+    def _bool_cell(v):
+        if v is True:
+            return '<td class="gate-ok">✓ yes</td>'
+        if v is False:
+            return '<td class="gate-fail">✗ no</td>'
+        return '<td class="muted">– n/a</td>'
+
+    def _int_cell(v, zero_ok=True):
+        if not isinstance(v, (int, float)):
+            return '<td class="muted">– n/a</td>'
+        if zero_ok and v == 0:
+            return f'<td class="gate-ok">✓ 0</td>'
+        return f'<td class="gate-fail">✗ {v}</td>'
+
+    rows_html = []
+    for r in ordered:
+        cov = r.get("pivot_doc_rule_memories_coverage")
+        cov_cell = (
+            f'<td>{fmt_pct(cov * 100)}</td>' if isinstance(cov, (int, float)) else '<td class="muted">– n/a</td>'
+        )
+        rows_html.append(
+            f'<tr><td>{esc(ARM_LABELS.get(r["arm"], r["arm"]))}</td><td>{esc(r["trial"])}</td>'
+            f'{_bool_cell(r.get("t1_init_chain_complete"))}{_bool_cell(r.get("t1_sweep_verified"))}'
+            f'{_int_cell(r.get("t1_edits_before_sweep"))}'
+            f'{_bool_cell(r.get("pivot_reclassified_attempted"))}'
+            f'{_bool_cell(r.get("pivot_reclassified_succeeded"))}'
+            f'{_bool_cell(r.get("pivot_resweep_verified"))}'
+            f'{_int_cell(r.get("pivot_edits_before_sweep"))}'
+            f'{cov_cell}</tr>'
+        )
+
+    return (
+        '<table class="fallback-table"><thead><tr><th>arm</th><th>trial</th>'
+        '<th>T1 init chain</th><th>T1 sweep verified</th><th>T1 edits before sweep</th>'
+        '<th>reclassify attempted</th><th>reclassify succeeded</th>'
+        '<th>resweep verified</th><th>edits before resweep</th>'
+        '<th>pivot doc-rule coverage</th></tr></thead>'
+        f'<tbody>{"".join(rows_html)}</tbody></table>'
+    )
+
+
 def memory_coverage_dot_chart(mem_rows, width=640, height=170):
     """Dot plot: doc-rule memory coverage (%) per run, arm-colored, with
     n_memories_read shown in the tooltip/fallback table."""
@@ -1259,6 +1608,7 @@ def failed_tests_cell_text(acc, reg):
 
 def per_run_table(rows):
     ordered = sorted(rows, key=lambda r: (ARM_ORDER.index(r.get("arm")) if r.get("arm") in ARM_ORDER else 99, r.get("trial") if r.get("trial") is not None else 0))
+    any_pivot = any(isinstance(r.get("phases"), dict) and "task1" in r["phases"] and "pivot" in r["phases"] for r in rows)
     head_cols = [
         ("arm", "Arm"), ("trial", "Trial"), ("success", "Success"),
         ("acc", "Acceptance"), ("reg", "Regression"),
@@ -1271,6 +1621,13 @@ def per_run_table(rows):
         ("wall_s", "Wall (s)"), ("cost", "Est. cost"), ("exit", "Exit/timeout"),
         ("state", "Final state"),
     ]
+    if any_pivot:
+        head_cols += [
+            ("b1_doc", "B1 doc %"), ("b1_spec", "B1 spec %"),
+            ("b2_doc", "B2 doc %"), ("b2_spec", "B2 spec %"),
+            ("retention_regressions", "Retention regressions"),
+            ("pivot_reclassified", "Pivot reclassified"),
+        ]
     ths = "".join(f'<th scope="col" data-sort-key="{k}" tabindex="0" role="button">{esc(label)}<span class="sort-indicator" aria-hidden="true"></span></th>' for k, label in head_cols)
 
     trs = []
@@ -1315,6 +1672,37 @@ def per_run_table(rows):
             cell(exit_str, sort_val=exit_str),
             cell(state or "—", sort_val=state or ""),
         ]
+
+        if any_pivot:
+            phases = r.get("phases")
+            has_phases = isinstance(phases, dict) and "task1" in phases and "pivot" in phases
+            if has_phases:
+                b1 = (phases.get("task1") or {}).get("benchmark") or {}
+                b2 = (phases.get("pivot") or {}).get("benchmark") or {}
+                retention = (phases.get("pivot") or {}).get("task1_retention") or {}
+                reclass = g(phases, "pivot", "gates", "pivot_reclassified", default={}) or {}
+                b1_doc = _phase_benchmark_pct(b1, "doc")
+                b1_spec = _phase_benchmark_pct(b1, "spec")
+                b2_doc = _phase_benchmark_pct(b2, "doc")
+                b2_spec = _phase_benchmark_pct(b2, "spec")
+                n_regressions = len(retention.get("regressions") or [])
+                if reclass.get("succeeded"):
+                    reclass_str = "succeeded"
+                elif reclass.get("attempted"):
+                    reclass_str = "attempted only"
+                else:
+                    reclass_str = "no"
+                row_cells += [
+                    cell(fmt_pct(b1_doc), sort_val=b1_doc if b1_doc is not None else -1),
+                    cell(fmt_pct(b1_spec), sort_val=b1_spec if b1_spec is not None else -1),
+                    cell(fmt_pct(b2_doc), sort_val=b2_doc if b2_doc is not None else -1),
+                    cell(fmt_pct(b2_spec), sort_val=b2_spec if b2_spec is not None else -1),
+                    cell(n_regressions, sort_val=n_regressions, cls="gate-fail" if n_regressions else "gate-ok"),
+                    cell(reclass_str, sort_val=reclass_str),
+                ]
+            else:
+                row_cells += [cell("—", sort_val=-1) for _ in range(4)] + [cell("—", sort_val=0), cell("—", sort_val="")]
+
         trs.append(f'<tr>{"".join(row_cells)}</tr>')
 
     return f'<table class="run-table" id="run-table"><thead><tr>{ths}</tr></thead><tbody>{"".join(trs)}</tbody></table>'
@@ -1386,8 +1774,10 @@ def _scorecard_cell_html(row, arm, control_arm):
                 f'{arrow} {abs(d):.0f}% <span class="muted">vs no harness</span></div>'
             )
 
+    arm_label_short = esc(ARM_LABELS.get(arm, arm).split(" (")[0])
     return (
-        f'<td class="scorecard-cell" data-sort="{val if val is not None else ""}">'
+        f'<td class="scorecard-cell" data-sort="{val if val is not None else ""}" '
+        f'data-arm-label="{arm_label_short}">'
         f'<div class="{value_cls}">{value_str}{best_tag}</div>{delta_html}</td>'
     )
 
@@ -1419,7 +1809,8 @@ def scorecard_html(agg):
     for row in sc["rows"]:
         if not any_data[row["key"]]:
             cells_html = "".join(
-                f'<td class="scorecard-cell"><div class="scorecard-value muted">not measured</div></td>' for _a in present
+                f'<td class="scorecard-cell" data-arm-label="{esc(ARM_LABELS.get(a, a).split(" (")[0])}">'
+                f'<div class="scorecard-value muted">not measured</div></td>' for a in present
             )
         else:
             cells_html = "".join(_scorecard_cell_html(row, a, control_arm) for a in present)
@@ -1430,6 +1821,106 @@ def scorecard_html(agg):
         f'<thead><tr><th scope="col" class="scorecard-corner"></th>{"".join(head_cells)}</tr></thead>'
         f'<tbody>{"".join(body_rows)}</tbody></table></div>'
     )
+
+
+def _two_phase_scorecard_block_html(title, subtitle, block_data, present, control_arm, retention=False):
+    """One labeled scorecard block ("Benchmark 1 — after task 1" /
+    "Benchmark 2 — after pivot"): doc-rule pass %, spec pass %, full
+    success x/n per arm, plus (B2 only) task-1 retention x/n. Same
+    big-value/delta-line cell convention as _scorecard_cell_html, but the
+    delta is omitted here (this block reads pivot_benchmark_stats output,
+    which doesn't carry a vs_baseline/vs_control shape) — cells show the
+    value only, best-tagged per row."""
+    rows_spec = [("doc_pass_pct", "Doc-rule pass %", "pct"), ("spec_pass_pct", "Spec pass %", "pct"),
+                 ("success_x_n", "Full success (x/n)", "raw")]
+    if retention:
+        rows_spec.append(("retention_x_n", "Task-1 retention (x/n)", "raw"))
+
+    head_cells = []
+    for arm in present:
+        chip = f'<span class="chip" style="background:var(--arm-{arm})"></span>'
+        sub = "no harness" if arm == control_arm else esc(ARM_LABELS.get(arm, arm).split(" (")[-1].rstrip(")"))
+        head_cells.append(
+            f'<th scope="col" class="scorecard-head"><div class="scorecard-head-arm">{chip}{esc(ARM_LABELS.get(arm, arm).split(" (")[0])}</div>'
+            f'<div class="scorecard-head-ver muted">{sub}</div></th>'
+        )
+
+    body_rows = []
+    for key, label, unit in rows_spec:
+        best_arm, best_val = None, None
+        cell_vals = {}
+        for arm in present:
+            d = block_data.get(arm, {})
+            if key == "retention_x_n":
+                val = d.get("retention_rate")
+                extra = None
+                if d.get("retention_rate") is not None and "success_x_n" in d:
+                    n = d["success_x_n"].split("/")[-1] if d.get("success_x_n") else None
+                    extra = f"{fmt_pct(d.get('retention_rate'))}"
+                    regressions = d.get("retention_regressions") or 0
+                    if regressions:
+                        extra += f" ({regressions} regression(s))"
+            elif unit == "pct":
+                val = d.get(key)
+                extra = None
+            else:
+                val = None
+                extra = d.get(key)
+            cell_vals[arm] = (val, extra)
+            if val is not None and (best_val is None or val > best_val):
+                best_val, best_arm = val, arm
+
+        cells_html = []
+        any_val = any(v is not None or e is not None for (v, e) in cell_vals.values())
+        for arm in present:
+            arm_label_short = esc(ARM_LABELS.get(arm, arm).split(" (")[0])
+            val, extra = cell_vals[arm]
+            if val is None and extra is None:
+                cells_html.append(f'<td class="scorecard-cell" data-arm-label="{arm_label_short}"><div class="scorecard-value muted">not measured</div></td>')
+                continue
+            is_best = (arm == best_arm and val is not None)
+            best_tag = ' <span class="best-tag">best</span>' if is_best else ""
+            value_cls = "scorecard-value best" if is_best else "scorecard-value"
+            display = fmt_pct(val) if unit == "pct" else (extra or "—")
+            cells_html.append(f'<td class="scorecard-cell" data-arm-label="{arm_label_short}"><div class="{value_cls}">{display}{best_tag}</div></td>')
+        if not any_val:
+            cells_html = [
+                f'<td class="scorecard-cell" data-arm-label="{esc(ARM_LABELS.get(a, a).split(" (")[0])}">'
+                f'<div class="scorecard-value muted">not measured</div></td>' for a in present
+            ]
+        body_rows.append(f'<tr><th scope="row" class="scorecard-row-label">{esc(label)}</th>{"".join(cells_html)}</tr>')
+
+    return f"""
+    <div class="two-phase-block">
+      <h3>{esc(title)}</h3>
+      <p class="section-subtitle">{esc(subtitle)}</p>
+      <div class="scorecard-wrap"><table class="scorecard-table">
+        <thead><tr><th scope="col" class="scorecard-corner"></th>{"".join(head_cells)}</tr></thead>
+        <tbody>{"".join(body_rows)}</tbody>
+      </table></div>
+    </div>"""
+
+
+def two_phase_scorecard_html(agg):
+    """Two labeled scorecard blocks ("Benchmark 1 — after task 1" /
+    "Benchmark 2 — after pivot"), each a per-arm doc/spec/success table;
+    B2 additionally shows task-1 retention x/n. Empty string when no arm
+    has any pivot rows (single-phase stamp) -- caller omits the Pivot
+    section entirely in that case."""
+    tp = two_phase_scorecard_data(agg)
+    present = tp["arms_present"]
+    if not present:
+        return ""
+    control_arm = "control" if "control" in present else None
+    b1_html = _two_phase_scorecard_block_html(
+        "Benchmark 1 — after task 1",
+        "Scored on the tree immediately after task 1, before the pivot prompt is ever shown.",
+        tp["b1"], present, control_arm, retention=False)
+    b2_html = _two_phase_scorecard_block_html(
+        "Benchmark 2 — after pivot",
+        "Scored on the final tree after the pivot phase; retention is task-1's own hidden tests re-run on this tree.",
+        tp["b2"], present, control_arm, retention=True)
+    return f'<div class="two-phase-scorecard-grid">{b1_html}{b2_html}</div>'
 
 
 def findings_cards_html(findings):
@@ -1600,6 +2091,13 @@ td.scorecard-cell {
 .scorecard-delta { font-size: 0.78rem; color: var(--text-secondary); margin-top: 3px; }
 .scorecard-delta .muted { font-size: 0.78rem; }
 tr:last-child .scorecard-cell, tr:last-child th.scorecard-row-label { border-bottom: none; }
+
+/* Two-phase (pivot) scorecard blocks */
+.two-phase-scorecard-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(min(420px, 100%), 1fr));
+  gap: 20px; margin-top: 4px;
+}
+.two-phase-block h3 { margin-bottom: 2px; }
 
 /* Findings cards */
 .findings-grid {
@@ -2044,6 +2542,62 @@ def render_report(rows, meta, title="Harness A/B Results", notes_html=None, note
       <div class="table-wrap">{gate_table_html}</div>
     </div>"""
 
+    # --- two-phase (pivot) content: scorecard blocks, B1/B2 doc-use,
+    # pivot gate matrix, phase-stacked cost chart. Empty/absent for a
+    # single-phase stamp -- has_pivot gates every pivot-only section below
+    # so a v1/v2-single-phase report renders exactly as before. ---
+    has_pivot_data = has_phase_rows(rows)
+    two_phase_scorecard_table_html = two_phase_scorecard_html(agg) if has_pivot_data else ""
+
+    b1_rule_ids, b1_per_cell = two_phase_doc_rule_heatmap_rows(rows, "b1") if has_pivot_data else ([], {})
+    b2_rule_ids, b2_per_cell = two_phase_doc_rule_heatmap_rows(rows, "b2") if has_pivot_data else ([], {})
+    b1_heatmap_html = doc_rule_heatmap_table(b1_rule_ids, b1_per_cell)
+    b2_heatmap_html = doc_rule_heatmap_table(b2_rule_ids, b2_per_cell)
+    pivot_doc_rule_card = f"""
+    <div class="chart-card">
+      <div class="chart-card-title">Benchmark 1 doc-rule pass/fail by run (task1 rules R*)</div>
+      <div class="chart-card-subtitle">Scored on the tree right after task 1, before the pivot prompt.</div>
+      <div class="table-wrap">{b1_heatmap_html}</div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-card-title">Benchmark 2 doc-rule pass/fail by run (pivot rules P*)</div>
+      <div class="chart-card-subtitle">Scored on the final tree after the pivot phase.</div>
+      <div class="table-wrap">{b2_heatmap_html}</div>
+    </div>"""
+
+    pivot_gate_rows_data = pivot_gate_matrix_rows(rows) if has_pivot_data else []
+    pivot_gate_matrix_html = pivot_gate_matrix_table(pivot_gate_rows_data)
+    pivot_gate_card = f"""
+    <div class="chart-card">
+      <div class="chart-card-title">Task-1 + pivot gate conformance per run</div>
+      <div class="chart-card-subtitle">Task-1 init/sweep, then pivot-phase reclassify/resweep/edits/doc-memory coverage; control is n/a (no harness).</div>
+      <div class="table-wrap">{pivot_gate_matrix_html}</div>
+    </div>"""
+
+    phase_cost_rows_data = phase_cost_stack_rows(rows) if has_pivot_data else []
+    phase_cost_svg, _phase_cost_h = phase_cost_stack_chart(phase_cost_rows_data)
+    phase_cost_fallback_rows = []
+    for (run_id, arm, trial, parts) in sorted(phase_cost_rows_data, key=lambda r: (ARM_ORDER.index(r[1]) if r[1] in ARM_ORDER else 99, r[2] or 0)):
+        phase_cost_fallback_rows.append((ARM_LABELS.get(arm, arm), trial, fmt_num(parts.get("task1")), fmt_num(parts.get("pivot"))))
+    phase_cost_fallback = build_fallback_table(phase_cost_fallback_rows, ["arm", "trial", "task1 tokens", "pivot tokens"])
+    phase_cost_card = f"""
+    <div class="chart-card">
+      <div class="chart-card-title">Tokens by phase per run</div>
+      <div class="chart-card-subtitle">Task 1 vs pivot phase, tokens, stacked per run.</div>
+      {phase_cost_svg}
+      <details class="table-fallback" open><summary>Data</summary>{phase_cost_fallback}</details>
+    </div>"""
+    pivot_medians = {}
+    pb = agg.get("pivot_benchmarks") or {}
+    for a in ARM_ORDER:
+        if a in pb:
+            pivot_medians[a] = pb[a]["phase_medians"]
+    phase_cost_median_rows = [
+        (ARM_LABELS.get(a, a), fmt_num(pm["task1"].get("total_tokens")), fmt_num(pm["pivot"].get("total_tokens")))
+        for a, pm in pivot_medians.items()
+    ]
+    phase_cost_median_fallback = build_fallback_table(phase_cost_median_rows, ["arm", "task1 tokens (median)", "pivot tokens (median)"])
+
     doc_use_takeaway = _takeaway_doc_use(agg)
     gates_takeaway = _takeaway_gates(agg)
     cost_takeaway = _takeaway_cost(agg)
@@ -2098,6 +2652,8 @@ def render_report(rows, meta, title="Harness A/B Results", notes_html=None, note
         ("runs", "Runs"),
         ("method", "Method"),
     ]
+    if has_pivot_data:
+        nav_items.insert(1, ("pivot", "Pivot"))
     nav_html = "".join(f'<li><a href="#{sid}">{esc(label)}</a></li>' for sid, label in nav_items)
 
     findings_section_html = (
@@ -2147,6 +2703,18 @@ body {{ font-family: 'Inter', system-ui, -apple-system, "Segoe UI", sans-serif; 
     </details>
   </section>
 
+  {f'''<section class="report-section" id="pivot">
+    <div class="eyebrow">Two-phase</div>
+    <h2>Pivot: benchmark 1 vs benchmark 2</h2>
+    <p class="section-subtitle">Benchmark 1 scores the tree right after task 1 (before the pivot prompt); benchmark 2 scores the final tree after the pivot phase, and adds task-1 retention (task 1's own hidden tests re-run on the final tree).</p>
+    {two_phase_scorecard_table_html}
+    <div class="chart-grid" style="margin-top:16px">
+      {phase_cost_card}
+      {pivot_gate_card}
+    </div>
+    <details class="table-fallback"><summary>Phase token/turn medians by arm</summary>{phase_cost_median_fallback}</details>
+  </section>''' if has_pivot_data else ""}
+
   <section class="report-section" id="doc-use">
     <div class="eyebrow">Documentation use</div>
     <h2>Spec &amp; doc-rule compliance</h2>
@@ -2156,6 +2724,7 @@ body {{ font-family: 'Inter', system-ui, -apple-system, "Segoe UI", sans-serif; 
       {other_dot_cards}
     </div>
     {doc_rule_card}
+    {f'<div class="chart-grid" style="margin-top:14px">{pivot_doc_rule_card}</div>' if has_pivot_data else ""}
   </section>
 
   <section class="report-section" id="gates">
@@ -2166,6 +2735,7 @@ body {{ font-family: 'Inter', system-ui, -apple-system, "Segoe UI", sans-serif; 
       {gate_card}
       {mem_coverage_card}
     </div>
+    {f'<p class="section-subtitle" style="margin-top:14px">Pivot-phase gate conformance (reclassify/resweep/edits/doc-memory coverage) is in the <a href="#pivot">Pivot</a> section above.</p>' if has_pivot_data else ""}
   </section>
 
   <section class="report-section" id="cost">
@@ -2178,6 +2748,7 @@ body {{ font-family: 'Inter', system-ui, -apple-system, "Segoe UI", sans-serif; 
     <details class="table-fallback"><summary>Token composition (main + subagent split)</summary>
       {comp_card}
     </details>
+    {f'<p class="section-subtitle" style="margin-top:8px">Per-phase token breakdown (task1 | pivot) is in the <a href="#pivot">Pivot</a> section above.</p>' if has_pivot_data else ""}
   </section>
 
   <section class="report-section" id="tools">

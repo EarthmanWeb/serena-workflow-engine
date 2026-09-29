@@ -220,6 +220,85 @@ class DocRulePassMatrixTest(unittest.TestCase):
     def test_empty_doc_rules(self):
         self.assertEqual(acceptance.doc_rule_pass_matrix([{"method": "x", "status": "ok"}], []), {})
 
+    # -- new object-shaped `tests` schema: {"id": ..., "asserts": ...} -----
+    # (tasks/v2/doc_rules.json and pivot's doc_rules.json, rule ids P1...,
+    # both now list tests this way; older files keep the plain-string form
+    # exercised by the tests above.)
+
+    def test_object_shaped_tests_all_pass(self):
+        rules = [{
+            "id": "R1", "memory": "dom/DOM_X", "summary": "s",
+            "tests": [{"id": "test_monthly_short_month", "asserts": "..."}],
+        }]
+        results = [
+            {"test_id": "test_monthly_short_month (m.T)", "method": "test_monthly_short_month", "status": "ok"},
+        ]
+        matrix = acceptance.doc_rule_pass_matrix(results, rules)
+        self.assertEqual(matrix["R1"], {"passed": 1, "total": 1, "memory": "dom/DOM_X", "summary": "s", "ok": True})
+
+    def test_object_shaped_tests_fail(self):
+        rules = [{
+            "id": "R1", "memory": "dom/DOM_X",
+            "tests": [{"id": "test_monthly_short_month", "asserts": "..."}],
+        }]
+        results = [
+            {"test_id": "test_monthly_short_month (m.T)", "method": "test_monthly_short_month", "status": "fail"},
+        ]
+        matrix = acceptance.doc_rule_pass_matrix(results, rules)
+        self.assertFalse(matrix["R1"]["ok"])
+        self.assertEqual(matrix["R1"]["passed"], 0)
+        self.assertEqual(matrix["R1"]["total"], 1)
+
+    def test_object_shaped_tests_match_by_full_test_id_substring(self):
+        rules = [{"id": "P1", "memory": "x", "tests": [
+            {"id": "hidden_tests.test_pivot_spec_budget.T", "asserts": "..."},
+        ]}]
+        results = [{
+            "test_id": "test_x (hidden_tests.test_pivot_spec_budget.T.test_x)",
+            "method": "test_x", "status": "ok",
+        }]
+        matrix = acceptance.doc_rule_pass_matrix(results, rules)
+        self.assertEqual(matrix["P1"]["total"], 1)
+        self.assertTrue(matrix["P1"]["ok"])
+
+    def test_mixed_string_and_object_shaped_tests_in_same_rule(self):
+        # Belt-and-suspenders: a rule mixing both shapes (shouldn't occur in
+        # practice within one doc_rules.json, but the matcher must not
+        # choke on it either way).
+        rules = [{"id": "R1", "memory": "x", "tests": [
+            "test_a", {"id": "test_b", "asserts": "..."},
+        ]}]
+        results = [
+            {"test_id": "test_a (m.T)", "method": "test_a", "status": "ok"},
+            {"test_id": "test_b (m.T)", "method": "test_b", "status": "ok"},
+        ]
+        matrix = acceptance.doc_rule_pass_matrix(results, rules)
+        self.assertEqual(matrix["R1"], {"passed": 2, "total": 2, "memory": "x", "summary": None, "ok": True})
+
+    def test_object_shaped_tests_no_id_key_does_not_match(self):
+        rules = [{"id": "R1", "memory": "x", "tests": [{"asserts": "no id here"}]}]
+        results = [{"test_id": "test_a (m.T)", "method": "test_a", "status": "ok"}]
+        matrix = acceptance.doc_rule_pass_matrix(results, rules)
+        self.assertIsNone(matrix["R1"]["ok"])
+        self.assertEqual(matrix["R1"]["total"], 0)
+
+
+class RuleTestIdTest(unittest.TestCase):
+    """_rule_test_id: normalizes a 'tests' entry (either schema) to its bare
+    id string, used directly by _test_id_matches."""
+
+    def test_string_entry_returned_as_is(self):
+        self.assertEqual(acceptance._rule_test_id("test_foo"), "test_foo")
+
+    def test_object_entry_returns_id_field(self):
+        self.assertEqual(acceptance._rule_test_id({"id": "test_foo", "asserts": "..."}), "test_foo")
+
+    def test_object_entry_without_id_returns_none(self):
+        self.assertIsNone(acceptance._rule_test_id({"asserts": "..."}))
+
+    def test_none_entry_returns_none(self):
+        self.assertIsNone(acceptance._rule_test_id(None))
+
 
 if __name__ == "__main__":
     unittest.main()

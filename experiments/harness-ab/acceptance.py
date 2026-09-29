@@ -114,7 +114,15 @@ def categorize_results(test_results):
 
 def load_doc_rules(path):
     """Load a task's optional doc_rules.json: a list of
-    {"id": str, "memory": str, "summary": str, "tests": [test_id, ...]}.
+    {"id": str, "memory": str, "summary": str, "tests": [...], "quote": str}.
+
+    'tests' entries come in two schemas (both accepted, see _rule_test_id /
+    _test_id_matches): older files use a plain test-id string per entry;
+    newer files (which also add the top-level "quote" field) use an object
+    {"id": "<test id>", "asserts": "<human-readable description>"} per
+    entry. 'quote' and 'asserts' are documentation-only and never consulted
+    by doc_rule_pass_matrix.
+
     Returns [] when the file doesn't exist or fails to parse (never
     raises)."""
     if not path or not os.path.exists(path):
@@ -129,10 +137,27 @@ def load_doc_rules(path):
     return [r for r in data if isinstance(r, dict) and r.get("id")]
 
 
+def _rule_test_id(rule_test):
+    """Normalize one doc_rules.json 'tests' entry to its bare id string.
+
+    Older doc_rules.json files list 'tests' as plain strings (the bare
+    method name or a test-id substring). Newer files (schema with 'quote')
+    list them as objects {"id": "<test id>", "asserts": "..."} — 'asserts'
+    is documentation-only (a human-readable description of what the test
+    checks) and never participates in matching. Returns None for anything
+    that yields no usable id (e.g. a dict with no 'id' key)."""
+    if isinstance(rule_test, dict):
+        return rule_test.get("id")
+    return rule_test
+
+
 def _test_id_matches(rule_test, actual_test_id, actual_method):
     """A doc_rules.json 'tests' entry may reference either the bare method
     name (e.g. "test_monthly_budget_short_month") or a full test id/substring
-    of one. Match either way."""
+    of one — as a plain string (older schema) or as an object
+    {"id": ..., "asserts": ...} (newer schema; see _rule_test_id). Match
+    either way."""
+    rule_test = _rule_test_id(rule_test)
     if not rule_test:
         return False
     if rule_test == actual_method:
