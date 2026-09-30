@@ -14,7 +14,7 @@ Use parallel agents to research existing codebase patterns. Compile into indexed
 
 ## Phase 1 — Launch Research Agents
 
-Launch one `Agent` per focus area, `run_in_background: true`, `model: "sonnet"`, ALL in ONE message. Prefix every agent prompt with `You are a subagent. BYPASS WF_INIT.`
+Launch one `Agent` per focus area, `run_in_background: true`, `model: "sonnet"` (fixed-shape task; escalate per FEATURE_SUBAGENTS table if the work turns out to be design/hard-debug), ALL in ONE message. Prefix every agent prompt with `You are a subagent. BYPASS WF_INIT.`
 
 ```javascript
 Agent({ description: "PHP standards", run_in_background: true, model: "sonnet",

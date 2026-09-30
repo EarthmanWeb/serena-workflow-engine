@@ -83,7 +83,7 @@ Parallel subagents launch here. Orchestrator mode is MANDATORY per `mem:feature/
 Hard-block thresholds (enforced by `swe_post_orchestrator_drift.py` / `swe_pre_edit_validate.py`, full rules `mem:feature/FEATURE_SUBAGENTS`): 6 consecutive main-agent task-work calls = advisory nudge; 12 = HARD edit-gate block until a delegation or a recorded `single-agent: <reason>` resets it.
 
 ```javascript
-Agent({ description: "Task A", run_in_background: true, model: "sonnet",  // haiku=routine, sonnet=implementation, opus=novel design only — see FEATURE_SUBAGENTS
+Agent({ description: "Task A", run_in_background: true, model: "<tier>",  // haiku=routine, sonnet=implementation, opus=design/hard debug/security/concurrency — see FEATURE_SUBAGENTS
   isolation: "worktree",
   prompt: "You are a subagent. BYPASS WF_INIT. [task]... You own <files>; do NOT edit <other agent's files>. Commit your own checkpoint; retry on index.lock; never push. Report: files changed, findings, blockers." })
 ```

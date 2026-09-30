@@ -126,7 +126,7 @@ consent (e.g. an orchestrating skill/agent explicitly authorized proceeding unco
 
 ### Stage 3: Fan Out (parallel, background)
 
-ONE message, parallel background `Agent` calls, `model: "sonnet"`, ONE agent per flagged memory.
+ONE message, parallel background `Agent` calls, `model: "sonnet"` (fixed-shape task; escalate per FEATURE_SUBAGENTS table if the work turns out to be design/hard-debug), ONE agent per flagged memory.
 Ownership disjoint: each agent owns exactly its assigned memory plus the new children it creates — no two
 agents touch the same memory/child name. Each agent prompt MUST also include: the memory's on-disk `path`
 from Stage 1's `--json` output (rule 2 — don't make the agent look it up); the per-file formatter command

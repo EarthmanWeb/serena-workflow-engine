@@ -101,7 +101,7 @@ mcp__plugin_swe_serena__list_memories(topic="dom")     # repeat for ref, dev, fe
 Per Delegation Economics (`mem:feature/FEATURE_SUBAGENTS`): this is mechanical extraction, never main-agent
 work. Batch candidates into parallel `Agent` calls, ONE message, `run_in_background: true`:
 
-- `model: "sonnet"` — default tier, derives obligation lines from body content/judgment.
+- `model: "sonnet"` — default tier, derives obligation lines from body content/judgment (fixed-shape task; escalate per FEATURE_SUBAGENTS table if the work turns out to be design/hard-debug).
 - `model: "haiku"` — ONLY for a batch that is a mechanical count/pass-through (e.g. confirming a memory is
   pure reference content and should get `obligations: []`) with no derivation judgment required.
 - Each agent gets a disjoint file list (no two agents touch the same memory), the field grammar above, and

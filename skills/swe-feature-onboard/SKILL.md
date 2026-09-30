@@ -190,7 +190,7 @@ mcp__plugin_swe_serena__read_memory("feature/FEATURE_SUBAGENTS")
 
 This loads subagent types, model selection, and parallel-launch patterns.
 
-Launch 10 read-only analysis subagents in ONE message via the `Agent` tool (`run_in_background: true`, `model: "haiku"` for read-only scans). Each covers one focus area; a final synthesis pass compiles their results into DOM__/SYS__ memories. Prefix every prompt with `You are a subagent. BYPASS WF_INIT. Do NOT read CLAUDE.md workflow.`
+Launch 10 read-only analysis subagents in ONE message via the `Agent` tool (`run_in_background: true`, `model: "haiku"` for read-only scans — fixed-shape task; escalate per FEATURE_SUBAGENTS table if the work turns out to be design/hard-debug). Each covers one focus area; a final synthesis pass compiles their results into DOM__/SYS__ memories. Prefix every prompt with `You are a subagent. BYPASS WF_INIT. Do NOT read CLAUDE.md workflow.`
 
 ```javascript
 // Launch ALL in ONE message for parallel execution.

@@ -54,14 +54,15 @@ Fan-out is the DEFAULT plan whenever the task has **2+ independent tracks** — 
 
 When ANY threshold is met, list tracks explicitly:
 
-| Track | Owner files | Independent? | Model tier                 |
-| ----- | ----------- | ------------ | -------------------------- |
-| A     | `path/a/**` | yes          | sonnet (implementation)    |
-| B     | `path/b/**` | yes          | haiku (mechanical/routine) |
+| Track | Owner files | Independent? | Model tier                   |
+| ----- | ----------- | ------------ | ---------------------------- |
+| A     | `path/a/**` | yes          | sonnet (implementation)      |
+| B     | `path/b/**` | yes          | haiku (mechanical/routine)   |
+| C     | `path/c/**` | yes          | opus (concurrency/FSM logic) |
 
 - Use Claude Code `Agent` tool with `run_in_background: true`.
 - Use `isolation: "worktree"` when tracks may edit overlapping files.
-- Model tier follows the FEATURE_SUBAGENTS routing table (haiku=routine, sonnet=implementation, opus=novel design only) — `model` is passed explicitly on every Agent call, never omitted.
+- Model tier follows the FEATURE_SUBAGENTS routing table (haiku=routine, sonnet=implementation, opus=novel design/hard cross-file debugging/security-sensitive changes/concurrency-FSM logic/broad refactors/explicit operator request) — `model` is passed explicitly on every Agent call, never omitted.
 - Note `parallel_agents: true` in WM along with the tracks table.
 
 Parallel subagents launch during `WF_EXECUTE` — no separate orchestration state. If no independent tracks exist, proceed as single-agent implementation and state why fan-out does not apply.

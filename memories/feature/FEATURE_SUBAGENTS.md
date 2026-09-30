@@ -6,7 +6,7 @@ paths:
   - hooks/post/swe_post_orchestrator_drift.py
 obligations:
   - Fan out to parallel background subagents (ONE message, disjoint file ownership) whenever ≥2 independent subtasks exist, 6+ files are affected, or 3+ layers are touched — the orchestrator itself only classifies, routes, and synthesizes.
-  - Every Agent call MUST pass `model` explicitly per the routing table (haiku for routine/mechanical, sonnet for implementation, opus only for novel design or after a failed sonnet attempt), MUST include the "BYPASS WF_INIT" prompt line, and MUST pass `run_in_background: true` unless the prompt carries a literal `[foreground-justified: <reason>]` tag.
+  - Every Agent call MUST pass `model` explicitly per the routing table (haiku for routine/mechanical, sonnet for implementation, opus REQUIRED for novel design/hard cross-file debugging/security/concurrency-FSM logic/broad refactors/explicit operator request — tag `[opus-justified: <reason>]`, NEVER downgraded to clear the gate), MUST include the "BYPASS WF_INIT" prompt line, and MUST pass `run_in_background: true` unless the prompt carries a literal `[foreground-justified: <reason>]` tag.
   - Any work that waits/polls (test runs, builds, CI, deploys, remote queues, a background process) MUST be delegated to ONE background subagent that runs the work AND polls it itself, then reports on completion — the orchestrator MUST NOT start it via `Bash run_in_background` and poll it with a blocking loop (`until`/`sleep` loops, repeated `tail`/`gh run view`/status checks, a Monitor loop held open in the main turn).
   - Every subagent prompt MUST state SCOPE LIMITS (stop conditions) explicitly — a subagent MUST STOP and report on a failure it did not cause, or after 2 failed attempts at its own change, rather than free-debug; on a subagent `[scope-gate]` trip, the orchestrator MUST launch a NEW scoped debug agent, NEVER `[scope-extend]` into open-ended debugging.
   - `swe_pre_agent_model_gate.py` DENIES an Agent/Task call (`[sweep-gate]`) unless the prompt's own "Required reading:" section names every memory `delegation_sweep.required_reading` computes for it (FEATURE_*/DEV_* by file path, FEATURE_TESTS/DEV_TESTS for test work, the orchestrator WM's Memories loaded/Rules planned/Compliance Checklist) — `[sweep-exempt: <reason>]` skips it for trivial read-only tasks. This does NOT relieve the orchestrator: it MUST still name in the prompt any task-specific memory the auto-sweep cannot infer (e.g. a DOM_ rule not yet in WM), and MUST record the task's sweep in WM (`Memories loaded` / Compliance Checklist) BEFORE delegating so both the gate and the sweep have it.
@@ -60,19 +60,23 @@ Any task requiring waiting or polling for completion — long test runs, builds,
 
 Parallel execution + routing work to the cheapest sufficient model is THE token-reduction mechanism for this harness — enforced by hooks, not left to judgment. Every `Agent` call MUST pass `model` EXPLICITLY. NEVER omit `model` / rely on inherited default. Every `Agent` call MUST also pass `run_in_background: true` explicitly — foreground (`run_in_background: false`) requires a literal `[foreground-justified: <reason>]` tag in the prompt; no subagent_type exemption.
 
-| Model  | Use for                                                                                                             |
-| ------ | ------------------------------------------------------------------------------------------------------------------- |
-| haiku  | Routine/mechanical: test suites, lint, grep/inventory sweeps, read-only audits, link checks, status collection      |
-| sonnet | Implementation, doc rewrites, bug fixes, verification of cheap-agent output, test-failure diagnosis                 |
-| opus   | ONLY: novel architecture/design, cross-system debugging after a sonnet attempt failed, or explicit operator request |
-| fable  | NEVER without a literal `[fable-justified: <reason>]` tag in the prompt                                             |
+| Model  | Use for                                                                                                                                                                                                                                 |
+| ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| haiku  | Routine/mechanical: test suites, lint, grep/inventory sweeps, read-only audits, link checks, status collection                                                                                                                          |
+| sonnet | Implementation, doc rewrites, bug fixes, verification of cheap-agent output, ordinary test-failure diagnosis                                                                                                                            |
+| opus   | Novel architecture/design; hard debugging (root cause unclear, cross-file/cross-system); security-sensitive changes; concurrency/state-machine/FSM logic; broad refactors spanning many modules; explicit operator request ("use opus") |
+| fable  | NEVER without a literal `[fable-justified: <reason>]` tag in the prompt                                                                                                                                                                 |
+
+### Opus REQUIRED
+
+When ANY hold — novel design, hard/cross-file/cross-system debugging, security-sensitive change, concurrency/state-machine/FSM logic, broad multi-module refactor, or explicit operator request — use `model: "opus"` tagged `[opus-justified: <reason>]`. NEVER downgrade to sonnet/haiku to clear the routine-opus gate check — the gate itself allows opus here (see check 3 below). Sonnet-first applies ONLY to ordinary test-failure debugging where the cause is not yet known to be cross-system/concurrency/security.
 
 - The orchestrator ALREADY runs the premium model. Delegation moves work OFF it, never spends a second premium call on work a cheaper tier can do.
 - `opus` tag alias: `[premium-justified: <reason>]` ≡ `[opus-justified: <reason>]` — reason required, no bare tag.
 - `fable` tag `[fable-justified: <reason>]` (or `[premium-justified: <reason>]`) REQUIRED on every `fable`-model call, no exception for "routine" vs "novel".
 - ALL independent tracks launch in ONE message, never sequential single-track calls for independent work.
 - Verification economy: ONE full-suite run per verified stage, by ONE haiku agent, at stage END. Implementation agents run ONLY `py_compile` + tests scoped to owned files. NEVER re-run an already-green suite "to double-check".
-- `swe_pre_agent_model_gate.py` enforces this: Agent calls without `model` + bypass line denied; routine-task `opus` requests denied; `fable` without justification tag denied; Agent/Task calls without `run_in_background: true` and without a `[foreground-justified: <reason>]` tag denied.
+- `swe_pre_agent_model_gate.py` enforces this: Agent calls without `model` + bypass line denied; routine-task `opus` requests denied UNLESS the prompt also carries a design keyword OR a complexity keyword (debug, root cause, security, auth, concurrency, race, deadlock, state machine, cross-file, cross-system, regression, flaky) — either overrides the routine-keyword deny; `fable` without justification tag denied; Agent/Task calls without `run_in_background: true` and without a `[foreground-justified: <reason>]` tag denied.
 
 ## Drift Enforcement
 
@@ -110,7 +114,7 @@ Three enforcement layers stop a delegated subagent from free-debugging past its 
 
 **Extend protocol**: the orchestrator lifts a trip with SendMessage containing `[scope-extend]` or `[scope-extend: N]` (+N calls, default 30; resets all failure streaks). NEVER use `[scope-extend]` to wave a stuck agent past a failure it cannot explain — only for a small, specific, orchestrator-stated next step.
 
-**Orchestrator routing rule**: a subagent's `[scope-gate]` failure report NEVER gets extended into open-ended debugging by default. Launch a NEW, explicitly scoped debug agent instead — `sonnet` first; `opus` only after a failed sonnet attempt, tagged `[opus-justified: <reason>]` — via `mem:wf/WF_DEBUG_TDD`-style test-first debugging. Reserve `[scope-extend]` for a small, specific, orchestrator-stated next step on the SAME agent, never as a default response to a stop-and-report.
+**Orchestrator routing rule**: a subagent's `[scope-gate]` failure report NEVER gets extended into open-ended debugging by default. Launch a NEW, explicitly scoped debug agent instead — `sonnet` first for an ordinary failure; opus-FIRST is allowed (no failed-sonnet-attempt prerequisite) when the failure is cross-system, concurrency/race, or security-sensitive, tagged `[opus-justified: <reason>]` — via `mem:wf/WF_DEBUG_TDD`-style test-first debugging. Reserve `[scope-extend]` for a small, specific, orchestrator-stated next step on the SAME agent, never as a default response to a stop-and-report.
 
 ## Related Memories
 
