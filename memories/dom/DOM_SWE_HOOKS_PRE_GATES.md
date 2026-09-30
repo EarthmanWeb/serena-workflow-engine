@@ -63,6 +63,7 @@ Recovery points, checked in order:
 
 - HARD-DENY spec/report/research/project links entering MEMORY.md (state-independent; the post-hook only advises).
 - ALSO DENIES a `write_memory`/direct-`Write` that creates or overwrites a dom/ref/dev/feature memory with no `obligations:` field (`obligations: []` passes; `edit_memory` partial edits exempt) — Change Set H, see `mem:ref/REF_MEMORY_STYLE`.
+- `[site-data]` — denies `write_memory`/`edit_memory`/memory-tree `Edit`/`Write` whose content carries non-placeholder IPv4 (loopback + RFC5737 allowed), non-placeholder emails, credentialed URLs, SSH connect strings, private-key blocks, or token prefixes. No escape. Rule source `mem:ref/REF_NO_SITE_DATA`.
 
 ## `swe_pre_bash_test_gate.py` — PreToolUse (Bash)
 

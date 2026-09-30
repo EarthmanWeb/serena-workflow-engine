@@ -1,6 +1,6 @@
 ---
 name: swe-feature-onboard
-version: 2.1.0
+version: 2.2.0
 description: Feature onboarding wizard with optional quick mode
 workflow:
   aware: true
@@ -41,6 +41,17 @@ Interactive wizard for registering features in the workflow system.
 | SYS_* memories     | No                          | Yes (if systems found)  |
 | Layer detection    | Basic                       | Detailed                |
 | Best for           | Small features, prototyping | Large codebases         |
+
+---
+
+## Site-Data Rule (MANDATORY)
+
+See `mem:ref/REF_NO_SITE_DATA`.
+
+- Write memories that describe STRUCTURE — paths, config KEY names, generic roles. NEVER site VALUES — real hostnames, IPs, IDs, org/client names, credentials.
+- Report any sensitive value found during analysis to the user IN CHAT ONLY. NEVER write it into a memory section, to-do, or inventory.
+- Prefix every Stage 3 analyzer prompt with the site-data instruction (see Stage 3).
+- Run the Stage 5 "Pre-Write Site-Data Check" on every drafted memory before `write_memory`/`edit_memory`.
 
 ---
 
@@ -190,30 +201,30 @@ mcp__plugin_swe_serena__read_memory("feature/FEATURE_SUBAGENTS")
 
 This loads subagent types, model selection, and parallel-launch patterns.
 
-Launch 10 read-only analysis subagents in ONE message via the `Agent` tool (`run_in_background: true`, `model: "haiku"` for read-only scans — fixed-shape task; escalate per FEATURE_SUBAGENTS table if the work turns out to be design/hard-debug). Each covers one focus area; a final synthesis pass compiles their results into DOM__/SYS__ memories. Prefix every prompt with `You are a subagent. BYPASS WF_INIT. Do NOT read CLAUDE.md workflow.`
+Launch 10 read-only analysis subagents in ONE message via the `Agent` tool (`run_in_background: true`, `model: "haiku"` for read-only scans — fixed-shape task; escalate per FEATURE_SUBAGENTS table if the work turns out to be design/hard-debug). Each covers one focus area; a final synthesis pass compiles their results into DOM__/SYS__ memories. Prefix every prompt with `You are a subagent. BYPASS WF_INIT. Do NOT read CLAUDE.md workflow.` followed by the MANDATORY second sentence: `Report STRUCTURE only — never copy literal hostnames, domains, IPs, IDs, org/client names, emails, or secret values from any file; name the file and the config KEY instead.`
 
 ```javascript
 // Launch ALL in ONE message for parallel execution.
 Agent({ description: "config-analyzer", run_in_background: true, model: "haiku",
-  prompt: "You are a subagent. BYPASS WF_INIT. Parse config files for [KEY] at [PATH]..." })
+  prompt: "You are a subagent. BYPASS WF_INIT. Report STRUCTURE only — never copy literal hostnames, domains, IPs, IDs, org/client names, emails, or secret values from any file; name the file and the config KEY instead. Parse config files for [KEY] at [PATH]..." })
 Agent({ description: "architecture-mapper", run_in_background: true, model: "haiku",
-  prompt: "You are a subagent. BYPASS WF_INIT. Detect architectural layers for [KEY]..." })
+  prompt: "You are a subagent. BYPASS WF_INIT. Report STRUCTURE only — never copy literal hostnames, domains, IPs, IDs, org/client names, emails, or secret values from any file; name the file and the config KEY instead. Detect architectural layers for [KEY]..." })
 Agent({ description: "pattern-detector", run_in_background: true, model: "haiku",
-  prompt: "You are a subagent. BYPASS WF_INIT. Find coding conventions for [KEY]..." })
+  prompt: "You are a subagent. BYPASS WF_INIT. Report STRUCTURE only — never copy literal hostnames, domains, IPs, IDs, org/client names, emails, or secret values from any file; name the file and the config KEY instead. Find coding conventions for [KEY]..." })
 Agent({ description: "domain-extractor", run_in_background: true, model: "haiku",
-  prompt: "You are a subagent. BYPASS WF_INIT. Extract domain concepts for [KEY]..." })
+  prompt: "You are a subagent. BYPASS WF_INIT. Report STRUCTURE only — never copy literal hostnames, domains, IPs, IDs, org/client names, emails, or secret values from any file; name the file and the config KEY instead. Extract domain concepts for [KEY]..." })
 Agent({ description: "system-finder", run_in_background: true, model: "haiku",
-  prompt: "You are a subagent. BYPASS WF_INIT. Identify systems/integrations for [KEY]..." })
+  prompt: "You are a subagent. BYPASS WF_INIT. Report STRUCTURE only — never copy literal hostnames, domains, IPs, IDs, org/client names, emails, or secret values from any file; name the file and the config KEY instead. Identify systems/integrations for [KEY]..." })
 Agent({ description: "test-analyzer", run_in_background: true, model: "haiku",
-  prompt: "You are a subagent. BYPASS WF_INIT. Analyze test patterns for [KEY]..." })
+  prompt: "You are a subagent. BYPASS WF_INIT. Report STRUCTURE only — never copy literal hostnames, domains, IPs, IDs, org/client names, emails, or secret values from any file; name the file and the config KEY instead. Analyze test patterns for [KEY]..." })
 Agent({ description: "import-tracer", run_in_background: true, model: "haiku",
-  prompt: "You are a subagent. BYPASS WF_INIT. Trace the dependency graph for [KEY]..." })
+  prompt: "You are a subagent. BYPASS WF_INIT. Report STRUCTURE only — never copy literal hostnames, domains, IPs, IDs, org/client names, emails, or secret values from any file; name the file and the config KEY instead. Trace the dependency graph for [KEY]..." })
 Agent({ description: "convention-learner", run_in_background: true, model: "haiku",
-  prompt: "You are a subagent. BYPASS WF_INIT. Detect style/naming conventions for [KEY]..." })
+  prompt: "You are a subagent. BYPASS WF_INIT. Report STRUCTURE only — never copy literal hostnames, domains, IPs, IDs, org/client names, emails, or secret values from any file; name the file and the config KEY instead. Detect style/naming conventions for [KEY]..." })
 Agent({ description: "file-indexer", run_in_background: true, model: "haiku",
-  prompt: "You are a subagent. BYPASS WF_INIT. Inventory files for [KEY] at [PATH]..." })
+  prompt: "You are a subagent. BYPASS WF_INIT. Report STRUCTURE only — never copy literal hostnames, domains, IPs, IDs, org/client names, emails, or secret values from any file; name the file and the config KEY instead. Inventory files for [KEY] at [PATH]..." })
 Agent({ description: "synthesizer", run_in_background: true, model: "sonnet",
-  prompt: "You are a subagent. BYPASS WF_INIT. Compile the analysis results for [KEY] into DOM_*/SYS_* memory drafts..." })
+  prompt: "You are a subagent. BYPASS WF_INIT. Report STRUCTURE only — never copy literal hostnames, domains, IPs, IDs, org/client names, emails, or secret values from any file; name the file and the config KEY instead. Compile the analysis results for [KEY] into DOM_*/SYS_* memory drafts..." })
 ```
 
 Collect results from the background task notifications, then synthesize into memories.
@@ -311,6 +322,10 @@ If user selects "No, needs changes", gather corrections manually.
 | ------- | ------ | ------- |
 | [suite] | [file] | [focus] |
 ```
+
+### Pre-Write Site-Data Check
+
+Before any `write_memory`/`edit_memory` call in this stage, re-read every drafted memory body against `mem:ref/REF_NO_SITE_DATA`. Replace real values with placeholders or generic role names. Move any sensitive-value finding to the chat report (see Exit) — NEVER into a memory. A `[site-data]` hook denial means a value slipped through — fix the draft, NEVER work around it.
 
 ### Create via Serena:
 
@@ -462,6 +477,8 @@ mcp__plugin_swe_serena__edit_memory(
 ```
 > **Skill /swe-feature-onboard complete** - Feature [KEY] registered
 ```
+
+Site-data findings (files containing real infra values discovered during analysis) are listed in this chat exit message — NEVER in memories.
 
 ---
 

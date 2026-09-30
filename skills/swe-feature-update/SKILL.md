@@ -1,6 +1,6 @@
 ---
 name: swe-feature-update
-version: 1.0.0
+version: 1.1.0
 description: Update a specific feature's memory files to reflect current codebase state
 workflow:
   aware: true
@@ -127,6 +127,10 @@ Changes detected for [KEY]:
 ---
 
 ## Stage 5: Update Feature Memory
+
+### Site-Data Rule (MANDATORY)
+
+See `mem:ref/REF_NO_SITE_DATA`. Before any `write_memory`/`edit_memory` call in this stage, re-read every updated memory body against it. Replace real hostnames/IPs/IDs/org names/credentials with placeholders or generic role names. Report a sensitive-value finding to the user IN CHAT ONLY — NEVER write it into a memory section, to-do, or inventory. A `[site-data]` hook denial means a value slipped through — fix the draft, NEVER work around it.
 
 ### ⚠️ SPECIAL CASE: SWE Feature
 
