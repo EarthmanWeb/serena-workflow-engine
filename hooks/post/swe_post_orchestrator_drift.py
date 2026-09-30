@@ -12,14 +12,22 @@ into a MANDATE: split remaining work into parallel subagents NOW, or record a
 PreToolUse edit gate (swe_pre_edit_validate.py) hard-enforces this same
 threshold by DENYING further edits without that override.
 
-An Agent or Workflow call resets the streak (the orchestrator just
-delegated). Informational only — PostToolUse cannot block, and this hook
-never does.
+A delegation resets the streak (the orchestrator just handed work off) ONLY
+when it is a real hand-off the orchestrator is not blocking on:
+  - a Workflow call (always background), or
+  - an Agent/Task call with tool_input['run_in_background'] exactly True.
+A FOREGROUND Agent/Task call (run_in_background missing or False) is NOT a
+reset — the orchestrator spawned one agent and is waiting on it, which is
+exactly the single-threaded pattern this nudge exists to discourage. It is
+instead recorded as ordinary task_work (same counting path as Edit/Bash/etc,
+including the advisory/hard-threshold escalation), with a status message
+telling the orchestrator to relaunch with run_in_background: true.
+See `is_background_delegation` for the exact rule.
 
-Exempt when the calling tool itself IS an Agent/Workflow launch — that event
-is the reset marker, not task work, and is recorded as 'delegation' instead
-of 'task_work' by this same hook (registered on both matchers so one script
-covers count + reset).
+Exempt when the calling tool itself IS a real (background) Agent/Workflow
+launch — that event is the reset marker, not task work, and is recorded as
+'delegation' instead of 'task_work' by this same hook (registered on both
+matchers so one script covers count + reset).
 
 Also exempt: a Bash call whose PRIMARY command is verification/inspection
 rather than task work — git status/diff/log/show/commit/add, test runners
@@ -63,6 +71,11 @@ MANDATE_TEXT = (
 
 DELEGATION_TOOL_NAMES = {'Agent', 'Task', 'Workflow'}
 
+# Agent/Task calls launched in the foreground (run_in_background missing or
+# False) block the orchestrator on one subagent — not the parallel-swarm
+# hand-off this hook's reset is meant to reward.
+FOREGROUND_CAPABLE_TOOL_NAMES = {'Agent', 'Task'}
+
 # Bash commands whose PRIMARY (first pipeline-group) stage is verification —
 # checking state or running tests/compiles — rather than doing task work.
 BASH_GROUP_SPLIT_RE = re.compile(r'(?:;|&&|\|\||&|\n)+')
@@ -101,6 +114,27 @@ def bash_is_verification(command: str) -> bool:
     return True
 
 
+def is_background_delegation(tool_name: str, tool_input: dict) -> bool:
+    """True when this delegation-tool call is a real hand-off that should
+    reset the drift counter.
+
+    - Workflow: always a background hand-off — always resets.
+    - Agent/Task: resets ONLY when tool_input['run_in_background'] is exactly
+      True. Missing, False, or any other value means the orchestrator is
+      blocking on a single foreground agent, which does not reset the streak
+      (see module docstring).
+    - Any other tool_name, or a non-dict/None tool_input for Agent/Task:
+      False.
+    """
+    if tool_name == 'Workflow':
+        return True
+    if tool_name in FOREGROUND_CAPABLE_TOOL_NAMES:
+        if not isinstance(tool_input, dict):
+            return False
+        return tool_input.get('run_in_background') is True
+    return False
+
+
 def is_task_work(tool_name: str, tool_input: dict) -> bool:
     """True when this tool call counts toward the orchestrator-drift streak.
 
@@ -133,12 +167,17 @@ def main():
         tool_input = get_input_field(input_data, 'tool_input', default={})
         stream_path = get_stream_path(session_id)
 
+        foreground_delegation = False
         if tool_name in DELEGATION_TOOL_NAMES:
-            append_event(stream_path, 'delegation', tool=tool_name, s=session_id)
-            output_status("\U0001f501 delegation logged — drift counter reset")
-            return
+            if is_background_delegation(tool_name, tool_input):
+                append_event(stream_path, 'delegation', tool=tool_name, s=session_id)
+                output_status("\U0001f501 delegation logged — drift counter reset")
+                return
+            # Foreground Agent/Task: not a reset — falls through to the
+            # ordinary task_work path below.
+            foreground_delegation = True
 
-        if not is_task_work(tool_name, tool_input):
+        if not foreground_delegation and not is_task_work(tool_name, tool_input):
             output_status(f"✓ verification call exempt from drift count: {tool_name}")
             return
 
@@ -147,25 +186,46 @@ def main():
 
         if drift_count >= DRIFT_HARD_THRESHOLD:
             output = HookOutput(event_name="PostToolUse")
-            output.add_message(
+            message = (
                 f"Orchestrator drift: {drift_count} direct task-work calls without "
                 f"delegating (>= hard threshold {DRIFT_HARD_THRESHOLD}). "
                 + MANDATE_TEXT
             )
+            if foreground_delegation:
+                message = (
+                    f"FOREGROUND delegation ({tool_name}) does not reset drift — "
+                    "it blocks the orchestrator on one subagent instead of "
+                    "parallel-splitting. Relaunch with run_in_background: true. "
+                ) + message
+            output.add_message(message)
             output.output_and_exit()
             return
 
         if drift_count >= DRIFT_THRESHOLD:
             output = HookOutput(event_name="PostToolUse")
-            output.add_message(
+            message = (
                 f"Orchestrator drift: {drift_count} direct task-work calls without "
                 "delegating — split remaining work into parallel subagents "
                 "(see FEATURE_SUBAGENTS)."
             )
+            if foreground_delegation:
+                message = (
+                    f"FOREGROUND delegation ({tool_name}) does not reset drift — "
+                    "it blocks the orchestrator on one subagent instead of "
+                    "parallel-splitting. Relaunch with run_in_background: true. "
+                ) + message
+            output.add_message(message)
             output.output_and_exit()
             return
 
-        output_status(f"\U0001f6e0️ task-work #{drift_count} since last delegation")
+        if foreground_delegation:
+            output_status(
+                f"\U0001f6e0️ task-work #{drift_count} since last delegation "
+                f"(FOREGROUND {tool_name} does not reset drift — relaunch with "
+                "run_in_background: true to hand off for real)"
+            )
+        else:
+            output_status(f"\U0001f6e0️ task-work #{drift_count} since last delegation")
 
     except Exception as e:
         output = {"hookSpecificOutput": {"hookEventName": "PostToolUse",

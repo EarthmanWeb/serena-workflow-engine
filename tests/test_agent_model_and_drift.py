@@ -433,7 +433,7 @@ class TestOrchestratorDriftMain(unittest.TestCase):
         self.assertIn(str(drift_hook.DRIFT_THRESHOLD), ctx)
         self.assertNotIn("STOP doing the work yourself", ctx)
 
-    def test_agent_call_resets_counter(self):
+    def test_background_agent_call_resets_counter(self):
         session_id = "efgh5678"
         for _ in range(drift_hook.DRIFT_THRESHOLD - 1):
             self._run_main({
@@ -441,9 +441,32 @@ class TestOrchestratorDriftMain(unittest.TestCase):
                 "transcript_path": self._transcript(session_id),
                 "tool_input": {},
             })
-        # Delegate — resets the streak.
+        # Delegate in the background — resets the streak.
         self._run_main({
             "tool_name": "Agent",
+            "transcript_path": self._transcript(session_id),
+            "tool_input": {"run_in_background": True},
+        })
+        result = self._run_main({
+            "tool_name": "Bash",
+            "transcript_path": self._transcript(session_id),
+            "tool_input": {},
+        })
+        ctx = result.get("hookSpecificOutput", {}).get("additionalContext", "")
+        self.assertNotIn("Orchestrator drift", ctx)
+
+    def test_workflow_call_resets_counter(self):
+        session_id = "wfres001"
+        for _ in range(drift_hook.DRIFT_THRESHOLD - 1):
+            self._run_main({
+                "tool_name": "Edit",
+                "transcript_path": self._transcript(session_id),
+                "tool_input": {},
+            })
+        # Workflow is always a background hand-off — resets even with no
+        # run_in_background field at all.
+        self._run_main({
+            "tool_name": "Workflow",
             "transcript_path": self._transcript(session_id),
             "tool_input": {},
         })
@@ -454,6 +477,44 @@ class TestOrchestratorDriftMain(unittest.TestCase):
         })
         ctx = result.get("hookSpecificOutput", {}).get("additionalContext", "")
         self.assertNotIn("Orchestrator drift", ctx)
+
+    def test_foreground_agent_call_does_not_reset_and_counts_as_task_work(self):
+        # A foreground Agent/Task call (run_in_background missing or False)
+        # blocks the orchestrator on one subagent — it must NOT reset the
+        # drift streak, and must instead count toward it like any other
+        # task-work call.
+        session_id = "fgnr0001"
+        for _ in range(drift_hook.DRIFT_THRESHOLD - 1):
+            self._run_main({
+                "tool_name": "Edit",
+                "transcript_path": self._transcript(session_id),
+                "tool_input": {},
+            })
+        result = self._run_main({
+            "tool_name": "Agent",
+            "transcript_path": self._transcript(session_id),
+            "tool_input": {},
+        })
+        ctx = result.get("hookSpecificOutput", {}).get("additionalContext", "")
+        self.assertIn("Orchestrator drift", ctx)
+        self.assertIn("FOREGROUND", ctx)
+        self.assertIn("run_in_background: true", ctx)
+
+    def test_foreground_agent_explicit_false_does_not_reset(self):
+        session_id = "fgnr0002"
+        for _ in range(drift_hook.DRIFT_THRESHOLD - 1):
+            self._run_main({
+                "tool_name": "Task",
+                "transcript_path": self._transcript(session_id),
+                "tool_input": {"run_in_background": False},
+            })
+        result = self._run_main({
+            "tool_name": "Bash",
+            "transcript_path": self._transcript(session_id),
+            "tool_input": {},
+        })
+        ctx = result.get("hookSpecificOutput", {}).get("additionalContext", "")
+        self.assertIn("Orchestrator drift", ctx)
 
     def test_spawned_agent_call_is_not_tracked(self):
         result = self._run_main({
@@ -551,6 +612,50 @@ class TestBashIsVerification(unittest.TestCase):
 
     def test_git_push_is_not_verification(self):
         self.assertFalse(drift_hook.bash_is_verification("git push origin main"))
+
+
+class TestIsBackgroundDelegation(unittest.TestCase):
+    def test_workflow_always_true(self):
+        self.assertTrue(drift_hook.is_background_delegation("Workflow", {}))
+
+    def test_workflow_true_even_with_no_tool_input(self):
+        self.assertTrue(drift_hook.is_background_delegation("Workflow", None))
+
+    def test_agent_with_run_in_background_true(self):
+        self.assertTrue(drift_hook.is_background_delegation(
+            "Agent", {"run_in_background": True}))
+
+    def test_agent_with_run_in_background_false(self):
+        self.assertFalse(drift_hook.is_background_delegation(
+            "Agent", {"run_in_background": False}))
+
+    def test_agent_with_run_in_background_missing(self):
+        self.assertFalse(drift_hook.is_background_delegation("Agent", {}))
+
+    def test_task_with_run_in_background_true(self):
+        self.assertTrue(drift_hook.is_background_delegation(
+            "Task", {"run_in_background": True}))
+
+    def test_task_with_run_in_background_false(self):
+        self.assertFalse(drift_hook.is_background_delegation(
+            "Task", {"run_in_background": False}))
+
+    def test_task_with_run_in_background_missing(self):
+        self.assertFalse(drift_hook.is_background_delegation("Task", {}))
+
+    def test_non_dict_tool_input_false(self):
+        self.assertFalse(drift_hook.is_background_delegation("Agent", None))
+        self.assertFalse(drift_hook.is_background_delegation("Agent", "not-a-dict"))
+        self.assertFalse(drift_hook.is_background_delegation("Task", None))
+
+    def test_unrelated_tool_name_false(self):
+        self.assertFalse(drift_hook.is_background_delegation(
+            "Edit", {"run_in_background": True}))
+
+    def test_truthy_non_true_value_is_not_background(self):
+        # Must be exactly True, not merely truthy.
+        self.assertFalse(drift_hook.is_background_delegation(
+            "Agent", {"run_in_background": 1}))
 
 
 class TestIsTaskWork(unittest.TestCase):
