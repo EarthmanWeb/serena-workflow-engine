@@ -164,6 +164,37 @@ class TestOpusOnRoutineReason(unittest.TestCase):
             "claude-opus-5-5", "Run the test suite and report failures.")
         self.assertEqual(reason, "")  # opus_on_routine_reason kept exact-match
 
+    def test_opus_plus_run_tests_plus_debug_race_condition_allows(self):
+        # Genuinely hard debugging work alongside a routine-sounding phrase
+        # ("run the tests") must NOT be denied — debugging a race condition
+        # is not mechanical just because tests are also run.
+        reason = agent_gate.opus_on_routine_reason(
+            "opus",
+            "Run the tests, then debug the race condition causing the "
+            "intermittent failure.")
+        self.assertEqual(reason, "")
+
+    def test_opus_plus_run_tests_plus_security_review_of_auth_allows(self):
+        reason = agent_gate.opus_on_routine_reason(
+            "opus",
+            "Run the tests, then do a security review of the auth flow.")
+        self.assertEqual(reason, "")
+
+    def test_opus_plus_author_list_grep_denies(self):
+        # Proves \bauth(?:entication|orization)?\b does NOT match "author" —
+        # this prompt has no genuine complexity marker, so it stays denied.
+        reason = agent_gate.opus_on_routine_reason(
+            "opus", "Grep the author list and report the inventory.")
+        self.assertTrue(reason)
+
+    def test_denial_message_leads_with_justify_tag_before_downgrade(self):
+        reason = agent_gate.opus_on_routine_reason(
+            "opus", "Run the test suite and report failures.")
+        lowered = reason.lower()
+        justify_idx = lowered.index("[opus-justified")
+        downgrade_idx = lowered.index("switch to haiku or sonnet")
+        self.assertLess(justify_idx, downgrade_idx)
+
 
 # ──────────────────────────────────────────────────────────────────
 # pre/swe_pre_agent_model_gate — fable_without_justification_reason

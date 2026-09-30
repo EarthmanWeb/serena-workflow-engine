@@ -20,10 +20,15 @@ Six independent DENY checks, each with its own message:
    the whole init chain on work that should start immediately.
 3. `model: "opus"` on a routine task — a conservative keyword heuristic:
    routine markers (run tests, lint, grep, inventory, list files, read-only
-   audit/status check) with NO design/architecture markers denies opus and
-   suggests haiku. Override with the literal tag `[opus-justified: <reason>]`
-   or `[premium-justified: <reason>]` anywhere in the prompt — an assertion,
-   not a bypass toggle.
+   audit/status check) with NO design/complexity markers denies opus and
+   suggests haiku or sonnet. The override set is broad: it covers novel
+   design/architecture work AND genuinely hard work that is not mechanical
+   just because the prompt also mentions running tests — debugging, root
+   cause investigation, security/vulnerability/auth review,
+   concurrency/race-condition/deadlock/state-machine reasoning, and
+   cross-file/cross-system/regression/flaky-test work. Override with the
+   literal tag `[opus-justified: <reason>]` or `[premium-justified: <reason>]`
+   anywhere in the prompt — an assertion, not a bypass toggle.
 4. ANY `model` in the fable family (PREMIUM tier, alongside opus) — the
    orchestrator itself already runs the premium model, so delegating TO a
    premium subagent defeats the entire point of delegation (moving work off
@@ -164,12 +169,21 @@ ROUTINE_KEYWORDS_RE = re.compile(
     re.IGNORECASE,
 )
 
-# Novel design/architecture work — presence of these overrides the routine
-# heuristic, since opus is appropriate here even alongside a routine-sounding
-# word (e.g. "design the test strategy").
+# Design AND complexity markers that warrant opus — presence of any of these
+# overrides the routine heuristic, since opus is appropriate here even
+# alongside a routine-sounding word (e.g. "design the test strategy", or
+# "run the tests" alongside "debug the race condition"). Covers both novel
+# design/architecture work and genuinely hard debugging/security/concurrency
+# work, which is NOT mechanical just because the prompt also mentions running
+# tests. Word-boundary-safe: e.g. `\bauth(?:entication|orization)?\b` must not
+# match "author".
 DESIGN_KEYWORDS_RE = re.compile(
     r'\barchitect(?:ure)?\b|\bdesign\b|novel|\brefactor\b|\bmigrat(?:e|ion)\b|'
-    r'\bplan(?:ning)?\b|trade-?off|from\s+scratch|greenfield|\bstrategy\b',
+    r'\bplan(?:ning)?\b|trade-?off|from\s+scratch|greenfield|\bstrategy\b|'
+    r'\bdebug(?:ging)?\b|root\s+cause|investigat\w*|diagnos\w*|\bsecurity\b|'
+    r'vulnerab\w*|\bauth(?:entication|orization)?\b|concurren\w*|'
+    r'race\s+condition|\bdeadlock\b|state\s+machine|\bFSM\b|cross-file|'
+    r'cross-system|cross-module|\bregression\b|\bflaky\b|\bintermittent\b',
     re.IGNORECASE,
 )
 
@@ -200,8 +214,9 @@ def missing_model_reason(tool_input: dict) -> str:
         "read-only audits, status checks)\n"
         "  - sonnet — implementation and verification (the default for real "
         "code changes)\n"
-        "  - opus   — novel architecture/design ONLY (new systems, hard "
-        "trade-offs, greenfield design)\n\n"
+        "  - opus   — novel architecture/design, hard debugging (root cause "
+        "unclear, cross-file/cross-system), security, concurrency/"
+        "state-machine logic, or explicit operator request\n\n"
         "Add `model: \"haiku\"|\"sonnet\"|\"opus\"` to this Agent call."
     )
 
@@ -232,11 +247,13 @@ def opus_on_routine_reason(model: str, prompt: str) -> str:
     return (
         "⚡ model: \"opus\" requested for what reads as ROUTINE work "
         "(tests/lint/grep/inventory/read-only audit).\n\n"
-        "Opus is reserved for novel architecture/design — this task pattern "
-        "is a haiku (mechanical) or sonnet (implementation/verification) job.\n\n"
-        "Switch to haiku or sonnet, OR if opus is genuinely warranted here, "
-        "add the literal tag `[opus-justified: <reason>]` (or "
-        "`[premium-justified: <reason>]`) to the prompt and re-call."
+        "If this task is genuinely hard (debugging, security, concurrency, "
+        "cross-file/cross-system reasoning, novel design), keep opus and add "
+        "the literal tag `[opus-justified: <reason>]` (or "
+        "`[premium-justified: <reason>]`) to the prompt, then re-call.\n\n"
+        "If it is truly mechanical (run tests, lint, grep, inventory), switch "
+        "to haiku or sonnet.\n\n"
+        "Do NOT downgrade hard work just to clear this gate."
     )
 
 
