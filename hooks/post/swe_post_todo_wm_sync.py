@@ -7,6 +7,10 @@ the hook does the file write itself, then outputs empty (silent).
 
 This avoids injecting directives that disrupt the model's tool-call
 flow and cause conversation stop signals.
+
+Spawned agents (is_spawned_agent/is_subagent_transcript): early
+output_empty(), no stream event, no WM sync — a subagent's own todo list is
+not the orchestrator's WM.
 """
 
 import os
@@ -18,7 +22,7 @@ import swe_hooks.bootstrap  # noqa: E402
 try:
     from swe_hooks.core.output import output_empty
     from swe_hooks.core.input import read_stdin_safe, get_input_field
-    from swe_hooks.core.session import extract_session_id, find_working_memory_for_session, get_project_root
+    from swe_hooks.core.session import extract_session_id, find_working_memory_for_session, get_project_root, is_spawned_agent, is_subagent_transcript
     from swe_hooks.core.stream import get_stream_path, append_event
 except ImportError as e:
     swe_hooks.bootstrap.import_error_exit(e, "PostTodoWM")
@@ -108,6 +112,13 @@ def main():
     try:
         input_data = read_stdin_safe(timeout_seconds=2.0)
         transcript_path = get_input_field(input_data, 'transcript_path', default='')
+
+        # Spawned agents are not orchestrators — their todos do not sync into
+        # the orchestrator's WM.
+        if is_spawned_agent(input_data) or is_subagent_transcript(transcript_path):
+            output_empty()
+            return
+
         session_id = extract_session_id(transcript_path)
 
         # Track in stream

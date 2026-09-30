@@ -18,6 +18,10 @@ is absent. Silent ({}) on no ledger / no match. One emission per
 (claim, used) pair per session via a 'claim_subst' stream event.
 
 Informational only — PostToolUse cannot block, and this hook never does.
+
+Spawned agents (is_spawned_agent/is_subagent_transcript): early
+output_empty(), no stream event, no substitution text — a subagent's Bash
+call is checked against its own task, not the orchestrator's WM ledger.
 """
 
 import os
@@ -29,7 +33,7 @@ import swe_hooks.bootstrap  # noqa: E402
 try:
     from swe_hooks.core.input import read_stdin_safe, get_input_field
     from swe_hooks.core.output import output_empty, output_message
-    from swe_hooks.core.session import extract_session_id
+    from swe_hooks.core.session import extract_session_id, is_spawned_agent, is_subagent_transcript
     from swe_hooks.core.stream import get_stream_path, append_event
     from swe_hooks.core.doc_claims import (
         find_wm_claims, near_match, stream_has_event_key)
@@ -50,6 +54,14 @@ def substitution_message(claim: dict, used: str) -> str:
 def main():
     try:
         input_data = read_stdin_safe(timeout_seconds=2.0)
+
+        # Spawned agents are not orchestrators — their Bash calls are not
+        # checked against the orchestrator's WM Doc Claims ledger.
+        transcript_path = get_input_field(input_data, 'transcript_path', default='')
+        if is_spawned_agent(input_data) or is_subagent_transcript(transcript_path):
+            output_empty()
+            return
+
         tool_name = get_input_field(input_data, 'tool_name', default='')
         if tool_name != 'Bash':
             output_empty()
@@ -60,7 +72,6 @@ def main():
             output_empty()
             return
 
-        transcript_path = get_input_field(input_data, 'transcript_path', default='')
         session_id = extract_session_id(transcript_path)
         if not session_id:
             output_empty()

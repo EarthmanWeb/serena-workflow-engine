@@ -3,6 +3,11 @@
 
 When a WF_* memory is read, this hook transitions the workflow state.
 Uses session isolation to ensure state changes only affect the current session.
+
+Spawned agents (is_spawned_agent/is_subagent_transcript): the 'docread' stream
+event is still appended (other gates count it), but NO additionalContext/status
+text is emitted and NO readAdvance FSM transition happens — a subagent reading
+a WF_* memory must never move the orchestrator's workflow state.
 """
 
 import os
@@ -15,7 +20,7 @@ try:
     from swe_hooks.core.output import HookOutput, output_empty, output_status, emit_once
     from swe_hooks.core.input import read_stdin_safe, get_input_field
     from swe_hooks.core.state_manager import StateManager, STATE_ICONS, is_forward_read_transition
-    from swe_hooks.core.session import extract_session_id, get_project_root, find_working_memory_for_session
+    from swe_hooks.core.session import extract_session_id, get_project_root, find_working_memory_for_session, is_spawned_agent, is_subagent_transcript
     from swe_hooks.core.config import append_transition_to_wm, write_state_file, resolve_installed_plugin, resolve_plugin_root
     from swe_hooks.core.stream import (
         get_stream_path, append_event, get_sentinel_path,
@@ -330,6 +335,20 @@ def main():
         # Extract session ID early (needed for continuation directives)
         transcript_path = get_input_field(input_data, 'transcript_path', default='')
         session_id = extract_session_id(transcript_path)
+
+        # Spawned agents: keep the 'docread' accounting (other gates count it)
+        # but emit NO additionalContext/status text, and NEVER readAdvance the
+        # FSM — a subagent reading a WF_* memory must not move the
+        # orchestrator's workflow state (see module docstring).
+        if is_spawned_agent(input_data) or is_subagent_transcript(transcript_path):
+            if 'search_memories' not in tool_name:
+                try:
+                    append_event(get_stream_path(session_id), 'docread',
+                                 s=session_id, name=memory_name or tool_name)
+                except Exception:
+                    pass
+            output_empty()
+            return
 
         # Memory-name/front-matter searches: credit is NAME-AWARE. A search
         # whose hits are all already read this task (or that finds nothing)

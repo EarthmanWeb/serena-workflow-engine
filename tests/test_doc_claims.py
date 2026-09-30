@@ -266,7 +266,7 @@ class TestPostDocClaimsMain(unittest.TestCase):
         with open(os.path.join(mem, f"WM_{self.SESSION}.md"), "w") as f:
             f.write("# WM\n\n## Doc Claims Used\n" + ledger)
 
-    def _run_main(self, command, tool_name="Bash"):
+    def _run_main(self, command, tool_name="Bash", agent_id=None):
         import contextlib
         payload = {
             "tool_name": tool_name,
@@ -275,6 +275,8 @@ class TestPostDocClaimsMain(unittest.TestCase):
                 f"/x/{self.SESSION}-0000-0000-0000-000000000000.jsonl",
             "cwd": self.cwd,
         }
+        if agent_id:
+            payload["agent_id"] = agent_id
         orig = claims_hook_mod.read_stdin_safe
         claims_hook_mod.read_stdin_safe = lambda **kw: payload
         buf = io.StringIO()
@@ -317,6 +319,18 @@ class TestPostDocClaimsMain(unittest.TestCase):
 
     def test_no_ledger_silent(self):
         self.assertEqual(self._run_main("curl -I http://sps-wpms-master.local/"), {})
+
+    def test_spawned_agent_gets_empty_output_and_no_stream_event(self):
+        # Even with a matching ledger, a spawned agent's Bash call must not be
+        # checked against the orchestrator's WM Doc Claims ledger.
+        self._write_wm("- mem:feature/FEATURE_WPMS → sps-wpms.local → pending\n")
+        result = self._run_main(
+            "curl -I http://sps-wpms-master.local/", agent_id="agent-123")
+        self.assertEqual(result, {})
+        if os.path.exists(self.stream):
+            with open(self.stream) as f:
+                substs = [line for line in f if '"claim_subst"' in line]
+            self.assertEqual(len(substs), 0)
 
     def test_non_bash_tool_silent(self):
         self._write_wm("- mem:feature/FEATURE_WPMS → sps-wpms.local → pending\n")

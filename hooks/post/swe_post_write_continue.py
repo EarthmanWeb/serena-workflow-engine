@@ -4,6 +4,10 @@
 Prevents Claude from stopping after write_memory returns a simple confirmation.
 Uses updatedMCPToolOutput to inject workflow state into the result itself,
 plus additionalContext as a belt-and-suspenders continuation reminder.
+
+Spawned agents (is_spawned_agent/is_subagent_transcript): early output_empty(),
+no continuation text — a subagent's memory write is not an orchestrator
+workflow-state cue.
 """
 
 import os
@@ -13,8 +17,9 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import swe_hooks.bootstrap  # noqa: E402
 
 try:
+    from swe_hooks.core.output import output_empty
     from swe_hooks.core.input import read_stdin_safe, get_input_field
-    from swe_hooks.core.session import extract_session_id, find_working_memory_for_session
+    from swe_hooks.core.session import extract_session_id, find_working_memory_for_session, is_spawned_agent, is_subagent_transcript
     from swe_hooks.core.config import read_working_memory_state
 except ImportError as e:
     swe_hooks.bootstrap.import_error_exit(e, "PostToolUse")
@@ -23,6 +28,13 @@ except ImportError as e:
 def main():
     try:
         input_data = read_stdin_safe(timeout_seconds=2.0)
+
+        # Spawned agents are not orchestrators — no continuation text.
+        transcript_path = get_input_field(input_data, 'transcript_path', default='')
+        if is_spawned_agent(input_data) or is_subagent_transcript(transcript_path):
+            output_empty()
+            return
+
         cwd = get_input_field(input_data, 'cwd', default=os.getcwd())
         tool_name = get_input_field(input_data, 'tool_name', default='')
         memory_name = get_input_field(input_data, 'tool_input', 'memory_name', default='')
@@ -30,7 +42,6 @@ def main():
         # Get original tool result
         tool_result = get_input_field(input_data, 'tool_result', default='')
 
-        transcript_path = get_input_field(input_data, 'transcript_path', default='')
         session_id = extract_session_id(transcript_path)
 
         # Get current workflow state

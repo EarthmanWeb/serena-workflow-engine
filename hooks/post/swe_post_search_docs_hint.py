@@ -14,6 +14,10 @@ documentation. Consulting a memory clears the streak.
 
 Mirrors swe_post_edit_checkpoint.py. Informational only — PostToolUse
 cannot block, and this hook never does.
+
+Spawned agents (is_spawned_agent/is_subagent_transcript): early
+output_empty(), no search stream event, no docs-first hint text — a
+subagent's own search streak is not the orchestrator's.
 """
 
 import os
@@ -23,9 +27,9 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import swe_hooks.bootstrap  # noqa: E402
 
 try:
-    from swe_hooks.core.output import HookOutput, output_status
+    from swe_hooks.core.output import HookOutput, output_status, output_empty
     from swe_hooks.core.input import read_stdin_safe, get_input_field
-    from swe_hooks.core.session import extract_session_id
+    from swe_hooks.core.session import extract_session_id, is_spawned_agent, is_subagent_transcript
     from swe_hooks.core.stream import get_stream_path, append_event, count_searches_since_docread
 except ImportError as e:
     swe_hooks.bootstrap.import_error_exit(e)
@@ -40,6 +44,13 @@ def main():
 
         # Extract session ID for session isolation
         transcript_path = get_input_field(input_data, 'transcript_path', default='')
+
+        # Spawned agents are not orchestrators — their search streak does not
+        # feed the orchestrator's docs-first hint.
+        if is_spawned_agent(input_data) or is_subagent_transcript(transcript_path):
+            output_empty()
+            return
+
         session_id = extract_session_id(transcript_path)
 
         # Record the search target if available (best-effort, for the log only)

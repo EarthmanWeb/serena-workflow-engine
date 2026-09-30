@@ -3,6 +3,10 @@
 
 Tracks edit count via stream-based event tracking and reminds
 the user to update WM progress after a threshold of edits.
+
+Spawned agents (is_spawned_agent/is_subagent_transcript): early output_empty(),
+no 'edit' stream event and no checkpoint text — a subagent's edits are not
+orchestrator edits, so they do not feed the orchestrator's checkpoint counter.
 """
 
 import os
@@ -15,7 +19,7 @@ try:
     from swe_hooks.core.output import HookOutput, output_empty, output_status
     from swe_hooks.core.input import read_stdin_safe, get_input_field
     from swe_hooks.core.state_manager import StateManager
-    from swe_hooks.core.session import extract_session_id, find_working_memory_for_session
+    from swe_hooks.core.session import extract_session_id, find_working_memory_for_session, is_spawned_agent, is_subagent_transcript
     from swe_hooks.core.stream import get_stream_path, append_event, count_edits_since_checkpoint
 except ImportError as e:
     swe_hooks.bootstrap.import_error_exit(e)
@@ -27,10 +31,17 @@ CHECKPOINT_THRESHOLD = 10
 def main():
     try:
         input_data = read_stdin_safe(timeout_seconds=2.0)
+
+        # Spawned agents are not orchestrators — their edits do not feed the
+        # orchestrator's checkpoint counter, and they get no checkpoint text.
+        transcript_path = get_input_field(input_data, 'transcript_path', default='')
+        if is_spawned_agent(input_data) or is_subagent_transcript(transcript_path):
+            output_empty()
+            return
+
         cwd = get_input_field(input_data, 'cwd', default=os.getcwd())
 
         # Extract session ID for session isolation
-        transcript_path = get_input_field(input_data, 'transcript_path', default='')
         session_id = extract_session_id(transcript_path)
 
         # Get edited file path if available
