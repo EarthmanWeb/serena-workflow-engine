@@ -17,7 +17,7 @@ metadata:
 | Key               | TESTS                                               |
 | Type              | infrastructure                                      |
 | Language          | Python                                              |
-| Formal test suite | stdlib `unittest` (14 files, 590 tests) in `tests/` |
+| Formal test suite | stdlib `unittest` (39 files, 2221 tests) in `tests/` |
 
 ## Unit Test Suite (`tests/`)
 

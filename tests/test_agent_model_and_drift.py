@@ -278,6 +278,11 @@ class TestWithSteeringClause(unittest.TestCase):
         self.assertIn("[doc-gate]", result["prompt"])
         self.assertIn("feature/FEATURE_TESTS", result["prompt"])
 
+    def test_clause_contains_scope_limits_and_scope_gate(self):
+        result = agent_gate.with_steering_clause({"prompt": "Do X."})
+        self.assertIn("SCOPE LIMITS", result["prompt"])
+        self.assertIn("[scope-gate]", result["prompt"])
+
     def test_idempotent_when_marker_already_present(self):
         once = agent_gate.with_steering_clause({"prompt": "Do X."})
         twice = agent_gate.with_steering_clause(once)
@@ -316,6 +321,81 @@ class TestWithSteeringClause(unittest.TestCase):
     def test_non_dict_input_passthrough(self):
         self.assertEqual(agent_gate.with_steering_clause("not-a-dict"), "not-a-dict")
         self.assertIsNone(agent_gate.with_steering_clause(None))
+
+
+# ──────────────────────────────────────────────────────────────────
+# pre/swe_pre_agent_model_gate — with_budget_tag / budget stamping
+# ──────────────────────────────────────────────────────────────────
+
+class TestWithBudgetTag(unittest.TestCase):
+    def test_haiku_stamped_25(self):
+        result = agent_gate.with_budget_tag({"prompt": "Do X.", "model": "haiku"})
+        self.assertIn("[swe-budget: 25]", result["prompt"])
+
+    def test_sonnet_stamped_60(self):
+        result = agent_gate.with_budget_tag({"prompt": "Do X.", "model": "sonnet"})
+        self.assertIn("[swe-budget: 60]", result["prompt"])
+
+    def test_opus_stamped_120(self):
+        result = agent_gate.with_budget_tag({"prompt": "Do X.", "model": "opus"})
+        self.assertIn("[swe-budget: 120]", result["prompt"])
+
+    def test_full_model_id_family_match(self):
+        result = agent_gate.with_budget_tag(
+            {"prompt": "Do X.", "model": "claude-haiku-5-1"})
+        self.assertIn("[swe-budget: 25]", result["prompt"])
+
+    def test_existing_tag_preserved_verbatim_not_duplicated(self):
+        original = {"prompt": "Do X. [swe-budget: 999]", "model": "haiku"}
+        result = agent_gate.with_budget_tag(original)
+        self.assertEqual(result["prompt"].count("[swe-budget:"), 1)
+        self.assertIn("[swe-budget: 999]", result["prompt"])
+        self.assertNotIn("[swe-budget: 25]", result["prompt"])
+
+    def test_idempotent_reapply(self):
+        once = agent_gate.with_budget_tag({"prompt": "Do X.", "model": "sonnet"})
+        twice = agent_gate.with_budget_tag(once)
+        self.assertEqual(once["prompt"], twice["prompt"])
+        self.assertEqual(once["prompt"].count("[swe-budget:"), 1)
+
+    def test_does_not_mutate_input(self):
+        original = {"prompt": "Do X.", "model": "sonnet"}
+        result = agent_gate.with_budget_tag(original)
+        self.assertEqual(original["prompt"], "Do X.")
+        self.assertNotEqual(result["prompt"], original["prompt"])
+
+    def test_non_string_prompt_passthrough(self):
+        original = {"prompt": None, "model": "sonnet"}
+        result = agent_gate.with_budget_tag(original)
+        self.assertEqual(result, original)
+        self.assertIsNot(result, original)
+
+    def test_non_dict_input_passthrough(self):
+        self.assertEqual(agent_gate.with_budget_tag("not-a-dict"), "not-a-dict")
+        self.assertIsNone(agent_gate.with_budget_tag(None))
+
+
+class TestSteeringClauseBudgetIntegration(unittest.TestCase):
+    def test_with_steering_clause_stamps_budget_per_model(self):
+        result = agent_gate.with_steering_clause(
+            {"prompt": "Do X.", "model": "opus"})
+        self.assertIn("[swe-budget: 120]", result["prompt"])
+        self.assertIn(agent_gate.STEERING_CLAUSE_MARKER, result["prompt"])
+
+    def test_with_steering_clause_preserves_existing_budget_tag(self):
+        result = agent_gate.with_steering_clause(
+            {"prompt": "Do X. [swe-budget: 5]", "model": "opus"})
+        self.assertIn("[swe-budget: 5]", result["prompt"])
+        self.assertNotIn("[swe-budget: 120]", result["prompt"])
+
+    def test_idempotent_reapply_of_steering_clause_and_budget(self):
+        once = agent_gate.with_steering_clause({"prompt": "Do X.", "model": "haiku"})
+        twice = agent_gate.with_steering_clause(once)
+        self.assertEqual(once["prompt"], twice["prompt"])
+        self.assertEqual(
+            once["prompt"].count(agent_gate.STEERING_CLAUSE_MARKER), 1)
+        self.assertEqual(
+            len(agent_gate.BUDGET_TAG_RE.findall(once["prompt"])), 1)
 
 
 # ──────────────────────────────────────────────────────────────────
