@@ -1,0 +1,662 @@
+#!/usr/bin/env python3
+"""Tests for experiments/harness-ab/report.py.
+
+Builds a synthetic runs.jsonl (3 arms x 3 trials, including one timed-out run
+and one run missing metrics) in a temp dir, renders the report, and asserts
+on the resulting HTML. Also unit-tests the pure scale-math helpers directly.
+"""
+import importlib.util
+import json
+import os
+import sys
+import tempfile
+import unittest
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+REPORT_PATH = os.path.join(HERE, "..", "experiments", "harness-ab", "report.py")
+
+
+def _load_report():
+    spec = importlib.util.spec_from_file_location("harness_ab_report", REPORT_PATH)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+report = _load_report()
+
+
+# --------------------------------------------------------------------------
+# Pure math helpers.
+# --------------------------------------------------------------------------
+
+class TestLinearScale(unittest.TestCase):
+    def test_basic_mapping(self):
+        scale = report.linear_scale((0, 10), (0, 100))
+        self.assertAlmostEqual(scale(0), 0)
+        self.assertAlmostEqual(scale(10), 100)
+        self.assertAlmostEqual(scale(5), 50)
+
+    def test_inverted_range(self):
+        scale = report.linear_scale((0, 10), (100, 0))
+        self.assertAlmostEqual(scale(0), 100)
+        self.assertAlmostEqual(scale(10), 0)
+
+    def test_degenerate_domain(self):
+        scale = report.linear_scale((5, 5), (0, 100))
+        self.assertAlmostEqual(scale(5), 50)
+        self.assertAlmostEqual(scale(999), 50)
+
+    def test_negative_domain(self):
+        scale = report.linear_scale((-10, 10), (0, 100))
+        self.assertAlmostEqual(scale(-10), 0)
+        self.assertAlmostEqual(scale(0), 50)
+        self.assertAlmostEqual(scale(10), 100)
+
+
+class TestNiceTicks(unittest.TestCase):
+    def test_simple_range(self):
+        ticks = report.nice_ticks(0, 100, 5)
+        self.assertTrue(len(ticks) >= 2)
+        self.assertLessEqual(ticks[0], 0)
+        self.assertGreaterEqual(ticks[-1], 100)
+
+    def test_equal_bounds_zero(self):
+        ticks = report.nice_ticks(0, 0, 5)
+        self.assertIsInstance(ticks, list)
+        self.assertTrue(len(ticks) >= 1)
+
+    def test_equal_bounds_nonzero(self):
+        ticks = report.nice_ticks(42, 42, 5)
+        self.assertIsInstance(ticks, list)
+        self.assertTrue(len(ticks) >= 1)
+
+    def test_none_inputs(self):
+        ticks = report.nice_ticks(None, None, 5)
+        self.assertEqual(ticks, [0])
+
+    def test_swapped_bounds(self):
+        ticks = report.nice_ticks(100, 0, 5)
+        self.assertLessEqual(ticks[0], 0)
+        self.assertGreaterEqual(ticks[-1], 100)
+
+    def test_small_range(self):
+        ticks = report.nice_ticks(1, 3, 5)
+        self.assertLessEqual(ticks[0], 1)
+        self.assertGreaterEqual(ticks[-1], 3)
+
+
+class TestMedian(unittest.TestCase):
+    def test_odd(self):
+        self.assertEqual(report.median([1, 3, 2]), 2)
+
+    def test_even(self):
+        self.assertEqual(report.median([1, 2, 3, 4]), 2.5)
+
+    def test_empty(self):
+        self.assertIsNone(report.median([]))
+
+    def test_with_nones(self):
+        self.assertEqual(report.median([1, None, 3, None, 2]), 2)
+
+
+# --------------------------------------------------------------------------
+# Data extraction helpers.
+# --------------------------------------------------------------------------
+
+class TestDataExtraction(unittest.TestCase):
+    def setUp(self):
+        self.rows = _synthetic_rows()
+
+    def test_rows_for_metric_skips_missing(self):
+        getter = lambda r: report.g(r, "metrics", "num_turns")
+        out = report.rows_for_metric(self.rows, getter)
+        arms_seen = {a for (a, _t, _v) in out}
+        self.assertTrue(arms_seen.issubset(set(report.ARM_ORDER)))
+        # the missing-metrics run should be excluded
+        self.assertEqual(len(out), len(self.rows) - 1)
+
+    def test_token_composition_rows_defaults_zero(self):
+        comp = report.token_composition_rows(self.rows)
+        self.assertEqual(len(comp), len(self.rows))
+        for (_id, _arm, _trial, parts) in comp:
+            for k in ("input", "output", "cache_creation", "cache_read"):
+                self.assertIn(k, parts)
+                self.assertIsInstance(parts[k], (int, float))
+
+    def test_acceptance_rows(self):
+        acc = report.acceptance_rows(self.rows)
+        self.assertEqual(len(acc), len(self.rows))
+        for r in acc:
+            self.assertIn(r["arm"], report.ARM_ORDER)
+
+    def test_tool_mix_rows_caps_and_folds_other(self):
+        tool_order, per_arm = report.tool_mix_rows(self.rows, top_n=2)
+        self.assertLessEqual(len(tool_order), 3)  # top_n + Other
+        for arm in report.ARM_ORDER:
+            self.assertIn(arm, per_arm)
+
+    def test_compute_verdict_nonempty(self):
+        agg = report.get_analyze().aggregate(self.rows)
+        verdict = report.compute_verdict(agg)
+        self.assertIsInstance(verdict, str)
+        self.assertGreater(len(verdict), 0)
+
+    def test_compute_verdict_empty_rows(self):
+        agg = report.get_analyze().aggregate([])
+        verdict = report.compute_verdict(agg)
+        self.assertIsInstance(verdict, str)
+
+
+# --------------------------------------------------------------------------
+# Full render.
+# --------------------------------------------------------------------------
+
+
+def _synthetic_rows():
+    rows = []
+    for arm in report.ARM_ORDER:
+        for trial in range(3):
+            row = {
+                "run_id": f"{arm}-t{trial}",
+                "arm": arm,
+                "trial": trial,
+                "model": "claude-sonnet-5",
+                "exit_code": 0,
+                "timed_out": False,
+                "wall_s": 100.0 + trial * 10 + (5 if arm == "v5" else 0),
+                "metrics": {
+                    "num_turns": 20 + trial + (2 if arm == "control" else 0),
+                    "total_tokens": 50000 + trial * 1000,
+                    "total_tool_calls": 30 + trial,
+                    "hook_denials": 1 if arm != "control" else 0,
+                    "stop_hook_blocks": 0,
+                    "est_cost_usd": 0.5 + trial * 0.1,
+                    "usage": {
+                        "input_tokens": 10000 + trial * 100,
+                        "output_tokens": 5000 + trial * 50,
+                        "cache_creation_input_tokens": 2000,
+                        "cache_read_input_tokens": 30000,
+                    },
+                    "tool_calls_by_name": {
+                        "Read": 10, "Edit": 5, "Bash": 8, "Write": 2,
+                        "Grep": 3, "Glob": 1, "Agent": 1, "TodoWrite": 1,
+                        "WeirdTool": 1,
+                    },
+                    "assistant_turns_incl_subagents": 35 + trial + (4 if arm == "control" else 0),
+                    "memory_file_reads": 3 + trial + (2 if arm != "control" else 0),
+                },
+                "acceptance": {"passed": 4, "total": 5, "ok": False, "failed_tests": ["test_x (tests.test_y.Z)"]},
+                "regression": {"passed": 10, "total": 10, "ok": True, "failed_tests": []},
+                "stream_metrics": {
+                    "stream_event_counts": {"tool_call": 12, "state_transition": 3} if arm != "control" else {},
+                    "final_workflow_state": "WF_VERIFY" if arm != "control" else None,
+                },
+            }
+            rows.append(row)
+
+    # one timed-out run
+    rows[0]["timed_out"] = True
+    rows[0]["exit_code"] = -1
+    rows[0]["acceptance"] = {"passed": 0, "total": 5, "ok": False}
+    rows[0]["regression"] = {"passed": 0, "total": 10, "ok": False}
+
+    # one run missing metrics entirely
+    rows[-1]["metrics"] = {}
+    rows[-1]["acceptance"] = {}
+    rows[-1]["regression"] = {}
+    rows[-1]["stream_metrics"] = {}
+
+    return rows
+
+
+class TestRenderReport(unittest.TestCase):
+    def setUp(self):
+        self.rows = _synthetic_rows()
+        self.meta = {
+            "args": {"model": "claude-sonnet-5", "trials": 3},
+            "arms": [
+                {"name": "baseline", "ref": "23ec685", "plugin": True},
+                {"name": "v5", "ref": "harness-v5-prototype", "plugin": True},
+                {"name": "control", "ref": None, "plugin": False},
+            ],
+            "prepared": {
+                "baseline": {"sha": "23ec685deadbeef", "version": "1.2.82"},
+                "v5": {"sha": "abc123", "version": "5.0.0-proto"},
+                "control": {"sha": None, "version": None},
+            },
+            "auth": {"authMethod": "claude.ai", "subscriptionType": "max", "apiProvider": "anthropic"},
+            "claude_version": "1.2.82 (Claude Code)",
+        }
+        self.html = report.render_report(self.rows, self.meta, title="Harness A/B Results")
+
+    def test_html_written_to_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            out_path = os.path.join(tmp, "report.html")
+            with open(out_path, "w") as f:
+                f.write(self.html)
+            self.assertTrue(os.path.exists(out_path))
+            self.assertGreater(os.path.getsize(out_path), 1000)
+
+    def test_has_svg_per_chart_section(self):
+        # dot/strip small multiples (5), token composition, acceptance,
+        # friction, tool mix => at least 5 + 4 = 9 svg elements
+        count = self.html.count("<svg")
+        self.assertGreaterEqual(count, 9)
+
+    def test_contains_every_arm_name(self):
+        for arm in report.ARM_ORDER:
+            self.assertIn(report.ARM_LABELS[arm], self.html)
+
+    def test_contains_every_run_row(self):
+        # every arm+trial combination appears in the per-run table (rendered
+        # as "<arm label> t<trial>" in row labels / table cells)
+        for arm in report.ARM_ORDER:
+            for trial in range(3):
+                self.assertIn(f"t{trial}", self.html)
+
+    def test_no_nan_or_bare_none_text(self):
+        # "isNaN" is legitimate JS; only reject NaN as rendered DATA (a bare
+        # token, or inside a value/tooltip attribute).
+        self.assertNotIn(">NaN<", self.html)
+        self.assertNotIn(" NaN ", self.html)
+        self.assertNotIn(">None<", self.html)
+        self.assertNotIn('data-sort="nan"', self.html.lower())
+        self.assertNotIn('data-tip="nan', self.html.lower())
+
+    def test_missing_fields_render_em_dash(self):
+        # the last synthetic run has empty metrics/acceptance/regression;
+        # em-dash placeholder must appear somewhere for it
+        self.assertIn("—", self.html)
+
+    def test_tooltip_data_attributes_present(self):
+        self.assertIn("data-tip=", self.html)
+
+    def test_title_element(self):
+        self.assertIn("<title>Harness A/B Results</title>", self.html)
+
+    def test_no_dual_axis_hint(self):
+        # sanity: we never render a second y-axis scale marker
+        self.assertNotIn("secondary-axis", self.html)
+
+    def test_arm_colors_no_aqua(self):
+        # arm colors must be blue/orange/green — no aqua/teal/cyan hex families
+        forbidden = ["#1baf7a", "#199e70", "#0bb", "#0bc", "#0cc"]
+        for f in forbidden:
+            self.assertNotIn(f, self.html.lower())
+        self.assertIn(report.ARM_COLOR_LIGHT["baseline"], self.html)
+        self.assertIn(report.ARM_COLOR_LIGHT["v5"], self.html)
+        self.assertIn(report.ARM_COLOR_LIGHT["control"], self.html)
+
+    def test_sortable_table_present(self):
+        self.assertIn('id="run-table"', self.html)
+        self.assertIn("data-sort-key", self.html)
+
+    def test_verdict_present(self):
+        self.assertIn('class="verdict"', self.html)
+
+    def test_kpi_row_present(self):
+        self.assertIn("kpi-card", self.html)
+
+    def test_method_section_present(self):
+        self.assertIn("Method &amp; caveats", self.html)
+
+    def test_memory_consultations_chart_present(self):
+        self.assertIn("Memory consultations", self.html)
+
+    def test_turns_all_agents_label_present(self):
+        self.assertIn("Turns (all agents)", self.html)
+        self.assertIn("Turns (main-agent only)", self.html)
+
+    def test_failed_tests_column_present(self):
+        self.assertIn("Failed tests", self.html)
+        self.assertIn("test_x", self.html)
+
+    def test_verdict_uses_all_agent_language_not_bare_turns(self):
+        # The verdict sentence must talk about "turns (all agents)" /
+        # "tokens (all models)", never a bare "turns"/"tokens" that could be
+        # misread as the main-agent-only figures.
+        agg = report.get_analyze().aggregate(self.rows)
+        verdict = report.compute_verdict(agg)
+        if "vs baseline" in verdict:
+            self.assertIn("turns (all agents)", verdict)
+            self.assertIn("tokens (all models)", verdict)
+
+    def test_notes_html_fragment_backward_compat(self):
+        # An HTML fragment with no '- text' bullet lines falls back to the
+        # legacy verbatim Findings section (backward compat with the old
+        # --notes contract), rendered before the scorecard section.
+        html = report.render_report(self.rows, self.meta, title="Harness A/B Results",
+                                     notes_html="<p>Custom finding text ABC123.</p>")
+        self.assertIn("Findings", html)
+        self.assertIn("Custom finding text ABC123.", html)
+        self.assertLess(html.index("Custom finding text ABC123."), html.index('id="scorecard"'))
+
+    def test_notes_line_format_renders_finding_cards(self):
+        notes = "- Baseline used fewer tokens than control.\n- v5 passed more doc-rule tests.\n"
+        html = report.render_report(self.rows, self.meta, title="Harness A/B Results",
+                                     notes_html=notes, notes_text=notes)
+        self.assertIn("finding-card", html)
+        self.assertIn("Baseline used fewer tokens than control.", html)
+        self.assertIn("v5 passed more doc-rule tests.", html)
+
+    def test_no_notes_omits_legacy_findings_section(self):
+        self.assertNotIn("Custom finding text", self.html)
+
+
+class ShortTestNameTest(unittest.TestCase):
+    def test_typical_unittest_id(self):
+        self.assertEqual(
+            report.short_test_name("test_foo (tests.test_bar.MyTest)"),
+            "MyTest.test_foo",
+        )
+
+    def test_unrecognized_format_returned_as_is(self):
+        self.assertEqual(report.short_test_name("weird-id"), "weird-id")
+
+    def test_python311plus_dotted_method_shape(self):
+        # Python 3.11+ repeats the method name at the end of the dotted path.
+        self.assertEqual(
+            report.short_test_name("test_fails (tests.test_sample.T.test_fails)"),
+            "T.test_fails",
+        )
+
+    def test_none_and_empty(self):
+        self.assertIsNone(report.short_test_name(None))
+        self.assertEqual(report.short_test_name(""), "")
+
+
+class FailedTestsCellTextTest(unittest.TestCase):
+    def test_both_acceptance_and_regression_failures(self):
+        acc = {"failed_tests": ["test_a (m.A)"]}
+        reg = {"failed_tests": ["test_b (m.B)"]}
+        text = report.failed_tests_cell_text(acc, reg)
+        self.assertIn("A: A.test_a", text)
+        self.assertIn("R: B.test_b", text)
+
+    def test_no_failures_empty_string(self):
+        self.assertEqual(report.failed_tests_cell_text({}, {}), "")
+        self.assertEqual(
+            report.failed_tests_cell_text({"failed_tests": []}, {"failed_tests": []}), ""
+        )
+
+
+class TestCLI(unittest.TestCase):
+    def test_main_writes_file(self):
+        rows = _synthetic_rows()
+        meta = {"args": {"model": "claude-sonnet-5", "trials": 3}, "arms": [], "prepared": {},
+                "auth": {}, "claude_version": ""}
+        with tempfile.TemporaryDirectory() as tmp:
+            stamp_dir = os.path.join(tmp, "stamp")
+            os.makedirs(stamp_dir)
+            with open(os.path.join(stamp_dir, "runs.jsonl"), "w") as f:
+                for r in rows:
+                    f.write(json.dumps(r) + "\n")
+            with open(os.path.join(stamp_dir, "meta.json"), "w") as f:
+                json.dump(meta, f)
+
+            out_path = os.path.join(tmp, "out.html")
+            rc = report.main([stamp_dir, "--out", out_path, "--title", "Test Title"])
+            self.assertEqual(rc, 0)
+            self.assertTrue(os.path.exists(out_path))
+            with open(out_path) as f:
+                content = f.read()
+            self.assertIn("<title>Test Title</title>", content)
+
+
+# --------------------------------------------------------------------------
+# Scorecard (redesign): values + deltas vs control.
+# --------------------------------------------------------------------------
+
+class ScorecardDataTest(unittest.TestCase):
+    def setUp(self):
+        self.rows = _synthetic_rows()
+        self.agg = report.get_analyze().aggregate(self.rows)
+
+    def test_rows_cover_the_six_key_metrics(self):
+        sc = report.scorecard_data(self.agg)
+        keys = [r["key"] for r in sc["rows"]]
+        self.assertEqual(keys, [
+            "doc_pass_pct_mean", "spec_pass_pct_mean", "success_rate",
+            "total_tokens_median", "turns_median", "wall_s_median",
+        ])
+
+    def test_control_is_reference_no_self_delta(self):
+        sc = report.scorecard_data(self.agg)
+        row = next(r for r in sc["rows"] if r["key"] == "total_tokens_median")
+        self.assertIsNone(row["cells"]["control"]["delta_pct"])
+
+    def test_delta_computed_vs_control_not_baseline(self):
+        # total_tokens medians in the synthetic fixture have no arm-specific
+        # offset (only a trial*1000 term, same for every arm), so the delta
+        # vs control must be small (well under the ~20% arm-effect band
+        # used elsewhere in this fixture for wall_s), not None, for every
+        # non-control arm — proving the delta is computed against control's
+        # value, not baseline's.
+        sc = report.scorecard_data(self.agg)
+        row = next(r for r in sc["rows"] if r["key"] == "total_tokens_median")
+        for arm in ("baseline", "v5"):
+            d = row["cells"][arm]["delta_pct"]
+            self.assertIsNotNone(d)
+            self.assertLess(abs(d), 2.0)
+
+    def test_wall_s_delta_nonzero_for_v5(self):
+        # synthetic wall_s adds +5s for v5 relative to baseline/control at
+        # every trial, so v5's median wall_s must read a positive delta vs
+        # control.
+        sc = report.scorecard_data(self.agg)
+        row = next(r for r in sc["rows"] if r["key"] == "wall_s_median")
+        d = row["cells"]["v5"]["delta_pct"]
+        self.assertIsNotNone(d)
+        self.assertGreater(d, 0)
+
+    def test_best_arm_marked_per_row_respects_direction(self):
+        sc = report.scorecard_data(self.agg)
+        tokens_row = next(r for r in sc["rows"] if r["key"] == "total_tokens_median")
+        # lower is better for tokens; best_arm must hold the minimum value
+        vals = {a: c["value"] for a, c in tokens_row["cells"].items() if c["value"] is not None}
+        self.assertEqual(tokens_row["best_arm"], min(vals, key=vals.get))
+
+    def test_success_rate_cell_has_fraction_extra(self):
+        sc = report.scorecard_data(self.agg)
+        row = next(r for r in sc["rows"] if r["key"] == "success_rate")
+        for arm in report.ARM_ORDER:
+            extra = row["cells"][arm]["extra"]
+            self.assertIsNotNone(extra)
+            self.assertIn("/", extra)
+
+    def test_empty_rows_all_none_no_crash(self):
+        agg = report.get_analyze().aggregate([])
+        sc = report.scorecard_data(agg)
+        self.assertEqual(sc["arms_present"], [])
+        for row in sc["rows"]:
+            self.assertEqual(row["cells"], {})
+
+
+class ScorecardHtmlTest(unittest.TestCase):
+    def test_renders_best_tag_and_delta_arrow(self):
+        rows = _synthetic_rows()
+        agg = report.get_analyze().aggregate(rows)
+        html = report.scorecard_html(agg)
+        self.assertIn("scorecard-table", html)
+        self.assertIn("best-tag", html)
+        self.assertIn("vs no harness", html)
+
+    def test_v1_shaped_rows_render_not_measured_compactly(self):
+        # v1 rows: no acceptance.spec/doc, no gates at all.
+        rows = []
+        for arm in report.ARM_ORDER:
+            rows.append({
+                "run_id": f"{arm}-t0", "arm": arm, "trial": 0,
+                "metrics": {"total_tokens": 1000, "assistant_turns_incl_subagents": 10},
+                "wall_s": 50.0,
+                "acceptance": {"passed": 1, "total": 1, "ok": True},
+                "regression": {"passed": 1, "total": 1, "ok": True},
+            })
+        agg = report.get_analyze().aggregate(rows)
+        html = report.scorecard_html(agg)
+        self.assertIn("not measured", html)
+        self.assertNotIn(">None<", html)
+        self.assertNotIn(">NaN<", html)
+
+    def test_no_runs_renders_muted_message_not_crash(self):
+        agg = report.get_analyze().aggregate([])
+        html = report.scorecard_html(agg)
+        self.assertIn("No runs to report", html)
+
+
+# --------------------------------------------------------------------------
+# Notes line-format parsing + key findings.
+# --------------------------------------------------------------------------
+
+class ParseNotesLinesTest(unittest.TestCase):
+    def test_parses_dash_bullet_lines(self):
+        text = "- First finding here.\n- Second finding here.\n"
+        self.assertEqual(
+            report.parse_notes_lines(text),
+            ["First finding here.", "Second finding here."],
+        )
+
+    def test_parses_star_bullet_lines(self):
+        text = "* One\n* Two\n"
+        self.assertEqual(report.parse_notes_lines(text), ["One", "Two"])
+
+    def test_ignores_blank_lines(self):
+        text = "- A\n\n\n- B\n"
+        self.assertEqual(report.parse_notes_lines(text), ["A", "B"])
+
+    def test_non_bullet_text_returns_empty_for_html_fallback(self):
+        text = "<p>Some HTML fragment, no bullets here.</p>"
+        self.assertEqual(report.parse_notes_lines(text), [])
+
+    def test_empty_and_none(self):
+        self.assertEqual(report.parse_notes_lines(""), [])
+        self.assertEqual(report.parse_notes_lines(None), [])
+
+    def test_strips_surrounding_whitespace(self):
+        text = "-    padded finding text   \n"
+        self.assertEqual(report.parse_notes_lines(text), ["padded finding text"])
+
+
+class KeyFindingsTest(unittest.TestCase):
+    def test_prefers_notes_findings_when_given(self):
+        rows = _synthetic_rows()
+        agg = report.get_analyze().aggregate(rows)
+        findings = report.key_findings(agg, notes_findings=["Custom note A", "Custom note B"])
+        self.assertEqual(findings, ["Custom note A", "Custom note B"])
+
+    def test_caps_at_max_findings(self):
+        rows = _synthetic_rows()
+        agg = report.get_analyze().aggregate(rows)
+        findings = report.key_findings(agg, notes_findings=[f"N{i}" for i in range(10)], max_findings=5)
+        self.assertEqual(len(findings), 5)
+
+    def test_derives_findings_when_no_notes(self):
+        rows = _synthetic_rows()
+        agg = report.get_analyze().aggregate(rows)
+        findings = report.key_findings(agg, notes_findings=None)
+        self.assertGreater(len(findings), 0)
+        self.assertLessEqual(len(findings), 5)
+
+    def test_empty_agg_returns_placeholder_not_crash(self):
+        agg = report.get_analyze().aggregate([])
+        findings = report.key_findings(agg, notes_findings=None)
+        self.assertEqual(len(findings), 1)
+
+
+# --------------------------------------------------------------------------
+# Section presence/order + v1/v2 backward compat on the full render.
+# --------------------------------------------------------------------------
+
+class SectionStructureTest(unittest.TestCase):
+    def setUp(self):
+        self.rows = _synthetic_rows()
+        self.meta = {
+            "args": {"model": "claude-sonnet-5", "trials": 3}, "arms": [], "prepared": {},
+            "auth": {}, "claude_version": "",
+        }
+        self.html = report.render_report(self.rows, self.meta, title="Section Order Test")
+
+    def test_sticky_nav_present_with_all_sections(self):
+        self.assertIn('class="section-nav"', self.html)
+        for label in ("Scorecard", "Documentation use", "Gates", "Cost", "Tools", "Runs", "Method"):
+            self.assertIn(f">{label}<", self.html)
+
+    def test_section_ids_present_in_order(self):
+        ids = ["scorecard", "doc-use", "gates", "cost", "tools", "runs", "method"]
+        positions = [self.html.index(f'id="{i}"') for i in ids]
+        self.assertEqual(positions, sorted(positions))
+
+    def test_nav_respects_safe_area_inset(self):
+        self.assertIn("safe-area-inset-top", self.html)
+
+    def test_section_takeaways_present(self):
+        self.assertIn("section-takeaway", self.html)
+
+    def test_runs_table_collapsed_by_default(self):
+        # the per-run table must be inside a <details> that is not "open"
+        idx = self.html.index('id="runs"')
+        runs_section = self.html[idx:self.html.index("</section>", idx)]
+        self.assertIn("<details", runs_section)
+        self.assertNotRegex(runs_section.split("<details", 1)[1].split(">", 1)[0], r"\bopen\b")
+
+    def test_chart_cards_have_title_and_subtitle(self):
+        self.assertIn("chart-card-title", self.html)
+        self.assertIn("chart-card-subtitle", self.html)
+
+    def test_data_table_fallback_present(self):
+        self.assertIn(">Data<", self.html)
+
+
+class V1BackwardCompatTest(unittest.TestCase):
+    """A v1-shaped stamp (no spec/doc/gates/doc_rules fields anywhere) must
+    still render cleanly: 'not measured' framing, no None/NaN leakage."""
+
+    def setUp(self):
+        rows = []
+        for arm in report.ARM_ORDER:
+            for trial in range(2):
+                rows.append({
+                    "run_id": f"{arm}-t{trial}", "arm": arm, "trial": trial,
+                    "exit_code": 0, "timed_out": False,
+                    "wall_s": 100.0 + trial,
+                    "metrics": {
+                        "num_turns": 10 + trial,
+                        "total_tokens": 20000 + trial * 500,
+                        "total_tool_calls": 15,
+                        "assistant_turns_incl_subagents": 18 + trial,
+                        "usage": {"input_tokens": 1000, "output_tokens": 500,
+                                  "cache_creation_input_tokens": 0, "cache_read_input_tokens": 0},
+                    },
+                    "acceptance": {"passed": 3, "total": 4, "ok": False},
+                    "regression": {"passed": 5, "total": 5, "ok": True},
+                })
+        self.rows = rows
+        self.meta = {"args": {"model": "m", "trials": 2}, "arms": [], "prepared": {},
+                     "auth": {}, "claude_version": ""}
+        self.html = report.render_report(self.rows, self.meta, title="V1 Compat")
+
+    def test_renders_without_none_or_nan(self):
+        self.assertNotIn(">None<", self.html)
+        self.assertNotIn(">NaN<", self.html)
+        self.assertNotIn(" NaN ", self.html)
+
+    def test_scorecard_shows_not_measured_for_missing_doc_spec(self):
+        idx = self.html.index('id="scorecard"')
+        scorecard_section = self.html[idx:self.html.index("</section>", idx)]
+        self.assertIn("not measured", scorecard_section)
+
+    def test_gates_section_present_and_does_not_crash(self):
+        self.assertIn('id="gates"', self.html)
+
+    def test_doc_use_section_present_and_does_not_crash(self):
+        self.assertIn('id="doc-use"', self.html)
+
+    def test_success_rate_and_tokens_still_populate(self):
+        idx = self.html.index('id="scorecard"')
+        scorecard_section = self.html[idx:self.html.index("</section>", idx)]
+        self.assertIn("/2", scorecard_section)  # success x/n fraction
+
+
+if __name__ == "__main__":
+    unittest.main()
