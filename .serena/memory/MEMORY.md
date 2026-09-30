@@ -43,7 +43,7 @@ metadata:
 
 ## Workflow Routing (v4)
 
-Init chain ends at WF_CLASSIFY (WF_START removed). Reading a WF_* memory is a PURE read — it never transitions state; transitions are explicit (`set_state` / prompt-intent hook) only.
+Init chain ends at WF_CLASSIFY (WF_START removed). Reading a WF_* memory advances state only forward along a matrix edge or via a declared `readBackward` entry (e.g. WF_RESEARCH → WF_CLASSIFY); all other moves use `swe_wm_transition` / `set_state.py` / the prompt-intent hook.
 
 | Situation                                       | Go To                                              |
 | ----------------------------------------------- | -------------------------------------------------- |

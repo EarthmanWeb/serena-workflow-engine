@@ -18,7 +18,7 @@ metadata:
 
 ## Project Overview
 
-State-machine workflow engine plugin for Claude Code. Integrates Serena memory persistence, hook-driven event architecture, and native subagent parallelization. Manages the SWE lifecycle through states (INIT, CLASSIFY, ARCH_REVIEW, EXECUTE, VERIFY, DONE, …). Transitions are explicit (`set_state` / prompt-intent hook) — reading a WF_* memory does NOT advance the FSM. Authoritative state list: `state-machine/states.json` (see `mem:dom/DOM_SWE_STATE_MACHINE`).
+State-machine workflow engine plugin for Claude Code. Integrates Serena memory persistence, hook-driven event architecture, and native subagent parallelization. Manages the SWE lifecycle through states (INIT, CLASSIFY, ARCH_REVIEW, EXECUTE, VERIFY, DONE, …). Transitions: reading a WF_* memory advances the FSM only forward along a matrix edge or via a declared `readBackward` entry; every other move is explicit (`swe_wm_transition` MCP tool / `set_state.py` / prompt-intent hook). Authoritative state list: `state-machine/states.json` (see `mem:dom/DOM_SWE_STATE_MACHINE`).
 
 **Tech stack:** Python (hooks, bootstrap, MCP servers) · Markdown (memories, specs, workflow defs) · JSON (config, state machine) · npm (dprint dev dep only) · dprint (markdown/JSON format) · MCP servers: Serena (code intelligence), swe-wm (working memory).
 
