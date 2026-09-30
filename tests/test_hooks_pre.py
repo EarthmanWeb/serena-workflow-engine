@@ -1354,12 +1354,11 @@ class TestBashMissingCdAutoRepair(unittest.TestCase):
 
 
 class TestBashTestGateSpawnedAgentExemption(unittest.TestCase):
-    """Stage 2: the blanket spawned-agent exemption from the test gate is
-    REMOVED. A spawned agent is now gated on its OWN docreads this task —
-    allowed iff it has itself read every existing TEST_DOC_NAMES memory,
-    denied (with a '[doc-gate]' message) otherwise. Reads credited to the
-    main agent (or to a different agent_id) never count for this agent
-    (per-agent isolation, positive control below)."""
+    """Spawned agents are exempt from the test-doc requirement gate
+    regardless of their own docreads — enforcement moved to DELEGATION time
+    (swe_pre_agent_model_gate.py's [sweep-gate]) instead of per-test-command.
+    The main agent is still gated on the FEATURE_TESTS sentinel, and the
+    project Bash-policy check still applies to everyone, spawned or not."""
 
     def setUp(self):
         reset_caches()
@@ -1430,27 +1429,15 @@ class TestBashTestGateSpawnedAgentExemption(unittest.TestCase):
             {'command': 'npx playwright test'}, agent_id='sub-123')
         self.assertEqual(result, {})
 
-    def test_spawned_agent_without_own_docread_denied(self):
+    def test_spawned_agent_without_own_docread_allowed(self):
+        # Spawned agents are exempt regardless of docreads — enforcement is
+        # at delegation time now, not per test command.
         self._write_test_doc()
         result = self._run_main(
             {'command': 'npx playwright test'}, agent_id='sub-123')
-        text = json.dumps(result)
-        self.assertIn('[doc-gate]', text)
-        self.assertIn('feature/FEATURE_TESTS', text)
+        self.assertEqual(result, {})
 
-    def test_main_agent_docread_does_not_credit_spawned_agent(self):
-        # Positive control: the main agent's own docread must not clear a
-        # different spawned agent's gate (per-agent isolation).
-        self._write_test_doc()
-        self._write_stream('deadbeef', [
-            {'type': 'docread', 'name': 'feature/FEATURE_TESTS'},
-        ])
-        result = self._run_main(
-            {'command': 'npx playwright test'}, agent_id='sub-123')
-        text = json.dumps(result)
-        self.assertIn('[doc-gate]', text)
-
-    def test_spawned_agent_with_own_docread_allowed(self):
+    def test_spawned_agent_with_docread_still_allowed(self):
         self._write_test_doc()
         self._write_stream('deadbeef', [
             {'type': 'docread', 'name': 'feature/FEATURE_TESTS', 'agent': 'sub-123'},
@@ -1458,6 +1445,18 @@ class TestBashTestGateSpawnedAgentExemption(unittest.TestCase):
         result = self._run_main(
             {'command': 'npx playwright test'}, agent_id='sub-123')
         self.assertEqual(result, {})
+
+    def test_spawned_agent_still_subject_to_bash_policy(self):
+        # The project Bash-policy deny-list applies to every caller,
+        # spawned or not — checked before the (now skipped) test-doc gate.
+        policy_dir = os.path.join(self.root, '.serena')
+        os.makedirs(policy_dir, exist_ok=True)
+        with open(os.path.join(policy_dir, 'bash-policy.json'), 'w') as f:
+            json.dump([{"pattern": "npx playwright test",
+                        "message": "use the sanctioned test runner"}], f)
+        result = self._run_main(
+            {'command': 'npx playwright test'}, agent_id='sub-123')
+        self.assertIn('BASH POLICY VIOLATION', json.dumps(result))
 
     def test_unittest_command_detected(self):
         result = self._run_main(

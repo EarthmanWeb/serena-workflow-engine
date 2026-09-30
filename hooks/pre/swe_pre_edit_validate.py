@@ -15,28 +15,25 @@ orchestrator must fan the remaining work out to parallel subagents
 subagent (an 'Agent'/'Task'/'Workflow' call — a 'delegation' stream event)
 resets the counter and unlocks edits immediately.
 
-Spawned agents (Agent/Task tool) are exempt from the state-gate, sweep-gate
-and drift-block logic above — resolved via core.session.is_spawned_agent
-FIRST in main(), before any other logic (this exemption does NOT weaken the
-bypass-write / raw-memory-write security guards, which apply to every
-caller). Missing WM file / missing stream / unmanaged session all fail OPEN
-for the sweep/drift checks (no block), matching the sweep gate's fail-open
-posture.
+Spawned agents (Agent/Task tool) are FULLY EXEMPT from this hook's
+edit-validation logic — state-gate, sweep-gate, doc-requirement gate, and
+drift-block alike — resolved via core.session.is_spawned_agent FIRST in
+main(), before any other logic. This exemption does NOT weaken the
+bypass-write / raw-memory-write security guards above it, which apply to
+every caller, spawned or not. Doc-requirement enforcement for subagents now
+happens at DELEGATION time instead (a `[sweep-gate]` check in
+swe_pre_agent_model_gate.py denies the Agent/Task call itself when its
+prompt lacks the required reading), not on each individual edit.
 
-Per-agent DOC REQUIREMENT gate (Stage 2 of per-subagent doc enforcement):
-applied to EVERY edit, main agent or spawned. Before writing to a file,
-core.doc_requirements.required_docs_for_path(target, project_root) is
-computed (FEATURE_*/DEV_* memories whose front-matter `paths:` glob matches,
-plus FEATURE_TESTS/DEV_TESTS for test artifacts) and diffed against the
-memories THIS caller has actually read this task
-(core.stream.collect_values_since_task_start with agent_id=
-core.session.get_agent_id(input) — None for the main agent, so it counts
-only main-agent docreads; a spawned agent's id, so it counts only that
-agent's own docreads, never the main agent's or a sibling subagent's). Any
-unread required memory DENIES the edit with a `[doc-gate]` message. For a
-spawned agent this is the ONLY check that applies — no sweep sentinel, no
-drift block, no workflow-state denial (subagents are instructed to bypass
-WF_INIT and do direct work).
+Per-agent DOC REQUIREMENT gate: applied to the MAIN AGENT ONLY. Before
+writing to a file, core.doc_requirements.required_docs_for_path(target,
+project_root) is computed (FEATURE_*/DEV_* memories whose front-matter
+`paths:` glob matches, plus FEATURE_TESTS/DEV_TESTS for test artifacts) and
+diffed against the memories the main agent has actually read this task
+(core.stream.collect_values_since_task_start with agent_id=None, so it
+counts only main-agent docreads). Any unread required memory DENIES the
+edit with a `[doc-gate]` message. `doc_gate_verdict` is kept as a pure,
+directly-testable function for this main-agent path.
 """
 
 import os
@@ -415,18 +412,13 @@ def main():
         session_id = extract_session_id(transcript_path)
         agent_id = get_agent_id(input_data)
 
-        # Spawned agents: apply ONLY the per-agent doc-requirement gate.
-        # No sweep sentinel, no drift block, no workflow-state denial —
-        # subagents are instructed to bypass WF_INIT and do direct work
-        # (mirrors the exemption already given to the drift block above).
+        # Spawned agents: fully exempt from edit validation. No sweep
+        # sentinel, no doc-requirement gate, no drift block, no
+        # workflow-state denial — subagents are instructed to bypass
+        # WF_INIT and do direct work. Doc-requirement enforcement for
+        # subagents is applied at DELEGATION time instead (see
+        # swe_pre_agent_model_gate.py's [sweep-gate]), not per-edit.
         if spawned_agent:
-            doc_verdict = _doc_gate_block(
-                session_id, agent_id, cwd, input_data.get('tool_input', {}))
-            if doc_verdict:
-                output = HookOutput(event_name="PreToolUse")
-                output.block(doc_verdict)
-                output.output_and_exit()
-                return
             output_status("✓ Edit allowed (spawned agent)", event="PreToolUse")
             return
 

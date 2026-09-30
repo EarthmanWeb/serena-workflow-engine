@@ -1,15 +1,13 @@
-"""Tests for the per-agent DOC REQUIREMENT gate added to
-hooks/pre/swe_pre_edit_validate.py (Stage 2 of per-subagent doc enforcement).
+"""Tests for the per-agent DOC REQUIREMENT gate in
+hooks/pre/swe_pre_edit_validate.py.
 
 Targets:
   - doc_gate_verdict(target, project_root, read_names) — pure function.
-  - main() integration: a spawned agent editing a file governed by a
-    feature/dev memory's `paths:` glob (or a test artifact requiring
-    FEATURE_TESTS/DEV_TESTS) is DENIED until IT has read the governing
-    memory this task; the main agent's own docread never credits a
-    different spawned agent (per-agent isolation, positive control); once
-    the (spawned or main) agent has its OWN docread, the edit is allowed;
-    an unmatched path is never gated by this check.
+  - main() integration: the doc-requirement gate applies to the MAIN AGENT
+    ONLY. A spawned agent is fully exempt from edit validation (state gate,
+    sweep gate, doc gate, drift block) and is allowed regardless of its own
+    docreads — doc-requirement enforcement for subagents happens at
+    DELEGATION time instead (swe_pre_agent_model_gate.py's [sweep-gate]).
 
 Deterministic + offline: no network, no real Serena, no real git. IO goes
 through tempfile.TemporaryDirectory.
@@ -193,34 +191,19 @@ class TestDocGateMainIntegration(unittest.TestCase):
                 edit_mod.main()
         return json.loads(buf.getvalue() or '{}')
 
-    # --- spawned agent: doc gate is the ONLY check ------------------------
+    # --- spawned agent: fully exempt, no doc gate --------------------------
 
-    def test_subagent_editing_matched_path_without_own_docread_denied(self):
+    def test_subagent_editing_matched_path_without_own_docread_allowed(self):
+        # Spawned agents are fully exempt from the doc gate — enforcement
+        # moved to delegation time (swe_pre_agent_model_gate.py).
         self._write_feature_doc('feature/FEATURE_WIDGET', ['src/widget/**/*.py'])
         result = self._run_main(
             {'file_path': os.path.join(self.cwd, 'src/widget/core.py')},
             extra={'agent_id': 'sub-1'})
         out = result.get('hookSpecificOutput', {})
-        self.assertEqual(out.get('permissionDecision'), 'deny')
-        self.assertIn('[doc-gate]', out.get('permissionDecisionReason', ''))
-        self.assertIn('feature/FEATURE_WIDGET',
-                       out.get('permissionDecisionReason', ''))
+        self.assertNotEqual(out.get('permissionDecision'), 'deny')
 
-    def test_main_agent_docread_does_not_credit_subagent(self):
-        # Positive control: prove main-agent reads don't leak into a
-        # subagent's own gate (per-agent isolation).
-        self._write_feature_doc('feature/FEATURE_WIDGET', ['src/widget/**/*.py'])
-        self._write_stream([
-            {'type': 'docread', 'name': 'feature/FEATURE_WIDGET'},  # main agent (no 'agent' field)
-        ])
-        result = self._run_main(
-            {'file_path': os.path.join(self.cwd, 'src/widget/core.py')},
-            extra={'agent_id': 'sub-1'})
-        out = result.get('hookSpecificOutput', {})
-        self.assertEqual(out.get('permissionDecision'), 'deny')
-        self.assertIn('[doc-gate]', out.get('permissionDecisionReason', ''))
-
-    def test_subagent_editing_matched_path_with_own_docread_allowed(self):
+    def test_subagent_editing_matched_path_with_docread_still_allowed(self):
         self._write_feature_doc('feature/FEATURE_WIDGET', ['src/widget/**/*.py'])
         self._write_stream([
             {'type': 'docread', 'name': 'feature/FEATURE_WIDGET', 'agent': 'sub-1'},

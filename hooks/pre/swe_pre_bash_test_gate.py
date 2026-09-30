@@ -18,15 +18,13 @@
    swe_post_read_state.py on a FEATURE_TESTS read) — same pattern as the
    other feature gates.
 
-   Spawned agents (Agent/Task tool): the blanket exemption from this gate is
-   REMOVED (Stage 2 of per-subagent doc enforcement — a delegated
-   test-writing subagent must not be free to skip the test-harness docs).
-   Instead, each spawned agent is gated on its OWN docreads this task
-   (core.stream.collect_values_since_task_start with
-   agent_id=core.session.get_agent_id(input) — never the main agent's or a
-   sibling subagent's reads): allowed iff that agent has read every existing
-   core.doc_requirements.TEST_DOC_NAMES memory, else DENIED with a
-   `[doc-gate]` message naming the unread ones.
+   Spawned agents (Agent/Task tool): exempt from the test-doc requirement —
+   checked immediately after the project Bash-policy check above (which
+   still applies to every caller, spawned or not). Doc-requirement
+   enforcement for subagents happens at DELEGATION time instead (a
+   `[sweep-gate]` check in swe_pre_agent_model_gate.py denies the Agent/Task
+   call itself when its prompt lacks the required reading), not on each
+   individual test-runner Bash command.
 """
 
 import hashlib
@@ -42,14 +40,12 @@ try:
         output_empty, output_block, output_allow_with_input)
     from swe_hooks.core.input import read_stdin_safe, get_input_field
     from swe_hooks.core.session import (
-        extract_session_id, is_spawned_agent, get_agent_id,
+        extract_session_id, is_spawned_agent,
     )
     from swe_hooks.core.stream import (
         get_stream_dir, get_stream_path, append_event,
-        collect_values_since_task_start,
     )
     from swe_hooks.core.config import get_project_root
-    from swe_hooks.core.doc_requirements import TEST_DOC_NAMES, memory_exists
     from swe_hooks.core.scope_guard import TEST_COMMAND_PATTERNS
 except ImportError as e:
     swe_hooks.bootstrap.import_error_exit(e, "PreToolUse")
@@ -216,47 +212,6 @@ def is_test_command(command: str) -> bool:
     return False
 
 
-def agent_test_doc_gate_message(unread: list) -> str:
-    """'[doc-gate]' deny message for a spawned agent running a test command
-    without having read `unread` (a non-empty subset of TEST_DOC_NAMES)
-    itself this task."""
-    lines = [
-        "[doc-gate] test command blocked: the test-harness docs have not "
-        "been read by THIS agent this task:",
-    ]
-    for name in unread:
-        lines.append(f'  read_memory("{name}") — governs the project test harness')
-    lines.append("Read each memory above, then retry this test command.")
-    return "\n".join(lines)
-
-
-def _agent_test_doc_gate_verdict(session_id, agent_id):
-    """Deny message when a spawned agent has not itself read every existing
-    TEST_DOC_NAMES memory this task, else None.
-
-    Pure w.r.t. its inputs modulo filesystem/stream reads. Fail-open (no
-    session id) matches the rest of this gate's fail-open posture — an
-    unmanaged/untracked session cannot be scoped per-agent at all.
-    """
-    if not session_id:
-        return None
-    try:
-        project_root = get_project_root()
-    except Exception:
-        return None
-    required = [name for name in TEST_DOC_NAMES if memory_exists(name, project_root)]
-    if not required:
-        return None
-    stream_path = get_stream_path(session_id)
-    read_names = collect_values_since_task_start(stream_path, agent_id=agent_id)
-    from swe_hooks.core.stream import normalize_memory_name
-    normalized_read = {normalize_memory_name(str(n)) for n in read_names}
-    unread = [n for n in required if normalize_memory_name(n) not in normalized_read]
-    if not unread:
-        return None
-    return agent_test_doc_gate_message(unread)
-
-
 def main():
     try:
         input_data = read_stdin_safe(timeout_seconds=2.0)
@@ -308,18 +263,11 @@ def main():
             output_empty()
             return
 
-        # Spawned agents (Agent/Task tool): the blanket exemption from this
-        # gate is REMOVED — gated instead on THIS agent's own docreads this
-        # task (never the main agent's or a sibling subagent's).
+        # Spawned agents (Agent/Task tool): exempt from the test-doc
+        # requirement — doc-requirement enforcement for subagents happens at
+        # DELEGATION time instead (swe_pre_agent_model_gate.py's
+        # [sweep-gate]), not on each individual test-runner Bash command.
         if is_spawned_agent(input_data):
-            agent_id = get_agent_id(input_data)
-            transcript_path = get_input_field(
-                input_data, 'transcript_path', default='')
-            session_id = extract_session_id(transcript_path)
-            verdict = _agent_test_doc_gate_verdict(session_id, agent_id)
-            if verdict:
-                output_block(verdict)
-                return
             output_empty()
             return
 
