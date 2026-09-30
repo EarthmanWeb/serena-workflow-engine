@@ -12,6 +12,12 @@
 2. Test gate: detects Playwright test commands and blocks if FEATURE_TESTS
    hasn't been loaded. Uses session-scoped sentinel file (created by
    swe_post_read_state.py). Same pattern as the other feature gates.
+
+Spawned agents (Agent/Task tool) are exempt from the test gate (item 2 only —
+the project Bash policy in item 1 still applies to every caller): subagents
+are explicitly instructed to run scoped tests, and injecting the FEATURE_TESTS
+workflow directive into their tool stream trains them to dismiss injected
+text generally. Detected via core.session.is_spawned_agent.
 """
 
 import hashlib
@@ -26,7 +32,7 @@ try:
     from swe_hooks.core.output import (
         output_empty, output_block, output_allow_with_input)
     from swe_hooks.core.input import read_stdin_safe, get_input_field
-    from swe_hooks.core.session import extract_session_id
+    from swe_hooks.core.session import extract_session_id, is_spawned_agent
     from swe_hooks.core.stream import get_stream_dir, get_stream_path, append_event
     from swe_hooks.core.config import get_project_root
 except ImportError as e:
@@ -235,6 +241,15 @@ def main():
             return
 
         if not is_test_command(command):
+            output_empty()
+            return
+
+        # Spawned agents (Agent/Task tool) are exempt from the test gate —
+        # subagents are explicitly instructed to run scoped tests, and this
+        # is a workflow directive (FEATURE_TESTS read requirement), not a
+        # security guard. The project Bash policy above still applies to
+        # every caller.
+        if is_spawned_agent(input_data):
             output_empty()
             return
 

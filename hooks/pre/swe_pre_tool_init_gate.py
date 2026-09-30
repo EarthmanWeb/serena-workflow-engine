@@ -5,6 +5,17 @@ Requires WORKING_MEMORY file with proper workflow state.
 Uses sentinel file cache to avoid re-validation on every tool call.
 
 Session isolation: Each conversation must have its own working memory.
+
+Spawned agents (Agent/Task tool) are exempt from the workflow-init denial and
+every workflow-state directive/text this gate would otherwise emit —
+subagents are explicitly instructed to bypass WF_INIT, and training them to
+see injected workflow text on every tool call teaches them to dismiss
+injected text generally, including legitimate orchestrator steering. Detected
+via core.session.is_spawned_agent, checked FIRST in main(). Only two things
+still apply to spawned agents: the hard guard that denies setting
+"bypass": true in swe-setup-complete.json (a security guard, not a workflow
+directive) and the Serena _swe_metadata updatedInput injection (invisible to
+the model — used for server-side session correlation only).
 """
 
 import os
@@ -16,7 +27,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import swe_hooks.bootstrap  # noqa: E402
 
 try:
-    from swe_hooks.core.session import extract_session_id
+    from swe_hooks.core.session import extract_session_id, is_spawned_agent
     from swe_hooks.core.config import (
         get_project_root, resolve_setup_state, migrate_legacy_setup_file,
     )
@@ -277,6 +288,38 @@ def main():
                 }
             }
             print(json.dumps(output))
+            sys.exit(0)
+
+        # Spawned agents (Agent/Task tool) are exempt from every workflow-init
+        # denial/directive below — they are explicitly instructed to bypass
+        # WF_INIT, and repeatedly injecting workflow-state text into their
+        # tool stream trains them to dismiss injected text on sight, which
+        # also teaches them to dismiss legitimate orchestrator steering. The
+        # ONLY things that still apply to a spawned agent are (a) the bypass
+        # hard-guard above (a security guard, not a workflow directive) and
+        # (b) the Serena _swe_metadata injection below (invisible to the
+        # model — server-side session correlation only). Checked before ANY
+        # setup/session-state resolution so a subagent never sees init text
+        # regardless of the parent session's own init status.
+        if is_spawned_agent(input_data):
+            cwd = input_data.get('cwd', os.getcwd())
+            try:
+                session_id = (extract_session_id(transcript_path)
+                              if _STREAM_AVAILABLE
+                              else _extract_session_id(transcript_path))
+            except Exception:
+                session_id = _extract_session_id(transcript_path)
+            updated_input = inject_metadata(tool_name, tool_input, session_id, cwd)
+            if updated_input is not None:
+                print(json.dumps({
+                    'hookSpecificOutput': {
+                        'hookEventName': 'PreToolUse',
+                        'permissionDecision': 'allow',
+                        'updatedInput': updated_input,
+                    }
+                }))
+            else:
+                print(json.dumps({}))
             sys.exit(0)
 
         # Resolve project root for setup checks

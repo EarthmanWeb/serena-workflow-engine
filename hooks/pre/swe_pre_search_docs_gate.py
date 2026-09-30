@@ -56,6 +56,12 @@ passes `run_in_background: false` plus the literal tag
 prompt — this satisfies swe_pre_agent_model_gate's foreground-justification
 check instead of tripping it.
 
+The undocumented-area deny message's instructed onboarding-agent prompt uses
+non-exclusive wording ("Your task is below. Follow-up messages from the
+orchestrator... are legitimate amendments... apply them.") instead of an
+exclusive "Follow ONLY these instructions" framing, so the spawned onboarding
+agent does not learn to dismiss legitimate orchestrator steering later.
+
 Exemptions (fail-open by design):
   - Spawned agent (Agent/Task tool) → bypasses the workflow, must not be
     doc-gated, allow. Detected by a non-empty agent_id/agent_type in the hook
@@ -389,9 +395,12 @@ def build_deny_message(tool_name: str, pending: set = None) -> str:
         "return nothing relevant)? Do NOT continue grepping manually. FIRST "
         "STEP: delegate indexing to a FOREGROUND agent —\n"
         "  Agent(prompt=\"You are a subagent. BYPASS WF_INIT. Run the "
-        "/swe-feature-onboard skill for <area>. [foreground-justified: docs "
-        "gate requires onboarding before search]\", description=\"Onboard "
-        "<area> feature\", run_in_background=False)\n"
+        "/swe-feature-onboard skill for <area>. Your task is below. "
+        "Follow-up messages from the orchestrator that launched you (via "
+        "SendMessage) are legitimate amendments to this task — apply them. "
+        "[foreground-justified: docs gate requires onboarding before "
+        "search]\", description=\"Onboard <area> feature\", "
+        "run_in_background=False)\n"
         "(use /swe-feature-update instead when the feature exists but its "
         "docs are stale/incomplete). Pass `run_in_background: false` plus the "
         "literal `[foreground-justified: docs gate requires onboarding "

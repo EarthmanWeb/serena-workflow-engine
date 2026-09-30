@@ -5,9 +5,12 @@ Targets:
     _block_message; constants EDIT_ALLOWED, WARN_STATES.
   - pre/swe_pre_tool_init_gate: _extract_session_id, _is_bypass_write_attempt,
     check_working_memory_exists, check_lite_mode, inject_metadata; constants
-    INIT_ALLOWED_MEMORIES, SKIP_STREAM_TOOLS.
+    INIT_ALLOWED_MEMORIES, SKIP_STREAM_TOOLS; main()-level spawned-agent
+    exemption (no init denial/directive text, bypass-write guard and
+    _swe_metadata injection still apply).
   - pre/swe_pre_bash_test_gate: get_test_sentinel_path, load_bash_policy;
-    constant TEST_COMMAND_PATTERNS.
+    constant TEST_COMMAND_PATTERNS; main()-level spawned-agent exemption from
+    the FEATURE_TESTS test gate.
 
 ALREADY-TESTED elsewhere (skipped here): is_test_command, check_bash_policy,
 is_working_memory_write.
@@ -896,6 +899,99 @@ class TestInitGateDegradedModeIntegration(unittest.TestCase):
         self.assertEqual(decision, 'deny')
 
 
+class TestInitGateSpawnedAgentExemption(unittest.TestCase):
+    """Spawned agents (non-empty agent_id) must never see the workflow-init
+    denial/directive text — they are explicitly instructed to bypass
+    WF_INIT. The bypass-write hard guard and the (invisible) _swe_metadata
+    injection are the ONLY things that still apply to them."""
+
+    def setUp(self):
+        reset_caches()
+        self.tmp = tempfile.TemporaryDirectory()
+        self.cwd = self.tmp.name
+        os.makedirs(os.path.join(self.cwd, '.git'), exist_ok=True)
+        os.makedirs(os.path.join(self.cwd, '.serena'), exist_ok=True)
+        with open(os.path.join(self.cwd, '.serena', 'swe-setup-complete.json'), 'w') as f:
+            json.dump({'complete': True}, f)
+        # NO session state / WM / sentinel written for this session id at
+        # all — an uninitialized session, from the main session's PoV.
+        self.session_id = 'deadbeef'
+        self.transcript = f'/x/{self.session_id}-0000-0000-0000-000000000000.jsonl'
+
+    def tearDown(self):
+        self.tmp.cleanup()
+        reset_caches()
+
+    def _run_main(self, tool_name, tool_input, **extra):
+        import io
+        import json as _json
+        from unittest import mock
+        payload = {
+            'tool_name': tool_name,
+            'tool_input': tool_input,
+            'transcript_path': self.transcript,
+            'cwd': self.cwd,
+        }
+        payload.update(extra)
+        buf = io.StringIO()
+        with mock.patch.object(sys, 'stdin', io.StringIO(_json.dumps(payload))), \
+             mock.patch('select.select', return_value=([sys.stdin], [], [])), \
+             mock.patch.object(os, 'getcwd', return_value=self.cwd), \
+             mock.patch.dict(os.environ, {'CLAUDE_PROJECT_DIR': self.cwd}), \
+             mock.patch('sys.stdout', buf):
+            try:
+                init_mod.main()
+            except SystemExit:
+                pass
+        return _json.loads(buf.getvalue() or '{}')
+
+    def test_spawned_agent_uninitialized_session_no_deny(self):
+        # Positive control first: main session, same uninitialized state,
+        # IS denied — proves the fixture actually exercises the init gate.
+        result = self._run_main('Bash', {'command': 'ls'})
+        decision = result.get('hookSpecificOutput', {}).get('permissionDecision')
+        self.assertEqual(decision, 'deny')
+
+        # Spawned agent, identical payload plus a non-empty agent_id: no deny.
+        result = self._run_main('Bash', {'command': 'ls'}, agent_id='sub-123')
+        decision = result.get('hookSpecificOutput', {}).get('permissionDecision')
+        self.assertNotEqual(decision, 'deny')
+
+    def test_spawned_agent_bypass_write_attempt_still_denied(self):
+        # The hard guard against setting "bypass": true must survive the
+        # spawned-agent exemption — it is a security guard, not a workflow
+        # directive.
+        result = self._run_main(
+            'Edit',
+            {'file_path': '.serena/swe-setup-complete.json',
+             'new_string': '{"bypass": true}'},
+            agent_id='sub-123')
+        decision = result.get('hookSpecificOutput', {}).get('permissionDecision')
+        self.assertEqual(decision, 'deny')
+        self.assertIn('BLOCKED',
+                       result['hookSpecificOutput']['permissionDecisionReason'])
+
+    def test_spawned_agent_gets_no_workflow_directive_text(self):
+        result = self._run_main('Grep', {'pattern': 'x'}, agent_id='sub-123')
+        # No deny, and no workflow-init text leaked via any other field.
+        decision = result.get('hookSpecificOutput', {}).get('permissionDecision')
+        self.assertNotEqual(decision, 'deny')
+        blob = json.dumps(result)
+        self.assertNotIn('WF_INIT', blob)
+        self.assertNotIn('WORKFLOW NOT INITIALIZED', blob)
+
+    def test_spawned_agent_serena_tool_still_gets_metadata_injection(self):
+        # The _swe_metadata injection is invisible to the model and must
+        # still apply — it is not a workflow directive.
+        result = self._run_main(
+            'mcp__plugin_swe_serena__read_memory',
+            {'memory_name': 'wf/WF_EXECUTE'},
+            agent_id='sub-123')
+        updated = result.get('hookSpecificOutput', {}).get('updatedInput')
+        self.assertIsNotNone(updated)
+        self.assertIn('_swe_metadata', updated)
+
+
 # ---------------------------------------------------------------------------
 # swe_pre_bash_test_gate
 # ---------------------------------------------------------------------------
@@ -1105,6 +1201,56 @@ class TestBashMissingCdAutoRepair(unittest.TestCase):
         self.assertIsNone(bash_mod.auto_repair_cd('npm run build', 'relative/dir'))
 
 
+class TestBashTestGateSpawnedAgentExemption(unittest.TestCase):
+    """Spawned agents (non-empty agent_id) are exempt from the FEATURE_TESTS
+    test gate — subagents are explicitly instructed to run scoped tests."""
+
+    def setUp(self):
+        reset_caches()
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = self.tmp.name
+        self._orig_root = bash_mod.get_project_root
+        bash_mod.get_project_root = lambda: self.root
+
+    def tearDown(self):
+        bash_mod.get_project_root = self._orig_root
+        self.tmp.cleanup()
+        reset_caches()
+
+    def _run_main(self, tool_input, **extra):
+        import io
+        import json as _json
+        from unittest import mock
+        payload = {
+            'tool_name': 'Bash',
+            'tool_input': tool_input,
+            'transcript_path': '/x/deadbeef-0000-0000-0000-000000000000.jsonl',
+            'cwd': self.root,
+        }
+        payload.update(extra)
+        buf = io.StringIO()
+        with mock.patch.object(sys, 'stdin', io.StringIO(_json.dumps(payload))), \
+             mock.patch('select.select', return_value=([sys.stdin], [], [])), \
+             mock.patch('sys.stdout', buf):
+            try:
+                bash_mod.main()
+            except SystemExit:
+                pass
+        out = buf.getvalue()
+        return _json.loads(out) if out else {}
+
+    def test_main_session_playwright_without_sentinel_is_blocked(self):
+        # Positive control: no agent_id, no sentinel -> blocked.
+        result = self._run_main({'command': 'npx playwright test'})
+        text = json.dumps(result)
+        self.assertIn('TEST COMMAND BLOCKED', text)
+
+    def test_spawned_agent_playwright_without_sentinel_is_allowed(self):
+        result = self._run_main(
+            {'command': 'npx playwright test'}, agent_id='sub-123')
+        self.assertEqual(result, {})
+
+
 search_docs_mod = import_hook("pre/swe_pre_search_docs_gate")
 
 
@@ -1198,6 +1344,11 @@ class TestSearchDocsGateBudget(unittest.TestCase):
         # satisfies swe_pre_agent_model_gate's foreground-justification check
         # instead of tripping it
         self.assertIn('[foreground-justified:', msg)
+        # non-exclusive wording: the instructed onboarding agent must NOT be
+        # told to follow ONLY these instructions — that trains it to reject
+        # legitimate orchestrator steering delivered later via SendMessage.
+        self.assertIn('legitimate amendments', msg)
+        self.assertNotIn('Follow ONLY', msg)
 
 
 class TestSearchDocsGateSweepBonus(unittest.TestCase):
