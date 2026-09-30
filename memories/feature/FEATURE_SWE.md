@@ -1,6 +1,17 @@
 ---
 name: FEATURE_SWE
 description: SWE plugin source layout, architecture, entry points, inventories. Hub for `mem:dom/DOM_SWE_*` children.
+paths:
+  - hooks/swe_hooks/**
+  - hooks/pre/swe_*.py
+  - hooks/post/swe_*.py
+  - hooks/prompt/swe_*.py
+  - hooks/session/swe_*.py
+  - hooks/stop/swe_*.py
+  - hooks/hooks.json
+  - state-machine/states.json
+  - skills/swe-*/**
+  - commands/swe-*.md
 obligations:
   - NEVER write to `.claude/plugins/serena-workflow-engine/` — it is the installed cache copy; this repo IS the plugin source, edit here.
   - Always pass `session_id` explicitly to `swe-wm` MCP tools — NEVER rely on most-recent-WM guessing across concurrent sessions.

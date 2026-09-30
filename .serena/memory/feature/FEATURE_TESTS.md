@@ -1,6 +1,8 @@
 ---
 name: Test Suite
 description: Verification approach for this repo (no formal test suite) + task-completion checklist + test-gate mechanics.
+paths:
+  - tests/**
 obligations:
   - Run the task-completion checklist in order when a task is done — unit suite, `npm run fmt`, `npm run fmt:check`, version bump if releasing, `py_compile` on changed hooks, then commit.
   - This memory MUST be read in-session (feature-gate sentinel) before direct test-runner Bash commands are permitted.

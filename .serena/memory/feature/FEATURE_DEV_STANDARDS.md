@@ -1,6 +1,12 @@
 ---
 name: Development Standards
 description: Project overview, per-language conventions, and build/format/git commands for serena-workflow-engine.
+paths:
+  - hooks/**/*.py
+  - scripts/**/*.py
+  - scripts/**/*.sh
+  - memories/**/*.md
+  - state-machine/**
 obligations:
   - Hooks MUST always output JSON to STDOUT and exit 0 — NEVER exit 1.
   - Format Markdown/JSON with dprint (`npm run fmt`) — memories follow `mem:ref/REF_MEMORY_STYLE`.

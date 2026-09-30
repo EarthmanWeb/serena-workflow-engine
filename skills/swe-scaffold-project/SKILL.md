@@ -144,6 +144,8 @@ The bootstrap script (`swe-bootstrap.py`) auto-detects project name, primary lan
 
 Both are `feature/`-prefixed (rule-bearing): the rendered template MUST carry the `obligations:` front-matter field (1-2 imperative lines, or `obligations: []`) per `mem:ref/REF_MEMORY_STYLE` "Obligations Field" — `swe_pre_memory_index_gate.py` denies the write without it. If the template file lacks it, add it before rendering.
 
+Replace the template's placeholder `paths:` glob with the detected project's actual source/test root before rendering, per `mem:ref/REF_MEMORY_STYLE` "Paths Field".
+
 **Additionally, create these non-template memories:**
 
 1. **INDEX_FEATURES** - Empty feature registry

@@ -316,6 +316,8 @@ If user selects "No, needs changes", gather corrections manually.
 
 `<content>` MUST include the `obligations:` front-matter field (1-2 imperative lines, or `obligations: []` for a conscious none) per `mem:ref/REF_MEMORY_STYLE` "Obligations Field" — `swe_pre_memory_index_gate.py` denies the write without it.
 
+Derive `paths:` from the Primary Directories and Key Files gathered in this stage — one glob per primary directory (e.g. `[dir]/**`) plus one per key file pattern not already covered. Write it as a top-level sibling of `description`, before `obligations:`, per `mem:ref/REF_MEMORY_STYLE` "Paths Field". Omit the field only when the feature governs no source files.
+
 ```javascript
 mcp__plugin_swe_serena__write_memory("FEATURE_[KEY]", "<content>")
 ```

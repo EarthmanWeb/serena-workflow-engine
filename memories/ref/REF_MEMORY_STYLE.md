@@ -66,6 +66,30 @@ metadata:
 - Optional (may be added, never required) outside dom/ref/dev/feature — `wf/`, `index/`, `arch/`, `spec/` carry no field requirement.
 - Enforced by: `swe_pre_memory_index_gate.py` DENIES a `write_memory`/direct-`Write` that CREATES or OVERWRITES a rule-bearing-prefix memory with no `obligations:` field (`edit_memory` partial edits are not denied); `swe_post_memory_style.py` nudges toward adding the field on an edit that lacks it; `/swe-memory-obligations` backfills the field across existing memories that predate this standard.
 
+## Paths Field (OPTIONAL for feature/, dev/)
+
+Add `paths:` as a top-level sibling of `description` (before `obligations:`):
+
+```
+---
+name: <short title>
+description: <one sentence: what this memory is / when to open it>
+paths:
+  - <repo-relative glob>
+  - <repo-relative glob>
+obligations:
+  - <imperative obligation, one line, concrete>
+metadata:
+  type: <feature | dev>
+---
+```
+
+- Declares which source files this memory governs. `**` matches any depth of directories; `*` matches within one path segment.
+- MUST list EVERY source path the memory governs — an incomplete list silently ungates files that should require the read.
+- Before any agent edits a file matching a `paths:` glob, it MUST have read that memory itself in-session. A test-artifact path additionally requires `mem:feature/FEATURE_TESTS` (+ a `dev/DEV_TESTS` memory if one exists), regardless of which other memory's `paths:` also matches.
+- Optional — a `feature/`/`dev/` memory with no governed source files omits the field entirely (no `paths: []` escape hatch; absence means "declares nothing").
+- NEVER add to `wf/`, `index/`, `arch/`, `spec/`, `ref/`, `dom/`, `feedback/` memories.
+
 ## Legacy Markers (rewrite on sight)
 
 A memory is LEGACY and MUST be rewritten immediately if it has any of:

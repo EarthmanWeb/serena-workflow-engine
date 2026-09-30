@@ -90,6 +90,11 @@ A flat `type:` block is converted into this shape. The `name`/`description` valu
 (enriched, not replaced). `metadata.keywords` is present only when the body carries concrete
 identifiers (see Derive rules); a keywords-free block is still standard.
 
+`paths:` (top-level sibling of `description`, before `obligations:`) is a recognized optional field
+on `feature/` and `dev/` memories per `mem:ref/REF_MEMORY_STYLE` "Paths Field" — NEVER strip it,
+NEVER invent globs for a memory that lacks it. When auditing a `feature/` memory with no `paths:`
+field, report it as a warning listing the memory name; do not add the field or guess its value.
+
 ## Directory-prefix → type map
 
 Derive `metadata.type` from the leading path segment of the memory name (case-insensitive):
@@ -177,6 +182,7 @@ memory finds its identifiers already in the front-matter and reports `ok`.
 - **Enriched**: <count> (search-poor description/keywords)
 - **OK**: <count> (already exactly the standard)
 - **Skipped**: <count> (read-only / WM / index / wf / claude)
+- **Paths warnings**: <list of feature/ memory names with no `paths:` field>
 - **Next Step Hint**: WF_CLASSIFY
 ```
 

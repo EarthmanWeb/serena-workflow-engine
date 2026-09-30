@@ -143,6 +143,8 @@ This ensures changes are preserved in the portable plugin and propagated correct
 
 `<updated content>` MUST carry the `obligations:` front-matter field (1-2 imperative lines, or `obligations: []`) per `mem:ref/REF_MEMORY_STYLE` "Obligations Field" — `swe_pre_memory_index_gate.py` denies a full-rewrite write without it; carry forward the existing field's value if present.
 
+MUST refresh `paths:` when Stage 4 found directory or key-file changes — regenerate the glob list from the current Primary Directories / Key Files rather than carrying the stale value forward. Add the field when the feature governs source files and has none; drop a glob when its directory is absent from the current Stage 4 listing.
+
 ```javascript
 mcp__plugin_swe_serena__write_memory("FEATURE_[KEY]", "<updated content>")
 ```
