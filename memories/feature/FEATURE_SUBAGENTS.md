@@ -67,6 +67,7 @@ Parallel execution + routing work to the cheapest sufficient model is THE token-
 - Implementation, doc rewrites, verification of haiku output → `sonnet`.
 - `opus` ONLY for novel design or after a `sonnet` attempt has already failed on the same problem.
 - `fable` NEVER delegated without a `[fable-justified: <reason>]` (or `[premium-justified: <reason>]`) tag — see Model-Tier Routing above.
+- Verification economy: ONE full-suite run per verified stage, by ONE agent (haiku), at the stage's END. Implementation agents run ONLY `py_compile` + the tests scoped to their owned files. NEVER re-run a suite that is already green this stage "to double-check" — a green result is the result.
 - The main agent NEVER burns premium-model tokens on routine tool loops. `swe_post_orchestrator_drift.py` counts consecutive main-agent task-work calls since the last delegation:
   - At 6 consecutive calls (`DRIFT_THRESHOLD`) — advisory nudge to split remaining work into parallel subagents.
   - At 12 consecutive calls (`DRIFT_HARD_THRESHOLD`) — `swe_pre_edit_validate.py` DENIES further main-agent edits until either a subagent is launched (any delegation resets the counter) or `single-agent: <reason>` is recorded in WM `## Workflow Context` (the tight single-file coupled-fix exception from the Stage Loop section above — use it ONLY for that case, not as a routine bypass).

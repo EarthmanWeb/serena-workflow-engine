@@ -13,6 +13,7 @@ metadata:
 
 ## Response & Style
 
+- [Single Test Run](feedback/FEEDBACK_SINGLE_TEST_RUN.md) — one full-suite run per stage; agents run only scoped tests; never re-run a green suite
 - [Response Format](feedback/FEEDBACK_RESPONSE_FORMAT.md) — no conversational language, use functional/direct phrasing only
 - [Read docs = list memories](feedback/FEEDBACK_READ_DOCS_MEANS_LIST.md) — "read the docs" means check MEMORY.md and use Serena to list_memories, not external docs
 
