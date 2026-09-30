@@ -12,7 +12,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import swe_hooks.bootstrap  # noqa: E402
 
 try:
-    from swe_hooks.core.output import HookOutput, output_empty, output_status
+    from swe_hooks.core.output import HookOutput, output_empty, output_status, emit_once
     from swe_hooks.core.input import read_stdin_safe, get_input_field
     from swe_hooks.core.state_manager import StateManager, STATE_ICONS, is_forward_read_transition
     from swe_hooks.core.session import extract_session_id, get_project_root, find_working_memory_for_session
@@ -45,6 +45,10 @@ MEMORY_LINK_RE = re.compile(
 
 # Topics excluded from related-link tracking — workflow machinery and the
 # WF_CLASSIFY 4d sweep exclusions (never loaded as general context).
+# E1: a same-state continuation directive suppressed as a repeat is re-emitted
+# once this many stream events have accumulated since it was last shown.
+CONTINUATION_REEMIT_EVENTS = 20
+
 LINK_EXCLUDED_PREFIXES = (
     'wf/', 'claude/', 'spec/', 'report/', 'research/', 'project/',
     'templates/',
@@ -97,6 +101,21 @@ def _search_credit(hit_names: set, read_names: set):
     """
     new_names = set(hit_names) - set(read_names)
     return (len(new_names) == 0, new_names)
+
+
+def _discovery_no_credit_message(new_names) -> str:
+    """No-credit message for a search that surfaced unread docs — TIERED per
+    WF_CLASSIFY 4d: only the surfaced docs relevant to THIS task must be
+    read; cold ones are deferred on the WM '**Memories deferred**:' line.
+    Never demands every surfaced name be read (the old wording dragged in
+    cold sibling-tree imports)."""
+    listing = ", ".join(sorted(new_names))
+    return (
+        "🔎 Discovery surfaced UNREAD docs — no docs-first credit yet: "
+        f"{listing}. Tiered (WF_CLASSIFY 4d): read the surfaced docs "
+        "RELEVANT to this task; DEFER cold ones on the WM "
+        "'- **Memories deferred**: <names>' line. Credit returns once the "
+        "relevant ones are read (or deferred).")
 
 
 def create_feature_sentinel(session_id: str, gate_name: str) -> bool:
@@ -161,12 +180,18 @@ def _get_continuation(current_state: str, session_id: str = None) -> str:
     the agent omitting session_id or serializing legacy per-section calls.
     """
     sid = f'session_id="{session_id}"' if session_id else 'session_id="<id>"'
+    # WF_CLASSIFY wording MUST agree with WF_CLASSIFY.md Step 4d (tiered
+    # loading; spec/ excluded from bulk loading) — between-call banners
+    # outweigh the state doc at decision time, so a "Load ALL … SPEC_*"
+    # banner here mistrains the sweep. Linted by
+    # tests/test_banner_doc_consistency.py.
     directives = {
         "WF_CLASSIFY": (
-            "Load ALL FEATURE_[KEY] + supporting DOM_*/SYS_*/SPEC_* memories "
-            f"→ ONE swe_wm_update call ({sid}, sections=[Affected Features "
-            "with '**Memories loaded**:' as PLAIN comma-separated names — no "
-            "annotations, no wf/*+claude/*]) → route to next step"),
+            "Tiered sweep: read primary FEATURE_[KEY] + directly-relevant "
+            "DOM_*/REF_* (≤3 refs; symptom-surfaced spec/ counts), DEFER "
+            f"cold refs → ONE swe_wm_update call ({sid}, sections=[Affected "
+            "Features with '**Memories loaded**:' as PLAIN comma-separated "
+            "names]) → route to next step"),
         "WF_ARCH_REVIEW": "Complete architecture review → present plan → route to WF_EXECUTE",
         "WF_EXECUTE": "Continue implementation → checkpoint at 3+ edits → WF_VERIFY when done",
         "WF_RESEARCH": "Continue investigation → record findings → route when complete",
@@ -180,8 +205,10 @@ def _get_continuation(current_state: str, session_id: str = None) -> str:
 def _continuation_directive(current_state: str, session_id: str) -> str:
     """Deduped continuation directive: only returns non-empty when the
     directive's state differs from the last one actually emitted this
-    session. A read/list/search call for a state the agent has already been
-    shown a directive for gets no directive — it carries no new information.
+    session, OR the same-state directive has aged out (E1 re-emission:
+    >= CONTINUATION_REEMIT_EVENTS stream events since it was last shown).
+    A read/list/search call for a state the agent has already been shown a
+    fresh directive for gets no directive — it carries no new information.
     Records a 'continuation' stream event on each NEW emission so later calls
     can compare against it.
     """
@@ -190,7 +217,9 @@ def _continuation_directive(current_state: str, session_id: str) -> str:
         return directive
     stream_path = get_stream_path(session_id)
     if get_last_continuation(stream_path) == current_state:
-        return ""
+        from swe_hooks.core.stream import count_all_events_since_last
+        if count_all_events_since_last(stream_path, 'continuation') < CONTINUATION_REEMIT_EVENTS:
+            return ""
     try:
         append_event(stream_path, 'continuation', s=session_id, state=current_state)
     except Exception:
@@ -308,11 +337,7 @@ def main():
                                  new=sorted(new_names))
                 except Exception:
                     pass
-                listing = ", ".join(sorted(new_names))
-                output_status(
-                    "🔎 Discovery surfaced UNREAD docs — NO docs-first credit "
-                    f"until they are read: {listing}. read_memory each before "
-                    "proceeding; reading them grants the credit.")
+                output_status(_discovery_no_credit_message(new_names))
             return
 
         # Consulting documentation (any list_memories / read_memory) resets the
@@ -360,6 +385,13 @@ def main():
                     "'- **Memories deferred**: <name> — <reason>' line. "
                     "Re-reading an already-read memory does not refill the "
                     "docs budget.")
+                # E2: the SAME unread set repeated (same memory re-read, or
+                # a sibling read surfacing the identical links) produces a
+                # byte-identical message — suppress the repeat. The
+                # 'docpending' stream event above stays unconditional: only
+                # the attached banner is deduped, never the accounting.
+                if not emit_once(session_id, pending_msg):
+                    pending_msg = ''
 
         # Handle list_memories calls (no memory_name) — inject continuation
         if 'list_memories' in tool_name:

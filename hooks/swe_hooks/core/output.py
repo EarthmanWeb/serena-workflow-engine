@@ -14,11 +14,72 @@ For blocking PreToolUse:
 
 For blocking Stop/SubagentStop/PostToolUse/UserPromptSubmit:
   - Use top-level decision = "block" and reason = "..."
+
+Injection budget (E3): hook-injected context targets ≤2 attachment blocks per
+tool call and ≤150k chars per session. Hooks that repeat guidance MUST route
+the repeatable block through emit_once() (byte-identical suppression) so a
+message is charged to the budget once, not per tool call.
 """
 
+import hashlib
 import json
+import os
 import sys
 from typing import Optional, Dict, Any
+
+
+# Canonical WF_INIT guidance. The SessionStart banner and the UserPromptSubmit
+# WF_INIT gate both register/check THIS exact text via emit_once(), so the
+# full block is injected once per session — later prompts in WF_INIT get a
+# one-line reminder instead of a duplicate block.
+WF_INIT_GUIDANCE = """STOP. Your next action MUST be a tool call. Not text. A tool call.
+
+If the tool is deferred, load its schema first (e.g. via ToolSearch when
+available), then call mcp__plugin_swe_serena__read_memory(...):
+
+  mcp__plugin_swe_serena__read_memory(memory_name="wf/WF_INIT")
+
+ALWAYS use the fully-qualified name mcp__plugin_swe_serena__read_memory — NEVER
+the bare read_memory.
+
+- Do NOT output any text before these tool calls
+- Do NOT explain what you're doing
+- Do NOT acknowledge the user's message first
+- Do NOT skip this because the user asked something specific
+- The user's request will be handled AFTER you read WF_INIT
+
+If your next output contains ANY text instead of a tool call, you have failed."""
+
+
+def emit_once(session_id: str, text: str, streams_dir: str = None) -> bool:
+    """Byte-identical suppression (E2): return True when `text` has NOT been
+    emitted this session (and record it), False when it already was.
+
+    One sha256 hash per line in .serena/streams/.emitted_<session_id>.
+    Fail-open: no session id, or ANY IO error reading/writing the ledger,
+    returns True — a message is never lost to the dedupe.
+    """
+    if not session_id or not text:
+        return True
+    try:
+        if streams_dir is None:
+            from swe_hooks.core.stream import get_stream_dir
+            streams_dir = get_stream_dir()
+        digest = hashlib.sha256(text.encode('utf-8')).hexdigest()
+        path = os.path.join(streams_dir, f'.emitted_{session_id}')
+        try:
+            with open(path, 'r', encoding='utf-8') as f:
+                for line in f:
+                    if line.strip() == digest:
+                        return False
+        except FileNotFoundError:
+            pass
+        os.makedirs(streams_dir, exist_ok=True)
+        with open(path, 'a', encoding='utf-8') as f:
+            f.write(digest + '\n')
+        return True
+    except OSError:
+        return True
 
 
 class HookOutput:

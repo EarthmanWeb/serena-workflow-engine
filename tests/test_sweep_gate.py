@@ -272,15 +272,39 @@ class TestCheckMemorySweep(unittest.TestCase):
         self.assertIn("dom/dom_x", err.lower())
         self.assertFalse(os.path.exists(self._sentinel()))
 
-    def test_follow_up_task_cannot_reuse_prior_task_reads(self):
-        # Reads before re-entry into WF_CLASSIFY do not count for this task.
+    def test_follow_up_task_reuses_prior_task_reads(self):
+        # D2 sweep idempotence: the docread ledger is SESSION-wide. A read
+        # from a prior task (before re-entry into WF_CLASSIFY) still
+        # satisfies the follow-up task's sweep list — re-listing without
+        # re-reading passes. The per-task cost is the fresh Affected
+        # Features WRITE itself (sentinel cleared on WF_CLASSIFY entry).
         _write_stream(self.stream_path, [
             {"type": "docread", "name": "feature/FEATURE_X"},
             {"type": "state", "from_s": "WF_DONE", "to_s": "WF_CLASSIFY"},
         ])
         content = "- **Memories loaded**: feature/FEATURE_X\n"
         err = wm._check_memory_sweep(self.session, content)
-        self.assertIsNotNone(err)
+        self.assertIsNone(err)
+        self.assertTrue(os.path.exists(self._sentinel()))
+
+    def test_reclassify_after_done_passes_with_zero_rereads(self):
+        # Full follow-up flow: task A reads its memories and passes its
+        # sweep, the session runs through to WF_DONE, then a reclassify
+        # stamps a new task boundary. Task B's sweep re-lists the same
+        # memories with ZERO re-reads after the boundary — and passes.
+        _write_stream(self.stream_path, [
+            {"type": "session_start", "s": self.session},
+            {"type": "docread", "name": "feature/FEATURE_X"},
+            {"type": "docread", "name": "dom/DOM_X"},
+            {"type": "sweep", "s": self.session},
+            {"type": "state", "from_s": "WF_EXECUTE", "to_s": "WF_VERIFY"},
+            {"type": "state", "from_s": "WF_VERIFY", "to_s": "WF_DONE"},
+            {"type": "state", "from_s": "WF_DONE", "to_s": "WF_CLASSIFY"},
+        ])
+        content = "- **Memories loaded**: feature/FEATURE_X, dom/DOM_X\n"
+        err = wm._check_memory_sweep(self.session, content)
+        self.assertIsNone(err)
+        self.assertTrue(os.path.exists(self._sentinel()))
 
     def test_requires_a_feature_memory_or_no_feature_token(self):
         _write_stream(self.stream_path, [
@@ -829,9 +853,13 @@ class TestTaskBoundaryStamping(unittest.TestCase):
     re-ran the prompt hook's FAST TRACK, which re-stamped 'session_start'
     and silently dropped every docread before it — sweep verification then
     rejected memories the agent HAD read this task, and each /swe-wm-update
-    invocation re-stamped again (unwinnable loop). Inverse defect: genuine
-    new-task transitions via the prompt hook appended NO boundary event, so
-    follow-up tasks could reuse a prior task's reads.
+    invocation re-stamped again (unwinnable loop).
+
+    D2 (sweep idempotence) since narrowed the boundary's blast radius: the
+    LOADED-list verification now reads the whole session stream, so a
+    boundary never invalidates docreads. The boundary still governs the
+    docpending window and the per-task Affected Features WRITE requirement,
+    so its shape and only-at-genuine-task-start emission still matter.
     """
 
     prompt_mod = import_hook("prompt/swe_user_prompt_workflow")
@@ -851,8 +879,11 @@ class TestTaskBoundaryStamping(unittest.TestCase):
         wm.get_feature_sentinel_path = self._orig_sentinel
         self.tmp.cleanup()
 
-    def test_append_task_boundary_resets_sweep(self):
-        # A REAL new task stamps a boundary; prior reads stop counting.
+    def test_append_task_boundary_keeps_session_reads(self):
+        # A REAL new task stamps a boundary — but the docread ledger is
+        # session-wide (D2): prior-turn reads still satisfy the next sweep
+        # list with zero re-reads. The boundary re-arms the per-task WRITE
+        # requirement and the docpending window; it never invalidates reads.
         _write_stream(self.stream_path, [
             {"type": "session_start", "s": self.session},
             {"type": "docread", "name": "feature/FEATURE_X"},
@@ -860,8 +891,7 @@ class TestTaskBoundaryStamping(unittest.TestCase):
         stream.append_task_boundary(self.stream_path, "WF_DONE", self.session)
         err = wm._check_memory_sweep(
             self.session, "- **Memories loaded**: feature/FEATURE_X\n")
-        self.assertIsNotNone(err)
-        self.assertIn("feature/feature_x", err.lower())
+        self.assertIsNone(err)
 
     def test_boundary_event_shape_matches_collector(self):
         # The stamped event must be exactly what events_since_task_start keys

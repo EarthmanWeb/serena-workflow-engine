@@ -27,6 +27,7 @@ metadata:
 
 - Update progress via swe-wm MCP (does NOT trigger edit hooks): `swe_wm_update_section(section="Progress", content="...")`
 - For a comprehensive update, invoke the skill: `/swe-wm-update --from WF_CHECKPOINT`
+- Batch WM updates at checkpoint boundaries (state transitions, task completion) — never per edit.
 
 ## Next Step
 

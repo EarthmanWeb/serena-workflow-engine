@@ -1,10 +1,25 @@
 #!/usr/bin/env python3
 """Stop-hook gate: enforce a terse response format.
 
-Blocks the stop (once) when the assistant's prose since the last genuine user
-message exceeds the word budget and the user did not ask for detail, OR when the
-reply emits recap/summary/self-congratulation scaffolding. The block reason
-instructs a terse restatement.
+Blocks the stop (at most ONCE per user turn) when the assistant's prose since
+the last genuine user message exceeds the word budget and the user did not ask
+for detail, OR when the reply emits recap/summary/self-congratulation
+scaffolding. The block reason instructs a terse restatement. A second overage
+in the SAME user turn emits a WARN attachment (additionalContext, never a
+second block) — every avoided block saves a full regenerated close.
+
+Detail budget: licensed by the literal `DETAIL:` prefix OR by natural-language
+detail asks in the last user message — review / report / explain / analysis /
+"summary of" / total / "walk me through" / why, word-boundary matched,
+case-insensitive (see detail_requested). This deliberately REPLACES the old
+"literal DETAIL: prefix ONLY" contract, which blocked the turn answering
+"provide me with a total review of token usage".
+
+Never blocks:
+  - when the session's workflow state is WF_DONE (final deliverable turn);
+  - on a stop_hook_active retry (main() exits before evaluating);
+  - for the DIAGNOSIS VERIFICATION: block, which is stripped before any
+    counting and counts as zero words (see strip_diagnosis_verification).
 
 Generic, non-project-specific: budget + enabled state come from the project's
 swe-setup-complete.json "response_format" block (see core.config
@@ -14,10 +29,14 @@ the project is uninitialized.
 
 Runtime state lives under .serena/streams/:
   - response-format-offenders.log  — one entry per blocked turn (regex tuning)
-  - .format-gate-block-<session>   — sentinel read by the UserPromptSubmit
-    reminder hook (swe_prompt_format_reminder.py), which surfaces the budget on
-    the next turn and clears it.
+  - .format-gate-block-<session>   — sentinel JSON {"fp", "count"}: fp is a
+    stable fingerprint of the last genuine user message (identifies the user
+    turn for the one-block-per-turn rule), count the overages seen this turn.
+    Read back by this gate, and (existence only) by the UserPromptSubmit
+    reminder hook (swe_prompt_format_reminder.py), which surfaces the budget
+    on the next turn and clears it.
 """
+import hashlib
 import json
 import os
 import re
@@ -32,15 +51,32 @@ try:
         get_response_format_config,
         resolve_setup_state,
     )
+    from swe_hooks.core.output import output_status
+    from swe_hooks.core.state_manager import StateManager
     from swe_hooks.core.stream import get_stream_dir
 except ImportError as e:
     swe_hooks.bootstrap.import_error_exit(e, "Stop")
 
 
-# Detail is opt-in via an EXPLICIT literal token only: the message must start
-# with `DETAIL:` (or `DETAIL -`) to license a long reply. Natural-language
-# phrasing ("why", "explain", "be thorough") stays under the terse floor.
+# Detail is opt-in two ways:
+#   1. the literal `DETAIL:` (or `DETAIL -`) prefix — the original token;
+#   2. natural-language detail asks — word-boundary, case-insensitive matches
+#      on: review, report, explain, analysis, "summary of", total,
+#      "walk me through", why.
+# The old contract (literal prefix ONLY) is deliberately gone: it blocked the
+# turn answering "provide me with a total review of token usage".
 DETAIL_TRIGGERS = re.compile(r"^\s*DETAIL\s*[:\-]", re.IGNORECASE)
+NATURAL_DETAIL_TRIGGERS = re.compile(
+    r"\b(?:review|report|explain|analysis|summary of|total|walk me through|why)\b",
+    re.IGNORECASE,
+)
+
+
+def detail_requested(last_user_text):
+    """True when the last genuine user message licenses the detail budget:
+    a literal DETAIL: prefix, or a natural-language detail trigger."""
+    text = last_user_text or ""
+    return bool(DETAIL_TRIGGERS.search(text) or NATURAL_DETAIL_TRIGGERS.search(text))
 
 # Recap / summary scaffolding that must never be emitted. These fire regardless
 # of word count — they are format violations, not length.
@@ -189,6 +225,44 @@ def duplicate_answer(assistant_since_user):
     return False
 
 
+# G4: the diagnosis verification block is EXEMPT from the word budget and must
+# never trigger a block. Exact shape stripped (counts as zero words):
+#   DIAGNOSIS VERIFICATION:
+#   - MECHANISM: <exact before/after code path producing the symptom>
+#   - TIMING: <the change postdates last-known-good — explains WHY NOW>
+#   - COUNTERFACTUAL: <prior state demonstrably produced the working behavior>
+# plus any line containing "candidate — unverified" (the unmet-check label).
+_DIAG_HEADER_PREFIX = "DIAGNOSIS VERIFICATION:"
+_DIAG_ITEM_PREFIXES = ("- MECHANISM:", "- TIMING:", "- COUNTERFACTUAL:")
+_DIAG_UNVERIFIED_MARK = "candidate — unverified"
+
+
+def strip_diagnosis_verification(text):
+    """Drop every diagnosis-verification block from `text`. Pure function.
+
+    A block runs from a line starting with "DIAGNOSIS VERIFICATION:" through
+    the last CONSECUTIVE line starting with "- MECHANISM:", "- TIMING:", or
+    "- COUNTERFACTUAL:". Any line containing "candidate — unverified" is
+    dropped wherever it appears. Everything else is kept verbatim.
+    """
+    out = []
+    lines = (text or "").splitlines()
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        if _DIAG_UNVERIFIED_MARK in line:
+            i += 1
+            continue
+        if line.lstrip().startswith(_DIAG_HEADER_PREFIX):
+            i += 1
+            while i < len(lines) and lines[i].lstrip().startswith(_DIAG_ITEM_PREFIXES):
+                i += 1
+            continue
+        out.append(line)
+        i += 1
+    return "\n".join(out)
+
+
 def evaluate(assistant_since_user, last_user_text, terse_limit, detail_limit, retry):
     """Decide whether to block. Pure function — no IO.
 
@@ -203,16 +277,19 @@ def evaluate(assistant_since_user, last_user_text, terse_limit, detail_limit, re
         (reason, scanned_text, word_count) when the turn should block, else
         (None, scanned_text, word_count).
     """
-    reply = "\n".join(assistant_since_user)
-    detail_requested = bool(DETAIL_TRIGGERS.search(last_user_text or ""))
-    limit = detail_limit if detail_requested else terse_limit
+    # G4: the diagnosis verification block counts as zero words and must never
+    # trigger a block — strip it from every message before ANY judging.
+    msgs = [strip_diagnosis_verification(t) for t in assistant_since_user]
+    reply = "\n".join(msgs)
+    wants_detail = detail_requested(last_user_text)
+    limit = detail_limit if wants_detail else terse_limit
 
     words = prose_words(reply)
-    worst_single = max((prose_words(t) for t in assistant_since_user), default=0)
+    worst_single = max((prose_words(t) for t in msgs), default=0)
 
     # On a retry, judge ONLY the newest message — the pre-block text is still in
     # `reply` and would re-trigger forever.
-    scanned = assistant_since_user[-1] if (retry and assistant_since_user) else reply
+    scanned = msgs[-1] if (retry and msgs) else reply
     violations = [label for pat, label in BANNED_PATTERNS if pat.search(scanned)]
 
     if retry and not violations:
@@ -230,7 +307,7 @@ def evaluate(assistant_since_user, last_user_text, terse_limit, detail_limit, re
     # A repeated answer blocks even when each copy is individually under budget.
     # Skip on retry: retry judges only the newest message, and the earlier
     # pre-block text lingers in `reply` by design.
-    if not retry and duplicate_answer(assistant_since_user):
+    if not retry and duplicate_answer(msgs):
         reason = (
             "RESPONSE FORMAT GATE: emitted a repeated answer — keep ONLY the last "
             "(tightest) version; the earlier restatement should not have shipped. "
@@ -248,7 +325,7 @@ def evaluate(assistant_since_user, last_user_text, terse_limit, detail_limit, re
         )
         reason = (
             f"RESPONSE FORMAT GATE: {which} "
-            f"(budget {limit}; detail {'requested' if detail_requested else 'NOT requested'}). "
+            f"(budget {limit}; detail {'requested' if wants_detail else 'NOT requested'}). "
             "Lead with the answer/action, bullets over paragraphs, no preamble/recap/"
             "closing summary. Output ONLY a terse restatement of the essential result "
             "(<=10 lines). Do not apologize or explain the length."
@@ -262,16 +339,44 @@ def evaluate(assistant_since_user, last_user_text, terse_limit, detail_limit, re
 # IO helpers
 # ---------------------------------------------------------------------------
 def sentinel_path(session):
-    """Per-session flag file read by swe_prompt_format_reminder.py."""
+    """Per-session flag file: JSON {"fp", "count"} identifying the user turn
+    of the last block. Read back by this gate (one-block-per-turn) and, by
+    existence only, by swe_prompt_format_reminder.py."""
     return os.path.join(get_stream_dir(), f".format-gate-block-{session}")
 
 
-def mark_blocked(session):
+def turn_fingerprint(user_text):
+    """Stable fingerprint of the last genuine user message — identifies one
+    user turn across the Stop events it produces (one-block-per-turn)."""
+    return hashlib.sha1((user_text or "").strip().encode("utf-8")).hexdigest()
+
+
+def read_block_record(session):
+    """Return the sentinel's {"fp": str, "count": int}, or None when absent
+    or legacy/unparseable (pre-F2 sentinels held the bare word 'blocked')."""
     try:
-        with open(sentinel_path(session), "w") as f:
-            f.write("blocked")
+        with open(sentinel_path(session), encoding="utf-8") as f:
+            rec = json.load(f)
+    except (OSError, ValueError):
+        return None
+    if not isinstance(rec, dict) or "fp" not in rec:
+        return None
+    return rec
+
+
+def mark_blocked(session, fp, count):
+    try:
+        with open(sentinel_path(session), "w", encoding="utf-8") as f:
+            json.dump({"fp": fp, "count": count}, f)
     except OSError:
         pass
+
+
+TURN_WARN_TEXT = (
+    "RESPONSE FORMAT WARN: over budget again in the same user turn — the gate "
+    "blocks at most once per turn, so this stop is allowed. Keep it terse "
+    "anyway: lead with the result, <=10 lines, no recap."
+)
 
 
 def offender_log_path():
@@ -349,6 +454,10 @@ def main():
 
     session = os.path.splitext(os.path.basename(transcript_path or "unknown"))[0]
 
+    # NEVER block the final deliverable turn: WF_DONE exits silently.
+    if StateManager(project_root, session_id=session).get_current_state() == "WF_DONE":
+        sys.exit(0)
+
     try:
         last_user_text, assistant_since_user = read_transcript(transcript_path)
     except OSError:
@@ -360,7 +469,14 @@ def main():
     )
 
     if reason:
-        mark_blocked(session)
+        fp = turn_fingerprint(last_user_text)
+        prior = read_block_record(session)
+        if prior and prior.get("fp") == fp:
+            # This user turn already consumed its one block — WARN attachment
+            # only (plain additionalContext, no decision:block).
+            mark_blocked(session, fp, int(prior.get("count", 1)) + 1)
+            output_status(TURN_WARN_TEXT, event="Stop")
+        mark_blocked(session, fp, 1)
         log_offender(session, reason.split(" — ")[0], last_user_text, scanned, words)
         print(json.dumps({"decision": "block", "reason": reason}))
 

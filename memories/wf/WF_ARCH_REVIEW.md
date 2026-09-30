@@ -21,7 +21,7 @@ Single planning gate for **major** code changes: design, architecture compliance
 
 - If a `SPEC_*` memory is loaded (check WM), SKIP steps 1-4 and reference the SPEC by name. Go to step 5 (Parallel Execution Assessment), then the Single Question + Consent Gate.
 - If no SPEC loaded, follow steps 1-4.
-- Feature knowledge (FEATURE_*/REF_*/DOM_*/SYS_*/ARCH_*) is already loaded by the WF_CLASSIFY Step 4d Feature Knowledge Sweep — check WM `Memories loaded` and do NOT re-read those. What remains for this state is DEV_* standards + compliance-checklist derivation (steps 2b, 2c), run AFTER questions are answered — see "Heavy Memory Load (After Questions Answered)".
+- Feature knowledge (FEATURE__/REF__/DOM__/SYS__/ARCH__) is already loaded by the WF_CLASSIFY Step 4d Feature Knowledge Sweep — check WM `Memories loaded` and do NOT re-read those. What remains for this state is DEV__ standards + compliance-checklist derivation (steps 2b, 2c), run AFTER questions are answered — see "Heavy Memory Load (After Questions Answered)".
 
 ## Gherkin Spec Gate
 
@@ -153,10 +153,10 @@ Fan-out is the DEFAULT plan whenever the task has **2+ independent tracks** — 
 
 When ANY threshold is met, the plan MUST list tracks explicitly:
 
-| Track | Owner files | Independent? | Model tier |
-| ----- | ----------- | ------------- | ---------- |
-| A | `path/a/**` | yes | sonnet (implementation) |
-| B | `path/b/**` | yes | haiku (mechanical/routine) |
+| Track | Owner files | Independent? | Model tier                 |
+| ----- | ----------- | ------------ | -------------------------- |
+| A     | `path/a/**` | yes          | sonnet (implementation)    |
+| B     | `path/b/**` | yes          | haiku (mechanical/routine) |
 
 - Use Claude Code `Agent` tool with `run_in_background: true`.
 - Use `isolation: "worktree"` when tracks may edit overlapping files.
@@ -180,6 +180,10 @@ Check whether the INITIAL user prompt gave blanket consent — phrases like "get
 - If blanket consent given: SKIP the final validate-or-continue question. If "no questions" was requested, ALSO derive the most logical choices for any design/approach questions yourself and proceed on that consent — do NOT call `AskUserQuestion`. Go directly to `WF_EXECUTE` (parallel subagents, if planned, launch there).
 - PERSIST the grant: note `blanket_consent: true` in the WM `Context` section (via `swe_wm_update_section`). While that flag is set, a PreToolUse gate DENIES `AskUserQuestion` for the rest of the session — derive choices and proceed. Only a destructive action or a genuine scope change may re-ask, by including the literal tag `[consent-override]` + the reason in the question text (the tag asserts the condition holds; it is not a bypass).
 - Otherwise: assemble and ask the single question call below.
+
+### Non-Interactive Session Check
+
+Non-interactive/autonomous session (no user available to answer): treat as blanket consent — derive the most reasonable answer for every design question yourself, note each derived choice + assumption in WM, and proceed to `WF_EXECUTE`. NEVER block an autonomous session on `AskUserQuestion`.
 
 ### Assemble & Ask ONE Question Call
 
@@ -221,8 +225,8 @@ Scope this load to the chosen approach. Do NOT sweep memories for approaches tha
 
 ### Handle Final-Question Response
 
-| Selection                         | Action                                                                                                                                                                                   |
-| --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Selection                         | Action                                                                                                                                                                      |
+| --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | "Validate the plan with me first" | Present the assembled plan (files table, constraints, data flow, test plan, parallel rec). Get explicit go-ahead, then read `WF_EXECUTE` (parallel subagents launch there). |
 | "Continue through to completion"  | Read `WF_EXECUTE` directly (parallel subagents launch there).                                                                                                               |
 | Consent-skip (blanket consent)    | Read `WF_EXECUTE` directly (parallel subagents launch there).                                                                                                               |
@@ -231,12 +235,12 @@ A non-design blocker surfacing here may use `WF_CLARIFY` (reusable ask-user subr
 
 ## Routing
 
-| Condition                                       | Next Step    |
-| ----------------------------------------------- | ------------ |
-| Consent-skip (blanket consent)                  | `WF_EXECUTE` |
-| "Continue through to completion"                | `WF_EXECUTE` |
-| "Validate the plan" → go-ahead                  | `WF_EXECUTE` |
-| Non-design blocker                              | `WF_CLARIFY` |
+| Condition                        | Next Step    |
+| -------------------------------- | ------------ |
+| Consent-skip (blanket consent)   | `WF_EXECUTE` |
+| "Continue through to completion" | `WF_EXECUTE` |
+| "Validate the plan" → go-ahead   | `WF_EXECUTE` |
+| Non-design blocker               | `WF_CLARIFY` |
 
 Parallel subagent work runs inside `WF_EXECUTE` (note `parallel_agents: true` in WM); there is no separate orchestration state.
 

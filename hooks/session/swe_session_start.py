@@ -31,6 +31,7 @@ try:
     from swe_hooks.core.state_manager import StateManager
     from swe_hooks.core.stream import get_stream_path, append_event
     from swe_hooks.core.orphan_reaper import reap_orphans
+    from swe_hooks.core.output import emit_once, WF_INIT_GUIDANCE
 except ImportError as e:
     swe_hooks.bootstrap.import_error_exit(e, "SessionStart")
 
@@ -694,6 +695,11 @@ STEP 1: Read WF_INIT workflow instructions
 STEP 2: Follow WF_INIT to classify and execute user's task
 ═══════════════════════════════════════════════════════════════════════════════
 """
+
+        # E2: this banner IS the session's WF_INIT guidance — register the
+        # canonical guidance hash so the UserPromptSubmit WF_INIT gate emits
+        # a one-line reminder instead of a duplicate full block.
+        emit_once(session_id, WF_INIT_GUIDANCE)
 
         output = {
             "hookSpecificOutput": {

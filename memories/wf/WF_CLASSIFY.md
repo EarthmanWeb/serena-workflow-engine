@@ -55,6 +55,8 @@ Defer to WF_EXECUTE or WF_ARCH_REVIEW instead:
 
 Scan the user message for behavioral/UX requirements ("should", "must", "needs to", corrections to current behavior, UX preferences). If found, note in WM for Step 5. If none, continue.
 
+Regression-language detection — scan the same message for: "regressed", "just broke", "stopped working", "used to work", "broke after". On match, note `regression: recent` in WM Task Context. This flag drives the regression route (Step 3 / Routing Table).
+
 ### 2b. Auto-Approve Detection
 
 Detect EXPLICIT intent to skip the WF_ARCH_REVIEW approval gate. ONLY these phrases qualify:
@@ -96,13 +98,15 @@ Scan locations:
 
 ### 3. Task Type Assessment
 
-| Task type | Signals | Route |
-|-----------|---------|-------|
-| Research (no code changes, exploration only) | How code works, exploring patterns, finding files/symbols | `WF_RESEARCH` |
-| Debugging (test-driven) | Failing tests, behavior differs between environments, test-driven debugging | `WF_DEBUG_TDD` |
-| Operational (no code changes, execution only) | Run shell/WP-CLI, HTTP requests, check DB state, run test suites, verify deployments — needs feature context, modifies no source. Skip arch review | `WF_EXECUTE` (after Step 4) |
-| Code change | Bug fix, feature addition, refactor, doc update — modifies source | `WF_ARCH_REVIEW` or `WF_EXECUTE` per Step 3b (after Step 4) |
-| Parallel subagents (2+ independent subtasks, OR explicit operator fan-out request, OR 6+ files, OR 3+ architectural layers) | Independent concurrent subtasks with disjoint file ownership — orchestrator mode per `feature/FEATURE_SUBAGENTS` is the DEFAULT, not an escalation. Note `parallel_agents: true`; use `Agent` tool with `run_in_background: true`, explicit `model` per tier, and optionally `isolation: "worktree"` for edit conflicts | `WF_ARCH_REVIEW` |
+| Task type                                                                                                                   | Signals                                                                                                                                                                                                                                                                                                                 | Route                                                       |
+| --------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| Research (no code changes, exploration only)                                                                                | How code works, exploring patterns, finding files/symbols                                                                                                                                                                                                                                                               | `WF_RESEARCH`                                               |
+| Debugging (test-driven)                                                                                                     | Failing tests, behavior differs between environments, test-driven debugging                                                                                                                                                                                                                                             | `WF_DEBUG_TDD`                                              |
+| Operational (no code changes, execution only)                                                                               | Run shell/WP-CLI, HTTP requests, check DB state, run test suites, verify deployments — needs feature context, modifies no source. Skip arch review                                                                                                                                                                      | `WF_EXECUTE` (after Step 4)                                 |
+| Code change                                                                                                                 | Bug fix, feature addition, refactor, doc update — modifies source                                                                                                                                                                                                                                                       | `WF_ARCH_REVIEW` or `WF_EXECUTE` per Step 3b (after Step 4) |
+| Parallel subagents (2+ independent subtasks, OR explicit operator fan-out request, OR 6+ files, OR 3+ architectural layers) | Independent concurrent subtasks with disjoint file ownership — orchestrator mode per `feature/FEATURE_SUBAGENTS` is the DEFAULT, not an escalation. Note `parallel_agents: true`; use `Agent` tool with `run_in_background: true`, explicit `model` per tier, and optionally `isolation: "worktree"` for edit conflicts | `WF_ARCH_REVIEW`                                            |
+
+Regression route — when WM has `regression: recent` (Step 2): route to `WF_RESEARCH` with the Feature Knowledge Sweep DEFERRED. Recency triage + runtime observation run FIRST; feature/doc memories load on-miss, keyed to the component the evidence implicates. Note "sweep deferred: regression route" in WM Affected Features. The edit gate still requires the sweep before any later edit — the deferral moves it after evidence, it never removes it.
 
 ### 3b. Architecture Review Necessity Check (Code Changes Only)
 
@@ -123,7 +127,7 @@ MAY SKIP `WF_ARCH_REVIEW` → route directly to `WF_EXECUTE` ONLY if ALL hold:
 When skipping arch review:
 
 - Note `arch_review_skipped: true` and the reason in WM
-- Still load the relevant DEV_*/DOM_* standards for the touched files (the load WF_ARCH_REVIEW would have done) at the start of WF_EXECUTE, scoped to touched files
+- Still load the relevant DEV__/DOM__ standards for the touched files (the load WF_ARCH_REVIEW would have done) at the start of WF_EXECUTE, scoped to touched files
 - If in WF_EXECUTE the change turns out larger than classified (>5 files or adds a module), STOP and route back to `WF_ARCH_REVIEW`
 
 When in doubt, do NOT skip → route to `WF_ARCH_REVIEW`. Skip is for genuinely small, well-understood changes only.
@@ -146,6 +150,14 @@ Then the MANDATORY fuzzy fallback — absence from `INDEX_FEATURES` is NOT absen
 - Do not conclude "no feature memory exists" without both searches returning nothing.
 - A hit outside the registry (e.g. `feature/FEATURE_X` not yet registered) IS the primary feature — use it and note the registry gap in WM.
 
+MANDATORY symptom search — run in addition to the feature-noun searches:
+
+- Search memories on the request's LITERAL symptom tokens (error strings, class names, option keys — e.g. "sr-only", "bootstrap"), not only feature nouns. Symptom tokens surface memories that feature-noun searches miss.
+
+Body-content search is sanctioned:
+
+- When name/front-matter search misses, a Grep/Bash grep across memory BODIES (`.serena/memory/` and configured memory paths) IS a legitimate docs consult — the docs-first gate credits it.
+
 ### 4c. Load the Primary FEATURE_[KEY]
 
 - `read_memory("feature/FEATURE_[KEY]")` — the primary feature.
@@ -163,15 +175,19 @@ Enumerate related memories from THREE sources:
 
 Then load, TIERED by relevance — read the task-relevant set, defer the rest to on-miss expansion:
 
-1. Read: the primary `FEATURE_*`, every secondary `FEATURE_*` the request touches, and each enumerated `REF_*`/`DOM_*`/`SYS_*`/`ARCH_*` whose title/hook is **directly relevant to what this task changes or inspects**. Judge relevance from the request's domain terms + the files/behavior in scope.
-2. DEFER (do NOT read up front): enumerated refs that are cold to this task — tangential subsystems, sibling-feature detail the request never touches. Every link this task surfaces must end up either read (in `**Memories loaded**:`) or deferred (in `**Memories deferred**:`) — see the list rules at Step 4e for how. One exception: a link surfaced by your **Primary** feature is on-topic by construction, so read it rather than deferring.
+1. Read — HARD CAP: the primary `FEATURE_*` + the secondary `FEATURE_*` memories the request EXPLICITLY touches + at most 3 directly-relevant `REF_*`/`DOM_*`/`SYS_*`/`ARCH_*` refs. Judge relevance from the request's domain terms + the files/behavior in scope. Everything else is deferred; on-miss expansion is trusted.
+2. DEFER (do NOT read up front): enumerated refs that are cold to this task — tangential subsystems, sibling-feature detail the request never touches. Every link this task surfaces must end up either read (in `**Memories loaded**:`) or deferred (in `**Memories deferred**:`) — see the list rules at Step 4e for how. One exception: a link surfaced by your **Primary** feature is on-topic by construction, so read it rather than deferring (it counts against the 3-ref cap; past the cap, defer it too and trust on-miss).
 3. ON-MISS EXPANSION: the moment a deferred ref turns out to matter (a rule you need, a pattern the edit must follow, a `docpending` link the work surfaces), read it THEN, before the dependent edit. Reaching for a deferred ref mid-task is expected, not a failure.
+
+Cross-cutting tasks (≥3 sibling features): load the shared parent feature + its `ARCH_*` only; defer per-child feature memories to on-miss. Do NOT enumerate every sibling up front.
+
+Sweep idempotence: a memory already read THIS SESSION never re-loads on reclassify, `/swe-goto`, or `WF_CONTINUE`. WM `**Memories loaded**:` is the dedupe ledger; the verifier accepts prior-turn/prior-task reads from this session.
 
 Rationale: reading the entire `[[link]]` closure up front is the dominant per-task token cost and most of it goes unused. Tiered loading keeps the enforcement floor (primary + task-relevant feature knowledge in context before any edit) while deferring cold refs. When genuinely unsure whether a ref is relevant, read it — correctness beats token savings.
 
 Exclusions — do NOT read during the sweep:
 
-- `spec/`, `report/`, `research/`, `project/` — not loaded as general context. Load a spec only when the task explicitly asks to review, author, or implement that spec — then load exactly the named spec, nothing else from the topic.
+- `spec/`, `report/`, `research/`, `project/` — not BULK-loaded as general context; the exclusion covers bulk topic loading only. A `spec/` memory surfaced by the Step 4b SYMPTOM search MUST be loaded. Also load a spec when the task explicitly asks to review, author, or implement it — then exactly the named spec, nothing else from the topic.
 - `dev/` standards — edit-time compliance, loaded at `WF_ARCH_REVIEW` / start of `WF_EXECUTE`, scoped to the files actually touched.
 - `wf/`, `claude/`, `WM_*` — workflow machinery, not feature knowledge.
 
@@ -200,7 +216,7 @@ mcp__plugin_swe_swe-wm__swe_wm_update(
 `**Memories loaded**:` list rules:
 
 - PLAIN comma-separated memory names ONLY — no annotations, parentheses, or trailing commentary on an entry (annotation after the first whitespace is stripped, but do not rely on it).
-- List ONLY memories read THIS task during Steps 4a–4d. Do NOT list the init chain (`wf/*`, `claude/*`) — those are workflow machinery, read before the task boundary; the verifier ignores them and they never count toward the sweep.
+- List the memories consulted for THIS task in Steps 4a–4d — including ones already read earlier this session (never re-read those; see sweep idempotence at 4d). Do NOT list the init chain (`wf/*`, `claude/*`) — those are workflow machinery, read before the task boundary; the verifier ignores them and they never count toward the sweep.
 - List the tier-1 (task-relevant) set you actually read — NOT deferred cold refs. Deferred refs read later via on-miss expansion still count toward the task's docreads; re-run the `Affected Features` write to append them only if a later gate needs them recorded.
 
 `**Memories deferred**:` — how it works:
@@ -212,9 +228,9 @@ mcp__plugin_swe_swe-wm__swe_wm_update(
 - Only defer what's genuinely cold to this task. When unsure, read it.
 - You only ever deal with links surfaced since your LAST passed sweep. Once a sweep passes, its links are settled — a later sweep in the same session won't re-demand them, so you never re-defer a prior task's docs.
 
-The sweep is HARD-ENFORCED, per task (follow-up tasks re-arm it):
+The sweep is HARD-ENFORCED, per task (follow-up tasks re-arm the `Affected Features` WRITE; reads dedupe per session — see sweep idempotence at 4d):
 
-- The `Affected Features` write is verified by the WM server: every name in `**Memories loaded**:` must have an ACTUAL `read_memory` this task (reads from a prior task in the session do not count). Unread names → the update is rejected.
+- The `Affected Features` write is verified by the WM server: every name in `**Memories loaded**:` must have an ACTUAL `read_memory` THIS SESSION — prior-turn/prior-task reads from this session count; never re-read a memory just to satisfy the verifier. Names with no read this session → the update is rejected.
 - The list must include ≥1 `feature/*` memory, or state `no-feature` (only when BOTH 4b searches returned nothing).
 - A verified write creates the sweep sentinel; the edit gate (`swe_pre_edit_validate.py`) DENIES every Edit/Write/Serena-edit until it exists. Test-artifact edits additionally require `dev/DEV_TESTS` + `feature/FEATURE_TESTS` reads when the project has them.
 - Refilling the docs-first search budget with one memory read is NOT the sweep.
@@ -242,25 +258,26 @@ When routing to a workflow-aware skill (e.g. `/research`):
 2. Inform user: `> Routing to /research skill. Will return to WF_CLASSIFY on completion.`
 3. Handle return:
 
-| Status | Action |
-|--------|--------|
+| Status                              | Action                  |
+| ----------------------------------- | ----------------------- |
 | `success` / `success_with_findings` | Continue to return step |
-| `needs_clarification` | `WF_CLARIFY` |
-| `blocked` | `WF_CLARIFY` |
+| `needs_clarification`               | `WF_CLARIFY`            |
+| `blocked`                           | `WF_CLARIFY`            |
 
 ## Routing Table
 
-| Condition | Route To |
-|-----------|----------|
-| Hard blocker — cannot classify (e.g. which of two features) | `WF_CLARIFY` |
-| Research only | `WF_RESEARCH` |
-| Test debugging needed | `WF_DEBUG_TDD` |
-| Approach/design ambiguity or conflicting requirement | Defer to `WF_ARCH_REVIEW` (single question gate) |
-| Operational task (no code changes) | `WF_EXECUTE` |
-| Code change — minor patch to existing functionality, ≤5 files, no open questions (Step 3b) | `WF_EXECUTE` (`arch_review_skipped: true`) |
-| Code change — new feature, major module addition, >5 files, or 3+ layers (Step 3b) | `WF_ARCH_REVIEW` |
-| Gherkin spec authoring (explicit) | `/swe-gherkin-spec` |
-| Gherkin TDD from existing spec | `/swe-gherkin-dev` |
+| Condition                                                                                  | Route To                                                                                     |
+| ------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------- |
+| Hard blocker — cannot classify (e.g. which of two features)                                | `WF_CLARIFY`                                                                                 |
+| Research only                                                                              | `WF_RESEARCH`                                                                                |
+| Regression language (`regression: recent`)                                                 | `WF_RESEARCH` — sweep deferred; note "sweep deferred: regression route" in Affected Features |
+| Test debugging needed                                                                      | `WF_DEBUG_TDD`                                                                               |
+| Approach/design ambiguity or conflicting requirement                                       | Defer to `WF_ARCH_REVIEW` (single question gate)                                             |
+| Operational task (no code changes)                                                         | `WF_EXECUTE`                                                                                 |
+| Code change — minor patch to existing functionality, ≤5 files, no open questions (Step 3b) | `WF_EXECUTE` (`arch_review_skipped: true`)                                                   |
+| Code change — new feature, major module addition, >5 files, or 3+ layers (Step 3b)         | `WF_ARCH_REVIEW`                                                                             |
+| Gherkin spec authoring (explicit)                                                          | `/swe-gherkin-spec`                                                                          |
+| Gherkin TDD from existing spec                                                             | `/swe-gherkin-dev`                                                                           |
 
 1. Determine which condition applies
 2. Read that WF_* memory

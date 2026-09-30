@@ -11,10 +11,11 @@ elsewhere are intentionally NOT re-tested here:
 
 Modules under test:
   post/swe_post_memory_style   — strip_examples, scan_style, SUGGESTION/VAGUE patterns
-  post/swe_post_read_state     — _get_continuation
+  post/swe_post_read_state     — _get_continuation, _discovery_no_credit_message
   post/swe_post_tool_failure   — unresolved_serena_correction, FLAIL_THRESHOLD, _BARE_SERENA_NAMES
   post/swe_post_todo_wm_sync   — sync_todos_to_wm, TODO_FENCE_START/END
   post/swe_post_memory_index   — find_memory_md, size/entry thresholds
+  swe_hooks.core.output        — emit_once (E2 byte-identical suppression)
 
 Stdlib unittest only. Deterministic + offline: no network, no real Serena, no
 real git. IO uses tempfile.TemporaryDirectory; get_project_root is monkeypatched.
@@ -26,8 +27,9 @@ import tempfile
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from _hookutil import import_hook, reset_caches  # noqa: E402
+from _hookutil import import_hook, import_core, reset_caches  # noqa: E402
 
+output_mod = import_core("swe_hooks.core.output")
 style_mod = import_hook("post/swe_post_memory_style")
 read_state_mod = import_hook("post/swe_post_read_state")
 failure_mod = import_hook("post/swe_post_tool_failure")
@@ -237,6 +239,27 @@ class TestContinuationDirective(unittest.TestCase):
         sid = "sess0004"
         self.assertEqual(read_state_mod._continuation_directive("WF_NOPE", sid), "")
 
+    def test_same_state_re_emits_after_event_threshold(self):
+        # E1: a same-state directive suppressed as a repeat is re-emitted
+        # once >= CONTINUATION_REEMIT_EVENTS stream events accumulate since
+        # it was last shown.
+        from swe_hooks.core.stream import get_stream_path, append_event
+        sid = "sess0005"
+        first = read_state_mod._continuation_directive("WF_EXECUTE", sid)
+        self.assertTrue(first)
+        stream_path = get_stream_path(sid)
+        threshold = read_state_mod.CONTINUATION_REEMIT_EVENTS
+        for _ in range(threshold - 1):
+            append_event(stream_path, 'tool', s=sid)
+        self.assertEqual(
+            read_state_mod._continuation_directive("WF_EXECUTE", sid), "")
+        append_event(stream_path, 'tool', s=sid)
+        re_emitted = read_state_mod._continuation_directive("WF_EXECUTE", sid)
+        self.assertIn("WF_EXECUTE", re_emitted)
+        # The re-emission stamps a fresh continuation marker: suppressed again.
+        self.assertEqual(
+            read_state_mod._continuation_directive("WF_EXECUTE", sid), "")
+
 
 # ---------------------------------------------------------------------------
 # swe_hooks.core.stream.get_last_continuation
@@ -267,6 +290,97 @@ class TestGetLastContinuation(unittest.TestCase):
         path = os.path.join(self.tmp.name, "s2.jsonl")
         self.stream.append_event(path, "tool", name="Read")
         self.assertEqual(self.stream.get_last_continuation(path), "")
+
+
+# ---------------------------------------------------------------------------
+# swe_post_read_state._discovery_no_credit_message — tiered wording (4d)
+# ---------------------------------------------------------------------------
+class TestDiscoveryNoCreditMessage(unittest.TestCase):
+    def test_lists_the_surfaced_names(self):
+        msg = read_state_mod._discovery_no_credit_message(
+            {"dom/dom_x", "ref/ref_y"})
+        self.assertIn("dom/dom_x", msg)
+        self.assertIn("ref/ref_y", msg)
+
+    def test_tiered_defer_language_present(self):
+        msg = read_state_mod._discovery_no_credit_message({"dom/dom_x"})
+        self.assertIn("defer", msg.lower())
+        self.assertIn("Memories deferred", msg)
+        self.assertIn("RELEVANT", msg)
+
+    def test_read_every_surfaced_doc_demand_absent(self):
+        # The message must not demand ALL surfaced names be read — cold
+        # sibling-tree hits are deferrable per WF_CLASSIFY 4d.
+        msg = read_state_mod._discovery_no_credit_message({"em/feature/x"})
+        self.assertNotIn("read_memory each before proceeding", msg)
+
+
+# ---------------------------------------------------------------------------
+# swe_hooks.core.output.emit_once — E2 byte-identical suppression
+# ---------------------------------------------------------------------------
+class TestEmitOnce(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.streams = self.tmp.name
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_first_emission_returns_true_and_records(self):
+        self.assertTrue(output_mod.emit_once("sess0001", "hello",
+                                             streams_dir=self.streams))
+        ledger = os.path.join(self.streams, ".emitted_sess0001")
+        self.assertTrue(os.path.exists(ledger))
+        with open(ledger) as f:
+            lines = [ln.strip() for ln in f if ln.strip()]
+        self.assertEqual(len(lines), 1)
+        self.assertEqual(len(lines[0]), 64)  # one sha256 hex digest per line
+
+    def test_identical_text_suppressed_on_repeat(self):
+        self.assertTrue(output_mod.emit_once("sess0002", "same text",
+                                             streams_dir=self.streams))
+        self.assertFalse(output_mod.emit_once("sess0002", "same text",
+                                              streams_dir=self.streams))
+        self.assertFalse(output_mod.emit_once("sess0002", "same text",
+                                              streams_dir=self.streams))
+
+    def test_different_text_not_suppressed(self):
+        self.assertTrue(output_mod.emit_once("sess0003", "text A",
+                                             streams_dir=self.streams))
+        self.assertTrue(output_mod.emit_once("sess0003", "text B",
+                                             streams_dir=self.streams))
+        self.assertFalse(output_mod.emit_once("sess0003", "text A",
+                                              streams_dir=self.streams))
+
+    def test_per_session_isolation(self):
+        self.assertTrue(output_mod.emit_once("sessAAAA", "shared text",
+                                             streams_dir=self.streams))
+        # Same bytes, different session → its own ledger, so it emits.
+        self.assertTrue(output_mod.emit_once("sessBBBB", "shared text",
+                                             streams_dir=self.streams))
+        self.assertFalse(output_mod.emit_once("sessAAAA", "shared text",
+                                              streams_dir=self.streams))
+
+    def test_io_error_passes_message_through(self):
+        # streams_dir is a FILE, so every ledger open raises OSError —
+        # emit_once must fail open (True) and never lose the message.
+        bogus_dir = os.path.join(self.streams, "not_a_dir")
+        with open(bogus_dir, "w") as f:
+            f.write("x")
+        self.assertTrue(output_mod.emit_once("sess0004", "msg",
+                                             streams_dir=bogus_dir))
+        self.assertTrue(output_mod.emit_once("sess0004", "msg",
+                                             streams_dir=bogus_dir))
+
+    def test_missing_session_id_passes_through(self):
+        self.assertTrue(output_mod.emit_once("", "msg",
+                                             streams_dir=self.streams))
+        self.assertTrue(output_mod.emit_once(None, "msg",
+                                             streams_dir=self.streams))
+
+    def test_empty_text_passes_through(self):
+        self.assertTrue(output_mod.emit_once("sess0005", "",
+                                             streams_dir=self.streams))
 
 
 # ---------------------------------------------------------------------------

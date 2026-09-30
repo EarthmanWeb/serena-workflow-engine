@@ -29,6 +29,7 @@ list_memories(topic="dev")
 - Read REF_* memories for coding patterns in affected areas.
 - Read DEV_* memories for language-specific standards.
 - Compare against WM's loaded-memories list. Read any memory added or updated since the previous session.
+- Never re-read memories already read this session — the WM `Memories loaded` list is the dedupe ledger.
 
 ## Step 3: Check Current Task State
 

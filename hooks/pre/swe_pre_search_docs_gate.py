@@ -29,6 +29,14 @@ file you already located, CLAUDE.md, a config) is not untargeted surfing — it
 is the normal way to do the work. Only wide searches and Bash recon count
 against the budget.
 
+Memory-tree greps ARE docs consults (B2): a gated Grep/Glob/Bash-grep whose
+target path sits inside a memory tree (.serena/memory/, .serena/memories/, or
+a memories/ dir) searches the documentation itself — the exact behavior this
+gate exists to route the agent toward. Such a call is NEVER denied, spends no
+budget, and is credited as a 'docread' (name='memory-grep', always-fresh) that
+REFILLS the budget like read_memory. Detected via tool_input path/pattern
+fields and Bash command text.
+
 Clearing the gate is deliberately cheap and BUDGETED: ONE docs consult
 (read_memory / list_memories / search_memories_by_name /
 search_memories_by_front_matter → 'docread' event) clears the gate for the
@@ -209,6 +217,34 @@ def bash_is_inspection(command: str) -> bool:
     return False
 
 
+# B2 — memory-tree consult detection. A target inside .serena/memory/,
+# .serena/memories/, or any memories/ dir is documentation, not code. The
+# bare word 'memories' only counts when it is a PATH SEGMENT (followed by
+# '/' or ending the value) — grepping source for the word "memories" is
+# still code surfing. MULTILINE so '$' also matches line ends inside a
+# multi-line Bash command.
+MEMORY_TREE_RE = re.compile(
+    r'\.serena/memor(?:y|ies)(?:/|$)'
+    r'|(?:^|[/\s"\'=(])memories(?:/|$)',
+    re.MULTILINE,
+)
+
+# tool_input fields that can carry a target path (Grep/Glob/search_for_pattern).
+_MEMORY_CONSULT_FIELDS = ('path', 'file_path', 'pattern', 'glob', 'relative_path')
+
+
+def is_memory_tree_consult(tool_name: str, tool_input: dict) -> bool:
+    """True when a gated call's target sits inside a memory tree — a DOCS
+    CONSULT, not code surfing. Bash is judged on its command text; other
+    tools on their path/pattern fields."""
+    tool_input = tool_input or {}
+    if tool_name == 'Bash':
+        return bool(MEMORY_TREE_RE.search(str(tool_input.get('command', ''))))
+    return any(
+        MEMORY_TREE_RE.search(str(tool_input.get(field, '')))
+        for field in _MEMORY_CONSULT_FIELDS)
+
+
 def is_gated_call(tool_name: str, tool_input: dict) -> bool:
     """True when this tool call is a docs-first-gated code-surf.
 
@@ -228,8 +264,9 @@ def is_gated_call(tool_name: str, tool_input: dict) -> bool:
 
 
 # docread names that refill even when repeated: credited memory searches
-# (a search confirming already-read docs is the sanctioned re-consult).
-ALWAYS_FRESH_NAMES = {'memory-search'}
+# (a search confirming already-read docs is the sanctioned re-consult) and
+# memory-tree greps (B2 — every grep INTO the docs is a fresh consult).
+ALWAYS_FRESH_NAMES = {'memory-search', 'memory-grep'}
 
 
 def _session_id_from_stream(stream_path: str) -> str:
@@ -406,6 +443,15 @@ def main():
 
         stream_path = get_stream_path(session_id)
         if not os.path.exists(stream_path):
+            output_empty()
+            return
+
+        # B2 — a gated call INTO a memory tree is a docs consult: never deny,
+        # never spend budget, and credit it as an always-fresh docread so it
+        # refills the budget exactly like read_memory.
+        if is_memory_tree_consult(tool_name, tool_input):
+            append_event(stream_path, 'docread',
+                         name='memory-grep', s=session_id)
             output_empty()
             return
 

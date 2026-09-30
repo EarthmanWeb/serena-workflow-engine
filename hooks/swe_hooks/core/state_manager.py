@@ -435,6 +435,10 @@ class StateManager:
             if loop_block is not None:
                 return False, loop_block
 
+            claims_block = self._check_doc_claims_gate(new_state)
+            if claims_block is not None:
+                return False, claims_block
+
         oscillation_warning = None
         if not force:
             oscillation_warning = self._detect_oscillation_warning(old_state, new_state)
@@ -546,6 +550,49 @@ class StateManager:
         if not ok:
             return message
         return None
+
+    def _check_doc_claims_gate(self, new_state: str) -> Optional[str]:
+        """Refuse a WF_VERIFY / WF_DONE transition while '## Doc Claims Used'
+        rows are still pending.
+
+        Reads this session's WM file and parses the Doc Claims ledger via
+        core.doc_claims (rows: 'mem:<name> → <claim> → pending|confirmed|
+        corrected → <true value>'). Any row still 'pending' — or 'corrected'
+        with no recorded true value — blocks the transition: every doc claim
+        used during the task must be confirmed against code or corrected
+        (edit the source memory, recording the true value) before
+        verification/completion. Missing WM file or missing section = no
+        rows = pass (zero-cost when the ledger is unused). Same refusal
+        mechanism as the loop-cap guard — runs only in the validated branch
+        of transition_to, so --force overrides it.
+
+        Lazy import: doc_claims may be absent mid-development, in which case
+        the gate degrades to a no-op. A real parse error propagates (fail
+        fast).
+
+        Returns the refusal message, or None to allow the transition.
+        """
+        if new_state not in ("WF_VERIFY", "WF_DONE"):
+            return None
+        if not self.wm_filepath or not os.path.exists(self.wm_filepath):
+            return None
+        try:
+            from .doc_claims import blocking_claims
+        except ImportError:
+            return None
+        with open(self.wm_filepath, 'r') as f:
+            wm_content = f.read()
+        blocked = blocking_claims(wm_content)
+        if not blocked:
+            return None
+        rows = "; ".join(
+            f"mem:{row['name']} → {row['claim']} → {row['status']}"
+            for row in blocked)
+        return (
+            f"Doc Claims Used has {len(blocked)} blocking row(s): {rows}. "
+            "Confirm or correct each claim (edit the source memory; a "
+            "'corrected' row MUST record the true value) before VERIFY/DONE."
+        )
 
     def _detect_oscillation_warning(self, old_state: str, new_state: str) -> Optional[str]:
         """Best-effort oscillation warning for the transition about to happen.

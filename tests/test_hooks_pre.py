@@ -1464,3 +1464,236 @@ class TestMemoryIndexGateCategoryLinks(unittest.TestCase):
 
     def test_empty_input_passes(self):
         self.assertEqual(memidx_mod.written_category_links({}), [])
+
+
+class TestMemoryIndexGateDedupe(unittest.TestCase):
+    """B4 — new-memory dedupe: a write_memory CREATING a memory whose topic
+    an existing memory already covers is denied toward edit_memory. Edits/
+    overwrites of existing memories, WM_ files, and the literal
+    [new-memory-justified: <reason>] tag always pass."""
+
+    WRITE_TOOL = 'mcp__plugin_swe_serena__write_memory'
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.cwd = self.tmp.name
+        ref_dir = os.path.join(self.cwd, '.serena', 'memories', 'ref')
+        os.makedirs(ref_dir, exist_ok=True)
+        with open(os.path.join(ref_dir, 'REF_MEMORY_STYLE.md'), 'w') as f:
+            f.write('---\nname: REF_MEMORY_STYLE\n'
+                    'description: terse-imperative style standard\n---\n'
+                    'Style enforcement via swe_post_memory_style hook.\n')
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def _deny(self, name, content=''):
+        return memidx_mod.new_memory_dedupe_denial(
+            self.WRITE_TOOL, {'memory_name': name, 'content': content},
+            self.cwd)
+
+    # --- tokenization ------------------------------------------------------
+    def test_topic_tokens_strip_dir_and_type_prefix(self):
+        self.assertEqual(memidx_mod.memory_topic_tokens('ref/REF_MEMORY_STYLE'),
+                         {'memory', 'style'})
+
+    def test_topic_tokens_drop_short_tokens(self):
+        # wp (2) and api (3) are below the distinctive-token threshold.
+        self.assertEqual(memidx_mod.memory_topic_tokens('dom/DOM_WP_API'), set())
+
+    # --- deny paths --------------------------------------------------------
+    def test_new_on_topic_name_denied_via_basename(self):
+        msg = self._deny('ref/REF_STYLE_MEMORY')
+        self.assertIsNotNone(msg)
+        self.assertIn('ref/REF_MEMORY_STYLE', msg)
+        self.assertIn('edit_memory', msg)
+        self.assertIn('[new-memory-justified:', msg)
+
+    def test_new_on_topic_name_denied_via_body(self):
+        # 'enforcement' is not in the existing basename but IS in its body.
+        msg = self._deny('dom/DOM_STYLE_ENFORCEMENT')
+        self.assertIsNotNone(msg)
+        self.assertIn('ref/REF_MEMORY_STYLE', msg)
+
+    # --- allow paths -------------------------------------------------------
+    def test_unrelated_new_memory_allowed(self):
+        self.assertIsNone(self._deny('feature/FEATURE_PAYMENTS_GATEWAY'))
+
+    def test_override_tag_allows(self):
+        self.assertIsNone(self._deny(
+            'ref/REF_STYLE_MEMORY',
+            'body [new-memory-justified: splitting the style doc] body'))
+
+    def test_existing_memory_overwrite_allowed(self):
+        self.assertIsNone(self._deny('ref/REF_MEMORY_STYLE'))
+
+    def test_existing_memory_by_bare_basename_allowed(self):
+        self.assertIsNone(self._deny('REF_MEMORY_STYLE'))
+
+    def test_edit_memory_tool_not_gated(self):
+        self.assertIsNone(memidx_mod.new_memory_dedupe_denial(
+            'mcp__plugin_swe_serena__edit_memory',
+            {'memory_name': 'ref/REF_STYLE_MEMORY', 'repl': 'x'}, self.cwd))
+
+    def test_wm_session_file_exempt(self):
+        self.assertIsNone(self._deny('WM_deadbeef'))
+
+    def test_name_without_distinctive_tokens_allowed(self):
+        self.assertIsNone(self._deny('dom/DOM_WP_API'))
+
+    def test_memory_md_and_wm_files_never_count_as_hits(self):
+        mem = os.path.join(self.cwd, '.serena', 'memories')
+        with open(os.path.join(mem, 'MEMORY.md'), 'w') as f:
+            f.write('- [x](ref/REF_X.md) — alpha beta gateway payments\n')
+        with open(os.path.join(mem, 'WM_cafe1234.md'), 'w') as f:
+            f.write('alpha beta gateway payments\n')
+        self.assertIsNone(self._deny('feature/FEATURE_PAYMENTS_GATEWAY'))
+
+    # --- main() end-to-end -------------------------------------------------
+    def _run_main(self, tool_input):
+        import contextlib
+        import io
+        payload = {'tool_name': self.WRITE_TOOL, 'tool_input': tool_input,
+                   'cwd': self.cwd}
+        orig = memidx_mod.read_stdin_safe
+        memidx_mod.read_stdin_safe = lambda **kw: payload
+        buf = io.StringIO()
+        try:
+            with contextlib.redirect_stdout(buf):
+                with self.assertRaises(SystemExit):
+                    memidx_mod.main()
+        finally:
+            memidx_mod.read_stdin_safe = orig
+        return json.loads(buf.getvalue())
+
+    def test_main_denies_duplicate_creation(self):
+        result = self._run_main(
+            {'memory_name': 'ref/REF_STYLE_MEMORY', 'content': 'dup'})
+        out = result['hookSpecificOutput']
+        self.assertEqual(out['permissionDecision'], 'deny')
+        self.assertIn('on-topic memory already exists',
+                      out['permissionDecisionReason'])
+
+    def test_main_allows_unrelated_creation(self):
+        result = self._run_main(
+            {'memory_name': 'feature/FEATURE_PAYMENTS_GATEWAY',
+             'content': 'new area'})
+        self.assertEqual(result, {})
+
+
+class TestDocsGateMemoryGrepLegitimization(unittest.TestCase):
+    """B2 — a gated Grep/Glob/Bash-grep INTO a memory tree is a docs consult:
+    never denied, spends no budget, credited as an always-fresh 'docread'
+    (name='memory-grep') that refills the budget like read_memory."""
+
+    MAIN_PATH = ("/Users/x/.claude/projects/-Users-x-proj/"
+                 "94aee7ae-ebde-442b-a66c-2cac8ccdd262.jsonl")
+
+    # --- detection ---------------------------------------------------------
+    def test_memory_tree_targets_detected(self):
+        for tool, tool_input in (
+                ('Grep', {'path': '/proj/.serena/memories', 'pattern': 'redis'}),
+                ('Grep', {'path': '.serena/memory/dom', 'pattern': 'cache'}),
+                ('Glob', {'pattern': '.serena/memory/**/*.md'}),
+                ('Glob', {'pattern': 'memories/**/*.md'}),
+                ('mcp__plugin_swe_serena__search_for_pattern',
+                 {'relative_path': '.serena/memories/', 'substring_pattern': 'x'}),
+                ('Bash', {'command': 'grep -rn "redis" .serena/memories/'}),
+                ('Bash', {'command':
+                          'grep -n foo /x/plugin/memories/wf/WF_INIT.md'}),
+        ):
+            self.assertTrue(
+                search_docs_mod.is_memory_tree_consult(tool, tool_input),
+                (tool, tool_input))
+
+    def test_non_memory_targets_not_detected(self):
+        for tool, tool_input in (
+                ('Grep', {'path': '/proj/src', 'pattern': 'redis'}),
+                ('Grep', {'pattern': 'in-memory cache'}),
+                ('Bash', {'command': 'cat package.json'}),
+                ('Bash', {'command': 'grep -rn memory src/'}),
+                ('Bash', {}),
+        ):
+            self.assertFalse(
+                search_docs_mod.is_memory_tree_consult(tool, tool_input),
+                (tool, tool_input))
+
+    # --- budget semantics --------------------------------------------------
+    def test_memory_grep_is_always_fresh(self):
+        self.assertIn('memory-grep', search_docs_mod.ALWAYS_FRESH_NAMES)
+
+    def test_repeated_memory_grep_docreads_keep_refilling(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        stream = os.path.join(tmp.name, 'sess.jsonl')
+        events = ([{'type': 'docread', 'name': 'memory-grep'}]
+                  + [{'type': 'gated'}] * search_docs_mod.GATED_CALL_BUDGET
+                  + [{'type': 'docread', 'name': 'memory-grep'}])
+        with open(stream, 'w') as f:
+            for e in events:
+                f.write(json.dumps(e) + '\n')
+        self.assertTrue(search_docs_mod.docs_budget_allows(stream))
+
+    # --- main() end-to-end -------------------------------------------------
+    def _run_main(self, tool_name, tool_input, events):
+        import contextlib
+        import io
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        sentinel = os.path.join(tmp.name, '.init_94aee7ae')
+        stream = os.path.join(tmp.name, '94aee7ae.jsonl')
+        open(sentinel, 'w').close()
+        with open(stream, 'w') as f:
+            for e in events:
+                f.write(json.dumps(e) + '\n')
+        payload = {'tool_name': tool_name, 'tool_input': tool_input,
+                   'transcript_path': self.MAIN_PATH}
+        orig = (search_docs_mod.read_stdin_safe,
+                search_docs_mod.get_sentinel_path,
+                search_docs_mod.get_stream_path)
+        search_docs_mod.read_stdin_safe = lambda **kw: payload
+        search_docs_mod.get_sentinel_path = lambda sid: sentinel
+        search_docs_mod.get_stream_path = lambda sid: stream
+        buf = io.StringIO()
+        try:
+            with contextlib.redirect_stdout(buf):
+                with self.assertRaises(SystemExit):
+                    search_docs_mod.main()
+        finally:
+            (search_docs_mod.read_stdin_safe,
+             search_docs_mod.get_sentinel_path,
+             search_docs_mod.get_stream_path) = orig
+        return json.loads(buf.getvalue()), stream
+
+    def test_main_allows_memory_grep_with_budget_spent_and_refills(self):
+        # No docread in the stream: a plain gated call would deny — the
+        # memory-tree grep is allowed anyway AND credits a docread that
+        # refills the budget for subsequent source reads.
+        result, stream = self._run_main(
+            'Grep', {'path': '/proj/.serena/memories', 'pattern': 'redis'},
+            events=[{'type': 'prompt'}])
+        self.assertEqual(result, {})
+        with open(stream) as f:
+            lines = f.read()
+        self.assertIn('"memory-grep"', lines)
+        self.assertTrue(search_docs_mod.docs_budget_allows(stream))
+
+    def test_main_still_denies_plain_grep_when_budget_spent(self):
+        # Positive control: without the memory-tree target the same setup
+        # denies.
+        result, _stream = self._run_main(
+            'Grep', {'pattern': 'redis'}, events=[{'type': 'prompt'}])
+        self.assertEqual(
+            result['hookSpecificOutput']['permissionDecision'], 'deny')
+
+    def test_memory_grep_spends_no_budget(self):
+        # With budget available, a memory-tree Bash grep must not append a
+        # 'gated' (budget-spending) event.
+        result, stream = self._run_main(
+            'Bash', {'command': 'grep -rn "redis" .serena/memories/'},
+            events=[{'type': 'docread', 'name': 'feature/x'}])
+        self.assertEqual(result, {})
+        with open(stream) as f:
+            lines = f.read()
+        self.assertNotIn('"gated"', lines)
+        self.assertIn('"memory-grep"', lines)

@@ -629,6 +629,37 @@ RECOVERY_NOTICE = (
 )
 
 
+def count_all_events_since_last(stream_path: str, marker_type: str = 'continuation') -> int:
+    """Count events of EVERY type since the most recent marker_type event.
+
+    Same tail-read strategy as count_events_since_last. Used by the E1
+    continuation re-emission rule: a directive suppressed as a same-state
+    repeat is re-emitted once >=20 events have accumulated since it was last
+    shown, so a long stretch of tool calls cannot outlive the guidance.
+    """
+    if not os.path.exists(stream_path):
+        return 0
+    try:
+        file_size = os.path.getsize(stream_path)
+        with open(stream_path, 'r') as f:
+            if file_size > 10240:
+                f.seek(max(0, file_size - 10240))
+                f.readline()  # Skip partial first line
+            lines = f.readlines()
+        count = 0
+        for line in reversed(lines):
+            try:
+                event = json.loads(line.strip())
+            except (json.JSONDecodeError, ValueError):
+                continue
+            if event.get('type') == marker_type:
+                break
+            count += 1
+        return count
+    except IOError:
+        return 0
+
+
 def get_last_continuation(stream_path: str) -> str:
     """Return the `state` value of the most recent 'continuation' event, or
     '' if none exists yet. Used to suppress a repeated "CONTINUE (STATE): …"

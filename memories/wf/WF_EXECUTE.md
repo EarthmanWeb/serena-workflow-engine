@@ -18,15 +18,43 @@ metadata:
 - If you cannot verify, label the statement "unverified" or ask. NEVER assert unverified state as fact.
 - NEGATIVE findings need a POSITIVE CONTROL. Before stating "X is empty / missing / not registered / returns nothing", run one probe proving your method CAN detect X when present (e.g. the same query against a known-good key, an unescaped vs escaped match, a published vs draft page). A negative result from an unvalidated probe is "probe unverified", not "X is absent" — wrong option key, ACF-escaped slashes (`em\/page-hero`), and 404s on drafts have each produced false "it's missing" conclusions.
 
+## Memories Are Hypotheses
+
+- Memories are HYPOTHESES about the code, not ground truth. Verify every load-bearing claim (paths, URLs, class mappings, version numbers) against the code/environment before acting on it.
+- Doc drift: on ANY doc↔code conflict found, correct the memory in the same session — immediate edit, or add it to a WM doc-drift list flushed at WF_VERIFY. A memory that contradicts the code is a FINDING, never context to obey.
+
+## Doc Claims Ledger
+
+Track every actionable value taken from a memory in the WM section `## Doc Claims Used`.
+
+- Rule: when a memory supplies an actionable value (URL, domain, path, container name, command, version, class mapping), record ONE ledger row on FIRST use as `pending`. Update the row to `confirmed` when the action using it succeeds, or to `corrected → <true value>` after fixing the memory.
+- `WF_VERIFY` and `WF_DONE` are BLOCKED while any row is `pending`.
+
+Row format (exact, one per claim):
+
+```markdown
+- mem:<memory-name> → <claim-value> → pending
+- mem:<memory-name> → <claim-value> → confirmed
+- mem:<memory-name> → <claim-value> → corrected → <true value>
+```
+
+- The parser tolerates `->` as well as `→`.
+- Shared parser: `hooks/swe_hooks/core/doc_claims.py` — `parse_claims(wm_content: str) -> list[dict]` returns dicts `{"name","claim","status","true_value"}` (`true_value` is `None` unless corrected); `pending_claims(wm_content: str) -> list[dict]` returns the rows with status `"pending"`; `blocking_claims(wm_content: str) -> list[dict]` returns the VERIFY/DONE blocking set.
+- A `corrected` row MUST record the true value (`corrected → <true value>`). A `corrected` row without one BLOCKS WF_VERIFY/WF_DONE like a pending row. Mark a row `corrected` ONLY after the actual memory edit — writing the status without editing the source memory is a violation checked at WF_VERIFY.
+
+## Compliance Checklist at Entry
+
+At the START of WF_EXECUTE — INCLUDING `arch_review_skipped` routes — derive a SHORT `## Compliance Checklist` in WM from the loaded `DEV_*`/`DOM_*` rules scoped to the files being touched (≤10 items). If WF_ARCH_REVIEW already wrote one, verify it covers the touched files instead of re-deriving. Re-check the checklist before declaring done. Rules are applied at edit time, not just read at classify time.
+
 ## Feature Memory Verification
 
 Check WM for `Feature Key(s)`. For each key, verify `FEATURE_[KEY]` is read.
 
-| Condition                   | Action                    |
-| --------------------------- | ------------------------- |
-| All feature memories loaded | Continue below            |
-| Feature memories not loaded | Read them now (below)     |
-| WM has no Feature Key(s)    | Go to `WF_CLASSIFY`       |
+| Condition                   | Action                |
+| --------------------------- | --------------------- |
+| All feature memories loaded | Continue below        |
+| Feature memories not loaded | Read them now (below) |
+| WM has no Feature Key(s)    | Go to `WF_CLASSIFY`   |
 
 ```
 mcp__plugin_swe_serena__read_memory("index/INDEX_FEATURES")
@@ -40,7 +68,7 @@ Proceed only after all feature memories are loaded.
 
 - Verify WM exists and reflects the current task before starting work.
 - If WM is stale or missing, invoke `/swe-wm-update --from WF_EXECUTE`.
-- Update WM (via the skill): before starting significant work; after completing each subtask; when task state changes; before transitioning to another WF_* step.
+- Update WM (`swe_wm_update`) at state transitions and task completion ONLY. NO mid-state incremental updates — no per-subtask or per-edit WM writes.
 
 ## Before Starting Work
 
@@ -97,13 +125,13 @@ Do NOT guess parameter names. Correct signatures:
 
 ### `replace_content` — text/regex replacement (preferred for non-symbol edits: Markdown, config, prose)
 
-| Param | Required | Notes |
-| ----- | -------- | ----- |
-| `relative_path` | ✅ | Path to the file |
-| `needle` | ✅ | String OR regex to search for (NOT `pattern`) |
-| `repl` | ✅ | Replacement string (regex backrefs: `$!1`, `$!2`, …) |
-| `mode` | ✅ | `"literal"` or `"regex"` — REQUIRED, no default |
-| `allow_multiple_occurrences` | ❌ | Default `false`; set `true` to replace every match |
+| Param                        | Required | Notes                                                |
+| ---------------------------- | -------- | ---------------------------------------------------- |
+| `relative_path`              | ✅       | Path to the file                                     |
+| `needle`                     | ✅       | String OR regex to search for (NOT `pattern`)        |
+| `repl`                       | ✅       | Replacement string (regex backrefs: `$!1`, `$!2`, …) |
+| `mode`                       | ✅       | `"literal"` or `"regex"` — REQUIRED, no default      |
+| `allow_multiple_occurrences` | ❌       | Default `false`; set `true` to replace every match   |
 
 ```
 mcp__plugin_swe_serena__replace_content(
@@ -118,19 +146,19 @@ mcp__plugin_swe_serena__replace_content(
 
 ### `replace_symbol_body` — replace a whole symbol body (functions, classes, methods)
 
-| Param | Required | Notes |
-| ----- | -------- | ----- |
-| `name_path` | ✅ | Symbol path, e.g. `ClassName/method_name` |
-| `relative_path` | ✅ | File containing the symbol |
-| `body` | ✅ | New symbol body (verbatim, correctly indented) |
+| Param           | Required | Notes                                          |
+| --------------- | -------- | ---------------------------------------------- |
+| `name_path`     | ✅       | Symbol path, e.g. `ClassName/method_name`      |
+| `relative_path` | ✅       | File containing the symbol                     |
+| `body`          | ✅       | New symbol body (verbatim, correctly indented) |
 
 ### `insert_before_symbol` / `insert_after_symbol`
 
-| Param | Required | Notes |
-| ----- | -------- | ----- |
-| `name_path` | ✅ | Anchor symbol |
-| `relative_path` | ✅ | File |
-| `body` | ✅ | Content to insert |
+| Param           | Required | Notes             |
+| --------------- | -------- | ----------------- |
+| `name_path`     | ✅       | Anchor symbol     |
+| `relative_path` | ✅       | File              |
+| `body`          | ✅       | Content to insert |
 
 **Tool choice:** code symbols → `replace_symbol_body` / `insert_*`; Markdown/config/prose or sub-symbol text → `replace_content` (or `Edit`). Fall back to `Edit`/`Read` ONLY when symbols cannot be resolved (per `CLAUDE_OBLIGATIONS`).
 

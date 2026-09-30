@@ -383,5 +383,96 @@ class StateManagerPureMethodsTest(_StateManagerBase):
         self.assertFalse(sm.is_plan_mode())
 
 
+class DocClaimsGateTest(_StateManagerBase):
+    """C4 doc-claims transition gate: transition_to refuses WF_VERIFY /
+    WF_DONE while the WM '## Doc Claims Used' ledger has pending rows;
+    confirmed/corrected rows and an absent section pass; --force overrides.
+    Row parsing lives in core.doc_claims (shared parser module).
+    """
+
+    MATRIX = {
+        "WF_EXECUTE": ["WF_CHECKPOINT", "WF_VERIFY", "WF_DONE"],
+        "WF_VERIFY": ["WF_DONE", "WF_EXECUTE", "WF_CLASSIFY"],
+        "WF_DONE": ["WF_CLASSIFY"],
+    }
+
+    def setUp(self):
+        super().setUp()
+        # Seed a known matrix so the gate tests are independent of
+        # states.json edits; the doc-claims check runs after matrix
+        # validation in the same non-force branch.
+        mod._transition_matrix_cache = dict(self.MATRIX)
+
+    def _sm_with_claims(self, claims_block, current_state="WF_EXECUTE"):
+        """StateManager over a WM that carries the given Doc Claims section
+        body (None = no section at all)."""
+        body = _wm_markdown(current_state=current_state)
+        if claims_block is not None:
+            body += "\n## Doc Claims Used\n\n" + claims_block + "\n"
+        path = os.path.join(self.memories_dir, "WM_20260101_120000.md")
+        with open(path, "w") as f:
+            f.write(body)
+        return mod.StateManager(self.root)
+
+    def test_pending_row_blocks_wf_verify(self):
+        sm = self._sm_with_claims(
+            "- mem:ref/REF_API → timeout=30s → pending\n")
+        ok, msg = sm.transition_to("WF_VERIFY")
+        self.assertFalse(ok)
+        self.assertIn("Doc Claims Used has 1 blocking row(s)", msg)
+        self.assertIn("mem:ref/REF_API", msg)
+        self.assertIn("Confirm or correct each claim", msg)
+        # The FSM did not move.
+        self.assertEqual(sm.get_current_state(), "WF_EXECUTE")
+
+    def test_pending_row_blocks_wf_done(self):
+        # ASCII arrow variant: the parser tolerates '->' as well as '→'.
+        sm = self._sm_with_claims(
+            "- mem:ref/REF_API -> timeout=30s -> pending\n")
+        ok, msg = sm.transition_to("WF_DONE")
+        self.assertFalse(ok)
+        self.assertIn("blocking row(s)", msg)
+        self.assertEqual(sm.get_current_state(), "WF_EXECUTE")
+
+    def test_confirmed_and_corrected_rows_pass(self):
+        sm = self._sm_with_claims(
+            "- mem:ref/REF_API → timeout=30s → confirmed\n"
+            "- mem:dom/DOM_X → retries=3 → corrected → retries=5\n")
+        ok, msg = sm.transition_to("WF_VERIFY")
+        self.assertTrue(ok, msg)
+        self.assertEqual(sm.get_current_state(), "WF_VERIFY")
+
+    def test_corrected_without_true_value_blocks(self):
+        # A row claiming correction but recording no true value cannot be
+        # verified — it blocks like a pending row.
+        sm = self._sm_with_claims(
+            "- mem:ref/REF_API → timeout=30s → corrected\n")
+        ok, msg = sm.transition_to("WF_VERIFY")
+        self.assertFalse(ok)
+        self.assertIn("blocking row(s)", msg)
+        self.assertIn("MUST record the true value", msg)
+        self.assertEqual(sm.get_current_state(), "WF_EXECUTE")
+
+    def test_absent_section_passes(self):
+        # Missing section = no rows = pass (zero-cost when ledger unused).
+        sm = self._sm_with_claims(None)
+        ok, msg = sm.transition_to("WF_VERIFY")
+        self.assertTrue(ok, msg)
+
+    def test_pending_rows_do_not_block_other_targets(self):
+        # The gate fires only on WF_VERIFY / WF_DONE targets.
+        sm = self._sm_with_claims(
+            "- mem:ref/REF_API → timeout=30s → pending\n")
+        ok, msg = sm.transition_to("WF_CHECKPOINT")
+        self.assertTrue(ok, msg)
+
+    def test_force_overrides_pending_rows(self):
+        sm = self._sm_with_claims(
+            "- mem:ref/REF_API → timeout=30s → pending\n")
+        ok, msg = sm.transition_to("WF_DONE", force=True)
+        self.assertTrue(ok, msg)
+        self.assertEqual(sm.get_current_state(), "WF_DONE")
+
+
 if __name__ == "__main__":
     unittest.main()

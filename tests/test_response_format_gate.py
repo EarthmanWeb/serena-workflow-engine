@@ -2,14 +2,17 @@
 
 Targets:
   - stop/swe_stop_response_format : pure evaluate(), prose_words(),
-    is_genuine_user(), text_of(), the banned-pattern and detail-trigger regexes.
+    is_genuine_user(), text_of(), detail_requested() (literal DETAIL: prefix
+    AND natural-language triggers), strip_diagnosis_verification() (the G4
+    word-budget exemption), and the banned-pattern regexes.
   - core.config.get_response_format_config : CLAUDE_PLUGIN_OPTION_* env parsing,
     defaults, and malformed-value fallback.
 
 Stdlib unittest only; deterministic and fully offline. Most tested surfaces
-are pure functions fed explicit args; TestMainStopHookActive drives main()
-end-to-end against a real transcript file to cover the stop_hook_active
-never-block behavior main() itself is responsible for.
+are pure functions fed explicit args; the _MainHarness classes drive main()
+end-to-end against a real transcript file to cover behavior main() itself is
+responsible for: stop_hook_active never blocks, WF_DONE never blocks, and at
+most one block per user turn (second overage warns instead).
 """
 import io
 import json
@@ -136,17 +139,42 @@ class TestEndsWithQuestion(unittest.TestCase):
 # ---------------------------------------------------------------------------
 # regex constants
 # ---------------------------------------------------------------------------
-class TestDetailTrigger(unittest.TestCase):
+class TestDetailRequested(unittest.TestCase):
+    """detail_requested(): literal DETAIL: prefix OR natural-language asks.
+    The old literal-prefix-ONLY contract is gone by design (F1)."""
+
     def test_literal_detail_prefix_matches(self):
         for p in ("DETAIL: explain the flow", "detail - go deep", "  DETAIL:x"):
-            self.assertTrue(gate.DETAIL_TRIGGERS.search(p), p)
+            self.assertTrue(gate.detail_requested(p), p)
 
-    def test_natural_language_does_not_trigger(self):
-        for p in ("why does this happen", "explain in depth", "be thorough please"):
-            self.assertFalse(gate.DETAIL_TRIGGERS.search(p), p)
+    def test_each_natural_trigger_matches(self):
+        for p in (
+            "please review the hook changes",
+            "give me a report on the failures",
+            "explain the failure mode",
+            "run an analysis of the stream layer",
+            "a summary of the changes so far",
+            "provide me with a total review of token usage",  # the A/B failure
+            "walk me through the init flow",
+            "why does this happen",
+        ):
+            self.assertTrue(gate.detail_requested(p), p)
 
-    def test_detail_word_midsentence_does_not_trigger(self):
-        self.assertFalse(gate.DETAIL_TRIGGERS.search("give me the detail here"))
+    def test_unrelated_words_do_not_trigger(self):
+        for p in ("fix the login bug", "give me the detail here",
+                  "run the tests and commit", "be thorough please"):
+            self.assertFalse(gate.detail_requested(p), p)
+
+    def test_word_boundary_substrings_do_not_trigger(self):
+        # "preview" contains "review", "totally" contains "total",
+        # "reporting" contains "report" — none at a word boundary.
+        for p in ("preview the page", "totally broken build",
+                  "reporting is disabled", "the previewer crashed"):
+            self.assertFalse(gate.detail_requested(p), p)
+
+    def test_empty_text_does_not_trigger(self):
+        self.assertFalse(gate.detail_requested(""))
+        self.assertFalse(gate.detail_requested(None))
 
 
 class TestBannedPatterns(unittest.TestCase):
@@ -192,6 +220,27 @@ class TestEvaluate(unittest.TestCase):
         essay = " ".join(["word"] * 60)
         reason, _, _ = gate.evaluate([essay], "DETAIL: explain everything", 40, 600, False)
         self.assertIsNone(reason)  # 60 < 600
+
+    def test_each_natural_trigger_raises_budget(self):
+        essay = " ".join(["word"] * 60)
+        for prompt in (
+            "please review the hook changes",
+            "give me a report on the failures",
+            "explain the failure mode",
+            "run an analysis of the stream layer",
+            "a summary of the changes so far",
+            "provide me with a total review of token usage",
+            "walk me through the init flow",
+            "why does this happen",
+        ):
+            reason, _, _ = gate.evaluate([essay], prompt, 40, 600, False)
+            self.assertIsNone(reason, prompt)  # 60 < 600
+
+    def test_unrelated_prompt_keeps_terse_budget(self):
+        essay = " ".join(["word"] * 60)
+        for prompt in ("fix the login bug", "preview the page", "totally broken"):
+            reason, _, _ = gate.evaluate([essay], prompt, 40, 600, False)
+            self.assertIsNotNone(reason, prompt)
 
     def test_banned_pattern_blocks_even_when_terse(self):
         reason, _, _ = gate.evaluate(["## Summary\nall done"], "ok", 40, 600, False)
@@ -285,6 +334,63 @@ class TestEvaluate(unittest.TestCase):
                "lambda mu nu xi omicron")
         reason, _, _ = gate.evaluate([dup, dup, "Fixed."], "ok", 600, 600, True)
         self.assertIsNone(reason)
+
+
+# ---------------------------------------------------------------------------
+# G4 — the DIAGNOSIS VERIFICATION block is budget-exempt
+# ---------------------------------------------------------------------------
+class TestDiagnosisVerificationExemption(unittest.TestCase):
+    DIAG = (
+        "DIAGNOSIS VERIFICATION:\n"
+        "- MECHANISM: " + " ".join(["m"] * 30) + "\n"
+        "- TIMING: " + " ".join(["t"] * 30) + "\n"
+        "- COUNTERFACTUAL: " + " ".join(["c"] * 30) + "\n"
+        "candidate — unverified: timing\n"
+    )
+
+    def test_strip_removes_block_and_unverified_line(self):
+        text = "Root cause found.\n" + self.DIAG + "Fix applied."
+        stripped = gate.strip_diagnosis_verification(text)
+        self.assertNotIn("MECHANISM", stripped)
+        self.assertNotIn("TIMING", stripped)
+        self.assertNotIn("COUNTERFACTUAL", stripped)
+        self.assertNotIn("unverified", stripped)
+        self.assertIn("Root cause found.", stripped)
+        self.assertIn("Fix applied.", stripped)
+
+    def test_strip_ends_at_first_non_item_line(self):
+        # The block runs only through CONSECUTIVE item lines; a blank line
+        # ends it, and later lines survive.
+        text = "DIAGNOSIS VERIFICATION:\n- MECHANISM: x\n\nafter the block"
+        stripped = gate.strip_diagnosis_verification(text)
+        self.assertNotIn("MECHANISM", stripped)
+        self.assertIn("after the block", stripped)
+
+    def test_item_lines_without_header_are_kept(self):
+        text = "- MECHANISM: kept because no header precedes it"
+        self.assertEqual(gate.strip_diagnosis_verification(text), text)
+
+    def test_unverified_label_dropped_anywhere(self):
+        text = "before\ncandidate — unverified: mechanism\nafter"
+        self.assertEqual(gate.strip_diagnosis_verification(text), "before\nafter")
+
+    def test_empty_and_none_safe(self):
+        self.assertEqual(gate.strip_diagnosis_verification(""), "")
+        self.assertEqual(gate.strip_diagnosis_verification(None), "")
+
+    def test_reply_whose_only_overage_is_diagnosis_block_passes(self):
+        reply = "Root cause found.\n" + self.DIAG
+        # Sanity: unstripped, the reply is over the terse budget.
+        self.assertGreater(gate.prose_words(reply), 40)
+        reason, _, words = gate.evaluate([reply], "fix it", 40, 600, False)
+        self.assertIsNone(reason)
+        self.assertLess(words, 40)
+
+    def test_same_volume_as_plain_prose_still_blocks(self):
+        # Control: the same word volume OUTSIDE the diagnosis shape blocks.
+        prose = " ".join(["m"] * 90)
+        reason, _, _ = gate.evaluate([prose], "fix it", 40, 600, False)
+        self.assertIsNotNone(reason)
 
 
 # ---------------------------------------------------------------------------
@@ -384,28 +490,47 @@ class TestResponseFormatConfig(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# main() — stop_hook_active must never block (deadlock/ping-pong prevention)
+# main() end-to-end harness — real transcript file, patched config/state/IO
 # ---------------------------------------------------------------------------
-class TestMainStopHookActive(unittest.TestCase):
+def _stub_state_manager(state):
+    """A StateManager stand-in reporting a fixed workflow state."""
+    class _Stub:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def get_current_state(self):
+            return state
+    return _Stub
+
+
+class _MainHarness(unittest.TestCase):
+    """Shared fixture: drives gate.main() against a real transcript file with
+    config, setup state, stream dir, and workflow state all patched. The
+    transcript basename is 'session', so the session id is 'session'."""
+
+    TERSE_LIMIT = 5
+
     def setUp(self):
         reset_caches()
         self.tmp = tempfile.TemporaryDirectory()
         self.transcript_path = os.path.join(self.tmp.name, "session.jsonl")
+        self.streams = os.path.join(self.tmp.name, "streams")
+        os.makedirs(self.streams, exist_ok=True)
 
     def tearDown(self):
         self.tmp.cleanup()
         reset_caches()
 
-    def _write_transcript(self, assistant_text):
+    def _write_transcript(self, assistant_text, user_text="fix it"):
         lines = [
-            {"type": "user", "message": {"content": "fix it"}},
+            {"type": "user", "message": {"content": user_text}},
             {"type": "assistant", "message": {"content": assistant_text}},
         ]
         with open(self.transcript_path, "w") as f:
             for rec in lines:
                 f.write(json.dumps(rec) + "\n")
 
-    def _run_main(self, stop_hook_active):
+    def _run_main(self, stop_hook_active=False, state="WF_EXECUTE"):
         payload = {
             "transcript_path": self.transcript_path,
             "stop_hook_active": stop_hook_active,
@@ -416,14 +541,28 @@ class TestMainStopHookActive(unittest.TestCase):
              mock.patch.object(gate, "resolve_setup_state",
                                 return_value={"bypassed": False, "initialized": True}), \
              mock.patch.object(gate, "get_response_format_config",
-                                return_value={"enabled": True, "terse_limit": 5,
+                                return_value={"enabled": True,
+                                               "terse_limit": self.TERSE_LIMIT,
                                                "detail_limit": 600}), \
+             mock.patch.object(gate, "get_stream_dir", return_value=self.streams), \
+             mock.patch.object(gate, "StateManager", _stub_state_manager(state)), \
              redirect_stdout(buf):
             try:
                 gate.main()
             except SystemExit:
                 pass
         return buf.getvalue()
+
+    def _sentinel(self):
+        return os.path.join(self.streams, ".format-gate-block-session")
+
+    def _read_sentinel(self):
+        with open(self._sentinel(), encoding="utf-8") as f:
+            return json.load(f)
+
+
+class TestMainStopHookActive(_MainHarness):
+    """stop_hook_active must never block (deadlock/ping-pong prevention)."""
 
     def test_stop_hook_active_never_blocks_even_on_violation(self):
         # A response with a banned recap heading would normally block; with
@@ -436,6 +575,63 @@ class TestMainStopHookActive(unittest.TestCase):
         # Same content, but stop_hook_active=False (a fresh turn) -> blocks.
         self._write_transcript("## Summary\nAll done and verified.")
         out = self._run_main(stop_hook_active=False)
+        self.assertIn('"decision": "block"', out)
+
+
+class TestMainWfDone(_MainHarness):
+    """F3: WF_DONE (final deliverable turn) never blocks."""
+
+    def test_wf_done_never_blocks_even_on_violation(self):
+        self._write_transcript("## Summary\nAll done and verified.")
+        out = self._run_main(state="WF_DONE")
+        self.assertEqual(out.strip(), "")
+        self.assertFalse(os.path.exists(self._sentinel()))
+
+    def test_other_state_still_blocks(self):
+        self._write_transcript("## Summary\nAll done and verified.")
+        out = self._run_main(state="WF_VERIFY")
+        self.assertIn('"decision": "block"', out)
+
+
+class TestMainOneBlockPerTurn(_MainHarness):
+    """F2: at most one format block per user turn; second overage warns."""
+
+    ESSAY = " ".join(["word"] * 60)
+
+    def test_first_overage_blocks_and_records_turn(self):
+        self._write_transcript(self.ESSAY)
+        out = self._run_main()
+        self.assertIn('"decision": "block"', out)
+        rec = self._read_sentinel()
+        self.assertEqual(rec["count"], 1)
+        self.assertEqual(rec["fp"], gate.turn_fingerprint("fix it"))
+
+    def test_second_overage_same_turn_warns_not_blocks(self):
+        self._write_transcript(self.ESSAY)
+        self._run_main()               # first overage: block
+        out = self._run_main()         # same user turn: WARN attachment
+        self.assertNotIn('"decision": "block"', out)
+        self.assertIn("additionalContext", out)
+        self.assertIn("RESPONSE FORMAT WARN", out)
+        self.assertEqual(self._read_sentinel()["count"], 2)
+
+    def test_new_user_turn_blocks_again(self):
+        self._write_transcript(self.ESSAY)
+        self._run_main()
+        # A NEW genuine user message -> new fingerprint -> full block again.
+        self._write_transcript(self.ESSAY, user_text="now fix the parser")
+        out = self._run_main()
+        self.assertIn('"decision": "block"', out)
+        self.assertEqual(self._read_sentinel()["fp"],
+                         gate.turn_fingerprint("now fix the parser"))
+
+    def test_legacy_sentinel_content_blocks_again(self):
+        # A pre-F2 sentinel held the bare word 'blocked' — it cannot identify
+        # the turn, so it must not suppress a block (treated as no record).
+        with open(self._sentinel(), "w") as f:
+            f.write("blocked")
+        self._write_transcript(self.ESSAY)
+        out = self._run_main()
         self.assertIn('"decision": "block"', out)
 
 

@@ -30,6 +30,7 @@ try:
         get_stream_path, get_event_count, get_sentinel_path, append_event,
         append_task_boundary,
     )
+    from swe_hooks.core.output import emit_once, WF_INIT_GUIDANCE
 except ImportError as e:
     swe_hooks.bootstrap.import_error_exit(e, "UserPromptSubmit")
 
@@ -518,29 +519,24 @@ NO classification, NO WF_INIT chain, NO WF_CLASSIFY. Fast-tracked to WF_EXECUTE.
         # Analyze prompt intent
         prompt_intent = analyze_prompt(prompt, current_state)
         
-        # Handle WF_INIT state - always direct to WF_INIT workflow
+        # Handle WF_INIT state - always direct to WF_INIT workflow.
+        # E2: the full blocking block goes through emit_once — when the
+        # SessionStart banner (or an earlier WF_INIT prompt) already carried
+        # identical guidance this session, inject a ONE-LINE reminder instead
+        # of a duplicate block.
         if current_state == 'WF_INIT':
-            context = deploy_note_for(prompt) + f"""<workflow-gate state="WF_INIT" session="{session_id or 'unknown'}">
+            if emit_once(session_id, WF_INIT_GUIDANCE):
+                context = deploy_note_for(prompt) + f"""<workflow-gate state="WF_INIT" session="{session_id or 'unknown'}">
 <blocking-instruction priority="CRITICAL">
-STOP. Your next action MUST be a tool call. Not text. A tool call.
-
-If the tool is deferred, load its schema first (e.g. via ToolSearch when
-available), then call mcp__plugin_swe_serena__read_memory(...):
-
-  mcp__plugin_swe_serena__read_memory(memory_name="wf/WF_INIT")
-
-ALWAYS use the fully-qualified name mcp__plugin_swe_serena__read_memory — NEVER
-the bare read_memory.
-
-- Do NOT output any text before these tool calls
-- Do NOT explain what you're doing
-- Do NOT acknowledge the user's message first
-- Do NOT skip this because the user asked something specific
-- The user's request will be handled AFTER you read WF_INIT
-
-If your next output contains ANY text instead of a tool call, you have failed.
+{WF_INIT_GUIDANCE}
 </blocking-instruction>
 </workflow-gate>"""
+            else:
+                context = deploy_note_for(prompt) + (
+                    f"⛔ WF_INIT (session {session_id or 'unknown'}): next "
+                    "action is the tool call mcp__plugin_swe_serena__"
+                    'read_memory(memory_name="wf/WF_INIT") — full guidance '
+                    "already shown this session.")
             output = {
                 "hookSpecificOutput": {
                     "hookEventName": "UserPromptSubmit",

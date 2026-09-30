@@ -10,6 +10,12 @@ Responsibilities:
   4. Detect a Serena MCP connection failure and append 'mcp_unavailable' —
      the init gate's degraded-mode circuit breaker reads this to unlock
      read-only tools immediately, without waiting for 3 init-gate denials
+  5. Doc-claim reconciliation (C5): when a failed Bash/browser/WP-CLI-like
+     call used a concrete value the WM '## Doc Claims Used' ledger attributes
+     to a memory, instruct the model to correct the SOURCE memory before
+     retrying — never to retry with a guessed substitute. One attachment per
+     claim per session ('claim_flag' stream-event dedupe). The MODEL updates
+     the ledger row; this hook only instructs.
 """
 
 import os
@@ -23,6 +29,8 @@ try:
     from swe_hooks.core.output import output_empty, output_message
     from swe_hooks.core.session import extract_session_id
     from swe_hooks.core.stream import get_stream_path, append_event, get_stream_dir, is_degraded
+    from swe_hooks.core.doc_claims import (
+        find_wm_claims, claim_in_args, stream_has_event_key)
 except ImportError as e:
     swe_hooks.bootstrap.import_error_exit(e, "PostToolUseFailure")
 
@@ -198,6 +206,36 @@ def schema_correction(tool_name: str, tool_error: str) -> str:
     )
 
 
+# C5 — doc-claim reconciliation: tools whose args carry doc-sourced concrete
+# values (hosts, paths, ports, flags). Bash exactly, plus MCP tools shaped
+# like a browser or WP-CLI bridge (substring match on the tool name — dumb
+# by design, no per-server list to maintain).
+_CLAIM_BEARING_EXACT = frozenset(['Bash', 'WebFetch', 'WebSearch'])
+_CLAIM_BEARING_MARKERS = ('browser', 'playwright', 'puppeteer', 'chrome',
+                          'wp_cli', 'wp-cli', 'wpcli', 'wordpress')
+
+
+def is_claim_bearing_tool(tool_name: str) -> bool:
+    """True for Bash and browser/WP-CLI-like tools — the calls whose args
+    embed concrete values copied out of memories."""
+    name = str(tool_name)
+    if name in _CLAIM_BEARING_EXACT:
+        return True
+    lowered = name.lower()
+    return any(marker in lowered for marker in _CLAIM_BEARING_MARKERS)
+
+
+def claim_failure_message(claim: dict) -> str:
+    """The C5 reconciliation instruction for a ledger claim found in a
+    failed call's args."""
+    return (
+        "Failing value '{claim}' came from mem:{name}. Determine the true "
+        "value, correct the source memory, THEN retry. Do NOT retry with a "
+        "guessed substitute first.".format(
+            claim=claim['claim'], name=claim['name'])
+    )
+
+
 def count_consecutive_failures(stream_path: str, tool_name: str) -> int:
     """Count consecutive failure events for the same tool from the end of stream.
 
@@ -291,6 +329,27 @@ def main():
                 "PostToolUse"
             )
             return
+
+        # C5 — doc-claim reconciliation (after the flailing logic): the failed
+        # call's args contain a value the WM ledger attributes to a memory.
+        # Route the fix through the SOURCE memory, not through blind
+        # retry-with-a-guess. Dedupe: one attachment per claim per session via
+        # a 'claim_flag' stream event. The MODEL updates the ledger row status;
+        # the hook only instructs.
+        if is_claim_bearing_tool(tool_name):
+            cwd = get_input_field(input_data, 'cwd', default='') or os.getcwd()
+            claims = find_wm_claims(cwd, session_id)
+            if claims:
+                args_text = json.dumps(tool_input, default=str) if tool_input else ''
+                claim = claim_in_args(claims, args_text)
+                if claim:
+                    key = f"{claim['name']}::{claim['claim']}"
+                    if not stream_has_event_key(stream_path, 'claim_flag', key):
+                        append_event(stream_path, 'claim_flag',
+                                     k=key, s=session_id)
+                        output_message(claim_failure_message(claim),
+                                       "PostToolUse")
+                        return
 
         output_empty()
 

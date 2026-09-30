@@ -37,6 +37,7 @@ from swe_hooks.core.stream import (
     collect_values_since_task_start,
     collect_docpending_sources,
     normalize_memory_name,
+    is_valid_memory_name,
 )
 
 # ──────────────────────────────────────────────────────────────────
@@ -374,9 +375,9 @@ PRIMARY_FEATURE_RE = re.compile(
 NO_FEATURE_TOKEN = 'no-feature'
 
 # Workflow-machinery prefixes excluded from the 4d sweep (wf/WF_CLASSIFY
-# exclusion list). Init-chain memories are read BEFORE the task boundary
-# (the state event into WF_CLASSIFY), so their docreads can never verify —
-# ignore them in a Memories-loaded list instead of failing the write.
+# exclusion list). Init-chain memories are workflow plumbing, not feature
+# knowledge — they are no part of the sweep contract, so ignore them in a
+# Memories-loaded list instead of failing the write.
 MACHINERY_PREFIXES = ('wf/', 'claude/')
 
 
@@ -444,15 +445,55 @@ def _parse_primary_feature_memory(content: str):
     return 'feature/feature_' + key
 
 
+def _collect_session_docreads(stream_path: str) -> set:
+    """Collect every normalized 'docread' name from the WHOLE session stream.
+
+    D2 sweep idempotence: the docread ledger is session-wide — a memory read
+    in ANY earlier turn/task of this session satisfies a later sweep list, so
+    re-listing without re-reading passes. (Docpending accounting keeps its
+    narrower since-sweep window; this collector is for loaded-list
+    verification only.) Malformed/truncated names are dropped.
+    """
+    names = set()
+    if not os.path.exists(stream_path):
+        return names
+    try:
+        with open(stream_path, 'r') as f:
+            lines = f.readlines()
+    except IOError:
+        return names
+    for line in lines:
+        try:
+            event = json.loads(line.strip())
+        except (json.JSONDecodeError, ValueError):
+            continue
+        if event.get('type') != 'docread':
+            continue
+        value = event.get('name')
+        items = value if isinstance(value, list) else [value]
+        for v in items:
+            if not v:
+                continue
+            name = normalize_memory_name(str(v))
+            if is_valid_memory_name(name):
+                names.add(name)
+    return names
+
+
 def _check_memory_sweep(session_id: str, content: str) -> Optional[str]:
     """Validate an Affected Features write against the ACTUAL memory reads of
-    the current task (WF_CLASSIFY Step 4d Feature Knowledge Sweep).
+    this session (WF_CLASSIFY Step 4d Feature Knowledge Sweep).
 
     Contract:
       - The write must carry a '**Memories loaded**:' list (absent is allowed
         only once a sweep sentinel already exists for the session/task).
-      - Every listed name must have a matching 'docread' stream event SINCE
-        the current task started (reads from a prior task never count).
+      - Every listed name must have a matching 'docread' stream event
+        ANYWHERE in this session's stream — a read in any earlier turn/task
+        of the session satisfies the list. The WM 'Memories loaded' line is
+        the dedupe ledger: re-listing without re-reading passes; only a name
+        never read this session fails. The sweep sentinel stays per-task
+        (cleared on WF_CLASSIFY entry), so each task still requires a fresh
+        Affected Features WRITE — just not re-reads.
       - The list must include at least one 'feature/*' memory, or the content
         must carry the literal token 'no-feature' (both WF_CLASSIFY 4b fuzzy
         searches returned nothing).
@@ -498,14 +539,18 @@ def _check_memory_sweep(session_id: str, content: str) -> Optional[str]:
             "searches (4b) returned nothing — state 'no-feature' in the section."
         )
 
-    read_names = collect_values_since_task_start(get_stream_path(session_id))
+    # D2 sweep idempotence: the docread ledger is the WHOLE session stream —
+    # a read in ANY earlier turn/task satisfies the list. The per-task cost
+    # is the fresh Affected Features WRITE (sentinel cleared on WF_CLASSIFY
+    # entry), never re-reading.
+    read_names = _collect_session_docreads(get_stream_path(session_id))
     unread = sorted(listed - read_names)
     if unread:
         return (
-            "Sweep verification FAILED — listed but not actually read this "
-            f"task: {', '.join(unread)}. read_memory each of them, then re-run "
-            "this update. Reads from a previous task in this session do not "
-            "count; the sweep is per-task."
+            "Sweep verification FAILED — listed but never read this "
+            f"session: {', '.join(unread)}. read_memory each of them, then "
+            "re-run this update. Prior-turn reads count; do not re-read "
+            "memories already read earlier this session."
         )
 
     # Docpending enforcement: every related link surfaced by this task's reads

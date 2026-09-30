@@ -120,11 +120,17 @@ If automated tests exist, run them.
 
 If no automated tests exist for this feature, note in WM that automated verification was not possible and flag for user attention before proceeding.
 
-## 5. Fix Violations
+## 5. Memory & Doc-Claims Verification
+
+- List memories consulted this task. For each, state: confirmed against code / corrected / not exercised.
+- Verify ZERO `pending` rows remain in WM `## Doc Claims Used` (parser: `hooks/swe_hooks/core/doc_claims.py`). A row showing a discovered true value with NO memory correction this session is a BLOCKER.
+- Flush the WM doc-drift list: correct EACH drifted memory before `WF_DONE`.
+
+## 6. Fix Violations
 
 Fix all found violations before proceeding.
 
-## 6. Update WM
+## 7. Update WM
 
 Invoke `/swe-wm-update --from WF_VERIFY` — provides the complete checklist and template; handles reading, validating, and writing WM.
 
@@ -150,13 +156,14 @@ When a fix exceeds the scope of a minor correction, re-classify rather than sile
 
 ## Routing
 
-| Condition | Next Step |
-| --------- | --------- |
-| Minor violation — fixable in place (≤5 files, existing functionality) | Fix in WF_VERIFY (no transition) |
-| Fix grew large (>5 files / new module / 3+ layers) — needs re-planning | `WF_CLASSIFY` (re-runs Step 3b) |
-| Larger fix, still plain implementation (no new design) | `WF_EXECUTE` |
-| Tests missing AND no automated verification possible | `WF_EXECUTE` |
-| WM not updated | Invoke `/swe-wm-update --from WF_VERIFY` |
-| All clean, tests pass, WM updated | `WF_DONE` |
+| Condition                                                              | Next Step                                                                            |
+| ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| Minor violation — fixable in place (≤5 files, existing functionality)  | Fix in WF_VERIFY (no transition)                                                     |
+| Fix grew large (>5 files / new module / 3+ layers) — needs re-planning | `WF_CLASSIFY` (re-runs Step 3b)                                                      |
+| Larger fix, still plain implementation (no new design)                 | `WF_EXECUTE`                                                                         |
+| Tests missing AND no automated verification possible                   | `WF_EXECUTE`                                                                         |
+| `pending` rows in `## Doc Claims Used`, or doc-drift list unflushed    | Resolve here — confirm/correct each claim, fix each drifted memory. BLOCKS `WF_DONE` |
+| WM not updated                                                         | Invoke `/swe-wm-update --from WF_VERIFY`                                             |
+| All clean, tests pass, zero pending doc claims, WM updated             | `WF_DONE`                                                                            |
 
 Update WM via `/swe-wm-update` before transitioning.

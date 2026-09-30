@@ -14,6 +14,15 @@ and denies it, state-independently.
 Matches: write_memory / edit_memory (Serena, both server prefixes) + Edit/Write.
 Fires ONLY when the target is the MEMORY index AND the written content
 introduces a link into a non-indexed category. Everything else passes silently.
+
+SECOND DUTY (B4) — new-memory dedupe: a write_memory that CREATES a memory
+(name not on disk under .serena/memory/**, .serena/memories/** or memories/**)
+is denied when an existing memory already covers its topic — the dumb check:
+every distinctive (>= 4 char) token of the new name (dir + REF_/SPEC_/DOM_/
+FEATURE_/SYS_ prefixes stripped) appears in one existing memory's basename or
+body. The remedy is edit_memory on the hit, not a near-duplicate file; the
+literal tag [new-memory-justified: <reason>] in the content overrides. Edits/
+overwrites of EXISTING memories and WM_ session files always pass.
 """
 
 import os
@@ -47,6 +56,133 @@ _CATEGORY_FILE_LINK = re.compile(
 #   write_memory: content · edit_memory: repl · Edit: new_string · Write: content
 CONTENT_FIELDS = ("content", "repl", "new_string")
 
+# ---------------------------------------------------------------------------
+# B4 — new-memory dedupe
+# ---------------------------------------------------------------------------
+# Memory trees scanned for existing memories, relative to the session cwd.
+MEMORY_DIR_NAMES = (".serena/memory", ".serena/memories", "memories")
+
+# Type prefixes stripped off a basename before topic tokenization.
+MEMORY_TYPE_PREFIXES = ("REF_", "SPEC_", "DOM_", "FEATURE_", "SYS_")
+
+# Literal override tag: a deliberate, justified new memory passes the gate.
+NEW_MEMORY_OVERRIDE_RE = re.compile(r"\[new-memory-justified:\s*[^\]]+\]")
+
+# A topic token must be at least this long to count as distinctive.
+_DISTINCTIVE_TOKEN_LEN = 4
+
+# Body-scan cap per existing memory (bytes) — the scan stays cheap.
+_BODY_SCAN_CAP = 65536
+
+_TOKEN_SPLIT_RE = re.compile(r"[^A-Za-z0-9]+")
+
+
+def _strip_type_prefix(basename):
+    """Strip one leading REF_/SPEC_/DOM_/FEATURE_/SYS_ type prefix."""
+    for prefix in MEMORY_TYPE_PREFIXES:
+        if basename.upper().startswith(prefix):
+            return basename[len(prefix):]
+    return basename
+
+
+def memory_topic_tokens(memory_name):
+    """Distinctive topic tokens of a memory name: basename only (dir prefix
+    dropped), type prefix stripped, split on non-alphanumerics, lowercase,
+    tokens shorter than 4 chars discarded."""
+    base = str(memory_name).replace("\\", "/").rstrip("/").rsplit("/", 1)[-1]
+    if base.endswith(".md"):
+        base = base[:-3]
+    base = _strip_type_prefix(base)
+    return {t for t in _TOKEN_SPLIT_RE.split(base.lower())
+            if len(t) >= _DISTINCTIVE_TOKEN_LEN}
+
+
+def _existing_memory_files(cwd):
+    """Yield (tree_root, file_path) for every .md under the memory trees."""
+    for rel_dir in MEMORY_DIR_NAMES:
+        root = os.path.join(cwd, rel_dir)
+        if not os.path.isdir(root):
+            continue
+        for dirpath, _dirnames, filenames in os.walk(root):
+            for fname in filenames:
+                if fname.endswith(".md"):
+                    yield root, os.path.join(dirpath, fname)
+
+
+def memory_exists(cwd, memory_name):
+    """True when memory_name already exists on disk in any memory tree —
+    by its exact relative path or by basename anywhere in a tree."""
+    name = str(memory_name).replace("\\", "/").strip().strip("/")
+    if name.endswith(".md"):
+        name = name[:-3]
+    target_base = name.rsplit("/", 1)[-1] + ".md"
+    for root, path in _existing_memory_files(cwd):
+        rel = os.path.relpath(path, root).replace(os.sep, "/")
+        if rel == name + ".md" or os.path.basename(path) == target_base:
+            return True
+    return False
+
+
+def find_on_topic_memories(cwd, tokens, limit=5):
+    """Existing memories that cover EVERY token — in their basename tokens or
+    (cheap python scan, capped) their body. Returns tree-relative names
+    without '.md'. MEMORY.md and WM_ session files never count as hits."""
+    hits = []
+    for root, path in _existing_memory_files(cwd):
+        base = os.path.basename(path)
+        if base == "MEMORY.md" or base.startswith("WM_"):
+            continue
+        base_tokens = memory_topic_tokens(base)
+        uncovered = [t for t in tokens if t not in base_tokens]
+        if uncovered:
+            try:
+                with open(path, "r", errors="replace") as f:
+                    body = f.read(_BODY_SCAN_CAP).lower()
+            except OSError:
+                continue
+            if any(t not in body for t in uncovered):
+                continue
+        rel = os.path.relpath(path, root).replace(os.sep, "/")
+        hits.append(rel[:-3] if rel.endswith(".md") else rel)
+        if len(hits) >= limit:
+            break
+    return hits
+
+
+def new_memory_dedupe_denial(tool_name, tool_input, cwd):
+    """B4 verdict: the deny message, or None to allow.
+
+    Applies ONLY to write_memory calls that would CREATE a new memory.
+    Edits/overwrites of existing memories, WM_ session files, and content
+    carrying the [new-memory-justified: <reason>] override always pass.
+    """
+    if not str(tool_name).endswith("write_memory"):
+        return None
+    tool_input = tool_input or {}
+    name = str(tool_input.get("memory_name", "")).strip()
+    if not name:
+        return None
+    if name.replace("\\", "/").rsplit("/", 1)[-1].startswith("WM_"):
+        return None  # session working memory, not a knowledge memory
+    if NEW_MEMORY_OVERRIDE_RE.search(str(tool_input.get("content", ""))):
+        return None
+    if not cwd or not os.path.isdir(cwd):
+        return None
+    if memory_exists(cwd, name):
+        return None  # updating an existing memory always passes
+    tokens = memory_topic_tokens(name)
+    if not tokens:
+        return None
+    hits = find_on_topic_memories(cwd, tokens)
+    if not hits:
+        return None
+    return (
+        "🛑 BLOCKED: An on-topic memory already exists: {hits}. "
+        "Update it (edit_memory {first}) instead of creating a duplicate. "
+        "Override only with literal tag [new-memory-justified: <reason>] "
+        "in the content.".format(hits=", ".join(hits), first=hits[0])
+    )
+
 
 def targets_memory_index(tool_input):
     """True when the call writes the MEMORY.md index (by memory name or path)."""
@@ -76,9 +212,19 @@ def written_category_links(tool_input):
 def main():
     try:
         input_data = read_stdin_safe(timeout_seconds=2.0)
+        tool_name = str(input_data.get("tool_name", ""))
         tool_input = input_data.get("tool_input", {}) or {}
 
         if not targets_memory_index(tool_input):
+            # B4 — new-memory dedupe: deny a write_memory creating a memory
+            # whose topic an existing memory already covers.
+            cwd = str(input_data.get("cwd", "") or "") or os.getcwd()
+            denial = new_memory_dedupe_denial(tool_name, tool_input, cwd)
+            if denial:
+                output = HookOutput(event_name="PreToolUse")
+                output.block(denial)
+                output.output_and_exit()
+                return
             output_empty()
             return
 

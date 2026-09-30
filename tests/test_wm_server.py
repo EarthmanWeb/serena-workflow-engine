@@ -915,3 +915,51 @@ class TestErrorHeadlineEndToEnd(_FSBase):
         self.assertTrue(headline.endswith("…"))
         self.assertLessEqual(len(headline), 121)
         self.assertIn("No session_id", body["error"])
+
+
+# ──────────────────────────────────────────────────────────────────
+# D2 sweep idempotence — session-wide docread ledger through the real tool
+# ──────────────────────────────────────────────────────────────────
+
+class TestSweepSessionWindowWiring(_FSBase):
+    """D2: the loaded-list verification window is the WHOLE session stream.
+    A reclassify after WF_DONE stamps a new task boundary, but prior-turn
+    docreads still satisfy the follow-up task's Affected Features write —
+    zero re-reads required. (Docpending accounting keeps its since-sweep
+    window; only the loaded-list ledger is session-wide.)
+    """
+
+    WM_BODY = (
+        "# WM\n\n## Current Task\n\n**[IN_PROGRESS]**: x\n\n"
+        "## Affected Features\n\n(tbd)\n\n## Previous Task\n\n-\n"
+    )
+
+    def test_prior_task_reads_satisfy_follow_up_sweep(self):
+        self._write_wm(self.WM_BODY)
+        path = wm.get_stream_path(self.SID)
+        wm.append_event(path, "session_start", s=self.SID)
+        wm.append_event(path, "docread", name="feature/FEATURE_X")
+        # Reclassify after WF_DONE: new task boundary, ZERO re-reads after.
+        wm.append_event(path, "state", from_s="WF_DONE", to_s="WF_CLASSIFY",
+                        s=self.SID)
+        result = wm.tool_swe_wm_update_section(
+            "Affected Features",
+            "- **Memories loaded**: feature/FEATURE_X",
+            session_id=self.SID)
+        self.assertTrue(result.get("success"), result)
+        self.assertTrue(os.path.exists(
+            wm.get_feature_sentinel_path(self.SID, "sweep")))
+
+    def test_never_read_name_still_rejected_with_session_wording(self):
+        self._write_wm(self.WM_BODY)
+        path = wm.get_stream_path(self.SID)
+        wm.append_event(path, "session_start", s=self.SID)
+        wm.append_event(path, "docread", name="feature/FEATURE_X")
+        result = wm.tool_swe_wm_update_section(
+            "Affected Features",
+            "- **Memories loaded**: feature/FEATURE_X, dom/DOM_NEVER_READ",
+            session_id=self.SID)
+        self.assertIn("error", result)
+        self.assertIn("never read this session", result["error"])
+        self.assertIn("Prior-turn reads count; do not re-read",
+                      result["error"])
