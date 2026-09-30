@@ -1,7 +1,9 @@
 """Tests for orchestrator + swarm delegation enforcement:
 
   - pre/swe_pre_agent_model_gate: missing_model_reason, missing_bypass_marker_reason,
-    opus_on_routine_reason (allow/deny paths for the Agent/Task model-tier gate)
+    opus_on_routine_reason, fable_without_justification_reason,
+    foreground_without_justification_reason (allow/deny paths for the
+    Agent/Task model-tier + foreground-blocking gate)
   - core/stream: count_task_work_since_delegation (drift counter + reset)
   - post/swe_post_orchestrator_drift: main() end-to-end via stdin, threshold nudge
 
@@ -219,6 +221,49 @@ class TestFableWithoutJustificationReason(unittest.TestCase):
 
 
 # ──────────────────────────────────────────────────────────────────
+# pre/swe_pre_agent_model_gate — foreground_without_justification_reason
+# ──────────────────────────────────────────────────────────────────
+
+class TestForegroundWithoutJustificationReason(unittest.TestCase):
+    def test_run_in_background_true_allows(self):
+        reason = agent_gate.foreground_without_justification_reason(
+            {"run_in_background": True, "prompt": "Do X."})
+        self.assertEqual(reason, "")
+
+    def test_run_in_background_false_denies(self):
+        reason = agent_gate.foreground_without_justification_reason(
+            {"run_in_background": False, "prompt": "Do X."})
+        self.assertTrue(reason)
+        self.assertIn("FOREGROUND", reason)
+
+    def test_run_in_background_missing_denies(self):
+        reason = agent_gate.foreground_without_justification_reason(
+            {"prompt": "Do X."})
+        self.assertTrue(reason)
+
+    def test_false_plus_valid_justification_tag_allows(self):
+        reason = agent_gate.foreground_without_justification_reason({
+            "run_in_background": False,
+            "prompt": "Do X. [foreground-justified: nothing else to do "
+                      "until this returns]",
+        })
+        self.assertEqual(reason, "")
+
+    def test_empty_reason_tag_still_denies(self):
+        reason = agent_gate.foreground_without_justification_reason({
+            "run_in_background": False,
+            "prompt": "Do X. [foreground-justified: ]",
+        })
+        self.assertTrue(reason)
+
+    def test_no_subagent_type_exempt(self):
+        # Unlike missing_model_reason, no subagent_type is exempt here.
+        reason = agent_gate.foreground_without_justification_reason(
+            {"subagent_type": "claude-code-guide", "prompt": "Do X."})
+        self.assertTrue(reason)
+
+
+# ──────────────────────────────────────────────────────────────────
 # pre/swe_pre_agent_model_gate — main() end-to-end via stdin
 # ──────────────────────────────────────────────────────────────────
 
@@ -257,6 +302,7 @@ class TestAgentModelGateMain(unittest.TestCase):
                 "subagent_type": "general-purpose",
                 "model": "sonnet",
                 "prompt": "You are a subagent. BYPASS WF_INIT. Implement X.",
+                "run_in_background": True,
             },
         })
         self.assertEqual(result, {})
@@ -289,6 +335,34 @@ class TestAgentModelGateMain(unittest.TestCase):
                 "model": "fable",
                 "prompt": "You are a subagent. BYPASS WF_INIT. Implement X. "
                           "[fable-justified: needs premium reasoning]",
+                "run_in_background": True,
+            },
+        })
+        self.assertEqual(result, {})
+
+    def test_foreground_call_denied_without_justification(self):
+        result = self._run_main({
+            "tool_name": "Agent",
+            "tool_input": {
+                "subagent_type": "general-purpose",
+                "model": "sonnet",
+                "prompt": "You are a subagent. BYPASS WF_INIT. Implement X.",
+                "run_in_background": False,
+            },
+        })
+        self.assertEqual(
+            result.get("hookSpecificOutput", {}).get("permissionDecision"), "deny")
+
+    def test_foreground_call_allowed_with_justification(self):
+        result = self._run_main({
+            "tool_name": "Agent",
+            "tool_input": {
+                "subagent_type": "general-purpose",
+                "model": "sonnet",
+                "prompt": "You are a subagent. BYPASS WF_INIT. Implement X. "
+                          "[foreground-justified: nothing else to do until "
+                          "this returns]",
+                "run_in_background": False,
             },
         })
         self.assertEqual(result, {})

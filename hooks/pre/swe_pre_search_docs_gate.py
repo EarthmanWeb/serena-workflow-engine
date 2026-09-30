@@ -49,7 +49,12 @@ Undocumented code areas: when no reasonable feature memories exist for the
 area under research, the deny message routes the agent to delegate indexing
 to a FOREGROUND Agent running /swe-feature-onboard (or /swe-feature-update
 for stale docs), wait for it, then read the memories it wrote — continued
-manual grepping is explicitly NOT the remedy.
+manual grepping is explicitly NOT the remedy. This gate legitimately must
+wait on that onboarding agent before proceeding, so the instructed call
+passes `run_in_background: false` plus the literal tag
+`[foreground-justified: docs gate requires onboarding before search]` in the
+prompt — this satisfies swe_pre_agent_model_gate's foreground-justification
+check instead of tripping it.
 
 Exemptions (fail-open by design):
   - Spawned agent (Agent/Task tool) → bypasses the workflow, must not be
@@ -384,13 +389,16 @@ def build_deny_message(tool_name: str, pending: set = None) -> str:
         "return nothing relevant)? Do NOT continue grepping manually. FIRST "
         "STEP: delegate indexing to a FOREGROUND agent —\n"
         "  Agent(prompt=\"You are a subagent. BYPASS WF_INIT. Run the "
-        "/swe-feature-onboard skill for <area>\", description=\"Onboard "
-        "<area> feature\")\n"
+        "/swe-feature-onboard skill for <area>. [foreground-justified: docs "
+        "gate requires onboarding before search]\", description=\"Onboard "
+        "<area> feature\", run_in_background=False)\n"
         "(use /swe-feature-update instead when the feature exists but its "
-        "docs are stale/incomplete). Do NOT set run_in_background — WAIT for "
-        "the agent to complete, THEN read the FEATURE_/ARCH_/DOM_/REF_ "
-        "memories it wrote. Those fresh reads clear this gate, and the new "
-        "docs — not manual grepping — are what your work continues from.\n\n"
+        "docs are stale/incomplete). Pass `run_in_background: false` plus the "
+        "literal `[foreground-justified: docs gate requires onboarding "
+        "before search]` tag in the prompt — WAIT for the agent to complete, "
+        "THEN read the FEATURE_/ARCH_/DOM_/REF_ memories it wrote. Those "
+        "fresh reads clear this gate, and the new docs — not manual "
+        "grepping — are what your work continues from.\n\n"
         "⚠️ Refilling the budget is NOT completed research. Reverse-engineering "
         "source before the feature + standards docs are read is the violation — "
         "not just a spent budget. On a documented subsystem, complete the "

@@ -6,7 +6,7 @@ a spawned agent must (1) name an explicit model, (2) carry the subagent bypass
 marker in its prompt so it does not re-run the init chain, and (3) not
 over-provision opus for routine mechanical work.
 
-Four independent DENY checks, each with its own message:
+Five independent DENY checks, each with its own message:
 
 1. Missing `model` — every Agent/Task call must pick a tier explicitly
    (haiku/sonnet/opus). Skipped only for a `subagent_type` that is a built-in,
@@ -29,6 +29,14 @@ Four independent DENY checks, each with its own message:
    premium subagent defeats the entire point of delegation (moving work off
    the premium tier). Denied unconditionally unless the prompt carries
    `[fable-justified: <reason>]` or `[premium-justified: <reason>]`.
+5. Foreground subagent without justification — a spawned Agent/Task call
+   that blocks the orchestrator (no `run_in_background: true`) defeats the
+   entire point of parallel delegation: the orchestrator sits idle waiting on
+   one subagent instead of fanning out independent work. Denied unless
+   `run_in_background is True`, OR the prompt carries the literal tag
+   `[foreground-justified: <reason>]` for the rare case where the
+   orchestrator genuinely has nothing else to do until the result returns.
+   No `subagent_type` is exempt.
 
 Model-tiering goal: this project's harness must HEAVILY enforce cutting token
 usage via parallel + cheaper subagents. Premium models (opus, fable) are never
@@ -75,6 +83,12 @@ OPUS_JUSTIFIED_RE = re.compile(
 # [fable-justified: …] tag, or the generic [premium-justified: …] tag.
 FABLE_JUSTIFIED_RE = re.compile(
     r'\[(?:fable|premium)-justified\s*:\s*[^\]]+\]', re.IGNORECASE)
+
+# Accepted justification tag for a foreground (blocking) subagent call: the
+# rare case where the orchestrator genuinely has nothing else to do until the
+# result returns. Requires a non-empty reason (mirrors the other tags' shape).
+FOREGROUND_JUSTIFIED_RE = re.compile(
+    r'\[foreground-justified\s*:\s*[^\]\s][^\]]*\]', re.IGNORECASE)
 
 # PREMIUM model family — substring match against the lowercased `model` param.
 # Covers short aliases ("opus", "fable") and full model ids
@@ -187,6 +201,37 @@ def fable_without_justification_reason(model: str, prompt: str) -> str:
     )
 
 
+def foreground_without_justification_reason(tool_input: dict) -> str:
+    """Non-empty reason string when an Agent/Task call blocks the orchestrator
+    (no `run_in_background: true`) without an explicit justification tag.
+
+    Foreground subagents make the orchestrator wait on one result instead of
+    fanning out independent work in parallel — the entire point of
+    delegation. Denied unless `run_in_background is True`, or the prompt
+    carries the literal `[foreground-justified: <reason>]` tag for the rare
+    case where the orchestrator genuinely has nothing else to do until the
+    result returns. No subagent_type is exempt.
+    """
+    if tool_input.get('run_in_background') is True:
+        return ''
+    prompt = str(tool_input.get('prompt') or '')
+    if FOREGROUND_JUSTIFIED_RE.search(prompt):
+        return ''
+    return (
+        "⏸️ FOREGROUND subagent call — blocks the orchestrator "
+        "and defeats parallel delegation.\n\n"
+        "A foreground Agent/Task call makes the orchestrator sit idle "
+        "waiting for this one result instead of fanning out independent "
+        "work in the same turn — the entire point of delegating to "
+        "subagents.\n\n"
+        "Relaunch with `run_in_background: true` (and launch every "
+        "independent track in ONE message so they run concurrently), OR — "
+        "only when the orchestrator genuinely has nothing else to do until "
+        "this result returns — add the literal tag "
+        "`[foreground-justified: <reason>]` to the prompt and re-call."
+    )
+
+
 def main():
     try:
         input_data = read_stdin_safe(timeout_seconds=2.0)
@@ -216,6 +261,11 @@ def main():
             return
 
         reason = fable_without_justification_reason(model, prompt)
+        if reason:
+            output_block(reason)
+            return
+
+        reason = foreground_without_justification_reason(tool_input)
         if reason:
             output_block(reason)
             return

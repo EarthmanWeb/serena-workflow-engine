@@ -1195,6 +1195,9 @@ class TestSearchDocsGateBudget(unittest.TestCase):
         self.assertIn('run_in_background', msg)
         # the agent-tool delegation itself
         self.assertIn('Agent', msg)
+        # satisfies swe_pre_agent_model_gate's foreground-justification check
+        # instead of tripping it
+        self.assertIn('[foreground-justified:', msg)
 
 
 class TestSearchDocsGateSweepBonus(unittest.TestCase):
