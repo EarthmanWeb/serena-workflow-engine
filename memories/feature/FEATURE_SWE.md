@@ -332,7 +332,7 @@ SessionStart detects no `swe-setup-complete.json` and prompts (does NOT block):
    - Run bootstrap (if not already done).
    - Verify MCP servers (Serena, swe-wm).
    - Serena onboarding (+ migrate default memories into SWE templates).
-   - Relocate & link the `memory_maintenance` memory into `ref/REF_MEMORY_MAINTENANCE`.
+   - Relocate & link the `memory_maintenance` memory into `ref/REF_MEMORY_MAINTENANCE` (sourced from the EarthmanWeb/serena fork — NEVER upstream oraios/serena or the uv cache).
    - Verify and install language servers.
    - Verify SWE plugin is enabled.
    - Review CLAUDE.md for conflicts.

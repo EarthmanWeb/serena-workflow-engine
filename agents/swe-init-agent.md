@@ -303,14 +303,17 @@ Never overwrite an existing copy: if `.serena/memory/ref/REF_MEMORY_MAINTENANCE.
 
 **Step 1: Obtain the memory-maintenance content.**
 
-Prefer the shipped Serena resource so the copy is deterministic. Fall back to whatever Serena seeded during onboarding (Task 5) if the resource path is not resolvable:
+Prefer the resource shipped in the **SWE Serena fork** (`github.com/EarthmanWeb/serena`, ref `${SWE_SERENA_REF:-swe}` — the same repo/ref `scripts/start-serena.sh` runs) so the copy is deterministic. Fall back to whatever Serena seeded during onboarding (Task 5) if the fork resource is not reachable.
+
+⛔ NEVER use the public upstream Serena (`github.com/oraios/serena`, `uvx --from git+https://github.com/oraios/serena ...`) — it is unsupported by SWE. NEVER search the filesystem or the uv cache (`~/.cache/uv/archive-v0/*/serena/resources/`) for `memory_maintenance.md` — cached copies there may be upstream builds. `import serena` in the system `python3` does not resolve the fork either (Serena runs in an isolated uv env). Use ONLY the commands below.
 
 ```bash
-# Serena package resource (canonical source of the guide)
-RES="$(python3 -c "import serena, os; print(os.path.join(os.path.dirname(serena.__file__), 'resources', 'memory_maintenance.md'))" 2>/dev/null)"
-if [ -n "$RES" ] && [ -f "$RES" ]; then
-  echo "Source: shipped resource $RES"
-  cat "$RES"
+# SWE fork resource (canonical source of the guide) — same repo/ref as scripts/start-serena.sh
+SERENA_REF="${SWE_SERENA_REF:-swe}"
+RES_URL="https://raw.githubusercontent.com/EarthmanWeb/serena/${SERENA_REF}/src/serena/resources/memory_maintenance.md"
+if MAINT="$(curl -sf "$RES_URL")"; then
+  echo "Source: SWE fork resource $RES_URL"
+  printf '%s\n' "$MAINT"
 else
   # Fallback: the copy Serena's onboarding (Task 5) may have seeded into the project memory dir
   echo "Resource not resolvable — falling back to project-seeded memory_maintenance (if any)"
@@ -658,7 +661,7 @@ Output summary after all verifications pass:
 ### MCP Won't Connect
 
 ```bash
-which uvx && which npx
+which uv && which uvx && which npx   # Serena = EarthmanWeb/serena fork via scripts/start-serena.sh — NEVER oraios/serena
 cat ~/.claude.json | jq
 claude mcp logs [server-name]
 ```
