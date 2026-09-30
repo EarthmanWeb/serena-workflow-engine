@@ -53,6 +53,19 @@ A memory is LEGACY and MUST be rewritten immediately if it has any of:
 - Missing front-matter block.
 - Examples/rationale that do not prevent a specific misapplication.
 
+## Size Budget
+
+| Status       | Chars   | Meaning                                                                      |
+| ------------ | ------- | ---------------------------------------------------------------------------- |
+| `ok`         | ≤8,000  | Target — no action.                                                          |
+| `warn`       | ≤16,000 | Trim in place; approaching the split threshold.                              |
+| `split`      | <50,000 | MUST split into hub + children.                                              |
+| `unreadable` | ≥50,000 | ≥50,000 chars — Claude Code replaces the read with a 2KB preview (measured). |
+
+Split at >16,000 chars into hub + children per `/swe-memory-size-audit` SPLIT CONTRACT. The hub keeps the
+original name/path — existing `mem:` links stay valid. A `📏 MEMORY SIZE` advisory means act now — run
+`/swe-memory-size-audit`, not a manual edit.
+
 ## Self-Compliance
 
 This memory conforms to itself. When editing it, keep it imperative, concrete, and free of filler.

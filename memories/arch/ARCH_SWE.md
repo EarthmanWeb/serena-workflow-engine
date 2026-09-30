@@ -96,7 +96,7 @@ When modifying the workflow system:
 - [ ] Update `WF_*` memory content and its `## Routing` table.
 - [ ] Update `state-machine/states.json` (transitions, `transitionMatrix`, `rank`, `loopCaps` as applicable).
 - [ ] Run `python3 scripts/validate-graph.py`.
-- [ ] Run `python3 scripts/validate-memory-graph.py`.
+- [ ] Run `python3 skills/swe-memory-size-audit/scripts/validate-memory-graph.py`.
 - [ ] Update `dom/DOM_SWE_STATE_MACHINE` (state set, transition model, critical paths).
 - [ ] Test affected paths manually.
 

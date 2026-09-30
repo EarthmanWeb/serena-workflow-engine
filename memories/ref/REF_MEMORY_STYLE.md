@@ -4,6 +4,7 @@ description: MANDATORY style for all project memories — terse, imperative, mac
 obligations:
   - Write every memory in imperative mood with concrete thresholds/names/paths — NEVER suggestion-mood ("should", "consider") or vague quantifiers ("some", "a few").
   - Every `dom/`/`ref/`/`dev/`/`feature/` memory MUST carry an `obligations:` field (or explicit `obligations: []`) as a top-level sibling of `description`.
+  - Split any memory over 16,000 chars into a hub + children via `/swe-memory-size-audit`; act immediately on a `📏 MEMORY SIZE` advisory.
 metadata:
   type: reference
 ---
@@ -74,6 +75,19 @@ A memory is LEGACY and MUST be rewritten immediately if it has any of:
 - Vague quantifiers ("some", "a few", "small", "large", "appropriate") where a concrete value fits.
 - Missing front-matter block.
 - Examples/rationale that do not prevent a specific misapplication.
+
+## Size Budget
+
+| Status       | Chars   | Meaning                                                                      |
+| ------------ | ------- | ---------------------------------------------------------------------------- |
+| `ok`         | ≤8,000  | Target — no action.                                                          |
+| `warn`       | ≤16,000 | Trim in place; approaching the split threshold.                              |
+| `split`      | <50,000 | MUST split into hub + children.                                              |
+| `unreadable` | ≥50,000 | ≥50,000 chars — Claude Code replaces the read with a 2KB preview (measured). |
+
+Split at >16,000 chars into hub + children per `/swe-memory-size-audit` SPLIT CONTRACT. The hub keeps the
+original name/path — existing `mem:` links stay valid. A `📏 MEMORY SIZE` advisory means act now — run
+`/swe-memory-size-audit`, not a manual edit.
 
 ## Self-Compliance
 

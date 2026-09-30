@@ -63,16 +63,16 @@ project/
 | Type                 | Contains                                                   | Constraint                                        |
 | -------------------- | ---------------------------------------------------------- | ------------------------------------------------- |
 | CLAUDE.md            | Entry point only; reads `WF_INIT`                          | ~20 lines; only file read from disk at start      |
-| `WF_*`               | What to do, what to read, next state(s)                    | 10-20 lines each; split if longer                 |
-| `CLAUDE_OBLIGATIONS` | Behavioral constraints (NEVER/ALWAYS)                      | ~20 lines                                         |
-| `ARCH_*`             | Architecture documentation (system overview or one layer)  | ~50 lines each; agents load only their layer      |
+| `WF_*`               | What to do, what to read, next state(s)                    | Size Budget; hub ≤12,000 chars                    |
+| `CLAUDE_OBLIGATIONS` | Behavioral constraints (NEVER/ALWAYS)                      | Size Budget                                       |
+| `ARCH_*`             | Architecture documentation (system overview or one layer)  | Size Budget; agents load only their layer         |
 | `DOM_*`              | Domain requirements (WHAT, not HOW); NO signatures/queries | Variable; implementation lives in `ARCH_*`/Serena |
 | `INDEX_*`            | Lookup tables mapping logical names → file paths           | Variable                                          |
 | `REF_*`              | How-to guides, coding/testing standards, framework syntax  | Variable                                          |
 
 ## Workflow Design Rules
 
-- Keep each WF_* file 10-20 lines max. Split when longer.
+- Keep every memory within the Size Budget (`mem:ref/REF_MEMORY_STYLE`: ≤8,000 chars target, >16,000 must split, ≥50,000 unreadable — measured). WF_* are read every task: hub ≤12,000; move conditional detail to `ref/REF_WF_<STATE>_<TOPIC>` children. Audit with `/swe-memory-size-audit`.
 - Every state MUST declare its explicit transitions in a `## Routing` table (`condition → WF_[NEXT]`). NEVER leave next-state implicit.
 - `WF_VERIFY` runs after all code changes; on a large violation it loops back to `WF_CLASSIFY` to re-evaluate scope (see `mem:wf/WF_VERIFY` Re-Scope Check); a minor violation is fixed in place.
 - `WF_CLARIFY` is reachable from multiple states when uncertain.
@@ -84,7 +84,7 @@ project/
 2. Route upstream states to the new state (update their `## Routing` tables).
 3. Add the state to `state-machine/states.json` (definition, `transitionMatrix`, `rank`).
 4. Update `dom/DOM_SWE_STATE_MACHINE` and `MEMORY.md` index.
-5. Run `python3 scripts/validate-graph.py` and `python3 scripts/validate-memory-graph.py`.
+5. Run `python3 scripts/validate-graph.py` and `python3 skills/swe-memory-size-audit/scripts/validate-memory-graph.py --root memories --root .serena/memory` (all roots in ONE run — separate runs report false dangling links).
 
 ## Modifying a State
 

@@ -437,6 +437,80 @@ class TestCheckMemorySweep(unittest.TestCase):
         self.assertIsNone(err)
         self.assertTrue(os.path.exists(self._sentinel()))
 
+    def test_primary_sourced_docpending_planned_and_cited_passes(self):
+        # Target rule: a primary-surfaced link satisfied by PLANNED (cited
+        # as mem:<name> in a Compliance Checklist) — no body read required.
+        _write_stream(self.stream_path, [
+            {"type": "docread", "name": "feature/FEATURE_X"},
+            {"type": "docpending", "new": ["dom/dom_hub_child"],
+             "src": "feature/feature_x"},
+        ])
+        content = (
+            "- **Primary**: X - the working feature\n"
+            "- **Memories loaded**: feature/FEATURE_X\n"
+            "- **Rules planned**: dom/DOM_HUB_CHILD\n\n"
+            "## Compliance Checklist\n"
+            "- [ ] some obligation (mem:dom/DOM_HUB_CHILD)\n")
+        err = wm._check_memory_sweep(self.session, content)
+        self.assertIsNone(err)
+        with open(self._sentinel()) as f:
+            self.assertEqual(json.load(f)["planned"], ["dom/dom_hub_child"])
+
+    def test_primary_sourced_docpending_ruled_out_with_reason_passes(self):
+        # Target rule: a primary-surfaced link satisfied by RULED OUT with a
+        # reason — no body read required.
+        _write_stream(self.stream_path, [
+            {"type": "docread", "name": "feature/FEATURE_X"},
+            {"type": "docpending", "new": ["ref/ref_not_applicable"],
+             "src": "feature/feature_x"},
+        ])
+        content = (
+            "- **Primary**: X - the working feature\n"
+            "- **Memories loaded**: feature/FEATURE_X\n"
+            "- **Rules ruled out**: ref/REF_NOT_APPLICABLE — not touched by "
+            "this task\n")
+        err = wm._check_memory_sweep(self.session, content)
+        self.assertIsNone(err)
+        with open(self._sentinel()) as f:
+            self.assertEqual(
+                json.load(f)["ruled_out"], ["ref/ref_not_applicable"])
+
+    def test_primary_sourced_docpending_bare_deferred_only_rejected(self):
+        # Target rule: a primary link listed ONLY under '**Memories
+        # deferred**:' (no planned citation, no ruled-out reason) is still
+        # rejected — the error must name the three accepted dispositions.
+        _write_stream(self.stream_path, [
+            {"type": "docread", "name": "feature/FEATURE_X"},
+            {"type": "docpending", "new": ["dom/dom_hub_child"],
+             "src": "feature/feature_x"},
+        ])
+        content = (
+            "- **Primary**: X - the working feature\n"
+            "- **Memories loaded**: feature/FEATURE_X\n"
+            "- **Memories deferred**: dom/DOM_HUB_CHILD\n")
+        err = wm._check_memory_sweep(self.session, content)
+        self.assertIsNotNone(err)
+        self.assertIn("dom/dom_hub_child", err)
+        self.assertIn("READ", err)
+        self.assertIn("PLANNED", err)
+        self.assertIn("RULED OUT", err)
+        self.assertFalse(os.path.exists(self._sentinel()))
+
+    def test_primary_sourced_docpending_ruled_out_without_reason_rejected(self):
+        _write_stream(self.stream_path, [
+            {"type": "docread", "name": "feature/FEATURE_X"},
+            {"type": "docpending", "new": ["ref/ref_unreasoned"],
+             "src": "feature/feature_x"},
+        ])
+        content = (
+            "- **Primary**: X - the working feature\n"
+            "- **Memories loaded**: feature/FEATURE_X\n"
+            "- **Rules ruled out**: ref/REF_UNREASONED\n")
+        err = wm._check_memory_sweep(self.session, content)
+        self.assertIsNotNone(err)
+        self.assertIn("ref/ref_unreasoned", err)
+        self.assertFalse(os.path.exists(self._sentinel()))
+
     def test_no_src_docpending_treated_as_deferrable(self):
         # Legacy/pre-upgrade events carry no src → fail-open to deferrable
         # (never fail-closed on an un-taggable link).
@@ -728,6 +802,28 @@ class TestUpdateSectionSweepWiring(unittest.TestCase):
     def test_other_sections_not_gated(self):
         result = wm.tool_swe_wm_update_section(
             "Notes", "free-form", session_id=self.session)
+        self.assertTrue(result.get("success"))
+
+    def test_compliance_checklist_is_agent_owned_section(self):
+        # WF docs instruct writing '## Compliance Checklist' directly (WF_
+        # ARCH_REVIEW 2c, WF_EXECUTE, WF_CLASSIFY 4e) — it must be a
+        # first-class allowed section, not require embedding a heading
+        # inside another section's content.
+        self.assertIn("Compliance Checklist", wm.ALLOWED_SECTIONS)
+        result = wm.tool_swe_wm_update_section(
+            "Compliance Checklist", "- [ ] some rule (mem:dom/DOM_X)",
+            session_id=self.session)
+        self.assertTrue(result.get("success"))
+        wm_path = os.path.join(
+            self.tmp.name, ".serena", "memories", f"WM_{self.session}.md")
+        with open(wm_path) as f:
+            self.assertIn("## Compliance Checklist", f.read())
+
+    def test_doc_claims_used_is_agent_owned_section(self):
+        self.assertIn("Doc Claims Used", wm.ALLOWED_SECTIONS)
+        result = wm.tool_swe_wm_update_section(
+            "Doc Claims Used", "| claim | used |\n|---|---|",
+            session_id=self.session)
         self.assertTrue(result.get("success"))
 
 

@@ -1,6 +1,6 @@
 {
   "name": "swe",
-  "version": "1.3.8",
+  "version": "1.3.9",
   "description": "State-machine workflow engine with Serena memory persistence, hook-driven event architecture, and native subagent parallelization",
   "author": {
     "name": "EarthmanWeb",

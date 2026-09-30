@@ -136,23 +136,24 @@ After migration, the symlink ensures all future auto-memory writes go to `.seren
 
 ## Commands & Skills
 
-| Command                     | Purpose                                     |
-| --------------------------- | ------------------------------------------- |
-| `/swe-init`                 | Full first-time setup (autonomous agent)    |
-| `/swe-scaffold-project`     | Lightweight setup (no MCP/LSP verification) |
-| `/swe-feature-onboard`      | Register a feature to the workflow          |
-| `/swe-feature-update`       | Sync feature memory with current code       |
-| `/swe-status`               | Show workflow state and transitions         |
-| `/swe-reset`                | Reset workflow state                        |
-| `/swe-goto [STATE]`         | Force transition (debug/recovery)           |
-| `/swe-cleanup`              | Archive completed memories                  |
-| `/swe-symlink-memory`       | Set up auto-memory symlink with migration   |
-| `/swe-wm-update`            | Update Working Memory sections              |
-| `/swe-workflow-research`    | Read-only code exploration                  |
-| `/swe-workflow-verify`      | Verify against requirements                 |
-| `/swe-workflow-arch-review` | Architecture compliance review              |
-| `/swe-workflow-debug-tdd`   | Test-driven debugging                       |
-| `/swe-symbol-index`         | Generate symbol index for feature docs      |
+| Command                     | Purpose                                      |
+| --------------------------- | -------------------------------------------- |
+| `/swe-init`                 | Full first-time setup (autonomous agent)     |
+| `/swe-scaffold-project`     | Lightweight setup (no MCP/LSP verification)  |
+| `/swe-feature-onboard`      | Register a feature to the workflow           |
+| `/swe-feature-update`       | Sync feature memory with current code        |
+| `/swe-status`               | Show workflow state and transitions          |
+| `/swe-reset`                | Reset workflow state                         |
+| `/swe-goto [STATE]`         | Force transition (debug/recovery)            |
+| `/swe-cleanup`              | Archive completed memories                   |
+| `/swe-symlink-memory`       | Set up auto-memory symlink with migration    |
+| `/swe-wm-update`            | Update Working Memory sections               |
+| `/swe-workflow-research`    | Read-only code exploration                   |
+| `/swe-workflow-verify`      | Verify against requirements                  |
+| `/swe-workflow-arch-review` | Architecture compliance review               |
+| `/swe-workflow-debug-tdd`   | Test-driven debugging                        |
+| `/swe-symbol-index`         | Generate symbol index for feature docs       |
+| `/swe-memory-size-audit`    | Split oversized memories into hub + children |
 
 ## Alternative Setup
 

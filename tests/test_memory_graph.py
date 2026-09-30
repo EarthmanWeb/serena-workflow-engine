@@ -1,4 +1,4 @@
-"""Tests for scripts/validate-memory-graph.py.
+"""Tests for skills/swe-memory-size-audit/scripts/validate-memory-graph.py.
 
 Pure-function tests against synthetic memory trees, plus an integration
 assertion that the real memories/ tree (+ .serena/memory, where present)
@@ -11,7 +11,7 @@ import unittest
 
 from _hookutil import PLUGIN_ROOT, load_script
 
-vmg = load_script("scripts/validate-memory-graph.py")
+vmg = load_script("skills/swe-memory-size-audit/scripts/validate-memory-graph.py")
 
 
 def write(root, rel_path, content):
@@ -128,6 +128,81 @@ class TestValidateSyntheticTree(unittest.TestCase):
         write(root_b, "wf/WF_B.md", "# B\n")
         result = vmg.validate([root_a, root_b])
         self.assertEqual(result["dangling"], [])
+
+    def test_aliased_root_prefixes_name(self):
+        root = os.path.join(self.tmp, "ext")
+        write(root, "feature/FEATURE_Y.md", "# Y\n")
+        result = vmg.validate([("em", root)])
+        self.assertIn("em/feature/FEATURE_Y", result["word_counts"])
+
+    def test_aliased_root_link_resolves_with_alias_prefix(self):
+        root = os.path.join(self.tmp, "ext")
+        write(root, "feature/FEATURE_Y.md", "# Y\nSee `mem:em/feature/FEATURE_Y2` next.\n")
+        write(root, "feature/FEATURE_Y2.md", "# Y2\n")
+        result = vmg.validate([("em", root)])
+        self.assertEqual(result["dangling"], [])
+
+    def test_mixed_plain_and_aliased_roots(self):
+        root_a = os.path.join(self.tmp, "a")
+        root_b = os.path.join(self.tmp, "b")
+        write(root_a, "wf/WF_A.md", "# A\nSee `mem:em/feature/FEATURE_Y` next.\n")
+        write(root_b, "feature/FEATURE_Y.md", "# Y\n")
+        result = vmg.validate([root_a, ("em", root_b)])
+        self.assertEqual(result["dangling"], [])
+
+
+class TestRootParityCLI(unittest.TestCase):
+    """CLI-level root parity with scripts/memory-size-audit.py: aliased
+    --root, .serena/memory-paths.conf default, and --plugin-root."""
+
+    SCRIPT_PATH = os.path.join(
+        PLUGIN_ROOT, "skills", "swe-memory-size-audit", "scripts", "validate-memory-graph.py"
+    )
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp(prefix="memgraph_cli_test_")
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _run(self, args, cwd):
+        import subprocess
+        import sys as _sys
+        return subprocess.run(
+            [_sys.executable, self.SCRIPT_PATH] + args,
+            cwd=cwd, capture_output=True, text=True,
+        )
+
+    def test_cli_aliased_root(self):
+        root = os.path.join(self.tmp, "ext")
+        write(root, "feature/FEATURE_Y.md", "# Y\n")
+        proc = self._run(["--root", f"em={root}", "--json"], cwd=self.tmp)
+        self.assertEqual(proc.returncode, 0)
+        data = json.loads(proc.stdout)
+        self.assertIn("em/feature/FEATURE_Y", data["word_counts"])
+
+    def test_cli_conf_default_when_no_root_flag(self):
+        os.makedirs(os.path.join(self.tmp, ".serena"))
+        memdir = os.path.join(self.tmp, ".serena", "memory")
+        write(memdir, "dom/DOM_X.md", "# X\n")
+        with open(os.path.join(self.tmp, ".serena", "memory-paths.conf"), "w") as f:
+            f.write("./.serena/memory\n")
+        proc = self._run(["--json"], cwd=self.tmp)
+        self.assertEqual(proc.returncode, 0)
+        data = json.loads(proc.stdout)
+        self.assertIn("dom/DOM_X", data["word_counts"])
+
+    def test_cli_plugin_root_adds_extra_unaliased_root(self):
+        proj_root = os.path.join(self.tmp, "proj_memories")
+        plugin_root = os.path.join(self.tmp, "plugin_memories")
+        write(proj_root, "wf/WF_A.md", "# A\nSee `mem:DOM_SHARED` next.\n")
+        write(plugin_root, "dom/DOM_SHARED.md", "# Shared\n")
+        proc = self._run(
+            ["--root", proj_root, "--plugin-root", plugin_root, "--json"], cwd=self.tmp
+        )
+        self.assertEqual(proc.returncode, 0)
+        data = json.loads(proc.stdout)
+        self.assertEqual(data["dangling"], [])
 
 
 class TestRealMemoryTree(unittest.TestCase):

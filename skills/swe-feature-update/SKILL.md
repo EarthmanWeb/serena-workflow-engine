@@ -16,18 +16,6 @@ args:
     required: true
 ---
 
-## ⚠️ WORKFLOW INITIALIZATION
-
-**If starting a new session**, first read workflow initialization:
-
-```
-mcp__plugin_swe_serena__read_memory("wf/WF_INIT")
-```
-
-Follow WF_INIT instructions before executing this skill.
-
----
-
 # /swe-update-feature [KEY]
 
 Update a specific feature's memory files to accurately reflect current codebase state.

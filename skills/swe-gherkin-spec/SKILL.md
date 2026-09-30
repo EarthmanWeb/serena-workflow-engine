@@ -18,18 +18,6 @@ args:
     description: Spec slug for the .feature filename (optional, derived from feature if not provided)
 ---
 
-## ⚠️ WORKFLOW INITIALIZATION
-
-**If starting a new session**, first read workflow initialization:
-
-```
-mcp__plugin_swe_serena__read_memory("wf/WF_INIT")
-```
-
-Follow WF_INIT instructions before executing this skill.
-
----
-
 # /swe-gherkin-spec [FEATURE] [--slug SLUG]
 
 Write Gherkin BDD specifications for a feature. Creates `.feature` files in the project's `tests/specs/` directory.

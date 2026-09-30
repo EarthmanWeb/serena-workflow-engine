@@ -12,18 +12,6 @@ workflow:
   auto_transition: true
 ---
 
-## ⚠️ WORKFLOW INITIALIZATION
-
-**If starting a new session**, first read workflow initialization:
-
-```
-mcp__plugin_swe_serena__read_memory("wf/WF_INIT")
-```
-
-Follow WF_INIT instructions before executing this skill.
-
----
-
 # Workflow Research Skill
 
 Explore and analyze codebase without making any changes.

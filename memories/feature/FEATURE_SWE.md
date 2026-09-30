@@ -1,6 +1,6 @@
 ---
 name: FEATURE_SWE
-description: Serena Workflow Engine plugin — source layout, state machine, hooks, MCP tools, feature gates, bootstrap/init flow, and dual-location edit rules.
+description: SWE plugin source layout, architecture, entry points, inventories. Hub for `mem:dom/DOM_SWE_*` children.
 obligations:
   - NEVER write to `.claude/plugins/serena-workflow-engine/` — it is the installed cache copy; this repo IS the plugin source, edit here.
   - Always pass `session_id` explicitly to `swe-wm` MCP tools — NEVER rely on most-recent-WM guessing across concurrent sessions.
@@ -12,451 +12,79 @@ metadata:
 
 ## Source Location (edit rules)
 
-- This repo IS the plugin source. `hooks/`, `memories/`, `skills/`, `commands/`, `state-machine/`, `scripts/`, `agents/` sit directly under the working-directory root. Edit here.
-- Target the repo root for ALL Serena/Glob/Grep searches of plugin source. NEVER target `.claude/plugins/...`.
-- NEVER write to `.claude/plugins/serena-workflow-engine/` — it is the installed cache copy. See `FEEDBACK_PLUGIN_SOURCE_LOCATION`.
-- Type: plugin. Languages: Python/Bash/JSON/Markdown. Framework: Claude Code Plugins.
+This repo IS the plugin source. `hooks/`, `memories/`, `skills/`, `commands/`, `state-machine/`, `scripts/`, `agents/` sit directly under the working-directory root — edit here. Target the repo root for ALL Serena/Glob/Grep searches. NEVER target or write to `.claude/plugins/serena-workflow-engine/` — it is the installed READ-ONLY cache copy. See `FEEDBACK_PLUGIN_SOURCE_LOCATION`. Type: plugin. Languages: Python/Bash/JSON/Markdown. Framework: Claude Code Plugins.
 
 ## Architecture Layers
 
-| Layer         | Purpose                              | Directory                               | Pattern               |
-| ------------- | ------------------------------------ | --------------------------------------- | --------------------- |
-| State Machine | Workflow FSM (states in states.json) | `state-machine/`                        | FSM with transitions  |
-| Core Modules  | Shared Python utilities              | `hooks/swe_hooks/core/`                 | Modular imports       |
-| MCP Server    | WM update tools (swe-wm)             | `hooks/swe_hooks/mcp/`                  | Stdio JSON-RPC 2.0    |
-| Hooks         | Event handlers for Claude Code       | `hooks/{session,prompt,pre,post,stop}/` | Python scripts        |
-| Skills        | User-invocable workflows             | `skills/`                               | YAML frontmatter + MD |
-| Commands      | CLI shortcuts                        | `commands/`                             | Markdown              |
-| Memories      | Workflow documentation               | `memories/`                             | Organized subdirs     |
-| Agents        | Subagent definitions                 | `agents/`                               | Markdown              |
-| Scripts       | Build/deployment tools               | `scripts/`                              | Shell scripts         |
+State Machine (workflow FSM, `state-machine/`) · Core Modules (shared Python utils, `hooks/swe_hooks/core/`) · MCP Server (WM tools, `hooks/swe_hooks/mcp/`) · Hooks (event handlers, `hooks/{session,prompt,pre,post,stop}/`) · Skills (user-invocable workflows, `skills/`) · Commands (CLI shortcuts, `commands/`) · Memories (workflow docs, `memories/`) · Agents (subagent defs, `agents/`) · Scripts (build/deploy, `scripts/`).
 
-### Data Flow
+### Data / State Flow
 
-`User Request → Hook (SessionStart) → WF_INIT → WF_CLASSIFY → State Machine → Hooks (Pre/Post) → Memory Persistence`
+Flow: SessionStart → WF_INITIAL_SETUP (first time) or WF_INIT → WF_CLASSIFY → WF_ARCH_REVIEW → WF_EXECUTE ↔ WF_CHECKPOINT → WF_VERIFY → WF_DONE → WF_CLEANUP.
 
-### State Machine Flow
-
-```
-SessionStart → WF_INITIAL_SETUP (first time) OR WF_INIT
-WF_INIT → WF_CLASSIFY → WF_ARCH_REVIEW → WF_EXECUTE
-         → WF_EXECUTE ↔ WF_CHECKPOINT → WF_VERIFY → WF_DONE → WF_CLEANUP
-```
+12 states: Setup (WF_INITIAL_SETUP, WF_ONBOARD) · Entry (WF_CLASSIFY, WF_CONTINUE) · Analysis (WF_RESEARCH, WF_RESEARCH_LITE) · Planning (WF_ARCH_REVIEW) · Gates (WF_CLARIFY) · Execution (WF_EXECUTE, WF_CHECKPOINT, WF_DEBUG_TDD) · Completion (WF_VERIFY, WF_DONE). FSM mechanics: `mem:dom/DOM_SWE_STATE_MACHINE`.
 
 ## Entry Points
 
-- Main: `state-machine/states.json`
-- Config: `.claude-plugin/plugin.json`
-- Hooks config: `hooks/hooks.json`
-- Init command: `commands/swe-init.md`
-
-## Root Plugin Files
-
-| File         | Purpose                  |
-| ------------ | ------------------------ |
-| `README.md`  | Plugin documentation     |
-| `.mcp.json`  | MCP server configuration |
-| `.gitignore` | Git ignore patterns      |
-
-## States (12 in states.json)
-
-| Category   | States                                  |
-| ---------- | --------------------------------------- |
-| Setup      | WF_INITIAL_SETUP, WF_ONBOARD            |
-| Entry      | WF_CLASSIFY, WF_CONTINUE                |
-| Analysis   | WF_RESEARCH, WF_RESEARCH_LITE           |
-| Planning   | WF_ARCH_REVIEW                          |
-| Gates      | WF_CLARIFY                              |
-| Execution  | WF_EXECUTE, WF_CHECKPOINT, WF_DEBUG_TDD |
-| Completion | WF_VERIFY, WF_DONE                      |
+Main: `state-machine/states.json` · Config: `.claude-plugin/plugin.json` · Hooks config: `hooks/hooks.json` · Init: `commands/swe-init.md`. Root files: `README.md`, `.mcp.json`, `.gitignore`.
 
 ## Core Modules (`hooks/swe_hooks/core/`)
 
-| Module             | Purpose                                                                                            |
-| ------------------ | -------------------------------------------------------------------------------------------------- |
-| `state_manager.py` | Workflow state transitions and persistence                                                         |
-| `config.py`        | Configuration, paths, WM state read/write                                                          |
-| `session.py`       | Session ID and Working Memory management                                                           |
-| `input.py`         | Hook input parsing utilities                                                                       |
-| `output.py`        | Hook output formatting                                                                             |
-| `stream.py`        | Append-only JSONL event log for sessions                                                           |
-| `wm_validator.py`  | Working Memory validation                                                                          |
-| `loop_guard.py`    | `loopCaps` enforcement for `readAdvance` transitions (refuse on cap exceeded, warn on oscillation) |
+`state_manager.py` (transitions/persistence) · `config.py` (paths, WM I/O) · `session.py` (session/WM mgmt) · `input.py`/`output.py` (hook I/O) · `stream.py` (JSONL event log) · `wm_validator.py` (WM validation) · `loop_guard.py` (`loopCaps` for `readAdvance` — refuse on cap exceeded, warn on oscillation) · `memory_size.py` (size thresholds; shared by `memory-size-audit.py`, `swe_post_memory_style.py`).
 
 ## MCP Server: swe-wm (`hooks/swe_hooks/mcp/`)
 
-- Stdlib-only stdio MCP server exposing Working Memory update tools.
-- Registered in `plugin.json` as `swe-wm`. Started via `scripts/start-wm-mcp.sh`.
+Stdlib-only stdio MCP server for WM updates; registered as `swe-wm`, started via `scripts/start-wm-mcp.sh`. Tools: `swe_wm_read` · `swe_wm_update` (CANONICAL — batched) · `swe_wm_update_section`/`swe_wm_update_status` (legacy). Protected: `Workflow Context`, `Transitions`. Session resolution: explicit param > `SWE_SESSION_ID` > `CLAUDE_SESSION_ID[:8]` > ERROR — NEVER most-recent-WM guessing.
 
-| Tool                    | Purpose                                                                             |
-| ----------------------- | ----------------------------------------------------------------------------------- |
-| `swe_wm_read`           | Read WM state + full content for a session                                          |
-| `swe_wm_update`         | CANONICAL — batched status + section updates in ONE call; returns post-update state |
-| `swe_wm_update_section` | Legacy single-section update (protects daemon fields)                               |
-| `swe_wm_update_status`  | Legacy status-only update of `**[STATUS]**:` tag                                    |
+## Hooks (20 scripts)
 
-- Protected sections (tools REJECT writes): `Workflow Context`, `Transitions`.
-- Agent-owned sections: `Current Task`, `Progress`, `Files`, `Notes`, `Requirements`, `Implementation Notes`, `Previous Task`, `Task Context`, `Affected Features`, `Context`, `Feature(s)`.
-- Usage: `mcp__swe-wm__swe_wm_update(session_id="...", status="IN_PROGRESS", sections=[{"section": "Progress", "content": "..."}, ...])` — one call per workflow step.
-- Session resolution (`_resolve_session_id`): explicit param > `SWE_SESSION_ID` > `CLAUDE_SESSION_ID[:8]` > ERROR. ⛔ No most-recent-WM guessing — with two sessions on one project it answers for the WRONG session and sweep verification runs against the wrong stream. ALWAYS pass `session_id` explicitly (printed in every hook message: `WM[<id>]` / `session="<id>"`).
+Hub: DOM_SWE_HOOKS (architecture/triggers/mechanics; children: PROMPT_ROUTING, PRE_GATES, POST, STOP, CORE_MODULES). Session: `swe_session_start.py`, `swe_session_end.py`. Prompt: `swe_user_prompt_workflow.py`, `swe_prompt_format_reminder.py`. Pre (6): init/edit/memory-index/bash-test/search-docs/question-consent gates. Post (8): read-state, edit-checkpoint, search-docs-hint, todo-wm-sync, write-continue, memory-index, memory-style (`📏 MEMORY SIZE` advisory), tool-failure. Stop: `swe_stop_continue_working.py`, `swe_stop_response_format.py` (DOM_SWE_RESPONSE_FORMAT_GATE). Sweep gate: DOM_SWE_FEATURE_GATES.
 
-## Hooks (20 Python scripts by event type)
+## Skills (16), Commands (9), Agents (1)
 
-### Session Hooks (`hooks/session/`)
+Skills: `swe-feature-onboard`, `swe-feature-update`, `swe-gherkin-spec`, `swe-gherkin-dev`, `swe-memory-audit`, `swe-memory-frontmatter`, `swe-memory-obligations`, `swe-memory-size-audit` (split oversized memories into hub+children), `swe-scaffold-project`, `swe-symbol-index`, `swe-wm-update`, `swe-workflow-research`, `swe-workflow-arch-review`, `swe-workflow-debug-tdd`, `swe-workflow-verify`, `swe-wp-cli-setup`.
 
-| Hook                   | Trigger      | Purpose                                                                                                                                                                                                              |
-| ---------------------- | ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `swe_session_start.py` | SessionStart | Initialize workflow state, create WM. Also reaps outdated-version daemons and orphaned VS-Code-extension Claude sessions (ppid==1, survived a VS Code crash/restart) via `core/orphan_reaper.py` — see DOM_SWE_HOOKS |
-| `swe_session_end.py`   | SessionEnd   | Clean up sentinels, mark WM abandoned                                                                                                                                                                                |
-
-### User Prompt Hooks (`hooks/prompt/`)
-
-| Hook                            | Trigger          | Purpose                                                                                                                                     |
-| ------------------------------- | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| `swe_user_prompt_workflow.py`   | UserPromptSubmit | Intent analysis, state transitions, sentinel recovery                                                                                       |
-| `swe_prompt_format_reminder.py` | UserPromptSubmit | Surface the response-format budget on the turn after `swe_stop_response_format.py` blocked; clears the sentinel. Same enabled/bypass guards |
-
-### Pre-Tool Hooks (`hooks/pre/`)
-
-| Hook                               | Trigger                                                                                 | Purpose                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
-| ---------------------------------- | --------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `swe_pre_tool_init_gate.py`        | PreToolUse                                                                              | Block ALL tools until WF_INIT read. TWO-TIER breaker, both clearing on next docread: Tier 1 "recovery" (3+ init denies, no `mcp_unavailable`) unlocks ONLY recovery/diagnostic Bash (`claude mcp list/get`, `ps`/`pgrep`, restricted log paths, `--reset-sentinel`) — not codebase Read/Grep/Glob. Tier 2 "degraded" (`mcp_unavailable` from a real Serena connection failure) unlocks Read/Grep/Glob/LS/ToolSearch + hardened read-only Bash; edits still deny. See `mem:dom/DOM_SWE_HOOKS` |
-| `swe_pre_edit_validate.py`         | PreToolUse (Edit/Write/Serena)                                                          | Validate edit permissions                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| `swe_pre_memory_index_gate.py`     | PreToolUse (Edit/Write/write_memory/edit_memory)                                        | HARD-DENY spec/report/research/project links entering MEMORY.md. ALSO DENIES a `write_memory`/direct-`Write` that creates or overwrites a dom/ref/dev/feature memory with no `obligations:` front-matter field (`obligations: []` passes; `edit_memory` partial edits are exempt) — see `mem:ref/REF_MEMORY_STYLE` "Obligations Field"                                                                                                                                                       |
-| `swe_pre_bash_test_gate.py`        | PreToolUse (Bash)                                                                       | Feature gate: FEATURE_TESTS                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| `swe_pre_search_docs_gate.py`      | PreToolUse (Grep/Glob/search_for_pattern/Bash-inspection; Read matched but never gated) | DOCS-FIRST gate, budget model: one FRESH docs consult clears the next `GATED_CALL_BUDGET` (currently 15) gated calls (re-reads don't refill); deny lists pending related docs; refill ≠ research; no-docs areas route to a FOREGROUND /swe-feature-onboard (or -update) agent — wait, then read its memories; spawned agents NEVER gated (exempt first via `is_spawned_agent` — non-empty agent_id/agent_type — with subagent-transcript shape as fallback)                                  |
-| `swe_pre_question_consent_gate.py` | PreToolUse (AskUserQuestion)                                                            | Deny questions under blanket consent (`auto_approve`/`blanket_consent`)                                                                                                                                                                                                                                                                                                                                                                                                                      |
-
-### Post-Tool Hooks (`hooks/post/`)
-
-| Hook                           | Trigger                                                      | Purpose                                                                                                                                                                                                                                                                       |
-| ------------------------------ | ------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `swe_post_read_state.py`       | PostToolUse (read_memory/list_memories/search_memories_by_*) | State transitions, plan mode; appends named `docread` (resets search streak, refills docs-gate budget, feeds sweep verification); searches surfacing unread docs get NO credit until read; reads surfacing unread mem:/[[…]] links append docpending + read-these instruction |
-| `swe_post_edit_checkpoint.py`  | PostToolUse (Edit/Write/Serena)                              | Track edits, checkpoint at 10 edits                                                                                                                                                                                                                                           |
-| `swe_post_search_docs_hint.py` | PostToolUse (Grep/Glob/search_for_pattern)                   | Docs-first sentinel: 3 consecutive wide searches → check memories first                                                                                                                                                                                                       |
-| `swe_post_todo_wm_sync.py`     | PostToolUse (TodoWrite)                                      | WM sync reminder on todo changes                                                                                                                                                                                                                                              |
-| `swe_post_write_continue.py`   | PostToolUse (Write)                                          | Post-write continuation                                                                                                                                                                                                                                                       |
-| `swe_post_memory_index.py`     | PostToolUse (write_memory)                                   | Enforce MEMORY.md index update                                                                                                                                                                                                                                                |
-| `swe_post_memory_style.py`     | PostToolUse (write_memory/edit_memory)                       | Enforce terse-imperative memory style. Nudges toward adding `obligations:` front-matter on a write/edit of a dom/ref/dev/feature memory that lacks the field — advisory, not a deny (the pre-gate denies new writes; this covers edits and existing memories)                 |
-| `swe_post_tool_failure.py`     | PostToolUseFailure                                           | Flailing detection, failure logging                                                                                                                                                                                                                                           |
-
-### Stop Hooks (`hooks/stop/`)
-
-| Hook                           | Trigger | Purpose                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| ------------------------------ | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `swe_stop_continue_working.py` | Stop    | Block unnecessary stops, continue-working                                                                                                                                                                                                                                                                                                                                                                                                               |
-| `swe_stop_response_format.py`  | Stop    | Terse-format gate: block over-budget / recap-scaffolded replies. ON by default; config via `CLAUDE_PLUGIN_OPTION_RESPONSE_FORMAT_*` (plugin.json `userConfig` block); silent when SWE bypassed / uninitialized / disabled. NEVER blocks when `stop_hook_active` (max 1 forced rewrite/turn) and NEVER blocks a reply ending in a question; excludes code blocks/tables/path lists from the word count. Sentinel + offender log under `.serena/streams/` |
-
-## Skills (15 total)
-
-| Skill                      | Purpose                                                                  |
-| -------------------------- | ------------------------------------------------------------------------ |
-| `swe-feature-onboard`      | Onboard new feature to workflow                                          |
-| `swe-feature-update`       | Update feature memory files                                              |
-| `swe-gherkin-spec`         | Author Gherkin BDD specs                                                 |
-| `swe-gherkin-dev`          | TDD implementation from Gherkin specs                                    |
-| `swe-memory-audit`         | Audit memories against the terse-imperative style                        |
-| `swe-memory-frontmatter`   | Audit/backfill memory YAML front-matter                                  |
-| `swe-memory-obligations`   | Backfill `obligations:` front-matter across dom/ref/dev/feature memories |
-| `swe-scaffold-project`     | Initialize new project                                                   |
-| `swe-symbol-index`         | Generate symbol index table for feature linked docs                      |
-| `swe-wm-update`            | Update Working Memory sections                                           |
-| `swe-workflow-research`    | Code exploration/research                                                |
-| `swe-workflow-arch-review` | Architecture compliance review                                           |
-| `swe-workflow-debug-tdd`   | Test-driven debugging                                                    |
-| `swe-workflow-verify`      | Verify implementation                                                    |
-| `swe-wp-cli-setup`         | Configure the WP-CLI MCP server                                          |
-
-## Commands (9 total)
-
-| Command                   | Purpose                                                                |
-| ------------------------- | ---------------------------------------------------------------------- |
-| `/swe-init`               | Initialize SWE for project                                             |
-| `/swe-status`             | Show workflow state                                                    |
-| `/swe-reset`              | Reset workflow state                                                   |
-| `/swe-goto`               | Force transition to state                                              |
-| `/swe-bypass`             | Disable SWE for project — USER-ONLY (`disable-model-invocation: true`) |
-| `/swe-cleanup`            | Archive completed memories                                             |
-| `/swe-symlink-memory`     | Set up auto-memory symlink                                             |
-| `/swe-memory-frontmatter` | Audit/backfill memory front-matter                                     |
-| `/swe-wp-cli-setup`       | Configure the WP-CLI MCP server                                        |
-
-### CLI Tools (non-skill)
-
-| Command                                                                     | Purpose                                     |
-| --------------------------------------------------------------------------- | ------------------------------------------- |
-| `python3 hooks/pre/swe_pre_tool_init_gate.py --reset-sentinel [session_id]` | Manual sentinel reset for deadlock recovery |
-
-## Agents (1 total)
-
-| Agent            | Purpose                   |
-| ---------------- | ------------------------- |
-| `swe-init-agent` | Autonomous initialization |
+Commands: `/swe-init`, `/swe-status`, `/swe-reset`, `/swe-goto`, `/swe-bypass` (USER-ONLY), `/swe-cleanup`, `/swe-symlink-memory`, `/swe-memory-frontmatter`, `/swe-wp-cli-setup`. CLI: `swe_pre_tool_init_gate.py --reset-sentinel [session_id]` (deadlock recovery). Agent: `swe-init-agent`.
 
 ## Memories Organization
 
-| Directory           | Contents                                                       |
-| ------------------- | -------------------------------------------------------------- |
-| `memories/wf/`      | Workflow state instructions (WF_*.md)                          |
-| `memories/ref/`     | Reference docs (FEATURE_DEV_STANDARDS, REF_MEMORY_STYLE, etc.) |
-| `memories/claude/`  | Claude behavior docs (CLAUDE.md, CLAUDE_OBLIGATIONS.md)        |
-| `memories/arch/`    | Architecture documentation (ARCH_SWE.md)                       |
-| `memories/dom/`     | Domain documentation (DOM_SWE_HOOKS.md)                        |
-| `memories/feature/` | Feature configs (FEATURE_SWE.md)                               |
-| `memories/index/`   | Index files (if any)                                           |
-
-## Feature Gate Pattern
-
-Feature gates block specific tools until the relevant FEATURE_* memory is read. All feature gates use session-scoped sentinel files for O(1) checks.
-
-### Mechanism
-
-1. Pre-tool hook checks for sentinel file `.serena/streams/.{gate}_feature_{session_id}`.
-2. If missing → block with instruction to read the FEATURE_* memory.
-3. Post-read hook (`swe_post_read_state.py`) creates the sentinel via `create_feature_sentinel(session_id, gate_name)`.
-4. Subsequent tool calls pass instantly (file-existence check).
-
-### Registered Gates
-
-| Gate Name | Pre-Hook                    | Blocks                        | Sentinel                   | Feature Memory                              |
-| --------- | --------------------------- | ----------------------------- | -------------------------- | ------------------------------------------- |
-| `test`    | `swe_pre_bash_test_gate.py` | `npx playwright test`         | `.test_feature_{session}`  | FEATURE_TESTS                               |
-| `sweep`   | `swe_pre_edit_validate.py`  | ALL edits in execution states | `.sweep_feature_{session}` | (WM-verified, not read-created — see below) |
-
-### The `sweep` Gate (per-task, WM-verified)
-
-Unlike read-created feature gates, the sweep sentinel is created ONLY by the WM server: an `Affected Features` write whose `**Memories loaded**:` list is verified against the SESSION's actual named `docread` events (D2 idempotence: a read from any earlier turn/task this session counts — re-listing without re-reading passes) (`_check_memory_sweep` in `wm_server.py`). List parsing takes the FIRST whitespace token per comma-separated entry (annotation text stripped), and workflow-machinery names (`wf/*`, `claude/*` — read before the task boundary, excluded from the 4d sweep) are IGNORED rather than rejected; a list of ONLY machinery names still fails. Every transition INTO WF_CLASSIFY deletes it (`clear_sweep_sentinel` in `state_manager.py`), so same-session follow-up tasks must re-WRITE the Affected Features section before their first edit — but never re-READ memories already read this session. Contract: `wf/WF_CLASSIFY` Steps 4d/4e. Tests: `tests/test_sweep_gate.py`.
-
-Two-tier sweep dispositions (Change Set H): a docpending link this task surfaces satisfies verification via loaded ∪ deferred ∪ planned ∪ ruled-out — not loaded-or-deferred alone. `**Rules planned**:` names must each be cited as `(mem:<name>)` on a `## Compliance Checklist` line; the WM server rejects the write on an uncited planned name (or a checklist citation with no matching planned name). `**Rules ruled out**:` entries require a mandatory reason per name. See `mem:wf/WF_CLASSIFY` Step 4d (Tier 0 digest pass / Tier 1 body pass) and Step 4e (WM grammar).
-
-"This task" = events since the last task boundary in the stream: the last `session_start` event or `state` event with `to_s=WF_CLASSIFY` (`events_since_task_start` in `core/stream.py`). Boundaries are stamped ONLY at genuine task starts — the prompt hook's new_task / after-WF_DONE transitions (`append_task_boundary`) and first-time session creation. Continuation/unclear prompts and mid-session slash commands (FAST TRACK re-invocation) NEVER stamp, so a task's docreads keep counting across interleaved prompts. See `DOM_SWE_HOOKS` "Task-boundary stamping".
-
-Docpending window (narrower than the task window): a SUCCESSFUL sweep stamps a `sweep` marker; `_check_memory_sweep` accounts docpending links via `events_since_task_start(since_sweep=True)`, i.e. only links surfaced AFTER the last passed sweep. Consequence: once a sweep passes its links are settled — a later sweep in the same session (common when continuation/pivot prompts don't re-stamp a task boundary) never re-demands a prior task's already-handled links. Docread/`Memories loaded` verification uses the FULL SESSION stream (D2). Leaked truncated link tokens (e.g. `ref/ref_...` from a clipped hook message) are dropped by `is_valid_memory_name()` before they can be demanded.
-
-### Adding a New Gate
-
-1. Create pre-hook `hooks/pre/swe_pre_{name}_gate.py` — check sentinel, block if missing.
-2. In `swe_post_read_state.py`, call `create_feature_sentinel(session_id, '{gate_name}')` when FEATURE_* is read.
-3. Register in `hooks/hooks.json`.
-4. Add a directive to the FEATURE_* memory documenting the gate.
-
-## Response-Format Gate (config-driven)
-
-`swe_stop_response_format.py` (Stop) enforces a terse reply budget; `swe_prompt_format_reminder.py` (UserPromptSubmit) surfaces the budget the turn after a block. Both are ON by default and skip silently when SWE is bypassed, the project is uninitialized, or the gate is disabled.
-
-### Config — the canonical Claude-plugin mechanism
-
-- Declared as a `userConfig` block in `.claude-plugin/plugin.json`. Claude Code exports each key to hook subprocesses as `CLAUDE_PLUGIN_OPTION_<KEY>`.
-- Read via `core.config.get_response_format_config()` — env-only, never a project file (project-scoped `.claude/settings.json` is intentionally NOT trusted for plugin config).
-- Keys + defaults: `response_format_enabled` (bool, true) · `response_format_terse_limit` (int, 40) · `response_format_detail_limit` (int, 600).
-- Detail is opt-in via the literal `DETAIL:` / `DETAIL -` prompt prefix OR natural-language detail triggers (F1): "review", "report", "explain", "analysis", "summary of", "total", "walk me through", "why" — any match grants the detail budget, no block. At most ONE format block per user turn (second overage → WARN attachment, F2); WF_DONE turns are never blocked (F3); the DIAGNOSIS VERIFICATION block + `candidate — unverified` label are word-budget-exempt (G4).
-- Per-project override: set the plugin option in a user/managed scope (`~/.claude.json`), NOT the repo. Opt a project out with `response_format_enabled=false`.
-
-### Runtime files (under `.serena/streams/`)
-
-- `.format-gate-block-<session>` — sentinel the Stop gate writes on a block; the prompt reminder reads + clears it.
-- `response-format-offenders.log` — one entry per blocked turn (prompt + offending reply) for regex tuning.
-
-### Testable seam
-
-- `swe_stop_response_format.evaluate(assistant_msgs, last_user_text, terse_limit, detail_limit, retry)` is a pure function (no IO) returning `(reason|None, scanned, words)`. Tests: `tests/test_response_format_gate.py`.
+`memories/wf/` (WF_*.md) · `memories/ref/` (FEATURE_DEV_STANDARDS, REF_MEMORY_STYLE, etc.) · `memories/claude/` (CLAUDE.md, CLAUDE_OBLIGATIONS.md) · `memories/arch/` (ARCH_SWE.md) · `memories/dom/` (DOM_SWE_HOOKS+children, DOM_SWE_STATE_MACHINE, DOM_SWE_FEATURE_GATES, DOM_SWE_RESPONSE_FORMAT_GATE, DOM_SWE_BOOTSTRAP, DOM_SWE_MEMORY_PATHS) · `memories/feature/` (this file) · `memories/index/` (if any).
 
 ## Plan Mode Triggers
 
-| Mode        | States                                                                   |
-| ----------- | ------------------------------------------------------------------------ |
-| Always      | WF_ARCH_REVIEW                                                           |
-| Never       | WF_DEBUG_TDD, WF_CHECKPOINT, WF_VERIFY, WF_DONE, WF_RESEARCH, WF_EXECUTE |
-| Conditional | WF_CLASSIFY (complexity >= medium)                                       |
+Always: WF_ARCH_REVIEW. Never: WF_DEBUG_TDD, WF_CHECKPOINT, WF_VERIFY, WF_DONE, WF_RESEARCH, WF_EXECUTE. Conditional: WF_CLASSIFY (complexity ≥ medium).
 
 ## Scripts
 
-| Script                     | Purpose                                                                                                                                                                                           |
-| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `bump-version.sh`          | Version management                                                                                                                                                                                |
-| `install-hooks.sh`         | Install git hooks                                                                                                                                                                                 |
-| `pre-commit`               | Pre-commit validation                                                                                                                                                                             |
-| `swe-bootstrap.py`         | Self-contained new project bootstrap                                                                                                                                                              |
-| `start-serena.sh`          | Start Serena LSP server                                                                                                                                                                           |
-| `start-wm-mcp.sh`          | Start WM MCP server                                                                                                                                                                               |
-| `serena_memory_patch.py`   | Serena memory path patching                                                                                                                                                                       |
-| `validate-graph.py`        | Validate `state-machine/states.json` (transitions, `transitionMatrix`, `rank`, `loopCaps`, `subflows`)                                                                                            |
-| `validate-memory-graph.py` | Validate the `memories/` link graph (dangling/orphan refs, word counts, CAPS hard-stop counts); `python3 scripts/validate-memory-graph.py [--root memories] [--json]`, exits 1 on dangling errors |
-
-## Memory Paths (multi-source, `.serena/memory-paths.conf`)
-
-- Entry syntax: `[alias=]path[:ro]`, one per line. First line = primary write dir (NEVER aliased). `start-serena.sh` appends the plugin `memories:ro` dir unaliased.
-- Aliased entry (`em=../em-serena/.serena/memory`): memories addressed ONLY as `<alias>/<rel>` (`em/feature/FEATURE_TESTS`) for list/read/write/edit/delete/move/search. NEVER merged into the flat namespace — same-named memories across sources cannot shadow each other. Use an alias for EVERY imported sibling-project tree.
-- Unaliased extra: flat merge, primary wins; Serena logs a warning per shadowed name.
-- Alias rules (Serena raises ValueError at startup): `[A-Za-z0-9_-]+`, not `global`, unique, not the name of a top-level dir in the primary tree.
-- Implementation: fork `serena/memories/memory_manager.py` (`_memory_aliases`, `split_alias`); `serena_memory_patch.py` preserves the `<alias>/` segment and normalizes only the remainder, and NEVER falls back to a non-aliased lookup for an aliased name.
+`bump-version.sh` · `install-hooks.sh` · `pre-commit` · `swe-bootstrap.py` (bootstrap — `mem:dom/DOM_SWE_BOOTSTRAP`) · `start-serena.sh` · `start-wm-mcp.sh` · `serena_memory_patch.py` (`mem:dom/DOM_SWE_MEMORY_PATHS`) · `validate-graph.py` (validate states.json: transitions, `transitionMatrix`, `rank`, `loopCaps`, `subflows`) · `skills/swe-memory-size-audit/scripts/validate-memory-graph.py` (bundled with the skill; dangling/orphan refs; pass ALL roots in one run; exit 1 on dangling) · `memory-size-audit.py` (sizes: ok ≤8,000/warn ≤16,000/split/unreadable ≥50,000 chars; `[--root [alias=]DIR] [--topic P] [--json]`, exit 1 on split/unreadable).
 
 ## Dependencies
 
-- Internal: Serena MCP (memory), swe-wm MCP (Working Memory updates).
-- External: jq (JSON parsing), bash, python3.
+Serena MCP (memory), swe-wm MCP (WM updates), jq, bash, python3.
 
 ## Runtime Files
 
-| File                                       | Purpose                                                                                                           |
-| ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------- |
-| `.serena/swe-setup-complete.json`          | Setup completion flag                                                                                             |
-| `.serena/swe-bypass.json`                  | SWE permanently disabled flag                                                                                     |
-| `.serena/swe-state/<session>.state`        | Decoupled workflow state (authoritative)                                                                          |
-| `.serena/streams/<session>.jsonl`          | Append-only event log                                                                                             |
-| `.serena/streams/.init_<session>`          | Init gate sentinel cache (self-healing: recreated from WM if missing)                                             |
-| `.serena/streams/.sweep_feature_<session>` | Per-task Feature Knowledge Sweep sentinel (created by WM-server sweep verification; cleared on WF_CLASSIFY entry) |
-| `.serena/memories/WM_<session>.md`         | Working Memory (per-session)                                                                                      |
-
-## Bootstrap & Init Flow (New Projects)
-
-When the plugin is installed at user level and a new project is opened, use a three-tier approach — never block the user.
-
-### Tier 1: Prompt to Set Up (new project detected)
-
-SessionStart detects no `swe-setup-complete.json` and prompts (does NOT block):
-
-- Option 1: Say "yes" or run `/swe-init` to set up.
-- Option 2: Run `/swe-bypass` to disable (user-only).
-
-### Tier 2: Project Bypass (user-only command)
-
-- Bypass is a `"bypass": true` field inside `swe-setup-complete.json` (same file used for init — no separate `swe-bypass.json`).
-- When set: all three hooks (SessionStart, UserPromptSubmit, PreToolUse init gate) skip enforcement.
-- SessionStart announces the bypass each session (`BYPASS_NOTICE`) with removal instructions. It is NOT silent.
-- Re-enable by setting `"bypass": false` (or removing the field) in `.serena/swe-setup-complete.json`.
-- Bypass is user-only and un-rationalizable: set ONLY by the user running `/swe-bypass` (`disable-model-invocation: true`). NEVER set it — a hard guard in both `swe_pre_tool_init_gate.py` and `swe_pre_edit_validate.py` denies any Edit/Write/Bash that would write `"bypass": true` into `swe-setup-complete.json`. Intent phrases like "skip swe" are NOT triggers; only the explicit command works.
-- Legacy: `.serena/swe-bypass.json` is still honored for backward compatibility; new bypasses use the in-file field.
-
-### Tier 3: Full Init (user accepts)
-
-1. User says "yes" → `swe-bootstrap.py` runs inline (via UserPromptSubmit hook).
-2. Bootstrap creates: `.serena/`, `.serena/swe/`, `.serena/memories/`, `.serena/.gitignore`, `project.yml`, `memory-paths.conf`, `CLAUDE_PREFIX.md` injection, rendered template memories (`{{placeholders}}` filled from detected project info), `swe-setup-complete.json` with `bootstrapped: true`.
-3. Init gate is unblocked (gate checks `complete` field; bootstrapped-but-not-complete passes through).
-4. User runs `/swe-init`, which launches the init agent (11 tasks):
-   - Detect environment + resolve plugin root.
-   - Auto-memory symlink (FIRST) — redirect Claude Code auto-memory into `.serena/memory/` before any memory is written, so init-time memories land in the right place.
-   - Run bootstrap (if not already done).
-   - Verify MCP servers (Serena, swe-wm).
-   - Serena onboarding (+ migrate default memories into SWE templates).
-   - Relocate & link the `memory_maintenance` memory into `ref/REF_MEMORY_MAINTENANCE` (sourced from the EarthmanWeb/serena fork — NEVER upstream oraios/serena or the uv cache).
-   - Verify and install language servers.
-   - Verify SWE plugin is enabled.
-   - Review CLAUDE.md for conflicts.
-   - Install Serena Log Viewer VSCode extension.
-   - Finalize setup (`complete: true`).
-5. Full workflow is now active.
-
-### State Flow
-
-```
-New Project → No setup file
-  → SessionStart prompts (not blocks)
-  ├── "yes" → Bootstrap runs → bootstrapped: true → Scaffold → complete: true → Full workflow
-  └── user runs /swe-bypass → "bypass": true in swe-setup-complete.json → hooks skip + announce bypass each session
-```
-
-### swe-bootstrap.py Guards
-
-| Guard                                                      | Behavior                     |
-| ---------------------------------------------------------- | ---------------------------- |
-| `.serena/swe-bypass.json` exists                           | Exit: "SWE bypassed"         |
-| `.serena/swe-setup-complete.json` has `complete: true`     | Exit: "Already initialized"  |
-| `.serena/swe-setup-complete.json` has `bootstrapped: true` | Exit: "Already bootstrapped" |
-
-### .gitignore Additions (via bootstrap)
-
-`.serena/.gitignore` (auto-created inside `.serena/`, only if absent). Default set (paths relative to `.serena/`):
-
-```
-/cache
-/streams
-/memories
-/swe-setup-complete
-```
-
-`/memories` blanket-ignores the plural session-WM dir (`.serena/memories/`, holds `WM_*.md`). Committed typed feature memories live in the singular `.serena/memory/` and are NOT matched. Source: `ensure_serena_gitignore()` in `scripts/swe-bootstrap.py`.
-
-Project root `.gitignore` (appended by `update_gitignore()`, guarded by the `!.serena/memory/` marker):
-
-```
-.serena/swe-bypass.json
-.serena/swe-setup-complete.json
-.serena/swe-state/
-
-# Override global .serena/* ignore — un-ignore project memories
-!.serena/memory/
-!.serena/memory/**/*.md
-!.serena/memories/
-!.serena/memories/**/*.md
-.serena/memories/WM_*.md
-```
+`.serena/swe-setup-complete.json` (setup flag) · `.serena/swe-bypass.json` (legacy disable) · `.serena/swe-state/<session>.state` (authoritative state) · `.serena/streams/<session>.jsonl` (event log) · `.serena/streams/.init_<session>` (init sentinel) · `.serena/streams/.sweep_feature_<session>` (sweep sentinel, `mem:dom/DOM_SWE_FEATURE_GATES`) · `.serena/memories/WM_<session>.md` (per-session WM).
 
 ## Test Commands
 
-```bash
-# Validate state machine
-jq . .claude/plugins/serena-workflow-engine/state-machine/states.json
+`jq . state-machine/states.json` · `python3 scripts/validate-graph.py` · `claude plugin list | grep serena-workflow-engine`.
 
-# Check hook permissions
-ls -la .claude/plugins/serena-workflow-engine/hooks/**/*.py
+## Sweep Rule (canonical)
 
-# Verify plugin installation
-claude plugin list | grep serena-workflow-engine
-```
-
-## Development Standards (Dual-Location Architecture)
-
-SWE is a standalone plugin with a dual-location architecture.
-
-### Location 1: Plugin Folder (generic/portable)
-
-Path: `.claude/plugins/serena-workflow-engine/`. Contains files that must work across ANY project using the plugin:
-
-- `memories/wf/WF_*.md` — Workflow state instructions
-- `memories/ref/REF_*.md` — Generic reference docs
-- `hooks/{session,prompt,pre,post,stop}/*.py` — Event handler scripts
-- `hooks/swe_hooks/core/*.py` — Core Python modules
-- `hooks/hooks.json` — Hook configuration (auto-loaded by plugin system)
-- `skills/*/SKILL.md` — Skill definitions
-- `commands/*.md` — Command definitions
-- `agents/*.md` — Agent definitions
-- `scripts/*.sh` — Build scripts
-- `README.md` — Plugin documentation
-
-### Location 2: Local Serena Memories (project-specific)
-
-Path: `.serena/swe/` — feature memories, refs, specs:
-
-- `wf/WF_*.md` — Copied from plugin, may have project customizations
-- `ref/REF_*.md` — Project-specific references
-- `dom/DOM_SWE_*.md` — Domain documentation
-- `feature/FEATURE_SWE.md` — This file
-
-Path: `.serena/memories/` — session Working Memory:
-
-- `WM_<session>.md` — Per-session working memory files
-
-### Change Decision Matrix
-
-| Change Type               | Plugin Folder | Local Memories | Example             |
-| ------------------------- | ------------- | -------------- | ------------------- |
-| Generic workflow logic    | ✅ YES        | ❌ No          | New WF_* state      |
-| Generic hook behavior     | ✅ YES        | ❌ No          | Hook pattern change |
-| Project-specific patterns | ❌ No         | ✅ YES         | Custom DOM_* doc    |
-| New skill/command         | ✅ YES        | ❌ No          | New /swe-* command  |
-| Reference documentation   | ✅ YES        | ❌ No          | REF_* updates       |
-| Hook script changes       | ✅ YES        | ❌ No          | Python hook edits   |
-
-### Hook Loading
-
-- SWE hooks load automatically from the plugin folder via Claude Code's plugin system.
-- `${CLAUDE_PLUGIN_ROOT}` in `hooks/hooks.json` resolves automatically — no copying to settings.json needed.
-- See `DOM_SWE_HOOKS` for hook architecture details.
+A docpending link surfaced by the PRIMARY feature is satisfied by read, planned (`(mem:<name>)` cited in WM Compliance Checklist), or ruled out (with reason); bare deferral is rejected. Mechanism: `mem:dom/DOM_SWE_FEATURE_GATES`.
 
 ## Related Memories
 
-- `ARCH_SWE` — SWE architecture documentation
-- `REF_SWE_DEVELOPMENT` — Development standards
-- `DOM_SWE_HOOKS` — Hook architecture
-- `ref/REF_DEV_STANDARDS_ONBOARD` — parallel-agent procedure for discovering an EXISTING codebase's dev standards (as opposed to `swe-scaffold-project`, which templates `FEATURE_DEV_STANDARDS` for a new empty project)
+`ARCH_SWE` (architecture docs) · `REF_SWE_DEVELOPMENT` (dev standards) · `ref/REF_DEV_STANDARDS_ONBOARD` (parallel-agent discovery for an EXISTING codebase's dev standards, vs `swe-scaffold-project` which templates `FEATURE_DEV_STANDARDS` for a new empty project).
+
+## Routing — When to Read a Child
+
+| When                                         | Read                                   |
+| -------------------------------------------- | -------------------------------------- |
+| Hook mechanics (hub for HOOKS_* children)    | `mem:dom/DOM_SWE_HOOKS`                |
+| State transitions, `states.json`, `loopCaps` | `mem:dom/DOM_SWE_STATE_MACHINE`        |
+| Sweep gate, sentinels, docpending logic      | `mem:dom/DOM_SWE_FEATURE_GATES`        |
+| Stop gate, config keys, detail triggers      | `mem:dom/DOM_SWE_RESPONSE_FORMAT_GATE` |
+| New-project bootstrap, `/swe-bypass`         | `mem:dom/DOM_SWE_BOOTSTRAP`            |
+| `memory-paths.conf`, memory aliasing         | `mem:dom/DOM_SWE_MEMORY_PATHS`         |

@@ -1,6 +1,6 @@
 ---
 name: WF_CLASSIFY
-description: Classify the task, detect requirements, load the primary feature memory plus its full related-memory set (Feature Knowledge Sweep), and route. First workflow state after init. Classification, feature-knowledge loading and routing only — no task work.
+description: Classify the task, detect requirements, load the primary feature memory plus its tiered related-memory set (Feature Knowledge Sweep), and route. First workflow state after init — classification and routing only, no task work.
 metadata:
   type: workflow
 ---
@@ -11,130 +11,68 @@ metadata:
 
 ## Entry & Non-Skippable
 
-- WF_CLASSIFY is the FIRST workflow state after init (`WF_INIT` → `CLAUDE_OBLIGATIONS` → `WF_CLASSIFY`).
-- The hook creates the WM file and init sentinel automatically on transition into WF_CLASSIFY. Do not create them.
-- Every task passes through WF_CLASSIFY. NEVER skip it — the sweep sentinel it creates gates every edit downstream, so skipping it blocks WF_EXECUTE later.
-- A feature key in WM is not a loaded `FEATURE_[KEY]` memory. Features load in Step 4 below.
+FIRST workflow state after init (`WF_INIT` → `CLAUDE_OBLIGATIONS` → `WF_CLASSIFY`). Hook creates the WM file and init sentinel automatically on transition in — do not create them. Every task passes through WF_CLASSIFY. NEVER skip it — its sweep sentinel gates every edit downstream; skipping it blocks WF_EXECUTE later. A feature key in WM is not a loaded `FEATURE_[KEY]` memory — features load in Step 4.
 
-Valid paths to WF_EXECUTE:
-
-- Major code change: `WF_CLASSIFY` → `WF_ARCH_REVIEW` → `WF_EXECUTE`
-- Minor code change (Step 3b): `WF_CLASSIFY` → `WF_EXECUTE` (arch review skipped)
-- Operational task: `WF_CLASSIFY` → `WF_EXECUTE`
+Valid paths to WF_EXECUTE: major code change → `WF_CLASSIFY` → `WF_ARCH_REVIEW` → `WF_EXECUTE`; minor code change (3b) → `WF_CLASSIFY` → `WF_EXECUTE` (arch review skipped); operational task → `WF_CLASSIFY` → `WF_EXECUTE`.
 
 ## ⛔ NO Task Work in This State
 
-WF_CLASSIFY is classification and routing only. The edit gate (`swe_pre_edit_validate.py`) HARD-BLOCKS every Edit/Write/Serena-edit call here. Task work now is wasted — you redo it after transition.
+Classification and routing only. `swe_pre_edit_validate.py` HARD-BLOCKS every Edit/Write/Serena-edit call here.
 
-Allowed (classification inputs only):
+ALLOWED: `read_memory` for `INDEX_FEATURES`, primary `FEATURE_[KEY]`, every Step-4d sweep memory; `search_memories_by_name`/`search_memories_by_front_matter` (4b/4d); reading the request and WM context; lightweight `list_memories`/`Glob` strictly for spec detection (2d) or the targeted feature. Memory reads = classification; source-file reads = task work.
 
-- `read_memory` for `INDEX_FEATURES`, the primary `FEATURE_[KEY]`, and every memory in the Feature Knowledge Sweep (Step 4d)
-- `search_memories_by_name` / `search_memories_by_front_matter` to identify features and enumerate related memories (Steps 4b/4d)
-- Read the user request and existing WM context
-- Lightweight `list_memories` / `Glob` strictly to detect specs (Step 2d) or the targeted feature
+DEFER to WF_EXECUTE/WF_ARCH_REVIEW: reading the target file; `find_symbol`/`get_symbols_overview`/`search_for_pattern`; planning the exact `needle`/`repl`; `Edit`/`Write`/`replace_content`/`replace_symbol_body`/any edit tool — HARD-BLOCKED here.
 
-Memory reads are classification work, not task work. Source-file reads are task work.
-
-Defer to WF_EXECUTE or WF_ARCH_REVIEW instead:
-
-- Reading the target source/doc file you intend to change
-- Running `find_symbol` / `get_symbols_overview` / `search_for_pattern` to scope the edit
-- Planning the exact change, drafting the diff, or deciding `needle`/`repl` values
-- Calling `Edit`, `Write`, `replace_content`, `replace_symbol_body`, or any edit tool — HARD-BLOCKED here
-
-> Reading the file you are about to edit is task work, not classification. You do not need file contents to classify task type or count files touched — the user request and the loaded feature memories suffice. If you catch yourself opening the target file or reaching for an edit tool: stop, finish routing, transition first.
+> File contents are not needed to classify task type or count files touched. Catching yourself opening the target file or reaching for an edit tool: stop, finish routing, transition first.
 
 ## Steps
 
 ### 1. Clarity Check
 
 - Cannot classify AT ALL (hard blocker, e.g. cannot tell which of two features is targeted) → `WF_CLARIFY`
-- Otherwise → continue. Do not resolve approach/design ambiguity or approach conflicts here — defer to the single question gate at `WF_ARCH_REVIEW`.
+- Otherwise → continue. Do not resolve approach/design ambiguity here — defer to the single question gate at `WF_ARCH_REVIEW`.
 
 ### 2. Detect Requirements
 
-Scan the user message for behavioral/UX requirements ("should", "must", "needs to", corrections to current behavior, UX preferences). If found, note in WM for Step 5. If none, continue.
+Scan the message for behavioral/UX requirements ("should", "must", "needs to", corrections to current behavior). Found → note in WM for Step 5. None → continue.
 
-Regression-language detection — scan the same message for: "regressed", "just broke", "stopped working", "used to work", "broke after". On match, note `regression: recent` in WM Task Context. This flag drives the regression route (Step 3 / Routing Table).
+Regression-language detection — scan for: "regressed", "just broke", "stopped working", "used to work", "broke after". Match → note `regression: recent` in WM Task Context (drives the regression route — Routing Table). Full mechanics: `mem:ref/REF_WF_CLASSIFY_SWEEP`.
 
 ### 2b. Auto-Approve Detection
 
-Detect EXPLICIT intent to skip the WF_ARCH_REVIEW approval gate. ONLY these phrases qualify:
+Detect EXPLICIT intent to skip the WF_ARCH_REVIEW approval gate. ONLY: "skip approval" / "skip the approval gate", "don't ask for approval" / "don't stop for approval", "auto-approve" / "auto approve". "just do it", "go ahead", "run unattended" do NOT qualify.
 
-- "skip approval" / "skip the approval gate"
-- "don't ask for approval" / "don't stop for approval"
-- "auto-approve" / "auto approve"
-
-"just do it", "continue through to completion", "run unattended", "go ahead" do NOT qualify — urgency/agreement, not blanket bypass.
-
-- Explicit opt-out detected → note `auto_approve: true` in WM. Plan is still presented at WF_ARCH_REVIEW; approval gate is skipped.
-- Not detected (default) → approval required at WF_ARCH_REVIEW.
+Explicit opt-out → note `auto_approve: true` in WM (plan still presented; gate skipped). Default → approval required at WF_ARCH_REVIEW.
 
 ### 2c. Command & Skill Identification
 
-Before planning manual implementation, check for an existing command or skill that handles the task.
-
-Scan locations:
-
-1. System-reminder skills list (already in context) — match intent against skill descriptions
-2. Project/user commands — `.claude/commands/*.md`, `.claude/skills/*/SKILL.md`, `~/.claude/commands/*.md`, `~/.claude/skills/*/SKILL.md`
-3. Plugin commands — installed plugin `commands/` directories
-
-- Use fuzzy intent matching. Respect `disable-model-invocation` (user-only skills).
-- Match found → note `matched_skill: plugin:skill-name` or `matched_command: /command-name` in WM, then invoke it. Commands/skills may handle routing themselves.
-- No match → continue to Step 3.
+Check for an existing command/skill before planning manual implementation: scan skills list, project/user/plugin commands; fuzzy-match intent; respect `disable-model-invocation`. Match → note `matched_skill:`/`matched_command:` in WM, invoke it. No match → Step 3. Detail: `mem:ref/REF_WF_CLASSIFY_PROTOCOLS`.
 
 ### 2d. Gherkin Spec Detection
 
-1. Explicit Gherkin request (user asks to write specs, create `.feature` files, or do BDD/TDD from specs):
-   - Note `gherkin_spec: true` in WM
-   - Route to `/swe-gherkin-spec` (authoring) or `/swe-gherkin-dev` (TDD from existing spec)
-2. New feature development (user describes new functionality to build):
-   - Check SPEC_* memories for the feature: `list_memories(topic="spec")` — NAMES ONLY. Do NOT read spec bodies here.
-   - No specs exist → note `gherkin_spec_needed: true` in WM (enforced at WF_ARCH_REVIEW)
-3. Feature addition to an existing feature with Gherkin specs:
-   - Check `.feature` files: `Glob(pattern="tests/specs/*[feature-key]*.feature")`
-   - Specs exist → note `gherkin_spec_update: true` in WM (enforced at WF_VERIFY)
+Explicit spec-authoring/TDD request → note `gherkin_spec: true`, route per Routing Table. New feature, no SPEC_* found (`list_memories(topic="spec")`, names only) → note `gherkin_spec_needed: true` (enforced at WF_ARCH_REVIEW). Existing feature + `.feature` files found → note `gherkin_spec_update: true` (enforced at WF_VERIFY). Detail: `mem:ref/REF_WF_CLASSIFY_PROTOCOLS`.
 
 ### 3. Task Type Assessment
 
-| Task type                                                                                                                   | Signals                                                                                                                                                                                                                                                                                                                 | Route                                                       |
-| --------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
-| Research (no code changes, exploration only)                                                                                | How code works, exploring patterns, finding files/symbols                                                                                                                                                                                                                                                               | `WF_RESEARCH`                                               |
-| Debugging (test-driven)                                                                                                     | Failing tests, behavior differs between environments, test-driven debugging                                                                                                                                                                                                                                             | `WF_DEBUG_TDD`                                              |
-| Operational (no code changes, execution only)                                                                               | Run shell/WP-CLI, HTTP requests, check DB state, run test suites, verify deployments — needs feature context, modifies no source. Skip arch review                                                                                                                                                                      | `WF_EXECUTE` (after Step 4)                                 |
-| Code change                                                                                                                 | Bug fix, feature addition, refactor, doc update — modifies source                                                                                                                                                                                                                                                       | `WF_ARCH_REVIEW` or `WF_EXECUTE` per Step 3b (after Step 4) |
-| Parallel subagents (2+ independent subtasks, OR explicit operator fan-out request, OR 6+ files, OR 3+ architectural layers) | Independent concurrent subtasks with disjoint file ownership — orchestrator mode per `feature/FEATURE_SUBAGENTS` is the DEFAULT, not an escalation. Note `parallel_agents: true`; use `Agent` tool with `run_in_background: true`, explicit `model` per tier, and optionally `isolation: "worktree"` for edit conflicts | `WF_ARCH_REVIEW`                                            |
+Signals only — see Routing Table for the actual route:
 
-Regression route — when WM has `regression: recent` (Step 2): route to `WF_RESEARCH` with the Feature Knowledge Sweep DEFERRED. Recency triage + runtime observation run FIRST; feature/doc memories load on-miss, keyed to the component the evidence implicates. Note "sweep deferred: regression route" in WM Affected Features. The edit gate still requires the sweep before any later edit — the deferral moves it after evidence, it never removes it.
+- Research (explore only) — no edits planned.
+- Debugging (TDD; failing tests, env-divergent).
+- Operational (shell/WP-CLI/HTTP/DB/tests/deploy-check; no edits).
+- Code change (bug fix/feature/refactor/doc; modifies source) — see Step 3b for arch-review necessity.
+- Parallel subagents — signal detail incl. triggers and orchestrator-default rule: `mem:ref/REF_WF_CLASSIFY_PROTOCOLS`. Note `parallel_agents: true` when triggered.
+
+Regression route — WM `regression: recent` (Step 2) → Feature Knowledge Sweep DEFERRED (loads on-miss after evidence); note "sweep deferred: regression route" in WM Affected Features. Edit gate still requires the sweep before any edit. Full detail: `mem:ref/REF_WF_CLASSIFY_SWEEP`.
 
 ### 3b. Architecture Review Necessity Check (Code Changes Only)
 
-REQUIRES `WF_ARCH_REVIEW` if ANY is true:
+REQUIRES `WF_ARCH_REVIEW` if ANY: new feature; major module addition; touches MORE than 5 files; touches 3+ layers OR `parallel_agents` noted; `gherkin_spec_needed: true` (2d).
 
-- New feature (net-new functionality, not a change to existing behavior)
-- Major module addition to an existing feature (new class/subsystem/integration surface)
-- Touches MORE than 5 files
-- Touches 3+ architectural layers, OR `parallel_agents` was noted
-- `gherkin_spec_needed: true` noted at Step 2d
-
-MAY SKIP `WF_ARCH_REVIEW` → route directly to `WF_EXECUTE` ONLY if ALL hold:
-
-- Minor patch to EXISTING functionality (bug fix, small refactor, copy/doc tweak, config value, localized behavior change) — NOT a new feature or major module addition
-- Touches 5 files or fewer
-- All design/approach questions already resolved (request unambiguous, or answers obvious from the memories loaded in the Step 4d sweep) — nothing to ask at a question gate
-
-When skipping arch review:
-
-- Note `arch_review_skipped: true` and the reason in WM
-- Still load the relevant DEV__/DOM__ standards for the touched files (the load WF_ARCH_REVIEW would have done) at the start of WF_EXECUTE, scoped to touched files
-- If in WF_EXECUTE the change turns out larger than classified (>5 files or adds a module), STOP and route back to `WF_ARCH_REVIEW`
-
-When in doubt, do NOT skip → route to `WF_ARCH_REVIEW`. Skip is for genuinely small, well-understood changes only.
+MAY SKIP → `WF_EXECUTE` ONLY if ALL: minor patch to EXISTING functionality; ≤5 files; all design questions resolved. Skipping: note `arch_review_skipped: true` + reason in WM; still load relevant DEV__/DOM__ standards scoped to touched files at start of WF_EXECUTE; WF_EXECUTE reveals a larger change → STOP, route back to `WF_ARCH_REVIEW`. When in doubt, do NOT skip. Full criteria: `mem:ref/REF_WF_CLASSIFY_PROTOCOLS`.
 
 ## Step 4: Feature Loading (Gate)
 
-Complete all substeps before proceeding.
+Complete all substeps first.
 
 ### 4a. Read Feature Registry
 
@@ -142,44 +80,25 @@ Complete all substeps before proceeding.
 
 ### 4b. Identify All Affected Features
 
-Scan request for feature indicators: explicit names, file paths spanning feature directories, cross-cutting concerns, domain terminology.
+Scan request for feature indicators: explicit names, file paths, cross-cutting concerns, domain terminology.
 
-Then the MANDATORY fuzzy fallback — absence from `INDEX_FEATURES` is NOT absence of a feature memory (the registry can lag):
+MANDATORY fuzzy fallback — registry can lag, absence from `INDEX_FEATURES` is NOT absence of a feature memory: no row matches, or match uncertain → run BOTH `search_memories_by_name("<key terms>")` AND `search_memories_by_front_matter("<key terms>")` on the request's key nouns. Do not conclude "no feature memory exists" without both returning nothing. A hit outside the registry IS the primary feature — use it, note the gap in WM.
 
-- No registry row matches, or the match is uncertain → run BOTH `search_memories_by_name("<key terms>")` AND `search_memories_by_front_matter("<key terms>")` on the request's key nouns.
-- Do not conclude "no feature memory exists" without both searches returning nothing.
-- A hit outside the registry (e.g. `feature/FEATURE_X` not yet registered) IS the primary feature — use it and note the registry gap in WM.
+MANDATORY symptom search: search memories on the request's LITERAL symptom tokens (error strings, class names, option keys) — surfaces memories feature-noun searches miss.
 
-MANDATORY symptom search — run in addition to the feature-noun searches:
-
-- Search memories on the request's LITERAL symptom tokens (error strings, class names, option keys — e.g. "sr-only", "bootstrap"), not only feature nouns. Symptom tokens surface memories that feature-noun searches miss.
-
-Body-content search is sanctioned:
-
-- When name/front-matter search misses, a Grep/Bash grep across memory BODIES (`.serena/memory/` and configured memory paths) IS a legitimate docs consult — the docs-first gate credits it.
+Body-content search sanctioned: when name/front-matter search misses, a Grep/Bash grep across memory BODIES IS a legitimate docs consult — the docs-first gate credits it.
 
 ### 4c. Load the Primary FEATURE_[KEY]
 
-- `read_memory("feature/FEATURE_[KEY]")` — the primary feature.
-- Note its Related Memories section/table and any `[[linked]]` memory names — they seed the sweep in 4d.
+`read_memory("feature/FEATURE_[KEY]")`. Note its Related Memories/`[[linked]]` names — they seed the sweep in 4d.
 
 ### 4d. Feature Knowledge Sweep (MANDATORY — every route) — TWO-TIER
 
-Load the feature's knowledge set before transitioning — work must not start on the primary FEATURE memory alone. This applies to every route: operational, research, audit, and code-change tasks alike. Skipping this is not just a style miss: the sweep sentinel that unlocks edits in WF_EXECUTE is verified against this load (Step 4e), so an incomplete sweep here blocks work later.
-
-The sweep runs in TWO tiers: a cheap digest pass over every candidate memory's front-matter (TIER 0, always), then a full-body read of the task-relevant subset (TIER 1, hard-capped). Tier 0 gives complete AWARENESS at low cost; Tier 1 gives DEPTH where it is needed. Nothing enumerated by Tier 0 is silently skipped — every candidate rule gets a disposition (read, planned, ruled out, or deferred).
+Load the feature's knowledge set before transitioning — the sweep sentinel unlocking WF_EXECUTE edits is verified against this load (4e). TWO tiers, always: cheap front-matter digest (TIER 0) then a hard-capped full-body read of the task-relevant subset (TIER 1). Every candidate rule gets a disposition (read/planned/ruled-out/deferred) — nothing silently skipped. Full disposition rules, cross-cutting handling, idempotence, source enumeration: `mem:ref/REF_WF_CLASSIFY_SWEEP`.
 
 #### TIER 0 — Digest Pass (ALWAYS, ONE extraction)
 
-Enumerate related memories from THREE sources first:
-
-1. The primary FEATURE memory's Related Memories section and `[[links]]`.
-2. `MEMORY.md` index lines whose title/hook matches the feature area or the request's domain terms.
-3. `search_memories_by_name("<feature key / domain terms>")` — catches memories neither the feature table nor MEMORY.md lists.
-
-Then run ONE sanctioned Bash/Grep extraction of front-matter (`name` + `description` + `obligations`) across the candidate memory dirs — `.serena/memory/{dom,ref,dev,feature}` plus any aliased trees in `.serena/memory-paths.conf`. This IS a credited docs consult (B2 docs-first budget refill); it is not a substitute for Tier 1 reads on the memories that matter.
-
-Exact command shape:
+Enumerate candidates from the primary FEATURE memory's links, `MEMORY.md` index, and `search_memories_by_name`. Then run ONE sanctioned front-matter extraction (`name`+`description`+`obligations`) across `.serena/memory/{dom,ref,dev,feature}` + aliased trees in `.serena/memory-paths.conf`:
 
 ```bash
 awk '
@@ -189,37 +108,23 @@ awk '
 ' .serena/memory/{dom,ref,dev,feature}/*.md
 ```
 
-Fallback for a candidate with no `obligations:` field: digest it by its `description:` line alone (grep `-A6 '^obligations:'` finds none — the description is the whole digest for that memory).
-
-Output of Tier 0: complete awareness of every candidate rule's name + description + (if present) obligations, at roughly 1-2k tokens total. This is the input to the dispositions below — not a substitute for them.
+No `obligations:` field → digest by `description:` alone.
 
 #### TIER 1 — Body Pass (task-relevant subset, HARD-CAPPED)
 
-Read, TIERED by relevance — read the task-relevant set, defer the rest to on-miss expansion:
+READ — HARD CAP: primary `FEATURE_*` + secondary `FEATURE_*` the request EXPLICITLY touches + at most 3 directly-relevant `REF_*`/`DOM_*`/`SYS_*`/`ARCH_*` refs whose Tier-0 digest intersects the task's touched surfaces. DEFER cold refs. Canonical rule: a link surfaced by the PRIMARY feature cannot be deferred — READ it (counts against the cap) or, past the cap, PLAN or RULE IT OUT with a reason. Unsure → read it. Full mechanics incl. WM-write rejection: `mem:ref/REF_WF_CLASSIFY_SWEEP`.
 
-1. Read — HARD CAP: the primary `FEATURE_*` + the secondary `FEATURE_*` memories the request EXPLICITLY touches + at most 3 directly-relevant `REF_*`/`DOM_*`/`SYS_*`/`ARCH_*` refs whose Tier 0 digest intersects the task's touched surfaces. Judge relevance from the request's domain terms + the files/behavior in scope. Everything else is deferred; on-miss expansion is trusted.
-2. DEFER (do NOT read up front): enumerated refs that are cold to this task — tangential subsystems, sibling-feature detail the request never touches. Every link this task surfaces must end up in one of three buckets: read (`**Memories loaded**:`), planned (`**Rules planned**:` + a `## Compliance Checklist` line), or deferred (`**Memories deferred**:`) — see the list rules at Step 4e for how. One exception: a link surfaced by your **Primary** feature is on-topic by construction, so read it rather than deferring (it counts against the 3-ref cap; past the cap, plan or defer it too and trust on-miss).
-3. PLANNED disposition: a Tier-0 digest that intersects the task but does not clear the Tier-1 cap — its obligation lines are captured into WM `## Compliance Checklist` as `- [ ] <obligation text> (mem:<name>)`, unread. This is NOT a body read; it is a scoped IOU the checklist tracks. WF_EXECUTE reads the body on-miss before implementing that item; WF_VERIFY rejects a planned item verified from the digest alone.
-4. RULED OUT disposition: a Tier-0 digest judged genuinely irrelevant to the task's touched surfaces — note it on `**Rules ruled out**:` with a reason. A reason is MANDATORY for ruled-out (unlike deferred, where a reason is optional).
-5. ON-MISS EXPANSION: the moment a deferred or planned ref turns out to matter (a rule you need, a pattern the edit must follow, a `docpending` link the work surfaces), read the BODY then, before the dependent edit. Reaching for one mid-task is expected, not a failure.
+Exclusions — do NOT bulk-read during the sweep:
 
-Cross-cutting tasks (≥3 sibling features): load the shared parent feature + its `ARCH_*` only; defer per-child feature memories to on-miss. Do NOT enumerate every sibling up front.
+- `spec/`, `report/`, `research/`, `project/` — symptom-surfaced (4b) or explicitly requested `spec/` loads exactly that spec.
+- `dev/` standards — loaded at `WF_ARCH_REVIEW`/start of `WF_EXECUTE` instead, scoped to touched files.
+- `wf/`, `claude/`, `WM_*` — workflow machinery.
 
-Sweep idempotence: a memory already read THIS SESSION never re-loads on reclassify, `/swe-goto`, or `WF_CONTINUE`. WM `**Memories loaded**:` is the dedupe ledger; the verifier accepts prior-turn/prior-task reads from this session.
-
-Rationale: reading the entire `[[link]]` closure up front is the dominant per-task token cost and most of it goes unused. Tiered loading keeps the enforcement floor (primary + task-relevant feature knowledge in context before any edit) while deferring cold refs. The Tier-0 digest gives every deferred rule a representation — its obligation line lands as either planned into the checklist or explicitly ruled out, never silently absent. When genuinely unsure whether a ref is relevant, read it — correctness beats token savings.
-
-Exclusions — do NOT read during the sweep:
-
-- `spec/`, `report/`, `research/`, `project/` — not BULK-loaded as general context; the exclusion covers bulk topic loading only. A `spec/` memory surfaced by the Step 4b SYMPTOM search MUST be loaded. Also load a spec when the task explicitly asks to review, author, or implement it — then exactly the named spec, nothing else from the topic.
-- `dev/` standards — edit-time compliance, loaded at `WF_ARCH_REVIEW` / start of `WF_EXECUTE`, scoped to the files actually touched.
-- `wf/`, `claude/`, `WM_*` — workflow machinery, not feature knowledge.
-
-The sweep is memory reads ONLY — still no source-file reads, no symbol lookups, no edits.
+Sweep = memory reads ONLY — no source reads, no symbol lookups, no edits.
 
 ### 4e. Update WM with Features + Loaded Memories (ENFORCED)
 
-ONE `swe_wm_update` call, `session_id` passed explicitly (it is printed in every hook message: `WM[<id>]` / `session="<id>"`). NEVER omit it — there is no env fallback, and an omitted/wrong session_id writes the sweep to the wrong session's stream, silently failing verification for both sessions:
+ONE `swe_wm_update` call, `session_id` passed explicitly (printed in every hook message: `WM[<id>]` / `session="<id>"`). NEVER omit it — wrong/missing session_id silently fails verification:
 
 ```
 mcp__plugin_swe_swe-wm__swe_wm_update(
@@ -233,92 +138,42 @@ mcp__plugin_swe_swe-wm__swe_wm_update(
 
 - **Primary**: [KEY1] - [reason]
 - **Secondary**: [KEY2] - [reason]
-- **Memories loaded**: [comma-separated list of the task-relevant set read in 4d — tiered, not the full closure]
-- **Memories deferred**: [only if PAUSED/sibling-feature-sourced docpending links were deferred — just the memory names, e.g. `ref/REF_A, ref/REF_B`. A reason is OPTIONAL and free-form: add one note for the whole line (`ref/REF_A, ref/REF_B — all cold: PHP-only`) or none at all.]
-- **Rules planned**: [comma-separated list of Tier-0 digest names given the PLANNED disposition — e.g. `dom/DOM_A, ref/REF_B`. Every name here MUST also appear as a `- [ ] <obligation> (mem:<name>)` line in the WM `## Compliance Checklist`; the WM server rejects the write otherwise.]
-- **Rules ruled out**: [comma-separated `<name> — <reason>` entries for Tier-0 digests judged irrelevant — e.g. `sys/SYS_X — no touch on that subsystem`. A reason is MANDATORY per entry.]
+- **Memories loaded**: [comma-separated PLAIN names — Tier-1 set actually read in 4d; no annotations; excludes init chain (`wf/*`, `claude/*`)]
+- **Memories deferred**: [only if deferred — names only, e.g. `ref/REF_A, ref/REF_B`; reason optional]
+- **Rules planned**: [Tier-0 digest names given PLANNED disposition, e.g. `dom/DOM_A` — each MUST appear as `- [ ] <obligation> (mem:<name>)` on the Compliance Checklist, or the write is rejected]
+- **Rules ruled out**: [`<name> — <reason>` entries; reason MANDATORY]
 ```
 
-`**Memories loaded**:` list rules:
+Docpending satisfaction: primary-feature links = read ∪ planned ∪ ruled-out; other links = read ∪ deferred ∪ planned ∪ ruled-out.
 
-- PLAIN comma-separated memory names ONLY — no annotations, parentheses, or trailing commentary on an entry (annotation after the first whitespace is stripped, but do not rely on it).
-- List the memories consulted for THIS task in Steps 4a–4d — including ones already read earlier this session (never re-read those; see sweep idempotence at 4d). Do NOT list the init chain (`wf/*`, `claude/*`) — those are workflow machinery, read before the task boundary; the verifier ignores them and they never count toward the sweep.
-- List the tier-1 (task-relevant) set you actually read — NOT deferred or planned cold refs. Deferred refs read later via on-miss expansion still count toward the task's docreads; re-run the `Affected Features` write to append them only if a later gate needs them recorded.
-
-`**Memories deferred**:` — how it works:
-
-- A `docpending` link this task surfaced must land in ONE of: `**Memories loaded**:` (read), `**Rules planned**:` (obligation captured, unread), or `**Memories deferred**:` (cold, not yet needed). Otherwise the write is rejected. Docpending satisfaction = loaded ∪ deferred ∪ planned ∪ ruled-out.
-- To defer, just put the memory names on a `**Memories deferred**:` line — comma-separated or one per line, either works. A reason is optional; if you add one it can cover the whole line.
-  - e.g. `- **Memories deferred**: ref/REF_A, ref/REF_B — cold: PHP-only`
-- You can't defer a link surfaced by your **Primary** feature — read those. Deferral is for links raised by a paused/other feature during a pivot.
-- Only defer what's genuinely cold to this task. When unsure, read it.
-- You only ever deal with links surfaced since your LAST passed sweep. Once a sweep passes, its links are settled — a later sweep in the same session won't re-demand them, so you never re-defer a prior task's docs.
-
-`**Rules planned**:` — how it works:
-
-- Every name here is a Tier-0 digest whose intersection with the task earned it a PLANNED disposition (Step 4d, tier 1, item 3): the memory's `obligations:` front-matter lines are copied into WM `## Compliance Checklist` as `- [ ] <obligation text> (mem:<name>)`, one item per obligation line, without reading the memory body.
-- Citation is MANDATORY: the WM server cross-checks every `**Rules planned**:` name against the checklist's `(mem:<name>)` tags and rejects the write on a mismatch in either direction — a planned name with no checklist citation, or a checklist citation with no planned name.
-- WF_EXECUTE reads the body of a planned rule on-miss, before implementing the item it gates. WF_VERIFY rejects a planned item checked done without a body read backing it (digest alone never verifies an implementation).
-
-`**Rules ruled out**:` — how it works:
-
-- Every name here is a Tier-0 digest judged genuinely cold to this task's touched surfaces. The reason is mandatory and stays with the name on the same line/entry.
-- A ruled-out memory is NOT re-litigated later in the same sweep window; a later on-miss discovery that it actually matters reopens it as planned or loaded, superseding the ruled-out entry.
-
-The sweep is HARD-ENFORCED, per task (follow-up tasks re-arm the `Affected Features` WRITE; reads dedupe per session — see sweep idempotence at 4d):
-
-- The `Affected Features` write is verified by the WM server: every name in `**Memories loaded**:` must have an ACTUAL `read_memory` THIS SESSION — prior-turn/prior-task reads from this session count; never re-read a memory just to satisfy the verifier. Names with no read this session → the update is rejected.
-- The list must include ≥1 `feature/*` memory, or state `no-feature` (only when BOTH 4b searches returned nothing).
-- Every `**Rules planned**:` name must be cited as `(mem:<name>)` on a `## Compliance Checklist` line — the WM server rejects an uncited planned name.
-- A verified write creates the sweep sentinel; the edit gate (`swe_pre_edit_validate.py`) DENIES every Edit/Write/Serena-edit until it exists. Test-artifact edits additionally require `dev/DEV_TESTS` + `feature/FEATURE_TESTS` reads when the project has them.
-- Refilling the docs-first search budget with one memory read is NOT the sweep.
+HARD-ENFORCED per task: every `**Memories loaded**:` name needs an ACTUAL `read_memory` THIS SESSION or rejected; list must include ≥1 `feature/*` memory or state `no-feature`; every `**Rules planned**:` name cited as `(mem:<name>)` on a Compliance Checklist line, rejected otherwise. Verified write creates the sweep sentinel gating all edits. One docs-first read ≠ the sweep. Full enforcement + rejection mechanics: `mem:ref/REF_WF_CLASSIFY_SWEEP`.
 
 ## Step 5: Validate Requirements Against Domain Memories
 
-If Step 2 detected requirements, compare them to loaded domain memories:
-
-1. Check for DOM_* memories relating to the detected requirements.
-2. Compare:
-   - NEW requirement → note it; added to domain memory after implementation
-   - CONFLICTING requirement → note the conflict in WM. Do NOT route to WF_CLARIFY. Approach/design conflicts (including overriding a documented domain rule) are deferred to the single question gate at `WF_ARCH_REVIEW`, asked once alongside all design questions.
-   - EXISTING requirement → acknowledge; domain already documents this behavior
-3. No requirements detected at Step 2 → skip this step.
+Step 2 detected requirements → check DOM_* memories: NEW → note it, added post-implementation; CONFLICTING → note conflict in WM (do NOT route to WF_CLARIFY — defer to the single question gate at `WF_ARCH_REVIEW`); EXISTING → acknowledge, already documented. No requirements at Step 2 → skip.
 
 ## Step 6: Note Key Information for Implementation
 
-From loaded feature memories, record: key file paths, class/function names for Serena lookups, testing commands, architecture patterns to follow.
+From loaded feature memories, record: file paths, class/function names for Serena lookups, test commands, architecture patterns.
 
 ## Skill Invocation Protocol
 
-When routing to a workflow-aware skill (e.g. `/research`):
-
-1. Set workflow context in WM: calling step, feature key, session ID, return step, invocation mode
-2. Inform user: `> Routing to /research skill. Will return to WF_CLASSIFY on completion.`
-3. Handle return:
-
-| Status                              | Action                  |
-| ----------------------------------- | ----------------------- |
-| `success` / `success_with_findings` | Continue to return step |
-| `needs_clarification`               | `WF_CLARIFY`            |
-| `blocked`                           | `WF_CLARIFY`            |
+Routing to a workflow-aware skill: set WM context (calling step, feature key, session ID, return step, mode), inform user, route by return status. Protocol: `mem:ref/REF_WF_CLASSIFY_PROTOCOLS`.
 
 ## Routing Table
 
-| Condition                                                                                  | Route To                                                                                     |
-| ------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------- |
-| Hard blocker — cannot classify (e.g. which of two features)                                | `WF_CLARIFY`                                                                                 |
-| Research only                                                                              | `WF_RESEARCH`                                                                                |
-| Regression language (`regression: recent`)                                                 | `WF_RESEARCH` — sweep deferred; note "sweep deferred: regression route" in Affected Features |
-| Test debugging needed                                                                      | `WF_DEBUG_TDD`                                                                               |
-| Approach/design ambiguity or conflicting requirement                                       | Defer to `WF_ARCH_REVIEW` (single question gate)                                             |
-| Operational task (no code changes)                                                         | `WF_EXECUTE`                                                                                 |
-| Code change — minor patch to existing functionality, ≤5 files, no open questions (Step 3b) | `WF_EXECUTE` (`arch_review_skipped: true`)                                                   |
-| Code change — new feature, major module addition, >5 files, or 3+ layers (Step 3b)         | `WF_ARCH_REVIEW`                                                                             |
-| Gherkin spec authoring (explicit)                                                          | `/swe-gherkin-spec`                                                                          |
-| Gherkin TDD from existing spec                                                             | `/swe-gherkin-dev`                                                                           |
+Single source of truth for routing — determine which condition applies, read that WF_* memory, report the new step to the user:
 
-1. Determine which condition applies
-2. Read that WF_* memory
-3. Report the new step to user
+- Hard blocker, cannot classify → `WF_CLARIFY`
+- Research only → `WF_RESEARCH`
+- Regression language (`regression: recent`) → `WF_RESEARCH`, sweep deferred
+- Test debugging needed → `WF_DEBUG_TDD`
+- Approach/design ambiguity or conflict → defer to `WF_ARCH_REVIEW`
+- Operational task, no code changes → `WF_EXECUTE`
+- Minor patch, ≤5 files, no open Qs (3b) → `WF_EXECUTE` (`arch_review_skipped: true`)
+- New feature / major module / >5 files / 3+ layers (3b) → `WF_ARCH_REVIEW`
+- Parallel subagents → `WF_ARCH_REVIEW`
+- Gherkin spec authoring (explicit) → `/swe-gherkin-spec`
+- Gherkin TDD from existing spec → `/swe-gherkin-dev`
 
 Update WM via `/swe-wm-update --from WF_CLASSIFY` before transitioning.

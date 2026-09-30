@@ -16,7 +16,21 @@ Reports:
   - per-file CAPS hard-stop counts: NEVER/MUST/ALWAYS/CRITICAL/⛔ (INFO)
 
 Usage:
-  python3 scripts/validate-memory-graph.py [--root memories] [--root .serena/memory] [--json]
+  python3 skills/swe-memory-size-audit/scripts/validate-memory-graph.py [--root memories] [--root .serena/memory] [--json]
+  python3 skills/swe-memory-size-audit/scripts/validate-memory-graph.py --root em=../em-serena/.serena/memory
+  python3 skills/swe-memory-size-audit/scripts/validate-memory-graph.py                       # uses .serena/memory-paths.conf
+  python3 skills/swe-memory-size-audit/scripts/validate-memory-graph.py --root memories --plugin-root /path/to/plugin/memories
+
+Root parsing matches scripts/memory-size-audit.py: --root accepts a plain
+DIR or an aliased "alias=DIR" (aliased memories resolve with an
+"<alias>/<rel>" prefix). With no --root at all, roots are read from
+".serena/memory-paths.conf" in the current working directory (same file
+format memory-size-audit.py uses). --plugin-root DIR is shorthand for an
+extra unaliased --root pointing at the shipped plugin memories/ tree — pass
+it (or an explicit --root) alongside every project-side root in ONE
+invocation, since links cross trees (a project's .serena/memory commonly
+links to the plugin's wf/dom/feature memories) and validating roots
+separately reports false dangling links.
 
 Exit code 1 if any dangling links are found, else 0.
 """
@@ -26,6 +40,19 @@ import json
 import os
 import re
 import sys
+
+sys.path.insert(
+    0,
+    os.path.join(
+        os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))),
+        "hooks",
+    ),
+)
+from swe_hooks.core.memory_size import (  # noqa: E402
+    CONF_PATH,
+    parse_root_arg,
+    resolve_roots as _resolve_roots,
+)
 
 LINK_MEM_RE = re.compile(r"mem:([A-Za-z0-9_./-]+)")
 LINK_WIKI_RE = re.compile(r"\[\[([A-Za-z0-9_./-]+)\]\]")
@@ -78,8 +105,13 @@ def is_placeholder(name: str) -> bool:
     return False
 
 
-def find_memory_files(root: str):
-    """Yield (relative_dir_prefixed_name, absolute_path) for every .md memory file under root."""
+def find_memory_files(root: str, alias: str = None):
+    """Yield (relative_dir_prefixed_name, absolute_path) for every .md memory file under root.
+
+    `alias`, when given, prefixes every name "<alias>/<rel>" (matching
+    scripts/memory-size-audit.py's aliased-root naming), so links from an
+    aliased tree are addressed as "<alias>/<rel>".
+    """
     for dirpath, dirnames, filenames in os.walk(root):
         # Skip hidden/version-control dirs.
         dirnames[:] = [d for d in dirnames if not d.startswith(".")]
@@ -93,18 +125,41 @@ def find_memory_files(root: str):
                 prefixed = name
             else:
                 prefixed = f"{rel_dir}/{name}".replace(os.sep, "/")
+            if alias:
+                prefixed = f"{alias}/{prefixed}"
+                name = f"{alias}/{name}"
             yield prefixed, name, abspath
+
+
+def _normalize_roots(roots):
+    """Normalize a roots list to (alias_or_None, dir) tuples.
+
+    Accepts plain dir strings (no alias) or (alias, dir) tuples, so callers
+    that already resolved aliased --root/conf entries can pass them through
+    unchanged.
+    """
+    normalized = []
+    for r in roots:
+        if isinstance(r, (tuple, list)):
+            normalized.append((r[0], r[1]))
+        else:
+            normalized.append((None, r))
+    return normalized
 
 
 def build_index(roots):
     """Build a name -> [abspath,...] index. Keys include both the bare name
-    and the dir-prefixed name, so links can be written either way."""
+    and the dir-prefixed name, so links can be written either way.
+
+    `roots` — plain dir strings, or (alias_or_None, dir) tuples (see
+    _normalize_roots).
+    """
     index = {}
     files = []  # list of (prefixed_name, bare_name, abspath, root)
-    for root in roots:
+    for alias, root in _normalize_roots(roots):
         if not os.path.isdir(root):
             continue
-        for prefixed, bare, abspath in find_memory_files(root):
+        for prefixed, bare, abspath in find_memory_files(root, alias=alias):
             files.append((prefixed, bare, abspath, root))
             index.setdefault(prefixed, []).append(abspath)
             index.setdefault(bare, []).append(abspath)
@@ -187,19 +242,37 @@ def main():
         action="append",
         dest="roots",
         default=None,
-        help="Memory root directory (repeatable). Default: memories",
+        help="Memory root directory, optionally '[alias=]DIR' (repeatable). "
+        "Default: .serena/memory-paths.conf in cwd, else 'memories'.",
+    )
+    parser.add_argument(
+        "--plugin-root",
+        dest="plugin_root",
+        default=None,
+        help="Shorthand for an extra unaliased --root pointing at the shipped "
+        "plugin memories/ tree (e.g. ${CLAUDE_PLUGIN_ROOT}/memories). Pass it "
+        "alongside every project-side root in one invocation — links cross trees.",
     )
     parser.add_argument("--json", action="store_true", help="Emit JSON instead of text.")
     args = parser.parse_args()
 
-    roots = args.roots or ["memories"]
+    if args.roots:
+        roots = [parse_root_arg(r) for r in args.roots]
+    else:
+        conf_roots = _resolve_roots(None, CONF_PATH)
+        roots = conf_roots if conf_roots else [(None, "memories")]
+
+    if args.plugin_root:
+        roots.append((None, args.plugin_root))
+
+    root_labels = [f"{a}={d}" if a else d for a, d in roots]
 
     result = validate(roots)
 
     if args.json:
         print(json.dumps(result, indent=2, ensure_ascii=False))
     else:
-        print(f"Scanned {result['file_count']} memory files under: {', '.join(roots)}")
+        print(f"Scanned {result['file_count']} memory files under: {', '.join(root_labels)}")
         print()
         if result["dangling"]:
             print(f"ERROR: {len(result['dangling'])} dangling link(s):")

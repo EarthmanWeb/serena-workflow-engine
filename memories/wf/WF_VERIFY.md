@@ -21,10 +21,7 @@ Check for violations:
 
 ## 2. Architecture & Compliance Check
 
-Read via `mcp__plugin_swe_serena__read_memory`:
-
-- `arch/ARCH_SWE`
-- `feature/FEATURE_DEV_STANDARDS`
+Read via `mcp__plugin_swe_serena__read_memory`: `arch/ARCH_SWE`, `feature/FEATURE_DEV_STANDARDS`.
 
 ### 2a. Generic Layer Verification
 
@@ -36,20 +33,11 @@ Read via `mcp__plugin_swe_serena__read_memory`:
 
 Read `## Compliance Checklist` from WM (written at WF_ARCH_REVIEW Step 2c).
 
-Per checklist item:
-
-- Verify it was satisfied in the implementation.
-- If violated, note what needs fixing.
-
-If no compliance checklist exists in WM (task skipped WF_ARCH_REVIEW): use 2a generic checks only.
-
-Compliance verification when WM contains a Compliance Checklist:
-
-- Verify each checklist item against the implementation.
-- Every item MUST be either checked done or explicitly waived with a reason. An UNCHECKED item with no waiver is a BLOCKER — resolve it before `WF_DONE`.
+- Verify each checklist item against the implementation; if violated, note what needs fixing.
+- If no compliance checklist exists in WM (task skipped WF_ARCH_REVIEW): use 2a generic checks only.
+- Every item MUST be either checked done or explicitly waived with a reason. An UNCHECKED item with no waiver is a BLOCKER — resolve before `WF_DONE`.
 - A `(mem:<name>)`-cited planned-rule item verifies against the memory's BODY, never the digest alone — read the body now if WF_EXECUTE never did (on-miss), then check the implementation against it. Marking a planned item done from the front-matter digest without a body read is a violation; fix by reading the body and re-verifying.
-- Reference `DOM_*` memories for domain-specific validation rules.
-- Reference `DEV_*` memories for language-specific standards compliance.
+- Reference `DOM_*` memories for domain-specific validation rules, `DEV_*` for language-specific standards compliance.
 
 ### 2c. Integration Completeness Check
 
@@ -67,60 +55,11 @@ Integration completeness failures are silent — code works in isolation but is 
 
 ## 3. Gherkin Spec Coverage Check
 
-Run when the affected feature has existing Gherkin specs OR WM contains `gherkin_spec_update: true`.
-
-### 3.0a. Check for Existing Specs
-
-- `Glob(pattern="tests/specs/*[feature-key]*.feature")`
-- `mcp__plugin_swe_serena__list_memories(topic="spec")`
-
-### 3.0b. If Specs Exist — Verify Coverage
-
-For each existing `.feature` file related to the affected feature:
-
-1. Read the spec; extract all Given/When/Then/And steps.
-2. Compare against changes made — did this task add or modify behavior covered by the spec?
-3. Check for gaps:
-   - New behavior added NOT covered by existing spec scenarios → spec update needed.
-   - Existing spec scenarios that now behave differently due to changes → spec update needed.
-   - All changed behavior covered by existing specs → pass.
-
-### 3.0c. If Spec Updates Needed
-
-Invoke `/swe-gherkin-spec` to add scenarios covering the new behavior, then `/swe-gherkin-dev` to create matching tests.
-
-This is NOT optional when specs exist. When a feature has Gherkin specs, every behavioral change MUST be reflected in both the specs and their tests.
-
-### 3.0d. If No Specs Exist
-
-Skip this section. Gherkin specs are enforced at WF_ARCH_REVIEW for new features. Do NOT retroactively require specs on existing features without specs unless the user requests it.
+Run when the affected feature has existing Gherkin specs OR WM contains `gherkin_spec_update: true`. Full procedure: `mem:ref/REF_WF_VERIFY_GHERKIN_COVERAGE`.
 
 ## 4. Test Coverage Check
 
-### 4a. Tests-as-Deliverable Verification
-
-When the task deliverable IS tests (writing new tests, fixing tests, adding coverage), the tests are not the verification — confirm the tests work correctly:
-
-- Run the new/modified tests — they MUST execute without runtime errors.
-- Tests pass when they should pass (happy-path assertions hold).
-- Tests fail when they should fail (if feasible: temporarily break the feature under test and confirm the test catches it).
-- No false positives (tests do not pass trivially or vacuously).
-
-After confirming test behavior, skip to Section 5. No browser verification for test-only deliverables.
-
-### 4b. Standard Test Coverage (Non-Test Deliverables)
-
-For multi-layer work or user-facing changes:
-
-- Functional tests cover the feature?
-- Visual regression tests if UI changed?
-- Tests run and pass?
-
-If automated tests exist, run them.
-
-### 4c. No Automated Tests
-
-If no automated tests exist for this feature, note in WM that automated verification was not possible and flag for user attention before proceeding.
+Run the applicable test-verification steps (tests-as-deliverable, standard coverage, no-automated-tests fallback): `mem:ref/REF_WF_VERIFY_TEST_COVERAGE`.
 
 ## 5. Memory & Doc-Claims Verification
 

@@ -4,6 +4,7 @@ description: MANDATORY style for all project memories — terse, imperative, mac
 obligations:
   - Write every memory in imperative mood with concrete thresholds/names/paths — NEVER suggestion-mood ("should", "consider") or vague quantifiers ("some", "a few").
   - Rewrite a memory to this standard immediately on sight of any legacy marker (missing front-matter, conversational prose, suggestion mood) — do not defer.
+  - Split any memory over 16,000 chars into a hub + children via `/swe-memory-size-audit`; act immediately on a `📏 MEMORY SIZE` advisory.
 metadata:
   type: reference
 ---
@@ -61,6 +62,19 @@ A memory is LEGACY and MUST be rewritten immediately if it has any of:
 | "Try to keep changes small."                         | "Touch ≤5 files. If >5, STOP and route to `mem:wf/WF_ARCH_REVIEW`."                                         |
 | "It's a good idea to verify state."                  | "Verify state with a tool call in the same turn before asserting it. If unverified, label it 'unverified'." |
 | "This section explains the init gate."               | (delete the sentence; state the gate's rules directly)                                                      |
+
+## Size Budget
+
+| Status       | Chars   | Meaning                                                                      |
+| ------------ | ------- | ---------------------------------------------------------------------------- |
+| `ok`         | ≤8,000  | Target — no action.                                                          |
+| `warn`       | ≤16,000 | Trim in place; approaching the split threshold.                              |
+| `split`      | <50,000 | MUST split into hub + children.                                              |
+| `unreadable` | ≥50,000 | ≥50,000 chars — Claude Code replaces the read with a 2KB preview (measured). |
+
+Split at >16,000 chars into hub + children per `/swe-memory-size-audit` SPLIT CONTRACT. The hub keeps the
+original name/path — existing `mem:` links stay valid. A `📏 MEMORY SIZE` advisory means act now — run
+`/swe-memory-size-audit`, not a manual edit.
 
 ## Self-Compliance
 

@@ -379,12 +379,14 @@ def main():
                     "📚 Related docs linked here, UNREAD this task: "
                     + ", ".join(sorted(unread))
                     + " — READ each that could bear on this task. A link "
-                    "surfaced by the CURRENT primary feature MUST be read; "
-                    "deferral is allowed ONLY for a link surfaced by a "
-                    "paused/other-feature read during a pivot, on a "
-                    "'- **Memories deferred**: <name> — <reason>' line. "
-                    "Re-reading an already-read memory does not refill the "
-                    "docs budget.")
+                    "surfaced by the CURRENT primary feature must be read, "
+                    "planned (`mem:<name>` in the Compliance Checklist + "
+                    "'**Rules planned**:'), or ruled out ('**Rules ruled "
+                    "out**: <name> — <reason>') — never bare-deferred. A "
+                    "link surfaced by a paused/other-feature read during a "
+                    "pivot may also be deferred, on a '- **Memories "
+                    "deferred**: <name> — <reason>' line. Re-reading an "
+                    "already-read memory does not refill the docs budget.")
                 # E2: the SAME unread set repeated (same memory re-read, or
                 # a sibling read surfacing the identical links) produces a
                 # byte-identical message — suppress the repeat. The

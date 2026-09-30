@@ -15,18 +15,6 @@ args:
     required: false
 ---
 
-## ⚠️ WORKFLOW INITIALIZATION
-
-**If starting a new session**, first read workflow initialization:
-
-```
-mcp__plugin_swe_serena__read_memory("wf/WF_INIT")
-```
-
-Follow WF_INIT instructions before executing this skill.
-
----
-
 # /swe-memory-audit [scope]
 
 Bring every writable project memory into compliance with the memory instruction-language standard. Read the standard first — it is the authority this skill enforces:

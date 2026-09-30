@@ -56,6 +56,7 @@ ALLOWED_SECTIONS = [
     "Current Task", "Progress", "Files", "Notes",
     "Requirements", "Implementation Notes", "Previous Task",
     "Task Context", "Affected Features", "Context", "Feature(s)",
+    "Compliance Checklist", "Doc Claims Used",
 ]
 
 VALID_STATUSES = [
@@ -595,21 +596,23 @@ def _check_memory_sweep(
       - The list must include at least one 'feature/*' memory, or the content
         must carry the literal token 'no-feature' (both WF_CLASSIFY 4b fuzzy
         searches returned nothing).
-      - Every 'docpending' link surfaced by this task's reads must be read OR
-        deferred by naming it on a '**Memories deferred**:' line (any layout, a
-        note is optional). Deferral is honored ONLY for a link surfaced solely
-        by a paused/sibling-feature read during a task pivot; a link surfaced by
-        the PRIMARY feature must be read.
+      - Every 'docpending' link surfaced by this task's reads must be
+        dispositioned. A link surfaced ONLY by a paused/sibling-feature read
+        during a task pivot: read ∪ deferred (named on a '**Memories
+        deferred**:' line, any layout, note optional) ∪ planned ∪ ruled-out.
+        A link surfaced by the PRIMARY feature (on-topic by construction):
+        read ∪ planned ∪ ruled-out — bare deferral is REJECTED (deferring
+        asserts "cold for this task", never true of the feature's own link).
       - Change Set H (digest-tier disposition, both OPTIONAL): a
         '**Rules planned**:' name is a docpending link whose obligations were
         captured into the Compliance Checklist WITHOUT a body read — it counts
-        toward the read-or-defer satisfaction set ONLY when also cited as
-        `mem:<name>` inside a '## Compliance Checklist' section (checked in
+        toward the satisfaction set ONLY when also cited as `mem:<name>`
+        inside a '## Compliance Checklist' section (checked in
         `other_sections` first, then the existing WM file content); an
         uncited planned name is rejected by name. A '**Rules ruled out**:'
         entry likewise counts toward satisfaction, but EVERY entry must carry
-        a ' — ' reason or is rejected by name. Absent both lines, behavior is
-        identical to today.
+        a ' — ' reason or is rejected by name. Absent both lines, only read ∪
+        deferred (non-primary) / read (primary) apply.
 
     On success creates the 'sweep' sentinel that unlocks the edit gate.
     Returns an error string on violation, None on pass/skip.
@@ -730,15 +733,32 @@ def _check_memory_sweep(
     }
     other_pending = pending - primary_pending
 
-    must_read = sorted(primary_pending - read_names)
-    if must_read:
+    # Primary-surfaced links: read ∪ planned (cited) ∪ ruled-out (reasoned)
+    # satisfy the link — bare deferral does NOT (deferral asserts "cold",
+    # which is never true of a link the feature you are working on links to;
+    # planned/ruled-out require the same citation/reason discipline already
+    # enforced above). Other (paused/sibling) links keep read ∪ deferred ∪
+    # planned ∪ ruled-out.
+    primary_dispositioned = read_names | planned | set(ruled_out.keys())
+    must_disposition = sorted(primary_pending - primary_dispositioned)
+    if must_disposition:
+        names = ', '.join(must_disposition)
+        example = must_disposition[0]
         return (
             "Sweep verification FAILED — related docs surfaced by the PRIMARY "
-            f"feature ({primary_mem}) must be READ, not deferred: "
-            f"{', '.join(must_read)}. read_memory each — a link the feature "
-            "you are working on links to is on-topic by construction; "
-            "deferral is reserved for links raised by a paused/other-feature "
-            "read during a pivot."
+            f"feature ({primary_mem}) must be READ, PLANNED, or RULED OUT — "
+            f"bare deferral is rejected: {names}. For EACH one, do ONE of:\n"
+            "  1. read_memory it, OR\n"
+            "  2. plan it — cite it as `mem:<name>` inside a '## Compliance "
+            "Checklist' section AND name it on a '**Rules planned**:' line, "
+            "e.g. '- **Rules planned**: " + example + "' with "
+            "'`mem:" + example + "`' in the Compliance Checklist, OR\n"
+            "  3. rule it out — name it on a '**Rules ruled out**:' line with "
+            "a ' — <reason>', e.g. '- **Rules ruled out**: " + example + " — "
+            "not applicable to this task'.\n"
+            "A link the feature you are working on links to is on-topic by "
+            "construction — deferral (asserting it is cold) is reserved for "
+            "links raised by a paused/other-feature read during a pivot."
         )
     dispositioned = deferred | planned | set(ruled_out.keys())
     outstanding = sorted(other_pending - read_names - dispositioned)

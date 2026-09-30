@@ -74,6 +74,6 @@ Subflows (not FSM states, never `set_state` targets): WF_INIT · WF_CLEANUP · W
 - Happy Path: WF_INIT → WF_CLASSIFY → WF_ARCH_REVIEW → WF_EXECUTE → WF_VERIFY → WF_DONE
 - Debug Path: WF_CLASSIFY → WF_DEBUG_TDD → WF_EXECUTE → WF_VERIFY → WF_DONE
 - Large Task (parallel subagents): WF_CLASSIFY → WF_ARCH_REVIEW → WF_EXECUTE (launches subagents) → WF_VERIFY → WF_DONE
-- Pivot (any active state): active state → WF_CLASSIFY (re-classify on a genuine new task or full pivot; see `mem:dom/DOM_SWE_HOOKS` prompt-intent routing for when this fires)
+- Pivot (any active state): active state → WF_CLASSIFY (re-classify on a genuine new task or full pivot; see `mem:dom/DOM_SWE_HOOKS_PROMPT_ROUTING` for when this fires)
 - Resume: SessionStart → WF_CONTINUE
 - Feature setup mid-task: WF_CLASSIFY → WF_ONBOARD → WF_CLASSIFY

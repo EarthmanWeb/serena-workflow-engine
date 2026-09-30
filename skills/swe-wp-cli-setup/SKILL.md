@@ -12,18 +12,6 @@ workflow:
   supports_standalone: true
 ---
 
-## ⚠️ WORKFLOW INITIALIZATION
-
-**If starting a new session**, first read workflow initialization:
-
-```
-mcp__plugin_swe_serena__read_memory("wf/WF_INIT")
-```
-
-Follow WF_INIT instructions before executing this skill.
-
----
-
 # /swe-wp-cli-setup
 
 Generate (or repair) `<project-root>/.serena/wp-cli.conf` so the `wp_cli` MCP

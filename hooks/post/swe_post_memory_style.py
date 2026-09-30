@@ -36,6 +36,7 @@ try:
     from swe_hooks.core.output import output_empty, output_message
     from swe_hooks.core.input import read_stdin_safe, get_input_field
     from swe_hooks.core.session import get_project_root
+    from swe_hooks.core.memory_size import size_advisory
 except ImportError as e:
     swe_hooks.bootstrap.import_error_exit(e, "PostToolUse")
 
@@ -247,23 +248,34 @@ def main():
                 and not has_obligations_field(content)):
             nudge = OBLIGATIONS_NUDGE
 
-        if not violations and not nudge:
+        # Size advisory: fires for write_memory AND edit_memory alike — both
+        # land here via find_memory_file() reading the post-write file off
+        # disk, so no separate branch for the two tool names is needed.
+        # Advisory only, never a violation and never blocking.
+        size_note = size_advisory(memory_name, content)
+
+        parts = []
+        if violations:
+            lines = "\n".join(f"  - {v}" for v in violations)
+            message = (
+                f"✍️ Memory style check — \"{memory_name}\" has legacy-style markers "
+                f"(authority: ref/REF_MEMORY_STYLE). Rewrite it now to the terse-"
+                f"imperative standard:\n{lines}"
+            )
+            if nudge:
+                message += f"\n  - {nudge}"
+            parts.append(message)
+        elif nudge:
+            parts.append(f"✍️ {nudge}")
+
+        if size_note:
+            parts.append(size_note)
+
+        if not parts:
             output_empty()
             return
 
-        if not violations:
-            output_message(f"✍️ {nudge}")
-            return
-
-        lines = "\n".join(f"  - {v}" for v in violations)
-        message = (
-            f"✍️ Memory style check — \"{memory_name}\" has legacy-style markers "
-            f"(authority: ref/REF_MEMORY_STYLE). Rewrite it now to the terse-"
-            f"imperative standard:\n{lines}"
-        )
-        if nudge:
-            message += f"\n  - {nudge}"
-        output_message(message)
+        output_message("\n".join(parts))
     except Exception:
         output_empty()
 

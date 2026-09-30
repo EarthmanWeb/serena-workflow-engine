@@ -15,18 +15,6 @@ args:
     required: false
 ---
 
-## ⚠️ WORKFLOW INITIALIZATION
-
-**If starting a new session**, first read workflow initialization:
-
-```
-mcp__plugin_swe_serena__read_memory("wf/WF_INIT")
-```
-
-Follow WF_INIT instructions before executing this skill.
-
----
-
 # /swe-memory-obligations [scope]
 
 Backfill the `obligations:` front-matter field (see `mem:ref/REF_MEMORY_STYLE` "Obligations Field") across

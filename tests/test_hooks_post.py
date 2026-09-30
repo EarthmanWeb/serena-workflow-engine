@@ -283,6 +283,93 @@ class TestStyleHookMainObligationsNudge(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
+# swe_post_memory_style main() — size advisory (memory_size.size_advisory)
+# ---------------------------------------------------------------------------
+class TestStyleHookMainSizeAdvisory(unittest.TestCase):
+    """The size advisory fires for both write_memory and edit_memory alike,
+    since the hook always re-reads the post-write file off disk via
+    find_memory_file() rather than branching on tool name."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self._orig_root = style_mod.get_project_root
+        style_mod.get_project_root = lambda: self.tmp.name
+
+    def tearDown(self):
+        style_mod.get_project_root = self._orig_root
+        self.tmp.cleanup()
+
+    def _write_memory(self, rel_path, content):
+        full = os.path.join(self.tmp.name, ".serena", "memory", rel_path)
+        os.makedirs(os.path.dirname(full), exist_ok=True)
+        with open(full, "w") as f:
+            f.write(content)
+
+    def _run_main(self, memory_name):
+        import io
+        from unittest import mock
+        payload = {"tool_input": {"memory_name": memory_name}}
+        buf = io.StringIO()
+        with mock.patch.object(sys, "stdin", io.StringIO(json.dumps(payload))), \
+             mock.patch("select.select", return_value=([sys.stdin], [], [])), \
+             mock.patch("sys.stdout", buf):
+            try:
+                style_mod.main()
+            except SystemExit:
+                pass
+        return buf.getvalue()
+
+    @staticmethod
+    def _decoded_context(raw):
+        payload = json.loads(raw)
+        return payload["hookSpecificOutput"]["additionalContext"]
+
+    def test_absent_for_small_clean_memory(self):
+        self._write_memory("dom/DOM_X.md", WITH_OBLIGATIONS_FM + "Run the tests.\n")
+        out = self._run_main("dom/DOM_X")
+        self.assertNotIn("MEMORY SIZE", out)
+
+    def test_present_for_oversized_memory(self):
+        big_body = "x" * (style_mod.size_advisory.__globals__["WARN_CHARS"] + 500)
+        self._write_memory("dom/DOM_BIG.md", WITH_OBLIGATIONS_FM + big_body)
+        out = self._decoded_context(self._run_main("dom/DOM_BIG"))
+        self.assertIn("MEMORY SIZE", out)
+        self.assertIn("dom/DOM_BIG", out)
+        self.assertIn("/swe-memory-size-audit", out)
+
+    def test_present_alongside_style_violation(self):
+        big_body = "You should run the tests.\n" + "x" * (
+            style_mod.size_advisory.__globals__["SPLIT_CHARS"] + 500)
+        self._write_memory("dom/DOM_BIG2.md", VALID_FRONT_MATTER + big_body)
+        out = self._decoded_context(self._run_main("dom/DOM_BIG2"))
+        self.assertIn("suggestion-mood", out)
+        self.assertIn("MEMORY SIZE", out)
+
+    def test_exit_zero_and_json_only_even_when_oversized(self):
+        import io
+        from unittest import mock
+        big_body = "x" * (style_mod.size_advisory.__globals__["UNREADABLE_CHARS"] + 100)
+        self._write_memory("dom/DOM_HUGE.md", WITH_OBLIGATIONS_FM + big_body)
+        payload = {"tool_input": {"memory_name": "dom/DOM_HUGE"}}
+        buf = io.StringIO()
+        exited_with = []
+        with mock.patch.object(sys, "stdin", io.StringIO(json.dumps(payload))), \
+             mock.patch("select.select", return_value=([sys.stdin], [], [])), \
+             mock.patch("sys.stdout", buf):
+            try:
+                style_mod.main()
+            except SystemExit as e:
+                exited_with.append(e.code)
+        # main() only calls sys.exit via output_message/output_empty, both of
+        # which exit 0 — SystemExit(0) or SystemExit(None) either way.
+        if exited_with:
+            self.assertIn(exited_with[0], (0, None))
+        out = buf.getvalue()
+        json.loads(out)  # must be valid JSON, no stray text
+        self.assertIn("UNREADABLE", out)
+
+
+# ---------------------------------------------------------------------------
 # swe_post_read_state._get_continuation
 # ---------------------------------------------------------------------------
 class TestGetContinuation(unittest.TestCase):
