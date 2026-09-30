@@ -475,6 +475,25 @@ class TestCheckMemorySweep(unittest.TestCase):
             self.assertEqual(
                 json.load(f)["ruled_out"], ["ref/ref_not_applicable"])
 
+    def test_primary_sourced_docpending_ruled_out_en_dash_reason_passes(self):
+        # Target rule: a primary-surfaced link satisfied by RULED OUT with an
+        # en-dash-separated reason — no body read required.
+        _write_stream(self.stream_path, [
+            {"type": "docread", "name": "feature/FEATURE_X"},
+            {"type": "docpending", "new": ["ref/ref_not_applicable"],
+             "src": "feature/feature_x"},
+        ])
+        content = (
+            "- **Primary**: X - the working feature\n"
+            "- **Memories loaded**: feature/FEATURE_X\n"
+            "- **Rules ruled out**: ref/REF_NOT_APPLICABLE – not touched by "
+            "this task\n")
+        err = wm._check_memory_sweep(self.session, content)
+        self.assertIsNone(err)
+        with open(self._sentinel()) as f:
+            self.assertEqual(
+                json.load(f)["ruled_out"], ["ref/ref_not_applicable"])
+
     def test_primary_sourced_docpending_bare_deferred_only_rejected(self):
         # Target rule: a primary link listed ONLY under '**Memories
         # deferred**:' (no planned citation, no ruled-out reason) is still
@@ -694,6 +713,27 @@ class TestParseDeferredNames(unittest.TestCase):
                    "- **Memories deferred**: dom/DOM_B, sys/SYS_C\n")
         self.assertEqual(wm._parse_deferred_names(content),
                          {"ref/ref_a", "dom/dom_b", "sys/sys_c"})
+
+
+class TestParseRuledOut(unittest.TestCase):
+    def test_em_dash_reason_parses(self):
+        content = "- **Rules ruled out**: dom/DOM_FOO — not applicable here\n"
+        self.assertEqual(wm._parse_ruled_out(content),
+                         {"dom/dom_foo": "not applicable here"})
+
+    def test_en_dash_reason_parses(self):
+        content = "- **Rules ruled out**: dom/DOM_FOO – not applicable here\n"
+        self.assertEqual(wm._parse_ruled_out(content),
+                         {"dom/dom_foo": "not applicable here"})
+
+    def test_hyphen_reason_parses(self):
+        content = "- **Rules ruled out**: dom/DOM_FOO - not applicable here\n"
+        self.assertEqual(wm._parse_ruled_out(content),
+                         {"dom/dom_foo": "not applicable here"})
+
+    def test_no_separator_returns_empty_reason(self):
+        content = "- **Rules ruled out**: dom/DOM_FOO\n"
+        self.assertEqual(wm._parse_ruled_out(content), {"dom/dom_foo": ""})
 
 
 class TestParsePrimaryFeatureMemory(unittest.TestCase):

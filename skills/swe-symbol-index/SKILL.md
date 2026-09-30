@@ -17,18 +17,6 @@ args:
     required: true
 ---
 
-## Workflow Initialization
-
-**If starting a new session**, first read workflow initialization:
-
-```
-mcp__plugin_swe_serena__read_memory("wf/WF_INIT")
-```
-
-Follow WF_INIT instructions before executing this skill.
-
----
-
 # /swe-symbol-index [KEY]
 
 Generate a tabular view of all symbols found in a feature's linked documentation memories, and insert it into the feature's main `FEATURE_[KEY]` memory as a "Related Docs" section after "Feature Overview".

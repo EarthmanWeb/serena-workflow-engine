@@ -19,7 +19,8 @@ Usage:
   python3 skills/swe-memory-size-audit/scripts/validate-memory-graph.py [--root memories] [--root .serena/memory] [--json]
   python3 skills/swe-memory-size-audit/scripts/validate-memory-graph.py --root em=../em-serena/.serena/memory
   python3 skills/swe-memory-size-audit/scripts/validate-memory-graph.py                       # uses .serena/memory-paths.conf
-  python3 skills/swe-memory-size-audit/scripts/validate-memory-graph.py --root memories --plugin-root /path/to/plugin/memories
+  python3 skills/swe-memory-size-audit/scripts/validate-memory-graph.py --plugin-root /path/to/plugin/memories
+  python3 skills/swe-memory-size-audit/scripts/validate-memory-graph.py --extra-root memories  # + conf roots, e.g. inside the plugin source repo
 
 Root parsing matches scripts/memory-size-audit.py: --root accepts a plain
 DIR or an aliased "alias=DIR" (aliased memories resolve with an
@@ -27,10 +28,16 @@ DIR or an aliased "alias=DIR" (aliased memories resolve with an
 ".serena/memory-paths.conf" in the current working directory (same file
 format memory-size-audit.py uses). --plugin-root DIR is shorthand for an
 extra unaliased --root pointing at the shipped plugin memories/ tree — pass
-it (or an explicit --root) alongside every project-side root in ONE
-invocation, since links cross trees (a project's .serena/memory commonly
-links to the plugin's wf/dom/feature memories) and validating roots
-separately reports false dangling links.
+it alongside every project-side root in ONE invocation, since links cross
+trees (a project's .serena/memory commonly links to the plugin's
+wf/dom/feature memories) and validating roots separately reports false
+dangling links. --extra-root [alias=]DIR (repeatable) appends ON TOP OF
+whichever roots were resolved above (explicit --root args, or else the conf
+file) instead of replacing them — use it to add the plugin source repo's own
+"memories" tree without losing the conf-derived project roots. Passing an
+explicit --root REPLACES the conf default entirely, so combining the
+plugin's own tree with conf roots must go through --extra-root or
+--plugin-root, never a bare --root.
 
 Exit code 1 if any dangling links are found, else 0.
 """
@@ -169,7 +176,9 @@ def build_index(roots):
 def extract_links(text: str):
     """Return the set of raw link tokens found in text (before placeholder filtering)."""
     links = set()
-    links.update(LINK_MEM_RE.findall(text))
+    links.update(
+        m.rstrip("./-") for m in LINK_MEM_RE.findall(text)
+    )
     links.update(LINK_WIKI_RE.findall(text))
     links.update(LINK_BARE_RE.findall(text))
     return links
@@ -253,6 +262,17 @@ def main():
         "plugin memories/ tree (e.g. ${CLAUDE_PLUGIN_ROOT}/memories). Pass it "
         "alongside every project-side root in one invocation — links cross trees.",
     )
+    parser.add_argument(
+        "--extra-root",
+        action="append",
+        dest="extra_roots",
+        default=None,
+        help="An additional root (optionally '[alias=]DIR', repeatable) appended "
+        "ON TOP OF the roots resolved above (--root args, or else "
+        ".serena/memory-paths.conf), instead of replacing them. Use this to add "
+        "the plugin source repo's own 'memories' tree when auditing inside that "
+        "repo, without losing the conf-derived project roots.",
+    )
     parser.add_argument("--json", action="store_true", help="Emit JSON instead of text.")
     args = parser.parse_args()
 
@@ -264,6 +284,9 @@ def main():
 
     if args.plugin_root:
         roots.append((None, args.plugin_root))
+
+    if args.extra_roots:
+        roots.extend(parse_root_arg(r) for r in args.extra_roots)
 
     root_labels = [f"{a}={d}" if a else d for a, d in roots]
 

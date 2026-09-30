@@ -1,7 +1,7 @@
 ---
 name: swe-memory-size-audit
 version: 1.0.0
-description: "Audit a project's Serena memories for size and split any that are too large to be useful. Runs scripts/memory-size-audit.py against .serena/memory-paths.conf roots, classifies each memory ok/warn/split/unreadable, and fans out parallel split agents that turn an oversized memory into a hub + focused children per the SPLIT CONTRACT — zero rule loss, hub keeps its name/path so mem: links stay valid. Complements /swe-memory-audit (style) and /swe-memory-obligations (front-matter); this skill fixes SIZE. Mutates only via Serena memory MCP tools (or plain-file edits for a plugin-source memories/ tree run inside this repo)."
+description: "Audit a project's Serena memories for size and split any too large to be useful. Runs scripts/memory-size-audit.py against .serena/memory-paths.conf roots, classifies each ok/warn/split/unreadable, and fans out parallel split agents turning an oversized memory into a hub + children per the SPLIT CONTRACT — zero rule loss, hub keeps name/path so mem: links stay valid. Complements /swe-memory-audit (style) and /swe-memory-obligations (front-matter); this fixes SIZE. Mutates via Serena memory MCP tools (plain-file edits for a plugin-source memories/ tree in this repo)."
 workflow:
   aware: true
   callable_from:
@@ -11,23 +11,23 @@ workflow:
   supports_standalone: true
 args:
   - name: scope
-    description: "Optional directory-prefix filter (e.g. dom, ref, feature) passed as --topic to limit the audit to one topic. Omit to audit ALL memories under the configured roots."
+    description: "Optional directory-prefix filter (e.g. dom, ref, feature) passed as --topic to limit the audit to one topic. Omit to audit all memories under the configured roots."
     required: false
 ---
 
 # /swe-memory-size-audit [scope]
 
-Measure every project memory's raw size and split any memory too large to be reliably read. Past the
-unreadable threshold, Claude Code replaces the MCP read result with a ~2KB preview — the memory's content
-is effectively invisible to every future read. This skill finds those memories (and ones heading toward
-that cliff) and splits them into a hub + focused children with ZERO rule loss.
+Measure every project memory's raw size and split any too large to be reliably read. Past the
+unreadable threshold, Claude Code replaces the MCP read result with a ~2KB preview — content is
+effectively invisible to every future read. This skill finds those memories (and ones heading toward that
+cliff) and splits them into a hub + focused children with ZERO rule loss.
 
 ## Relationship to /swe-memory-audit and /swe-memory-obligations
 
-- `/swe-memory-audit` — fixes STYLE (prose → imperative). Does not touch size.
-- `/swe-memory-obligations` — backfills the `obligations:` front-matter field. Does not touch size.
+- `/swe-memory-audit` — fixes STYLE (prose → imperative); does not touch size.
+- `/swe-memory-obligations` — backfills the `obligations:` field; does not touch size.
 - `/swe-memory-size-audit` (this skill) — fixes SIZE (hub + children). Run after a split settles content;
-  a follow-up `/swe-memory-obligations` pass backfills `obligations:` on new children.
+  a follow-up `/swe-memory-obligations` pass backfills `obligations:` on children.
 
 ## Memory Graph Validator
 
@@ -35,27 +35,31 @@ Execute (do not Read into context) — checks `mem:`/`[[link]]`/backtick-CAPS li
 the ONE invocation Stage 1 (baseline) and Stage 4 (post-split check) both reuse:
 
 ```bash
-python3 "${CLAUDE_SKILL_DIR}/scripts/validate-memory-graph.py" --root memories --root .serena/memory --plugin-root "${CLAUDE_PLUGIN_ROOT}/memories" --json
+python3 "${CLAUDE_SKILL_DIR}/scripts/validate-memory-graph.py" --plugin-root "${CLAUDE_PLUGIN_ROOT}/memories" --json
 ```
+
+Project-side roots come from `.serena/memory-paths.conf` (no `--root` needed). Inside the swe plugin
+source repo only, also pass `--extra-root memories` (adds the plugin's own source tree on top of conf
+roots).
 
 - Dangling (ERROR) = link resolves to no known memory. Orphan (WARNING) = zero inbound links.
 - **ALL-ROOTS-IN-ONE-RUN**: links cross trees (a project's `.serena/memory` links to the plugin's
-  `wf/dom/feature` memories, served at runtime as `${CLAUDE_PLUGIN_ROOT}/memories:ro`). Separate-root runs
-  report FALSE dangling links (measured: `.serena/memory` alone → 29 dangling; both roots together → 12,
-  the true count). Always pass every root Serena serves in ONE invocation.
+  `wf/dom/feature` memories, served at runtime as `${CLAUDE_PLUGIN_ROOT}/memories:ro`). Separate-root
+  runs report FALSE dangling links (measured: `.serena/memory` alone → 29 dangling; both together → 12,
+  the true count). Always pass every root in ONE invocation.
 - **Baseline→subset rule**: take a `--json` baseline BEFORE any split (Stage 1); post-split dangling
-  (Stage 4) MUST be a subset of the baseline — diff programmatically, never eyeball counts.
+  (Stage 4) MUST be a subset — diff programmatically, never eyeball counts.
 - **New-orphan rule**: a NEW orphan among a split's children = hub's `| When | Read |` table is missing
   that row = FAILURE, not a warning.
 - `--root` accepts `alias=DIR`; no `--root` defaults to `.serena/memory-paths.conf` in cwd.
 
 ## ⛔ NO IMPROVISATION
 
-- Run the measurement command in Stage 1 VERBATIM. NEVER compose an alternative `wc`/`find`/`awk` pipeline
-  or hand-rolled char count for a step that has a literal command below.
-- Splitting is delegated to parallel `Agent` calls (Stage 3) — the orchestrator NEVER edits a memory body
-  directly to shrink it. A verbatim command failing twice = STOP, report the failure verbatim
-  (`mem:claude/CLAUDE_OBLIGATIONS` Skill Failure Threshold). NEVER retry with an invented variant.
+- Run the Stage 1 measurement command VERBATIM. NEVER compose an alt `wc`/`find`/`awk` pipeline or
+  hand-rolled char count where a literal command exists below.
+- Splitting is delegated to parallel `Agent` calls (Stage 3) — orchestrator NEVER edits a memory body
+  directly to shrink it. Verbatim command failing twice = STOP, report the failure verbatim (`mem:
+  claude/CLAUDE_OBLIGATIONS` Skill Failure Threshold). NEVER retry with an invented variant.
 
 ## Stages
 
@@ -72,24 +76,25 @@ python3 "${CLAUDE_PLUGIN_ROOT}/scripts/memory-size-audit.py" --json --sections 1
 python3 "${CLAUDE_PLUGIN_ROOT}/scripts/memory-size-audit.py" --topic <scope> --json --sections 10
 ```
 
-- Default roots come from `.serena/memory-paths.conf` in cwd (no `--root` needed for the standard case).
-- Sizes are UTF-8 decoded CHARACTERS of the whole file, including front-matter.
-- Thresholds: `ok` ≤8,000 · `warn` ≤16,000 · `split` <50,000 · unreadable ≥50,000 chars. `UNREADABLE_CHARS`
-  is MEASURED: a 50,052-char memory (front-matter stripped) read inline; 53,734- and 64,345-char memories
-  became Claude Code's 2KB preview. If Claude Code's cutoff changes, re-measure with 2 probe files
-  straddling the current threshold before editing `memory_size.py`'s `UNREADABLE_CHARS`.
-- Exit code 1 means at least one `split`/`unreadable` memory exists.
+- Default roots come from `.serena/memory-paths.conf` in cwd (no `--root` needed in the standard case).
+- Sizes are UTF-8 decoded CHARACTERS of the whole file, incl. front-matter.
+- Thresholds: `ok` ≤8,000 · `warn` 8,001-16,000 · `split` 16,001-49,999 · `unreadable` ≥50,000. `UNREADABLE_CHARS`
+  is MEASURED: a 50,052-char memory (front-matter stripped) read inline; 53,734/64,345-char memories became
+  Claude Code's 2KB preview. If cutoff changes, re-measure with 2 probe files straddling the current
+  threshold before editing `memory_size.py`'s `UNREADABLE_CHARS`.
+- Exit 1 means ≥1 `split`/`unreadable` memory exists.
 - **Formatter detection**: check for `dprint.json`/`.dprint.json`, `.prettierrc*`, or a `package.json`
-  "scripts.fmt"/"scripts.format" entry. Record the exact per-file command (Stage 3 puts it in every agent
-  prompt). None found: state so, skip formatting.
-- **Foreign trees**: a memory name prefixed `<alias>/` is a sibling project's, not this one's. Mark
-  "foreign — out of scope"; exclude from Stage 2 unless the user named that alias.
-- Present the non-`ok` memories as a table: `memory | chars | tokens_est | status | sections (heading:chars)`.
-- **Graph baseline** (required before any split — see Memory Graph Validator above): run the all-roots
-  form above, saving to a scratch file:
+  "scripts.fmt"/"scripts.format" entry. Record the exact per-file command (Stage 3 puts it in every
+  agent prompt); none found, state so and skip formatting.
+- **Foreign trees**: a memory name prefixed `<alias>/` is a sibling project's, not this one's — mark
+  "foreign — out of scope", exclude from Stage 2 unless the user named that alias.
+- Present non-`ok` memories as a table: `memory | chars | tokens_est | status | sections (heading:chars)`.
+- **Graph baseline** (required before any split, per Memory Graph Validator above): run that form
+  (add `--extra-root memories` in the plugin source repo), saved to a scratch file:
 
 ```bash
-python3 "${CLAUDE_SKILL_DIR}/scripts/validate-memory-graph.py" --root memories --root .serena/memory --plugin-root "${CLAUDE_PLUGIN_ROOT}/memories" --json > /tmp/memgraph-baseline.json
+mkdir -p .serena/cache
+python3 "${CLAUDE_SKILL_DIR}/scripts/validate-memory-graph.py" --plugin-root "${CLAUDE_PLUGIN_ROOT}/memories" --json > .serena/cache/memgraph-baseline.json
 ```
 
 ### Stage 2: Plan
@@ -105,10 +110,10 @@ Per flagged memory, choose exactly one action:
 group's raw chars, +30% for any table-heavy section (mostly `|` rows), stays ≤8,000. Adjacent sections may
 share a child; never split one section across two children.
 
-**Always-read memories** (`wf/*`, `claude/*`, any memory read at task start): hub keeps only what every
-task needs; conditional content moves behind one routing-table row. Target ≤12,000 for these hubs (vs
-≤8,000 general — they can't omit invariant content). A task-type table, a "read when" check, and a routing
-table restating the same decision: keep exactly one, delete the rest.
+**Always-read memories** (`wf/*`, `claude/*`, any memory read at task start): hub keeps only what
+every task needs; conditional content moves behind one routing-table row. Target ≤12,000 for these hubs
+(vs ≤8,000 general — can't omit invariant content). A task-type table, a "read when" check, and a routing
+table restating the same decision: keep one, delete the rest.
 
 Present the plan table: `memory | chars | status | action | proposed children (names)`. Name each child per
 the SPLIT CONTRACT naming rule before asking approval — don't defer naming to the split agent.
@@ -118,43 +123,43 @@ gave blanket consent (e.g. an orchestrating skill/agent explicitly authorized pr
 
 ### Stage 3: Fan Out (parallel, background)
 
-ONE message, parallel background `Agent` calls, `model: "sonnet"`, ONE agent per flagged memory. Ownership
-disjoint: each agent owns exactly its assigned memory plus the new children it creates — no two agents
-touch the same memory/child name. Each agent prompt MUST also include: the memory's on-disk `path` from
-Stage 1's `--json` output (rule 2 — don't make the agent look it up); the per-file formatter command from
-Stage 1 (or "no formatter — skip formatting"); and: "You NEVER commit. Do not run `git commit`/`git add
--A` — the orchestrator commits once after Stage 4 passes."
+ONE message, parallel background `Agent` calls, `model: "sonnet"`, ONE agent per flagged memory.
+Ownership disjoint: each agent owns exactly its assigned memory plus the new children it creates — no two
+agents touch the same memory/child name. Each agent prompt MUST also include: the memory's on-disk `path`
+from Stage 1's `--json` output (rule 2 — don't make the agent look it up); the per-file formatter command
+from Stage 1 (or "no formatter — skip formatting"); and: "You NEVER commit — the orchestrator commits once
+after Stage 4 passes."
 
 Each agent's prompt MUST start with:
 
 > You are a subagent. BYPASS WF_INIT entirely. Do NOT read CLAUDE.md workflow. Follow ONLY these
 > instructions.
 
-...then embed the SPLIT CONTRACT below **verbatim** (wording may be adapted for the agent's specific
-memory name/status/proposed children/path/formatter-command from the Stage 2 plan row, but every numbered
-rule must appear).
+...then embed the SPLIT CONTRACT below **verbatim** (adapt wording for the agent's specific memory
+name/status/proposed children/path/formatter-command from the Stage 2 plan row; every numbered rule must
+appear).
 
 #### SPLIT CONTRACT (embed verbatim)
 
 1. Budgets (chars, whole file incl. front-matter, MEASURED AFTER FORMATTING — see rule 8): target ≤8,000
    per file; hard max 16,000. Hub ≤8,000 (≤12,000 for an always-read hub, e.g. `wf/*`).
 2. **Reading an oversized source**: if the memory is ≥50,000 chars, `read_memory` returns only a 2KB
-   preview — do NOT rely on it. Read the FULL file with `Read` against the on-disk `path` given in your
-   prompt, in `offset`/`limit` chunks. Never reconstruct content from a preview.
+   preview — do NOT rely on it. Read the FULL file with `Read` against the on-disk `path` in your prompt,
+   in `offset`/`limit` chunks. Never reconstruct content from a preview.
 3. Hub KEEPS the original name/path — `mem:` links stay valid. Hub body = invariants needed every read + a
    routing table `| When | Read |`, one row per child (`mem:<child>` link + condition to open it).
-4. Child naming: `feature/FEATURE_<KEY>` → `dom/DOM_<KEY>_<TOPIC>`; `wf/WF_<STATE>` → `ref/REF_WF_<STATE>_
-   <TOPIC>` (never new `wf/` names — FSM machinery); `spec/*` stays in `spec/`, `metadata.type: spec`, NO
-   `obligations:` (specs aren't rule-bearing); all others → same directory, `<NAME>_<TOPIC>`.
-   UPPER_SNAKE_CASE.
+4. Child naming (UPPER_SNAKE_CASE): `feature/FEATURE_<KEY>` → `dom/DOM_<KEY>_<TOPIC>`; `wf/WF_<STATE>`
+   → `ref/REF_WF_<STATE>_<TOPIC>` (never new `wf/` names — FSM machinery); `spec/*` stays in `spec/`,
+   `metadata.type: spec`, NO `obligations:` (specs aren't rule-bearing); all others → same directory,
+   `<NAME>_<TOPIC>`.
 5. Every child carries front-matter: name, description (one sentence), metadata.type (from directory),
    `obligations:` (1-2 imperative lines, or `[]`) for dom/ref/dev/feature (never `spec/`, per rule 4).
 6. ZERO RULE LOSS: every rule/threshold/path/command/name/contract survives (moved or condensed, never
-   dropped). Produce a rule-diff: each original heading → destination file.
+   dropped). Produce a rule-diff: original heading → destination file.
 7. **Dedupe before deleting**: before removing a block as duplicate, `grep`/`search_for_pattern` the
-   CANONICAL owner memory for each fact. Delete only what the owner already states; a fact present ONLY in
-   the trimmed block moves to a child, never dropped. Confirmed duplicates become a `mem:` link to the
-   canonical owner.
+   CANONICAL owner memory for each fact. Delete only what the owner already states; a fact present ONLY
+   in the trimmed block moves to a child, never dropped. Confirmed duplicates become a `mem:` link to the
+   owner.
 8. Style per `mem:ref/REF_MEMORY_STYLE`: terse imperative bullets, tables for mappings, no prose
    paragraphs, no filler; compress verbose table cells. **Format before measuring**: after writing each
    file, run the project's formatter (given in your prompt) ON THIS FILE ONLY — never repo-wide, since
@@ -162,10 +167,10 @@ rule must appear).
    widest cell, inflating every row (measured: one file grew 7,540 → 13,892 chars from formatting alone).
    Re-measure with `wc -m <file>` AFTER formatting — that number must meet the rule-1 budget. A table with
    any long cell becomes a bullet list instead; keep tables only where every cell is short.
-9. Preserve any heading/marker code or tests parse: `grep -r "<memory-filename-without-ext>" tests/ hooks/`
-   BEFORE moving any heading; keep every parsed heading, marker, step number (e.g. "Step 4d") in the hub.
-   After splitting, run only the matched test file with the project's documented scoped-test command (its
-   test memory, e.g. `FEATURE_TESTS`/`DEV_TESTS`) — never the full suite from a subagent.
+9. Preserve any heading/marker code or tests parse: `grep -r "<memory-filename-without-ext>" tests/
+   hooks/` BEFORE moving any heading; keep every parsed heading, marker, step number (e.g. "Step 4d") in
+   the hub. After splitting, run only the matched test file with the project's documented scoped-test
+   command (its test memory, e.g. `FEATURE_TESTS`/`DEV_TESTS`) — never the full suite from a subagent.
 10. **Cross-reference check**: hub NAME is unchanged so `mem:` links stay valid, but a quoted section
     reference (e.g. `NAME "Section Title"`) to a moved section goes stale. `grep -rn "<memory-name>"
     memories/ skills/ hooks/ agents/ commands/ .serena/memory/` (adjust to what exists); report each hit as
@@ -180,23 +185,22 @@ rule must appear).
     `[new-memory-justified: split child of <HUB> per /swe-memory-size-audit]`. Write children FIRST, hub
     last.
 
-Mutation channel: project memories (any `.serena/memory` tree, incl. aliased roots) mutate ONLY via Serena
-`write_memory`/`edit_memory`/`delete_memory`. A plugin-source `memories/` tree (this repo's own shipped
-templates, when run inside this repo) uses plain-file `Read`/`Edit`/`Write` instead — never mix channels.
+Mutation channel: project memories (any `.serena/memory` tree, incl. aliased roots) mutate ONLY via
+Serena `write_memory`/`edit_memory`/`delete_memory`. A plugin-source `memories/` tree (this repo's own
+shipped templates, run inside this repo) uses plain-file `Read`/`Edit`/`Write` — never mix channels.
 
-Each agent returns: the rule-diff (heading → destination), the cross-reference hit list (rule 10), and
-final POST-FORMAT char counts (`wc -m`) for the hub and every child it created.
+Each agent returns: rule-diff (heading → destination), cross-reference hit list (rule 10), and final
+POST-FORMAT char counts (`wc -m`) for the hub and every child created.
 
 ### Stage 4: Verify
 
 1. Re-run Stage 1's exact command. Every file touched in Stage 3 MUST now be `ok` or `warn` at most
    16,000 chars; every hub MUST be ≤8,000 chars (≤12,000 for an always-read hub).
-2. Run the SAME all-roots command as the Stage 1 baseline (never one root at a time — see Memory Graph
-   Validator), redirected to a second file, then diff:
+2. Run the SAME command as the Stage 1 baseline, redirected to a second file, then diff:
 
 ```bash
-python3 "${CLAUDE_SKILL_DIR}/scripts/validate-memory-graph.py" --root memories --root .serena/memory --plugin-root "${CLAUDE_PLUGIN_ROOT}/memories" --json > /tmp/memgraph-postsplit.json
-python3 -c "import json,sys; b={tuple(x) for x in json.load(open('/tmp/memgraph-baseline.json'))['dangling']}; p={tuple(x) for x in json.load(open('/tmp/memgraph-postsplit.json'))['dangling']}; n=sorted(p-b); print(n); sys.exit(1 if n else 0)"
+python3 "${CLAUDE_SKILL_DIR}/scripts/validate-memory-graph.py" --plugin-root "${CLAUDE_PLUGIN_ROOT}/memories" --json > .serena/cache/memgraph-postsplit.json
+python3 -c "import json,sys; b={tuple(x) for x in json.load(open('.serena/cache/memgraph-baseline.json'))['dangling']}; p={tuple(x) for x in json.load(open('.serena/cache/memgraph-postsplit.json'))['dangling']}; n=sorted(p-b); print(n); sys.exit(1 if n else 0)"
 ```
 
 Pass = empty new-dangling list (post-split ⊆ baseline) AND no orphan among the split's new children (a
@@ -208,24 +212,24 @@ new-child orphan = hub routing table missing that row = fix it, do not waive).
    multiple split memories — to repoint the stale reference.
 5. **Trim wave**: any file still over budget (first-pass agents commonly leave hubs/children at 8-14K)
    triggers ONE agent per still-over-budget family, parallel, background, `model: "sonnet"`, same SPLIT
-   CONTRACT plus the literal target. Re-run Stage 1 after. Cap 2 waves; still over after wave 2 → STOP,
+   CONTRACT plus the literal target. Re-run Stage 1 after; cap 2 waves — still over after wave 2 → STOP,
    report in Stage 5.
 
-On any other failure (dangling link, missing rule-diff entry), re-launch a fix agent scoped to that one
+On any other failure (dangling link, missing rule-diff entry), re-launch a fix agent scoped to that
 memory — NEVER fix it directly in the orchestrator.
 
 ### Stage 5: Report
 
 Present a before/after table: `memory | chars before | status before | chars after (hub) | children
-created | status after`. List any file still over budget after 2 trim waves as **Remaining** with its
-current chars — never silently drop it.
+created | status after`. List any file still over budget after 2 trim waves as **Remaining** with
+current chars — never drop it silently.
 
 **Commit**: the orchestrator (never a subagent) commits once, here, after Stage 4 passes clean.
 
 ## Idempotency
 
-A re-run where Stage 1 reports all `ok` is a no-op — Stage 2's plan table is empty and the skill exits
-without asking approval or launching agents.
+A re-run where Stage 1 reports all `ok` is a no-op — Stage 2's plan table is empty; the skill exits
+without approval or agents.
 
 ## Skill Return
 
@@ -248,23 +252,22 @@ without asking approval or launching agents.
 
 ## Troubleshooting
 
-- **Script reports `--json` parse failure** — re-run the exact Stage 1 command unmodified; never hand-parse
-  table output instead.
-- **A split agent's memory is still >16,000 chars after Stage 3** — expected on a first pass; it's Stage
-  4's trim wave, not a one-off fix. Only re-launch a targeted fix agent outside the trim-wave flow if Stage
-  4 already exhausted its 2-wave cap.
-- **New dangling `mem:` link** (not in Stage 1 baseline) — a child was renamed/dropped after the rule-diff.
-  Re-launch a fix agent to restore the link/target.
-- **Graph validator reports many dangling links** — roots validated separately; rerun with all roots in one
-  invocation (see Memory Graph Validator above).
+- **Script reports `--json` parse failure** — re-run Stage 1's exact command; never hand-parse
+  table output.
+- **Split agent's memory still >16,000 chars after Stage 3** — expected first-pass; it's Stage 4's
+  trim wave, not a one-off fix. Re-launch a targeted fix agent only if Stage 4 exhausted its 2-wave cap.
+- **New dangling `mem:` link** (not in Stage 1 baseline) — a child was renamed/dropped post-rule-diff.
+  Re-launch a fix agent to restore link/target.
+- **Graph validator reports many dangling links** — roots ran separately; rerun all-in-one (see
+  Validator above).
 - **Serena `write_memory`/`edit_memory` refused (read-only)** — matches a `read_only_memory_patterns`
   entry. Report under Skipped in the before/after table; do not force it.
-- **Agent got a 2KB preview instead of memory content** — called `read_memory` on a ≥50,000-char source
-  instead of `Read`-ing the on-disk `path` (rule 2). Re-launch with the path passed explicitly.
-- **File grew after formatting instead of shrinking** — a long table cell padded across every row by the
-  formatter (rule 8). Convert to a bullet list, reformat, re-measure with `wc -m`.
-- **`write_memory` denied (missing obligations / flagged duplicate)** — add `obligations:` (or `[]`) per
-  rule 5; if dedupe fired, retry with `[new-memory-justified: split child of <HUB> per
+- **Agent got a 2KB preview, not memory content** — called `read_memory` on a ≥50,000-char source
+  instead of `Read`-ing the on-disk `path` (rule 2); re-launch, passing the path explicitly.
+- **File grew after formatting, not shrank** — a long table cell padded every row (rule 8). Convert
+  to a bullet list, reformat, re-measure with `wc -m`.
+- **`write_memory` denied (missing obligations / flagged duplicate)** — add `obligations:` (or `[]`)
+  per rule 5; if dedupe fired, retry with `[new-memory-justified: split child of <HUB> per
   /swe-memory-size-audit]` (rule 13).
 - **WM sweep at WF_CLASSIFY rejected a hub's child link** — child missing accurate `obligations:`, or
   linked outside the `| When | Read |` table (rule 12). Fix `obligations:` and/or move the link into the

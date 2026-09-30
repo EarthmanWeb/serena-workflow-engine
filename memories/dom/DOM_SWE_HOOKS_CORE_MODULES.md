@@ -139,7 +139,7 @@ jq '.hooks | keys' .claude/plugins/serena-workflow-engine/hooks/hooks.json
 
 - `hooks/swe_hooks/core/loop_guard.py` — implements `loopCaps` enforcement (refuse-with-escape-message on cap exceeded, warn on A→B→A→B oscillation) for `readAdvance` transitions. See `mem:dom/DOM_SWE_STATE_MACHINE`.
 - `scripts/validate-graph.py` — validates `state-machine/states.json` (transitions, `transitionMatrix` edges, `rank` ordering, `loopCaps`, `subflows`).
-- `skills/swe-memory-size-audit/scripts/validate-memory-graph.py` — validates the memory link graph (dangling/orphan refs, per-file word counts, CAPS hard-stop counts). See `mem:feature/FEATURE_SWE` for usage.
+- `skills/swe-memory-size-audit/scripts/validate-memory-graph.py` — validates the memory link graph (dangling/orphan refs, per-file word counts, CAPS hard-stop counts). Run as `python3 skills/swe-memory-size-audit/scripts/validate-memory-graph.py --extra-root memories` (conf roots + plugin source tree in ONE run — never validate trees separately). See `mem:feature/FEATURE_SWE` for usage.
 
 ## Diagnostic Checklist
 

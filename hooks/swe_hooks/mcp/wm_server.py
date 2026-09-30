@@ -431,7 +431,9 @@ def _parse_ruled_out(content: str) -> dict:
     """Parse '<name> — <reason>' entries from ALL '**Rules ruled out**:'
     line(s). Returns {normalized_name: reason}. An entry with no ' — '
     reason is returned with reason='' so the caller can reject it by name
-    (a missing reason must not silently drop the entry from detection)."""
+    (a missing reason must not silently drop the entry from detection).
+    Separator accepts em dash '—', en dash '–', or ' - ', all handled the
+    same way."""
     entries = {}
     for line_tail in RULES_RULED_OUT_RE.findall(content or ''):
         # Split entries on commas that are NOT inside a '<name> — <reason>'
@@ -444,6 +446,8 @@ def _parse_ruled_out(content: str) -> dict:
                 continue
             if '—' in raw_entry:
                 name_part, reason_part = raw_entry.split('—', 1)
+            elif '–' in raw_entry:
+                name_part, reason_part = raw_entry.split('–', 1)
             elif ' - ' in raw_entry:
                 name_part, reason_part = raw_entry.split(' - ', 1)
             else:

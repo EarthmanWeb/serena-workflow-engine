@@ -4,6 +4,7 @@ Pure-function tests against synthetic memory trees, plus an integration
 assertion that the real memories/ tree (+ .serena/memory, where present)
 has zero dangling link errors.
 """
+import json
 import os
 import shutil
 import tempfile
@@ -71,6 +72,16 @@ class TestExtractLinks(unittest.TestCase):
         # Not one of the recognized prefixes -> not extracted as a link at all.
         links = vmg.extract_links("call `SOME_FUNC` now")
         self.assertNotIn("SOME_FUNC", links)
+
+    def test_mem_style_strips_trailing_sentence_punctuation(self):
+        links = vmg.extract_links("see mem:dom/DOM_X.")
+        self.assertIn("dom/DOM_X", links)
+        self.assertNotIn("dom/DOM_X.", links)
+
+    def test_mem_style_stops_at_comma_no_trailing_dash(self):
+        links = vmg.extract_links("mem:ref/REF_A-B,")
+        self.assertIn("ref/REF_A-B", links)
+        self.assertNotIn("ref/REF_A-B,", links)
 
 
 class TestValidateSyntheticTree(unittest.TestCase):
@@ -203,6 +214,43 @@ class TestRootParityCLI(unittest.TestCase):
         self.assertEqual(proc.returncode, 0)
         data = json.loads(proc.stdout)
         self.assertEqual(data["dangling"], [])
+
+    def test_cli_extra_root_appends_to_conf_default(self):
+        """--extra-root adds a root ON TOP OF the conf-derived default roots
+        (unlike a bare --root, which replaces them) — e.g. adding the plugin
+        source repo's own memories/ tree alongside .serena/memory-paths.conf
+        roots in one invocation."""
+        os.makedirs(os.path.join(self.tmp, ".serena"))
+        conf_memdir = os.path.join(self.tmp, ".serena", "memory")
+        write(conf_memdir, "wf/WF_A.md", "# A\nSee `mem:DOM_SHARED` next.\n")
+        with open(os.path.join(self.tmp, ".serena", "memory-paths.conf"), "w") as f:
+            f.write("./.serena/memory\n")
+
+        extra_root = os.path.join(self.tmp, "plugin_memories")
+        write(extra_root, "dom/DOM_SHARED.md", "# Shared\n")
+
+        proc = self._run(["--extra-root", extra_root, "--json"], cwd=self.tmp)
+        self.assertEqual(proc.returncode, 0)
+        data = json.loads(proc.stdout)
+        # Both the conf-derived root and the extra root are present.
+        self.assertIn("wf/WF_A", data["word_counts"])
+        self.assertIn("dom/DOM_SHARED", data["word_counts"])
+        self.assertEqual(data["dangling"], [])
+
+    def test_cli_extra_root_appends_to_explicit_root(self):
+        """--extra-root also appends when --root is explicit (not just the
+        conf-default path), and supports an alias."""
+        root = os.path.join(self.tmp, "proj_memories")
+        extra_root = os.path.join(self.tmp, "plugin_memories")
+        write(root, "wf/WF_A.md", "# A\n")
+        write(extra_root, "dom/DOM_B.md", "# B\n")
+        proc = self._run(
+            ["--root", root, "--extra-root", f"plug={extra_root}", "--json"], cwd=self.tmp
+        )
+        self.assertEqual(proc.returncode, 0)
+        data = json.loads(proc.stdout)
+        self.assertIn("wf/WF_A", data["word_counts"])
+        self.assertIn("plug/dom/DOM_B", data["word_counts"])
 
 
 class TestRealMemoryTree(unittest.TestCase):

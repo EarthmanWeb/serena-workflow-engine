@@ -51,3 +51,17 @@ If a `DEV_*` memory does not exist for a language, skip it and note the gap.
 - Extract concrete rules applicable to this task from the loaded `DEV_*`, `DOM_*`, `SYS_*`, `FEATURE_[KEY]` memories.
 - Write as a checklist in WM under `## Compliance Checklist` — one item per rule (naming conventions, boilerplate, security patterns, registration contracts, integration points, required interfaces, testing commands, file patterns).
 - Verified at `WF_VERIFY`.
+
+Example (format + specificity to match):
+
+```markdown
+## Compliance Checklist
+
+- [ ] PHP file header with @package and @since (DEV_PHP)
+- [ ] Handler implements getFieldHTML + initField (DOM_BUILDER_FIELDS)
+- [ ] Blade template has variable defaults block at top (DEV_BLADEONE)
+- [ ] filemtime() for asset versioning, not hardcoded (DEV_PHP)
+- [ ] Handler registered via registerComponentHandler (DOM_BUILDER_FIELDS)
+- [ ] New JS/CSS enqueued in builder-assets.php (FEATURE_builder)
+- [ ] Nonce verification in any AJAX handler (DEV_PHP)
+```

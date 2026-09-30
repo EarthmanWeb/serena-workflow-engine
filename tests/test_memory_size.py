@@ -80,6 +80,18 @@ class TestMeasureMemory(unittest.TestCase):
         m = size_mod.measure_memory(text)
         self.assertEqual(m["sections"][0]["level"], 4)
 
+    def test_atx_closing_hashes_stripped_from_heading(self):
+        text = "## Foo ##\ncontent\n"
+        m = size_mod.measure_memory(text)
+        self.assertEqual(m["sections"][0]["heading"], "Foo")
+
+    def test_hash_without_preceding_space_not_treated_as_closer(self):
+        # A '#' immediately following non-space text (no whitespace before
+        # it) is not an ATX closing sequence and stays part of the heading.
+        text = "## C# tips\ncontent\n"
+        m = size_mod.measure_memory(text)
+        self.assertEqual(m["sections"][0]["heading"], "C# tips")
+
     def test_h1_not_treated_as_section_boundary(self):
         # Only ##/###/#### count per spec; a single # is not a section heading.
         text = "# Title\nintro\n## Real Section\nbody\n"
@@ -251,10 +263,35 @@ class TestAuditScriptRoots(unittest.TestCase):
         self.assertNotIn("ref/REF_X", names)
 
     def test_exit_code_0_when_all_ok(self):
-        proc = run_script(["--root", os.path.join(self.tmp.name, "onlysmall"), "--json"],
-                           cwd=self.tmp.name)
-        # nonexistent dir -> no memories -> ok exit
+        empty_root = os.path.join(self.tmp.name, "onlysmall")
+        os.makedirs(empty_root)
+        proc = run_script(["--root", empty_root, "--json"], cwd=self.tmp.name)
+        # existing but empty dir -> no memories -> ok exit
         self.assertEqual(proc.returncode, 0)
+
+    def test_missing_root_dir_errors_exit_2(self):
+        # A --root that does not exist is a fatal error: it is printed to
+        # stderr and the run exits 2 rather than silently reporting clean.
+        missing = os.path.join(self.tmp.name, "does_not_exist")
+        proc = run_script(["--root", missing, "--json"], cwd=self.tmp.name)
+        self.assertEqual(proc.returncode, 2)
+        self.assertIn("ERROR: memory root not found:", proc.stderr)
+        self.assertIn(missing, proc.stderr)
+
+    def test_conf_with_one_valid_one_missing_root_errors_exit_2(self):
+        os.makedirs(os.path.join(self.tmp.name, ".serena"))
+        valid_root = os.path.join(self.tmp.name, "valid_root")
+        os.makedirs(os.path.join(valid_root, "dom"))
+        with open(os.path.join(valid_root, "dom", "DOM_OK.md"), "w") as f:
+            f.write("## A\nshort\n")
+        missing_root = os.path.join(self.tmp.name, "stale_root")
+        conf_path = os.path.join(self.tmp.name, ".serena", "memory-paths.conf")
+        with open(conf_path, "w") as f:
+            f.write(f"./valid_root\n{missing_root}\n")
+        proc = run_script([], cwd=self.tmp.name)
+        self.assertEqual(proc.returncode, 2)
+        self.assertIn("ERROR: memory root not found:", proc.stderr)
+        self.assertIn(missing_root, proc.stderr)
 
     def test_all_flag_includes_ok_rows_text_mode(self):
         proc = run_script(["--root", self.root, "--all"], cwd=self.tmp.name)

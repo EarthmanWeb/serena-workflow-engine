@@ -154,6 +154,12 @@ After migration, the symlink ensures all future auto-memory writes go to `.seren
 | `/swe-workflow-debug-tdd`   | Test-driven debugging                        |
 | `/swe-symbol-index`         | Generate symbol index for feature docs       |
 | `/swe-memory-size-audit`    | Split oversized memories into hub + children |
+| `/swe-gherkin-spec`         | Write Gherkin BDD specs for a feature        |
+| `/swe-gherkin-dev`          | TDD from Gherkin specs to 100% compliance    |
+| `/swe-memory-audit`         | Rewrite memories to terse-imperative style   |
+| `/swe-memory-frontmatter`   | Backfill/normalize memory YAML front-matter  |
+| `/swe-memory-obligations`   | Backfill `obligations:` field on memories    |
+| `/swe-wp-cli-setup`         | Configure the WP-CLI MCP server for a site   |
 
 ## Alternative Setup
 

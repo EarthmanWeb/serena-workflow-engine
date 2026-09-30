@@ -17,6 +17,12 @@ Roots:
   `:ro` marker is stripped. No --root AND no conf file is an error (exit 2)
   — there is no silent fallback to a hardcoded default.
 
+  Every resolved root (from --root or from the conf file) MUST exist as a
+  directory. A root that does not exist (typo'd --root, or a stale conf
+  entry) is a fatal error, not a silent skip: one "ERROR: memory root not
+  found: <alias=>path" line is printed to stderr per missing root and the
+  script exits 2 without scanning anything.
+
 Memory names are the file's path relative to its root, without the `.md`
 extension, prefixed `<alias>/` for an aliased root. WM_*.md files (session
 working-memory, not authored memories) are always skipped.
@@ -31,7 +37,8 @@ Usage:
   python3 scripts/memory-size-audit.py --warn 6000 --split 12000 --unreadable 30000
 
 Exit code: 1 if any memory is "split" or "unreadable", 0 otherwise (2 for a
-usage/config error — no roots resolvable).
+usage/config error — no roots resolvable, or a resolved root does not
+exist).
 """
 
 import argparse
@@ -72,10 +79,18 @@ def find_memory_files(root_dir):
 
 
 def collect_memories(roots, topics, warn, split, unreadable, sections_n):
-    """Walk every root, measure every memory, return a sorted list of records."""
+    """Walk every root, measure every memory, return a sorted list of records.
+
+    A root directory that does not exist is a fatal error (fail fast, no
+    silent skip): every missing root is printed to stderr and the caller
+    must treat this as an exit-2 condition (see main()).
+    """
     records = []
+    missing = []
     for alias, root_dir in roots:
         if not os.path.isdir(root_dir):
+            label = f"{alias}={root_dir}" if alias else root_dir
+            missing.append(label)
             continue
         for rel, abspath in find_memory_files(root_dir):
             name = f"{alias}/{rel}" if alias else rel
@@ -109,6 +124,11 @@ def collect_memories(roots, topics, warn, split, unreadable, sections_n):
             if read_error:
                 record["error"] = read_error
             records.append(record)
+
+    if missing:
+        for label in missing:
+            print(f"ERROR: memory root not found: {label}", file=sys.stderr)
+        return None
 
     records.sort(key=lambda r: r["chars"], reverse=True)
     return records
@@ -157,6 +177,10 @@ def main():
     records = collect_memories(
         roots, args.topics, args.warn, args.split, args.unreadable, args.sections
     )
+    if records is None:
+        # collect_memories already printed one "ERROR: memory root not
+        # found: ..." line per missing root to stderr.
+        return 2
 
     counts = {"ok": 0, "warn": 0, "split": 0, "unreadable": 0}
     for r in records:

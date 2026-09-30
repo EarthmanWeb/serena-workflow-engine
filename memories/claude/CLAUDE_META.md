@@ -84,7 +84,7 @@ project/
 2. Route upstream states to the new state (update their `## Routing` tables).
 3. Add the state to `state-machine/states.json` (definition, `transitionMatrix`, `rank`).
 4. Update `dom/DOM_SWE_STATE_MACHINE` and `MEMORY.md` index.
-5. Run `python3 scripts/validate-graph.py` and `python3 skills/swe-memory-size-audit/scripts/validate-memory-graph.py --root memories --root .serena/memory` (all roots in ONE run — separate runs report false dangling links).
+5. Run `python3 scripts/validate-graph.py` and `python3 skills/swe-memory-size-audit/scripts/validate-memory-graph.py --extra-root memories` (conf roots + plugin source tree in ONE run — never validate trees separately).
 
 ## Modifying a State
 

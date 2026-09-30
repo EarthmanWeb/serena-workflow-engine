@@ -86,7 +86,7 @@ def resolve_roots(cli_roots, conf_path=CONF_PATH):
 
     return None
 
-_HEADING_RE = re.compile(r"^(#{2,4})\s+(.*)$")
+_HEADING_RE = re.compile(r"^(#{2,4})\s+(.*?)(?:\s+#+)?\s*\r?$")
 _FENCE_RE = re.compile(r"^\s*(```|~~~)")
 
 PREAMBLE_HEADING = "(preamble)"
