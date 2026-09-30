@@ -12,6 +12,8 @@ below the cutoff at any size tested.
 import os
 import re
 
+from swe_hooks.core.stream import EXCLUDED_TOPICS, is_excluded_memory
+
 # Budget thresholds, in UTF-8 decoded characters of the whole file (incl.
 # front-matter). See module docstring for the source of each number.
 WARN_CHARS = 8000
@@ -20,41 +22,10 @@ UNREADABLE_CHARS = 50000
 
 CONF_PATH = os.path.join(".serena", "memory-paths.conf")
 
-# Topic segments excluded from size measurement/advisories everywhere.
-EXCLUDED_TOPICS = ("spec", "report", "research", "project")
-
-# Basename prefixes for excluded topics, derived from EXCLUDED_TOPICS (e.g.
-# "spec" -> "SPEC_"). Covers a bare "SPEC_Z" with no topic directory.
-_EXCLUDED_BASENAME_PREFIXES = tuple(f"{t.upper()}_" for t in EXCLUDED_TOPICS)
-
-
-def is_excluded_memory(name: str) -> bool:
-    """True when `name` belongs to an excluded topic (spec/, report/,
-    research/, project/).
-
-    `name` is a memory name as produced by the audit/validator tools:
-    an optional alias prefix, then path segments, then a basename, e.g.
-    "spec/SPEC_X", "em/spec/SPEC_X", "report/REPORT_Y", "research/RESEARCH_Z",
-    "project/PROJECT_Q", "dom/DOM_SPECIAL", "ref/REF_SPEC_PARSER", or a bare
-    "SPEC_Z" with no topic segment at all.
-
-    True when ANY path segment other than the basename equals an excluded
-    topic (case-insensitive), OR the basename itself starts with one of the
-    excluded-topic prefixes ("SPEC_", "REPORT_", "RESEARCH_", "PROJECT_",
-    case-insensitive) — covering a bare "SPEC_Z" with no topic directory.
-    """
-    if not name:
-        return False
-    parts = name.split("/")
-    basename = parts[-1]
-    dirs = parts[:-1]
-    for seg in dirs:
-        if seg.lower() in EXCLUDED_TOPICS:
-            return True
-    basename_upper = basename.upper()
-    if basename_upper.startswith(_EXCLUDED_BASENAME_PREFIXES):
-        return True
-    return False
+# EXCLUDED_TOPICS / is_excluded_memory: single source of truth is
+# hooks/swe_hooks/core/stream.py (imported above). Kept importable from here
+# unchanged so scripts/memory-size-audit.py and
+# skills/swe-memory-size-audit/scripts/validate-memory-graph.py keep working.
 
 
 def parse_root_arg(raw):

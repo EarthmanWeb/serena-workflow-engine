@@ -20,7 +20,7 @@ try:
     from swe_hooks.core.stream import (
         get_stream_path, append_event, get_sentinel_path,
         collect_values_since_task_start, normalize_memory_name,
-        get_last_continuation,
+        get_last_continuation, is_excluded_memory, EXCLUDED_TOPICS,
     )
     from datetime import datetime
     import re
@@ -43,40 +43,20 @@ MEMORY_NAME_RE = re.compile(
 MEMORY_LINK_RE = re.compile(
     r'(?:mem:|\[\[)\s*([a-z][a-z0-9_.-]*/[A-Za-z0-9][A-Za-z0-9_./-]*?)\s*(?:\]\]|(?=[^A-Za-z0-9_./-])|$)')
 
-# Topics excluded from related-link tracking — workflow machinery and the
-# WF_CLASSIFY 4d sweep exclusions (never loaded as general context).
 # E1: a same-state continuation directive suppressed as a repeat is re-emitted
 # once this many stream events have accumulated since it was last shown.
 CONTINUATION_REEMIT_EVENTS = 20
 
-# USER DECISION (2026-09): spec/ and report/ are FULLY excluded from the
-# WF_CLASSIFY Feature Knowledge Sweep — never demanded, bulk-loaded, or
-# required to carry a disposition. A spec/report memory loads ONLY when the
-# task explicitly names it (review/author/implement exactly that one), never
-# because a sweep search or a read-surfaced link happened to mention it.
-# SWEEP_EXCLUDED_PREFIXES is intentionally duplicated (same name, same value)
-# in hooks/swe_hooks/mcp/wm_server.py — both files own their own copy of this
-# list rather than sharing an import (neither file may take on a new shared
-# core-module dependency without touching modules outside this task's
-# ownership); keep the two definitions identical on any future change.
-SWEEP_EXCLUDED_PREFIXES = ('spec/', 'report/')
-
-LINK_EXCLUDED_PREFIXES = (
-    'wf/', 'claude/', 'research/', 'project/',
-    'templates/',
-) + SWEEP_EXCLUDED_PREFIXES
-
-
-def _is_sweep_excluded(name: str) -> bool:
-    """True when `name` (already normalize_memory_name'd) is spec/ or
-    report/ — directly, or behind one aliased leading segment (e.g.
-    'em/spec/SPEC_X' from a `--memory-path`/.serena/memory-paths.conf
-    `alias=path` entry). Duplicated identically in
-    hooks/swe_hooks/mcp/wm_server.py — see SWEEP_EXCLUDED_PREFIXES above."""
-    if name.startswith(SWEEP_EXCLUDED_PREFIXES):
-        return True
-    rest = name.split('/', 1)[1] if '/' in name else ''
-    return rest.startswith(SWEEP_EXCLUDED_PREFIXES)
+# Workflow-machinery prefixes excluded from related-link tracking — init
+# chain / template memories, never loaded as general context. Topic exclusion
+# (spec/, report/, research/, project/ — USER DECISION 2026-09: FULLY
+# excluded from the WF_CLASSIFY Feature Knowledge Sweep, never demanded,
+# bulk-loaded, or required to carry a disposition; a memory in one of these
+# topics loads ONLY when the task explicitly names it) goes through
+# is_excluded_memory (hooks/swe_hooks/core/stream.py) — the single source of
+# truth shared with hooks/swe_hooks/mcp/wm_server.py and
+# hooks/swe_hooks/core/memory_size.py.
+LINK_EXCLUDED_PREFIXES = ('wf/', 'claude/', 'templates/')
 
 
 def _related_links(text: str) -> set:
@@ -95,7 +75,7 @@ def _related_links(text: str) -> set:
         name = normalize_memory_name(match)
         if not is_valid_memory_name(name):
             continue
-        if name.startswith(LINK_EXCLUDED_PREFIXES) or _is_sweep_excluded(name):
+        if name.startswith(LINK_EXCLUDED_PREFIXES) or is_excluded_memory(name):
             continue
         links.add(name)
     return links
@@ -126,14 +106,15 @@ def _search_credit(hit_names: set, read_names: set):
     read (re-search confirming the same authoritative docs). NEW names mean
     unread documentation was just surfaced: no credit until it is read.
 
-    spec/ and report/ hits are excluded from "new" before the credit decision
-    (USER DECISION 2026-09, sweep-excluded topics): an unread SPEC_*/REPORT_*
-    name a search happens to surface must never withhold docs-first credit or
-    get demanded as a designated next read — those topics are never bulk-load
-    obligations.
+    Excluded-topic hits (spec/, report/, research/, project/ —
+    is_excluded_memory) are excluded from "new" before the credit decision
+    (USER DECISION 2026-09, sweep-excluded topics): an unread SPEC_*/REPORT_*/
+    RESEARCH_*/PROJECT_* name a search happens to surface must never withhold
+    docs-first credit or get demanded as a designated next read — those
+    topics are never bulk-load obligations.
     """
     new_names = {n for n in (set(hit_names) - set(read_names))
-                 if not _is_sweep_excluded(n)}
+                 if not is_excluded_memory(n)}
     return (len(new_names) == 0, new_names)
 
 
@@ -215,15 +196,19 @@ def _get_continuation(current_state: str, session_id: str = None) -> str:
     """
     sid = f'session_id="{session_id}"' if session_id else 'session_id="<id>"'
     # WF_CLASSIFY wording MUST agree with WF_CLASSIFY.md Step 4d (tiered
-    # loading; spec/ and report/ EXCLUDED from sweeps entirely — never
-    # bulk-loaded, never demanded, no disposition needed; a spec/report loads
-    # only when the task explicitly names it) — between-call banners outweigh
-    # the state doc at decision time, so a "Load ALL … SPEC_*" banner here
-    # mistrains the sweep. Linted by tests/test_banner_doc_consistency.py.
+    # loading; spec/, report/, research/, project/ EXCLUDED from sweeps
+    # entirely — never bulk-loaded, never demanded, no disposition needed; a
+    # memory in one of these topics loads only when the task explicitly names
+    # it) — between-call banners outweigh the state doc at decision time, so
+    # a "Load ALL … SPEC_*" banner here mistrains the sweep. Topic list is
+    # derived from EXCLUDED_TOPICS (single source of truth, core/stream.py)
+    # so the banner can never drift from the exclusion rule it summarizes.
+    # Linted by tests/test_banner_doc_consistency.py.
+    excluded_label = ", ".join(f"{t}/" for t in EXCLUDED_TOPICS)
     directives = {
         "WF_CLASSIFY": (
             "Tiered sweep: read primary FEATURE_[KEY] + directly-relevant "
-            "DOM_*/REF_* (≤3 refs; spec/, report/ excluded from sweeps), "
+            f"DOM_*/REF_* (≤3 refs; {excluded_label} excluded from sweeps), "
             f"DEFER cold refs → ONE swe_wm_update call ({sid}, "
             "sections=[Affected Features with '**Memories loaded**:' as "
             "PLAIN comma-separated names]) → route to next step"),

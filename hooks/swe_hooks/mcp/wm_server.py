@@ -38,6 +38,7 @@ from swe_hooks.core.stream import (
     collect_docpending_sources,
     normalize_memory_name,
     is_valid_memory_name,
+    is_excluded_memory,
 )
 
 # ──────────────────────────────────────────────────────────────────
@@ -381,34 +382,21 @@ NO_FEATURE_TOKEN = 'no-feature'
 # Memories-loaded list instead of failing the write.
 MACHINERY_PREFIXES = ('wf/', 'claude/')
 
-# USER DECISION (2026-09): spec/ and report/ are FULLY excluded from the
-# WF_CLASSIFY Feature Knowledge Sweep — never demanded, bulk-loaded, or
-# required to carry a disposition. A spec/report name that shows up as a
-# docpending link (e.g. surfaced by a primary feature's `[[spec/SPEC_X]]`
-# link) is dropped from the pending set the same way MACHINERY_PREFIXES names
-# are — it is never something the sweep verifier can reject the write over.
-# It still loads fine when the task explicitly reads it: that shows up as an
-# ordinary docread and an ordinary '**Memories loaded**:' entry, which
-# _check_memory_sweep already accepts unconditionally (no reject path here
-# examines what a LOADED name's prefix is).
-# SWEEP_EXCLUDED_PREFIXES is intentionally duplicated (same name, same value)
-# in hooks/post/swe_post_read_state.py — both files own their own copy of
-# this list rather than sharing an import (neither file may take on a new
-# shared core-module dependency without touching modules outside this task's
-# ownership); keep the two definitions identical on any future change.
-SWEEP_EXCLUDED_PREFIXES = ('spec/', 'report/')
-
-
-def _is_sweep_excluded(name: str) -> bool:
-    """True when `name` (already normalize_memory_name'd) is spec/ or
-    report/ — directly, or behind one aliased leading segment (e.g.
-    'em/spec/SPEC_X' from a `--memory-path`/.serena/memory-paths.conf
-    `alias=path` entry — same alias tolerance MEMORY_NAME_RE / the sweep's
-    own name matching already applies elsewhere in this file)."""
-    if name.startswith(SWEEP_EXCLUDED_PREFIXES):
-        return True
-    rest = name.split('/', 1)[1] if '/' in name else ''
-    return rest.startswith(SWEEP_EXCLUDED_PREFIXES)
+# USER DECISION (2026-09): spec/, report/, research/, and project/ are FULLY
+# excluded from the WF_CLASSIFY Feature Knowledge Sweep — never demanded,
+# bulk-loaded, or required to carry a disposition. A name in one of these
+# topics that shows up as a docpending link (e.g. surfaced by a primary
+# feature's `[[spec/SPEC_X]]` link) is dropped from the pending set the same
+# way MACHINERY_PREFIXES names are — it is never something the sweep
+# verifier can reject the write over. It still loads fine when the task
+# explicitly reads it: that shows up as an ordinary docread and an ordinary
+# '**Memories loaded**:' entry, which _check_memory_sweep already accepts
+# unconditionally (no reject path here examines what a LOADED name's prefix
+# is).
+#
+# Exclusion test is `is_excluded_memory` (hooks/swe_hooks/core/stream.py) —
+# the single source of truth shared with hooks/post/swe_post_read_state.py
+# and hooks/swe_hooks/core/memory_size.py.
 
 # ──────────────────────────────────────────────────────────────────
 # Change Set H — obligation-digest disposition parsing
@@ -756,7 +744,7 @@ def _check_memory_sweep(
         stream_path, count_type='docpending', value_key='new', since_sweep=True)
     pending = {n for n in pending
                if not n.startswith(MACHINERY_PREFIXES)
-               and not _is_sweep_excluded(n)}
+               and not is_excluded_memory(n)}
     sources = collect_docpending_sources(stream_path, since_sweep=True)
     primary_mem = _parse_primary_feature_memory(content)
 

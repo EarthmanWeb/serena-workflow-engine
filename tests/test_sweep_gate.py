@@ -770,6 +770,102 @@ class TestCheckMemorySweep(unittest.TestCase):
         self.assertIn("ref/ref_spec_parser", err.lower())
         self.assertFalse(os.path.exists(self._sentinel()))
 
+    # ── research/ and project/ carry the SAME exclusion as spec/ and       ──
+    # ── report/ (ADDED to the exclusion alongside spec/report) — never    ──
+    # ── demanded, never block the Affected Features write, no disposition ──
+    # ── needed; still accepted (with an actual read) when explicitly      ──
+    # ── loaded, and an alias-prefixed form is excluded the same way.      ──
+
+    def test_research_docpending_never_blocks_write(self):
+        _write_stream(self.stream_path, [
+            {"type": "docread", "name": "feature/FEATURE_X"},
+            {"type": "docpending", "new": ["research/RESEARCH_COLD"],
+             "src": "feature/feature_x"},
+        ])
+        content = "- **Memories loaded**: feature/FEATURE_X\n"
+        err = wm._check_memory_sweep(self.session, content)
+        self.assertIsNone(err)
+        self.assertTrue(os.path.exists(self._sentinel()))
+
+    def test_project_docpending_never_blocks_write(self):
+        _write_stream(self.stream_path, [
+            {"type": "docread", "name": "feature/FEATURE_X"},
+            {"type": "docpending", "new": ["project/PROJECT_OLD"],
+             "src": "feature/feature_paused"},
+        ])
+        content = "- **Memories loaded**: feature/FEATURE_X\n"
+        err = wm._check_memory_sweep(self.session, content)
+        self.assertIsNone(err)
+        self.assertTrue(os.path.exists(self._sentinel()))
+
+    def test_research_under_memories_loaded_still_accepted_when_read(self):
+        _write_stream(self.stream_path, [
+            {"type": "docread", "name": "feature/FEATURE_X"},
+            {"type": "docread", "name": "research/RESEARCH_TARGET"},
+        ])
+        content = ("- **Memories loaded**: feature/FEATURE_X, "
+                   "research/RESEARCH_TARGET\n")
+        err = wm._check_memory_sweep(self.session, content)
+        self.assertIsNone(err)
+        with open(self._sentinel()) as f:
+            self.assertIn("research/research_target",
+                          json.load(f)["memories"])
+
+    def test_research_under_memories_loaded_but_unread_still_rejected(self):
+        # Explicit-load acceptance is not a free pass: an EXPLICITLY LISTED
+        # research/ name must still have an actual read this session.
+        _write_stream(self.stream_path, [
+            {"type": "docread", "name": "feature/FEATURE_X"},
+        ])
+        content = ("- **Memories loaded**: feature/FEATURE_X, "
+                   "research/RESEARCH_TARGET\n")
+        err = wm._check_memory_sweep(self.session, content)
+        self.assertIsNotNone(err)
+        self.assertIn("research/research_target", err.lower())
+
+    def test_aliased_research_docpending_excluded(self):
+        _write_stream(self.stream_path, [
+            {"type": "docread", "name": "feature/FEATURE_X"},
+            {"type": "docpending", "new": ["em/research/RESEARCH_ALIASED"],
+             "src": "feature/feature_x"},
+        ])
+        content = "- **Memories loaded**: feature/FEATURE_X\n"
+        err = wm._check_memory_sweep(self.session, content)
+        self.assertIsNone(err)
+
+    def test_dom_projection_and_ref_research_tools_still_demanded(self):
+        # DOM_PROJECTION / REF_RESEARCH_TOOLS merely contain topic words —
+        # neither is topic-excluded (no path segment equals "research" or
+        # "project"; basename doesn't start with RESEARCH_/PROJECT_).
+        _write_stream(self.stream_path, [
+            {"type": "docread", "name": "feature/FEATURE_X"},
+            {"type": "docpending",
+             "new": ["dom/DOM_PROJECTION", "ref/REF_RESEARCH_TOOLS"],
+             "src": "feature/feature_x"},
+        ])
+        content = "- **Memories loaded**: feature/FEATURE_X\n"
+        err = wm._check_memory_sweep(self.session, content)
+        self.assertIsNotNone(err)
+        self.assertIn("dom/dom_projection", err.lower())
+        self.assertIn("ref/ref_research_tools", err.lower())
+        self.assertFalse(os.path.exists(self._sentinel()))
+
+
+class TestSingleSourceOfTruthExclusion(unittest.TestCase):
+    """wm_server and swe_post_read_state use the SAME is_excluded_memory
+    function object from core/stream — a single source of truth, not
+    independent duplicated copies, for the sweep exclusion rule."""
+
+    def test_wm_server_and_post_read_state_share_is_excluded_memory(self):
+        self.assertIs(wm.is_excluded_memory, stream.is_excluded_memory)
+        self.assertIs(read_mod.is_excluded_memory, stream.is_excluded_memory)
+
+    def test_neither_module_defines_its_own_sweep_excluded_prefixes(self):
+        self.assertFalse(hasattr(wm, "SWEEP_EXCLUDED_PREFIXES"))
+        self.assertFalse(hasattr(read_mod, "SWEEP_EXCLUDED_PREFIXES"))
+        self.assertFalse(hasattr(wm, "_is_sweep_excluded"))
+        self.assertFalse(hasattr(read_mod, "_is_sweep_excluded"))
+
 
 class TestParseDeferredNames(unittest.TestCase):
     def test_absent_line_returns_empty(self):

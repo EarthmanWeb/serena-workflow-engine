@@ -222,6 +222,57 @@ def normalize_memory_name(name: str) -> str:
     return name
 
 
+# ---------------------------------------------------------------------------
+# Sweep/size-audit topic exclusions (single source of truth)
+# ---------------------------------------------------------------------------
+# USER DECISION (2026-09): spec/, report/, research/, and project/ are FULLY
+# excluded from the WF_CLASSIFY Feature Knowledge Sweep AND from memory-size
+# advisories — never demanded, never bulk-loaded, never needing a
+# disposition, never withholding docs-first credit. A memory under one of
+# these topics loads ONLY when the task explicitly names it.
+#
+# This is the ONE definition of the exclusion rule. Every other module
+# (hooks/post/swe_post_read_state.py, hooks/swe_hooks/mcp/wm_server.py,
+# hooks/swe_hooks/core/memory_size.py — and anything scripts/memory_size.py
+# feeds) imports EXCLUDED_TOPICS / is_excluded_memory from here rather than
+# keeping its own copy.
+EXCLUDED_TOPICS = ("spec", "report", "research", "project")
+
+# Basename prefixes for excluded topics, derived from EXCLUDED_TOPICS (e.g.
+# "spec" -> "SPEC_"). Covers a bare "SPEC_Z" with no topic directory.
+_EXCLUDED_BASENAME_PREFIXES = tuple(f"{t.upper()}_" for t in EXCLUDED_TOPICS)
+
+
+def is_excluded_memory(name: str) -> bool:
+    """True when `name` belongs to an excluded topic (spec/, report/,
+    research/, project/).
+
+    `name` is a memory name — an optional alias prefix, then path segments,
+    then a basename, e.g. "spec/SPEC_X", "em/spec/SPEC_X", "report/REPORT_Y",
+    "research/RESEARCH_Z", "project/PROJECT_Q", "dom/DOM_SPECIAL",
+    "ref/REF_SPEC_PARSER", or a bare "SPEC_Z" with no topic segment at all.
+    Case-insensitive; works on both already-normalized (lower-cased) and raw
+    names.
+
+    True when ANY path segment other than the basename equals an excluded
+    topic (case-insensitive), OR the basename itself starts with one of the
+    excluded-topic prefixes ("SPEC_", "REPORT_", "RESEARCH_", "PROJECT_",
+    case-insensitive) — covering a bare "SPEC_Z" with no topic directory.
+    """
+    if not name:
+        return False
+    parts = name.split("/")
+    basename = parts[-1]
+    dirs = parts[:-1]
+    for seg in dirs:
+        if seg.lower() in EXCLUDED_TOPICS:
+            return True
+    basename_upper = basename.upper()
+    if basename_upper.startswith(_EXCLUDED_BASENAME_PREFIXES):
+        return True
+    return False
+
+
 def is_valid_memory_name(name: str) -> bool:
     """True when `name` (already normalized) looks like a real memory path.
 

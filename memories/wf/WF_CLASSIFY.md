@@ -116,8 +116,7 @@ READ — HARD CAP: primary `FEATURE_*` + secondary `FEATURE_*` the request EXPLI
 
 Exclusions — do NOT bulk-read during the sweep:
 
-- `spec/`, `report/` — EXCLUDED from sweeps: never bulk-loaded/demanded, no disposition needed. Load one only when explicitly named.
-- `research/`, `project/` — excluded from bulk loading, general context only.
+- `spec/`, `report/`, `research/`, `project/` — EXCLUDED from sweeps: never bulk-loaded, never demanded, no disposition needed. Load one ONLY when the task explicitly names it.
 - `dev/` standards — loaded at `WF_ARCH_REVIEW`/`WF_EXECUTE` start, scoped to files.
 - `wf/`, `claude/`, `WM_*` — workflow machinery.
 
