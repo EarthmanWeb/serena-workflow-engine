@@ -992,6 +992,148 @@ class TestInitGateSpawnedAgentExemption(unittest.TestCase):
         self.assertIn('_swe_metadata', updated)
 
 
+class TestInitGateScopeGuardIntegration(unittest.TestCase):
+    """Drives init_mod.main() for a NAMED spawned agent (non-empty agent_id)
+    through the per-agent scope guard (core.scope_guard): a bounded
+    tool-call budget and a per-kind consecutive-failure streak, scoped
+    entirely to that agent's own logged events."""
+
+    def setUp(self):
+        reset_caches()
+        self.tmp = tempfile.TemporaryDirectory()
+        self.cwd = self.tmp.name
+        os.makedirs(os.path.join(self.cwd, '.git'), exist_ok=True)
+        os.makedirs(os.path.join(self.cwd, '.serena'), exist_ok=True)
+        with open(os.path.join(self.cwd, '.serena', 'swe-setup-complete.json'), 'w') as f:
+            json.dump({'complete': True}, f)
+        self.session_id = 'deadbeef'
+        self.transcript = f'/x/{self.session_id}-0000-0000-0000-000000000000.jsonl'
+        self.agent_id = 'sub-scope-1'
+
+    def tearDown(self):
+        self.tmp.cleanup()
+        reset_caches()
+
+    def _stream_path(self):
+        d = os.path.join(self.cwd, '.serena', 'streams')
+        os.makedirs(d, exist_ok=True)
+        return os.path.join(d, f'{self.session_id}.jsonl')
+
+    def _write_events(self, events):
+        with open(self._stream_path(), 'w') as f:
+            for e in events:
+                f.write(json.dumps(e) + '\n')
+
+    def _read_events(self):
+        path = self._stream_path()
+        if not os.path.exists(path):
+            return []
+        with open(path, 'r') as f:
+            return [json.loads(line) for line in f if line.strip()]
+
+    def _run_main(self, tool_name, tool_input, **extra):
+        import io
+        import json as _json
+        from unittest import mock
+        payload = {
+            'tool_name': tool_name,
+            'tool_input': tool_input,
+            'transcript_path': self.transcript,
+            'cwd': self.cwd,
+            'agent_id': self.agent_id,
+        }
+        payload.update(extra)
+        buf = io.StringIO()
+        with mock.patch.object(sys, 'stdin', io.StringIO(_json.dumps(payload))), \
+             mock.patch('select.select', return_value=([sys.stdin], [], [])), \
+             mock.patch.object(os, 'getcwd', return_value=self.cwd), \
+             mock.patch.dict(os.environ, {'CLAUDE_PROJECT_DIR': self.cwd}), \
+             mock.patch('sys.stdout', buf):
+            try:
+                init_mod.main()
+            except SystemExit:
+                pass
+        return _json.loads(buf.getvalue() or '{}')
+
+    def test_subagent_under_budget_allowed_and_logged(self):
+        self._write_events([
+            {'type': 'agent_spawn', 'agent': self.agent_id, 'model': 'sonnet', 'budget': 60},
+        ])
+        result = self._run_main('Bash', {'command': 'ls'})
+        decision = result.get('hookSpecificOutput', {}).get('permissionDecision')
+        self.assertNotEqual(decision, 'deny')
+        events = self._read_events()
+        calls = [e for e in events if e.get('type') == 'agent_call']
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(calls[0]['agent'], self.agent_id)
+        self.assertEqual(calls[0]['tool'], 'Bash')
+
+    def test_subagent_over_budget_denied_with_scope_gate(self):
+        events = [{'type': 'agent_spawn', 'agent': self.agent_id, 'model': 'haiku', 'budget': 3}]
+        events += [{'type': 'agent_call', 'agent': self.agent_id, 'tool': 'Bash'} for _ in range(3)]
+        self._write_events(events)
+        result = self._run_main('Bash', {'command': 'ls'})
+        decision = result.get('hookSpecificOutput', {}).get('permissionDecision')
+        self.assertEqual(decision, 'deny')
+        reason = result['hookSpecificOutput']['permissionDecisionReason']
+        self.assertIn('[scope-gate]', reason)
+        self.assertIn('budget exhausted', reason)
+
+    def test_two_consecutive_test_failures_deny_edit_but_allow_read(self):
+        self._write_events([
+            {'type': 'agent_spawn', 'agent': self.agent_id, 'model': 'sonnet', 'budget': 60},
+            {'type': 'agent_fail', 'agent': self.agent_id, 'kind': 'test'},
+            {'type': 'agent_fail', 'agent': self.agent_id, 'kind': 'test'},
+        ])
+        edit_result = self._run_main('Edit', {'file_path': '/x/y.py'})
+        decision = edit_result.get('hookSpecificOutput', {}).get('permissionDecision')
+        self.assertEqual(decision, 'deny')
+        reason = edit_result['hookSpecificOutput']['permissionDecisionReason']
+        self.assertIn('[scope-gate]', reason)
+        self.assertIn('failed 2 times in a row', reason)
+
+        read_result = self._run_main('Read', {'file_path': '/x/y.py'})
+        read_decision = read_result.get('hookSpecificOutput', {}).get('permissionDecision')
+        self.assertNotEqual(read_decision, 'deny')
+
+    def test_scope_extend_lifts_trip_and_resets_streak(self):
+        self._write_events([
+            {'type': 'agent_spawn', 'agent': self.agent_id, 'model': 'sonnet', 'budget': 60},
+            {'type': 'agent_fail', 'agent': self.agent_id, 'kind': 'edit'},
+            {'type': 'agent_fail', 'agent': self.agent_id, 'kind': 'edit'},
+        ])
+        denied = self._run_main('Edit', {'file_path': '/x/y.py'})
+        self.assertEqual(
+            denied.get('hookSpecificOutput', {}).get('permissionDecision'), 'deny')
+
+        with open(self._stream_path(), 'a') as f:
+            f.write(json.dumps(
+                {'type': 'scope_extend', 'agent': self.agent_id, 'budget_add': 30}) + '\n')
+
+        allowed = self._run_main('Edit', {'file_path': '/x/y.py'})
+        self.assertNotEqual(
+            allowed.get('hookSpecificOutput', {}).get('permissionDecision'), 'deny')
+
+    def test_other_agents_events_do_not_affect_this_agent(self):
+        self._write_events([
+            {'type': 'agent_fail', 'agent': 'someone-else', 'kind': 'test'},
+            {'type': 'agent_fail', 'agent': 'someone-else', 'kind': 'test'},
+        ])
+        result = self._run_main('Edit', {'file_path': '/x/y.py'})
+        decision = result.get('hookSpecificOutput', {}).get('permissionDecision')
+        self.assertNotEqual(decision, 'deny')
+
+    def test_no_agent_id_skips_scope_guard(self):
+        # No agent_id at all -> not a NAMED spawned agent per get_agent_id,
+        # so is_spawned_agent() may still be False here (agent_id/agentId are
+        # the ONLY signals checked) and the call falls through to the
+        # ordinary uninitialized-session denial instead of the scope guard.
+        result = self._run_main('Bash', {'command': 'ls'}, agent_id='')
+        # Whatever the outcome, it must not carry a [scope-gate] message.
+        blob = json.dumps(result)
+        self.assertNotIn('[scope-gate]', blob)
+
+
 # ---------------------------------------------------------------------------
 # swe_pre_bash_test_gate
 # ---------------------------------------------------------------------------

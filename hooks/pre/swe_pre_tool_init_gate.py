@@ -11,11 +11,19 @@ every workflow-state directive/text this gate would otherwise emit —
 subagents are explicitly instructed to bypass WF_INIT, and training them to
 see injected workflow text on every tool call teaches them to dismiss
 injected text generally, including legitimate orchestrator steering. Detected
-via core.session.is_spawned_agent, checked FIRST in main(). Only two things
+via core.session.is_spawned_agent, checked FIRST in main(). Three things
 still apply to spawned agents: the hard guard that denies setting
 "bypass": true in swe-setup-complete.json (a security guard, not a workflow
-directive) and the Serena _swe_metadata updatedInput injection (invisible to
-the model — used for server-side session correlation only).
+directive), the Serena _swe_metadata updatedInput injection (invisible to
+the model — used for server-side session correlation only), and — for a
+NAMED spawned agent (non-empty core.session.get_agent_id) — the per-agent
+SCOPE GUARD (core.scope_guard): a bounded tool-call budget plus a per-kind
+consecutive-failure streak limit, scoped to that agent's own logged events
+(agent_spawn/agent_call/agent_ok/agent_fail/scope_extend). Tripping it denies
+every tool except scope_guard.READ_ONLY_TOOLS with a "[scope-gate]" message
+telling the agent to stop and report to the orchestrator; a SendMessage
+carrying "[scope-extend]" lifts it. Guards against a delegated subagent
+hitting an unrelated issue and debugging far outside its assigned scope.
 """
 
 import os
@@ -27,7 +35,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import swe_hooks.bootstrap  # noqa: E402
 
 try:
-    from swe_hooks.core.session import extract_session_id, is_spawned_agent
+    from swe_hooks.core.session import extract_session_id, is_spawned_agent, get_agent_id
     from swe_hooks.core.config import (
         get_project_root, resolve_setup_state, migrate_legacy_setup_file,
     )
@@ -38,6 +46,9 @@ try:
         DEGRADED_NOTICE, RECOVERY_NOTICE,
     )
     from swe_hooks.core.input import read_stdin_safe
+    from swe_hooks.core.scope_guard import (
+        scope_state, scope_verdict, load_agent_events,
+    )
     _STREAM_AVAILABLE = True
 except ImportError:
     _STREAM_AVAILABLE = False
@@ -309,6 +320,34 @@ def main():
                               else _extract_session_id(transcript_path))
             except Exception:
                 session_id = _extract_session_id(transcript_path)
+
+            # Per-subagent SCOPE GUARD: bounded tool-call budget + per-kind
+            # consecutive-failure streak, scoped to THIS agent's own events
+            # (core.session.get_agent_id) — never the main agent's or a
+            # sibling subagent's. A tripped agent keeps read-only tools
+            # (scope_guard.READ_ONLY_TOOLS) so it can still investigate,
+            # report to the orchestrator, and stop; everything else is
+            # denied with a "[scope-gate]" message until the orchestrator
+            # lifts it via a SendMessage carrying "[scope-extend]".
+            agent_id = get_agent_id(input_data) if _STREAM_AVAILABLE else None
+            if agent_id and session_id and _STREAM_AVAILABLE:
+                stream_path = get_stream_path(session_id)
+                events = load_agent_events(stream_path, agent_id)
+                state = scope_state(events, agent_id)
+                verdict = scope_verdict(state, tool_name)
+                if verdict:
+                    print(json.dumps({
+                        'hookSpecificOutput': {
+                            'hookEventName': 'PreToolUse',
+                            'permissionDecision': 'deny',
+                            'permissionDecisionReason': verdict,
+                        }
+                    }))
+                    sys.exit(0)
+                if tool_name not in SKIP_STREAM_TOOLS:
+                    append_event(stream_path, 'agent_call',
+                                 agent=agent_id, tool=tool_name, s=session_id)
+
             updated_input = inject_metadata(tool_name, tool_input, session_id, cwd)
             if updated_input is not None:
                 print(json.dumps({
