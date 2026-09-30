@@ -127,15 +127,12 @@ READ_ONLY_TOOLS = frozenset([
 # ---------------------------------------------------------------------------
 # Test-command detection
 # ---------------------------------------------------------------------------
-# NOT imported from hooks/pre/swe_pre_bash_test_gate.py: that module is a
-# PreToolUse hook script whose top-level does `import swe_hooks.bootstrap`
-# (sys.path mutation) and a chain of `from swe_hooks.core...` imports — not a
-# side-effect-free module to pull a constant from without also loading (or
-# faking the loading of) the rest of the hook's import graph. Per the task
-# contract, this is called out rather than reaching into that hook: the list
-# is copied here as this module's own source of truth for test-kind
-# classification. Keep in sync with swe_pre_bash_test_gate.TEST_COMMAND_PATTERNS
-# by hand if either changes.
+# SINGLE SOURCE OF TRUTH for test-runner command classification, used by
+# THIS module's classify_kind (the 'test' kind) and imported by
+# hooks/pre/swe_pre_bash_test_gate.py for its own test-command gate. This
+# module is pure/side-effect-free (stdlib only, no swe_hooks.bootstrap
+# import), so the PreToolUse hook — whose own top-level import chain is
+# heavier — imports FROM here rather than the reverse.
 TEST_COMMAND_PATTERNS = [
     r'\bnpx\s+playwright\s+test\b',
     r'\bpython3?\s+-m\s+(?:unittest|pytest)\b',

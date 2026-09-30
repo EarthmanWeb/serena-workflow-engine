@@ -16,6 +16,14 @@ Responsibilities:
      retrying — never to retry with a guessed substitute. One attachment per
      claim per session ('claim_flag' stream-event dedupe). The MODEL updates
      the ledger row; this hook only instructs.
+  6. Scope-guard failure accounting (core.scope_guard): for a NAMED spawned
+     agent (core.session.get_agent_id), a failed call of a tracked kind
+     (edit/test/bash — classify_kind) logs 'agent_fail' for that agent+kind,
+     extending its consecutive-failure streak. This is the ONLY hook that can
+     log agent_fail for Bash — Claude Code routes a Bash command's nonzero
+     exit to PostToolUseFailure, never to PostToolUse (see
+     swe_post_orchestrator_drift.py's module docstring for the matching
+     agent_ok side, logged there on PostToolUse success).
 """
 
 import os
@@ -27,10 +35,11 @@ import swe_hooks.bootstrap  # noqa: E402
 try:
     from swe_hooks.core.input import read_stdin_safe, get_input_field
     from swe_hooks.core.output import output_empty, output_message
-    from swe_hooks.core.session import extract_session_id
+    from swe_hooks.core.session import extract_session_id, get_agent_id
     from swe_hooks.core.stream import get_stream_path, append_event, get_stream_dir, is_degraded
     from swe_hooks.core.doc_claims import (
         find_wm_claims, claim_in_args, stream_has_event_key)
+    from swe_hooks.core.scope_guard import classify_kind
 except ImportError as e:
     swe_hooks.bootstrap.import_error_exit(e, "PostToolUseFailure")
 
@@ -285,6 +294,20 @@ def main():
         error_summary = str(tool_error)[:200] if tool_error else ''
         append_event(stream_path, 'tool_failure',
                      name=tool_name, s=session_id, err=error_summary)
+
+        # Scope-guard: a spawned agent's failed call (edit/test/bash —
+        # core.scope_guard.classify_kind) extends that kind's consecutive-
+        # failure streak. PostToolUseFailure is where a Bash command's
+        # nonzero exit actually surfaces (Claude Code routes it here, not to
+        # PostToolUse — see swe_post_orchestrator_drift.py's module
+        # docstring for the corresponding agent_ok side of this event pair),
+        # so this is the ONLY place agent_fail can be logged for Bash.
+        agent_id = get_agent_id(input_data)
+        if agent_id:
+            kind = classify_kind(tool_name, tool_input)
+            if kind is not None:
+                append_event(stream_path, 'agent_fail',
+                             agent=agent_id, kind=kind, s=session_id)
 
         # A Serena MCP CONNECTION failure (server unreachable) means the
         # init-gate's read_memory chain cannot succeed regardless of retries —

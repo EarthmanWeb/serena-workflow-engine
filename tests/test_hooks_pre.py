@@ -28,7 +28,7 @@ import tempfile
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from _hookutil import import_hook, reset_caches  # noqa: E402
+from _hookutil import import_hook, import_core, reset_caches  # noqa: E402
 
 edit_mod = import_hook("pre/swe_pre_edit_validate")
 init_mod = import_hook("pre/swe_pre_tool_init_gate")
@@ -1139,12 +1139,21 @@ class TestInitGateScopeGuardIntegration(unittest.TestCase):
 # ---------------------------------------------------------------------------
 class TestBashTestGateConstants(unittest.TestCase):
     def test_test_command_patterns_shape(self):
+        # TEST_COMMAND_PATTERNS is imported into this hook module from
+        # swe_hooks.core.scope_guard (single source of truth, shared with
+        # scope_guard.classify_kind's 'test' classification) — same list
+        # object, same assertions as when it was defined locally.
         self.assertIsInstance(bash_mod.TEST_COMMAND_PATTERNS, list)
         # Broadened beyond Playwright: unittest/pytest, npm/npx test
         # runners, phpunit, go test, cargo test.
         self.assertTrue(len(bash_mod.TEST_COMMAND_PATTERNS) >= 7)
         self.assertIn(r'\bnpx\s+playwright\s+test\b',
                       bash_mod.TEST_COMMAND_PATTERNS)
+
+    def test_test_command_patterns_is_scope_guard_source(self):
+        scope_guard = import_core("swe_hooks.core.scope_guard")
+        self.assertIs(bash_mod.TEST_COMMAND_PATTERNS,
+                      scope_guard.TEST_COMMAND_PATTERNS)
 
 
 class TestBashGetTestSentinelPath(unittest.TestCase):

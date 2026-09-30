@@ -36,6 +36,28 @@ project's own validate-*.py scripts. Checking your own work, or reading
 codebase state to decide what to do next, is not "doing the work itself" in
 the sense this nudge targets; counting it as task work produced false
 positives that nudged delegation mid-verification.
+
+Scope-guard event logging (core.scope_guard — see that module's docstring
+for the full event vocabulary): this hook is also where the remaining scope-
+guard events get appended, alongside its drift-counting duty.
+
+  - Spawned-agent branch: a spawned agent's tool call that classify_kind()
+    recognizes (an edit, a test run, or plain Bash) logs `agent_ok` for that
+    agent+kind — PostToolUse only fires on tool SUCCESS, so every call this
+    hook sees for a spawned agent already succeeded. A failed call routes to
+    PostToolUseFailure instead (swe_post_tool_failure.py logs `agent_fail`
+    there).
+  - Main-agent Agent/Task call: extracts the newly spawned agent's id from
+    the call's tool_response (see extract_spawned_agent_id) and logs
+    `agent_spawn` with a resolved budget — a `[swe-budget: N]` tag in the
+    spawning prompt (scope_guard.parse_budget_tag) overrides the model-
+    family default (scope_guard.budget_for_model). No id extractable -> no
+    event (the scope guard then uses DEFAULT_BUDGET for that agent).
+  - Main-agent SendMessage call: a `[scope-extend]` tag in the message
+    (scope_guard.parse_scope_extend) logs `scope_extend` against the
+    message's `to` agent. SendMessage is neither task work nor a delegation
+    for DRIFT counting purposes — it never resets or advances the drift
+    streak, regardless of whether it carries a scope-extend tag.
 """
 
 import os
@@ -48,10 +70,16 @@ import swe_hooks.bootstrap  # noqa: E402
 try:
     from swe_hooks.core.output import HookOutput, output_status, output_empty
     from swe_hooks.core.input import read_stdin_safe, get_input_field
-    from swe_hooks.core.session import extract_session_id, is_spawned_agent, is_subagent_transcript
+    from swe_hooks.core.session import (
+        extract_session_id, is_spawned_agent, is_subagent_transcript,
+        get_agent_id,
+    )
     from swe_hooks.core.stream import (
         get_stream_path, append_event, count_task_work_since_delegation,
         DRIFT_HARD_THRESHOLD,
+    )
+    from swe_hooks.core.scope_guard import (
+        classify_kind, budget_for_model, parse_budget_tag, parse_scope_extend,
     )
 except ImportError as e:
     swe_hooks.bootstrap.import_error_exit(e)
@@ -147,6 +175,66 @@ def is_task_work(tool_name: str, tool_input: dict) -> bool:
     return True
 
 
+# ---------------------------------------------------------------------------
+# Scope-guard event logging (agent_spawn / agent_ok / scope_extend)
+# ---------------------------------------------------------------------------
+
+# `agentId: <id>` (or `agent_id: <id>`) embedded in a stringified Agent-tool
+# tool_response. The documented PostToolUse payload for the Agent tool gives
+# tool_response as {"type": "text", "text": "<free-form result text>"} — no
+# structured id field — so a background launch's confirmation text is parsed
+# with this regex as the fallback path. A future harness version that adds a
+# structured field is checked FIRST (see extract_spawned_agent_id) and this
+# regex only runs when no such field is present.
+_AGENT_ID_TEXT_RE = re.compile(
+    r'\bagent[_-]?id\b\s*[:=]\s*["\']?([A-Za-z0-9._-]+)', re.IGNORECASE)
+
+
+def extract_spawned_agent_id(tool_response) -> str:
+    """Best-effort extraction of a newly spawned agent's id from an Agent/Task
+    tool's PostToolUse `tool_response`.
+
+    Checks structured shapes first (in case a harness version supplies them
+    directly), then falls back to a regex over the stringified response for
+    the documented free-form-text shape ({"type": "text", "text": "..."}) —
+    a background launch's confirmation text names the spawned agent's id as
+    `agentId: <id>`. Returns '' when no id can be found; callers then log no
+    agent_spawn event at all (scope_guard.DEFAULT_BUDGET applies instead).
+    """
+    if isinstance(tool_response, dict):
+        for key in ('agent_id', 'agentId'):
+            val = tool_response.get(key)
+            if isinstance(val, str) and val.strip():
+                return val.strip()
+        # Structured-but-textual shape: {"type": "text", "text": "..."}
+        text = tool_response.get('text')
+        if isinstance(text, str):
+            match = _AGENT_ID_TEXT_RE.search(text)
+            if match:
+                return match.group(1)
+        return ''
+    if isinstance(tool_response, str):
+        match = _AGENT_ID_TEXT_RE.search(tool_response)
+        if match:
+            return match.group(1)
+        return ''
+    return ''
+
+
+def resolve_spawn_budget(tool_input: dict) -> int:
+    """Resolve the tool-call budget for a newly spawned agent.
+
+    A `[swe-budget: N]` tag in the spawning prompt (scope_guard.
+    parse_budget_tag) overrides the model-family default
+    (scope_guard.budget_for_model) computed from tool_input['model'].
+    """
+    tool_input = tool_input or {}
+    tag_budget = parse_budget_tag(tool_input.get('prompt', ''))
+    if tag_budget is not None:
+        return tag_budget
+    return budget_for_model(tool_input.get('model', ''))
+
+
 def main():
     try:
         input_data = read_stdin_safe(timeout_seconds=2.0)
@@ -157,15 +245,55 @@ def main():
             output_empty()
             return
 
-        # Subagents are not orchestrators — never track drift for their own
-        # tool calls (they are expected to do direct work).
-        if is_spawned_agent(input_data) or is_subagent_transcript(transcript_path):
-            output_empty()
-            return
-
         tool_name = get_input_field(input_data, 'tool_name', default='')
         tool_input = get_input_field(input_data, 'tool_input', default={})
         stream_path = get_stream_path(session_id)
+
+        # Subagents are not orchestrators — never track DRIFT for their own
+        # tool calls (they are expected to do direct work). They DO still
+        # get scope-guard credit here: PostToolUse only fires on success, so
+        # a classify_kind()-recognized call (edit/test/bash) from a NAMED
+        # spawned agent logs agent_ok, resetting that kind's failure streak
+        # (core.scope_guard). A failed call never reaches this hook — it
+        # routes to PostToolUseFailure, handled by swe_post_tool_failure.py.
+        if is_spawned_agent(input_data) or is_subagent_transcript(transcript_path):
+            agent_id = get_agent_id(input_data)
+            kind = classify_kind(tool_name, tool_input)
+            if agent_id and kind is not None:
+                append_event(stream_path, 'agent_ok',
+                             agent=agent_id, kind=kind, s=session_id)
+            output_empty()
+            return
+
+        # Main-agent SendMessage: a [scope-extend] tag lifts a spawned
+        # agent's scope-guard trip. SendMessage is neither task work nor a
+        # delegation for DRIFT counting — it never touches the drift streak,
+        # tagged or not.
+        if tool_name == 'SendMessage':
+            budget_add = parse_scope_extend(tool_input.get('message', ''))
+            if budget_add is not None:
+                target_agent = tool_input.get('to', '')
+                if target_agent:
+                    append_event(stream_path, 'scope_extend',
+                                 agent=target_agent, budget_add=budget_add,
+                                 s=session_id)
+            output_empty()
+            return
+
+        # Main-agent Agent/Task call: this is where the agent actually
+        # spawned, so its tool_response carries (in free-form text, per the
+        # documented PostToolUse payload) the launched agent's id — logged
+        # here as agent_spawn with its resolved budget. Runs BEFORE the
+        # drift delegation/task-work accounting below, which is unaffected
+        # by whether an id was extracted.
+        if tool_name in ('Agent', 'Task'):
+            tool_response = get_input_field(input_data, 'tool_response', default='')
+            spawned_id = extract_spawned_agent_id(tool_response)
+            if spawned_id:
+                budget = resolve_spawn_budget(tool_input)
+                append_event(stream_path, 'agent_spawn',
+                             agent=spawned_id, model=tool_input.get('model', ''),
+                             budget=budget, s=session_id)
 
         foreground_delegation = False
         if tool_name in DELEGATION_TOOL_NAMES:

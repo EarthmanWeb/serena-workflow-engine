@@ -50,6 +50,7 @@ try:
     )
     from swe_hooks.core.config import get_project_root
     from swe_hooks.core.doc_requirements import TEST_DOC_NAMES, memory_exists
+    from swe_hooks.core.scope_guard import TEST_COMMAND_PATTERNS
 except ImportError as e:
     swe_hooks.bootstrap.import_error_exit(e, "PreToolUse")
 
@@ -57,16 +58,13 @@ except ImportError as e:
 # Kept as a list of regexes; is_test_command matches against the whole
 # command string (case-insensitive) rather than per-stage, matching the
 # pre-existing (single-pattern) behavior of this gate.
-TEST_COMMAND_PATTERNS = [
-    r'\bnpx\s+playwright\s+test\b',
-    r'\bpython3?\s+-m\s+(?:unittest|pytest)\b',
-    r'(?<!\w)pytest\b',
-    r'\bnpm\s+(?:run\s+)?test\b',
-    r'\bnpx\s+(?:jest|vitest|playwright\s+test)\b',
-    r'(?:^|[/\s])(?:vendor/bin/)?phpunit\b',
-    r'\bgo\s+test\b',
-    r'\bcargo\s+test\b',
-]
+#
+# SINGLE SOURCE OF TRUTH: imported from swe_hooks.core.scope_guard, which
+# also needs this exact test-vs-bash classification for its own 'test' kind
+# (scope_guard.classify_kind). scope_guard is a pure, side-effect-free
+# module; this PreToolUse hook (whose own import chain pulls in
+# swe_hooks.bootstrap and a longer dependency graph) imports the pure regex
+# list from it rather than the reverse.
 
 
 def load_bash_policy():
