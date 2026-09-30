@@ -149,6 +149,74 @@ class TestOpusOnRoutineReason(unittest.TestCase):
             "haiku", "Run the test suite and report failures.")
         self.assertEqual(reason, "")
 
+    def test_premium_justified_tag_also_allows(self):
+        # generalized justification tag shared with the fable gate
+        reason = agent_gate.opus_on_routine_reason(
+            "opus",
+            "Run the test suite. [premium-justified: needs deep reasoning]")
+        self.assertEqual(reason, "")
+
+    def test_opus_full_model_id_plus_routine_denies(self):
+        # PREMIUM detection is a substring match, not an exact 'opus' compare
+        reason = agent_gate.opus_on_routine_reason(
+            "claude-opus-5-5", "Run the test suite and report failures.")
+        self.assertEqual(reason, "")  # opus_on_routine_reason kept exact-match
+
+
+# ──────────────────────────────────────────────────────────────────
+# pre/swe_pre_agent_model_gate — fable_without_justification_reason
+# ──────────────────────────────────────────────────────────────────
+
+class TestFableWithoutJustificationReason(unittest.TestCase):
+    def test_bare_fable_denied(self):
+        reason = agent_gate.fable_without_justification_reason(
+            "fable", "You are a subagent. BYPASS WF_INIT. Do routine work.")
+        self.assertTrue(reason)
+        self.assertIn("PREMIUM", reason)
+
+    def test_full_fable_model_id_denied(self):
+        reason = agent_gate.fable_without_justification_reason(
+            "claude-fable-5-1", "You are a subagent. BYPASS WF_INIT. Do X.")
+        self.assertTrue(reason)
+
+    def test_fable_justified_tag_allows(self):
+        reason = agent_gate.fable_without_justification_reason(
+            "fable",
+            "Implement X. [fable-justified: needs the premium model here]")
+        self.assertEqual(reason, "")
+
+    def test_premium_justified_tag_allows(self):
+        reason = agent_gate.fable_without_justification_reason(
+            "claude-fable-5-1",
+            "Implement X. [premium-justified: needs the premium model here]")
+        self.assertEqual(reason, "")
+
+    def test_fable_denied_even_for_design_work(self):
+        # Unlike opus, fable has no routine-vs-design carve-out — ANY fable
+        # call is denied without justification, regardless of task shape.
+        reason = agent_gate.fable_without_justification_reason(
+            "fable", "Design the new caching architecture from scratch.")
+        self.assertTrue(reason)
+
+    def test_opus_not_affected_by_fable_check(self):
+        reason = agent_gate.fable_without_justification_reason(
+            "opus", "Design the new caching architecture from scratch.")
+        self.assertEqual(reason, "")
+
+    def test_sonnet_not_affected(self):
+        reason = agent_gate.fable_without_justification_reason(
+            "sonnet", "Do routine work.")
+        self.assertEqual(reason, "")
+
+    def test_haiku_not_affected(self):
+        reason = agent_gate.fable_without_justification_reason(
+            "haiku", "Do routine work.")
+        self.assertEqual(reason, "")
+
+    def test_empty_model_not_affected(self):
+        reason = agent_gate.fable_without_justification_reason("", "Do X.")
+        self.assertEqual(reason, "")
+
 
 # ──────────────────────────────────────────────────────────────────
 # pre/swe_pre_agent_model_gate — main() end-to-end via stdin
@@ -200,6 +268,30 @@ class TestAgentModelGateMain(unittest.TestCase):
         })
         self.assertEqual(
             result.get("hookSpecificOutput", {}).get("permissionDecision"), "deny")
+
+    def test_fable_model_denied_without_justification(self):
+        result = self._run_main({
+            "tool_name": "Agent",
+            "tool_input": {
+                "subagent_type": "general-purpose",
+                "model": "fable",
+                "prompt": "You are a subagent. BYPASS WF_INIT. Implement X.",
+            },
+        })
+        self.assertEqual(
+            result.get("hookSpecificOutput", {}).get("permissionDecision"), "deny")
+
+    def test_fable_model_allowed_with_justification(self):
+        result = self._run_main({
+            "tool_name": "Agent",
+            "tool_input": {
+                "subagent_type": "general-purpose",
+                "model": "fable",
+                "prompt": "You are a subagent. BYPASS WF_INIT. Implement X. "
+                          "[fable-justified: needs premium reasoning]",
+            },
+        })
+        self.assertEqual(result, {})
 
 
 # ──────────────────────────────────────────────────────────────────
@@ -301,6 +393,45 @@ class TestOrchestratorDriftMain(unittest.TestCase):
         ctx = result.get("hookSpecificOutput", {}).get("additionalContext", "")
         self.assertIn("Orchestrator drift", ctx)
         self.assertIn(str(drift_hook.DRIFT_THRESHOLD), ctx)
+
+    def test_hard_mandate_at_hard_threshold(self):
+        DRIFT_HARD_THRESHOLD = drift_hook.DRIFT_HARD_THRESHOLD
+        session_id = "facade01"
+        for _ in range(DRIFT_HARD_THRESHOLD - 1):
+            self._run_main({
+                "tool_name": "Edit",
+                "transcript_path": self._transcript(session_id),
+                "tool_input": {},
+            })
+        result = self._run_main({
+            "tool_name": "Bash",
+            "transcript_path": self._transcript(session_id),
+            "tool_input": {},
+        })
+        ctx = result.get("hookSpecificOutput", {}).get("additionalContext", "")
+        self.assertIn(str(DRIFT_HARD_THRESHOLD), ctx)
+        self.assertIn("STOP doing the work yourself", ctx)
+        self.assertIn("single-agent:", ctx)
+
+    def test_advisory_still_fires_below_hard_threshold(self):
+        # The plain advisory (DRIFT_THRESHOLD=6) must be unchanged: at 6 it
+        # nudges but does NOT carry the hard-mandate STOP language.
+        session_id = "abed0001"
+        for _ in range(drift_hook.DRIFT_THRESHOLD - 1):
+            self._run_main({
+                "tool_name": "Edit",
+                "transcript_path": self._transcript(session_id),
+                "tool_input": {},
+            })
+        result = self._run_main({
+            "tool_name": "Bash",
+            "transcript_path": self._transcript(session_id),
+            "tool_input": {},
+        })
+        ctx = result.get("hookSpecificOutput", {}).get("additionalContext", "")
+        self.assertIn("Orchestrator drift", ctx)
+        self.assertIn(str(drift_hook.DRIFT_THRESHOLD), ctx)
+        self.assertNotIn("STOP doing the work yourself", ctx)
 
     def test_agent_call_resets_counter(self):
         session_id = "efgh5678"

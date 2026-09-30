@@ -177,6 +177,16 @@ Agent({ description: "Task A", run_in_background: true, model: "sonnet",  // hai
 - Collect results from background task notifications, then chain the next stage's agents immediately — do not do the next stage's work yourself.
 - `swe_pre_agent_model_gate.py` enforces explicit `model` + bypass line on every Agent call; an orchestrator-drift nudge here flags self-performed file/test work that should have been delegated.
 
+## Delegation Economics (ENFORCED)
+
+Full rules: `mem:feature/FEATURE_SUBAGENTS` (Model-Tier Routing, Delegation Economics). Condensed:
+
+- Parallel + cheaper agents are THE token-reduction lever here — not optional style.
+- Model routing: `haiku` for recon/tests/lint/link-checks (parallel, one message); `sonnet` for implementation/doc rewrites/verifying haiku output; `opus` ONLY for novel design or after a `sonnet` failure; `fable` NEVER without `[fable-justified: <reason>]`/`[premium-justified: <reason>]`.
+- DRIFT thresholds (`swe_post_orchestrator_drift.py`): 6 consecutive main-agent task-work calls = nudge; 12 = HARD edit-gate block (`swe_pre_edit_validate.py`).
+- Any delegation (Agent/Task call) resets the drift counter.
+- Escape hatch: record `single-agent: <reason>` in WM `## Workflow Context` for the tight single-file coupled-fix exception ONLY — not a routine bypass.
+
 ## Rules
 
 - Make ONLY approved changes.

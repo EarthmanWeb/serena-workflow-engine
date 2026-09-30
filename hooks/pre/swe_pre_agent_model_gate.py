@@ -6,7 +6,7 @@ a spawned agent must (1) name an explicit model, (2) carry the subagent bypass
 marker in its prompt so it does not re-run the init chain, and (3) not
 over-provision opus for routine mechanical work.
 
-Three independent DENY checks, each with its own message:
+Four independent DENY checks, each with its own message:
 
 1. Missing `model` — every Agent/Task call must pick a tier explicitly
    (haiku/sonnet/opus). Skipped only for a `subagent_type` that is a built-in,
@@ -22,7 +22,18 @@ Three independent DENY checks, each with its own message:
    routine markers (run tests, lint, grep, inventory, list files, read-only
    audit/status check) with NO design/architecture markers denies opus and
    suggests haiku. Override with the literal tag `[opus-justified: <reason>]`
-   anywhere in the prompt — an assertion, not a bypass toggle.
+   or `[premium-justified: <reason>]` anywhere in the prompt — an assertion,
+   not a bypass toggle.
+4. ANY `model` in the fable family (PREMIUM tier, alongside opus) — the
+   orchestrator itself already runs the premium model, so delegating TO a
+   premium subagent defeats the entire point of delegation (moving work off
+   the premium tier). Denied unconditionally unless the prompt carries
+   `[fable-justified: <reason>]` or `[premium-justified: <reason>]`.
+
+Model-tiering goal: this project's harness must HEAVILY enforce cutting token
+usage via parallel + cheaper subagents. Premium models (opus, fable) are never
+used where a cheaper tier (haiku for routine/recon/tests, sonnet for
+implementation) suffices.
 
 Fail-open on any error (never block real work over a hook bug) and on any
 input the hook cannot parse into a clear judgment.
@@ -55,7 +66,20 @@ BYPASS_MARKER_RE = re.compile(
     re.IGNORECASE,
 )
 
-OPUS_JUSTIFIED_RE = re.compile(r'\[opus-justified\s*:\s*[^\]]+\]', re.IGNORECASE)
+# Accepted justification tags for opus-on-routine: the specific [opus-justified: …]
+# tag, or the generic [premium-justified: …] tag shared with the fable gate.
+OPUS_JUSTIFIED_RE = re.compile(
+    r'\[(?:opus|premium)-justified\s*:\s*[^\]]+\]', re.IGNORECASE)
+
+# Accepted justification tags for the unconditional fable gate: the specific
+# [fable-justified: …] tag, or the generic [premium-justified: …] tag.
+FABLE_JUSTIFIED_RE = re.compile(
+    r'\[(?:fable|premium)-justified\s*:\s*[^\]]+\]', re.IGNORECASE)
+
+# PREMIUM model family — substring match against the lowercased `model` param.
+# Covers short aliases ("opus", "fable") and full model ids
+# ("claude-opus-5-5", "claude-fable-5-1").
+PREMIUM_MODEL_MARKERS = ('opus', 'fable')
 
 # Routine, mechanical work — the canonical "should have been haiku" shapes.
 ROUTINE_KEYWORDS_RE = re.compile(
@@ -78,6 +102,12 @@ DESIGN_KEYWORDS_RE = re.compile(
 
 def _is_agent_tool(tool_name: str) -> bool:
     return tool_name in AGENT_TOOL_NAMES
+
+
+def _is_premium_model(model: str, marker: str) -> bool:
+    """True when `marker` ("opus" or "fable") appears as a lowercase substring
+    of `model` — covers both short aliases and full model ids."""
+    return marker in (model or '').strip().lower()
 
 
 def missing_model_reason(tool_input: dict) -> str:
@@ -131,8 +161,29 @@ def opus_on_routine_reason(model: str, prompt: str) -> str:
         "Opus is reserved for novel architecture/design — this task pattern "
         "is a haiku (mechanical) or sonnet (implementation/verification) job.\n\n"
         "Switch to haiku or sonnet, OR if opus is genuinely warranted here, "
-        "add the literal tag `[opus-justified: <reason>]` to the prompt and "
-        "re-call."
+        "add the literal tag `[opus-justified: <reason>]` (or "
+        "`[premium-justified: <reason>]`) to the prompt and re-call."
+    )
+
+
+def fable_without_justification_reason(model: str, prompt: str) -> str:
+    """Non-empty reason string when a fable-family model is requested without
+    justification. Unlike opus_on_routine_reason (routine-keyword-gated),
+    this denies ANY fable call unconditionally — fable is premium-tier
+    alongside opus, and the orchestrator itself already runs the premium
+    model, so there is no routine-vs-design distinction to make: delegating
+    TO a premium subagent defeats the entire purpose of delegation."""
+    if not _is_premium_model(model, 'fable'):
+        return ''
+    if FABLE_JUSTIFIED_RE.search(prompt or ''):
+        return ''
+    return (
+        "\U0001f4b8 model: \"fable\" (PREMIUM tier) requested for a subagent — "
+        "the orchestrator already runs the premium model — delegation exists "
+        "to move work OFF it; use haiku (routine) or sonnet (implementation), "
+        "or justify with [fable-justified: <reason>].\n\n"
+        "Add `[fable-justified: <reason>]` or `[premium-justified: <reason>]` "
+        "to the prompt only if fable is genuinely required here, then re-call."
     )
 
 
@@ -160,6 +211,11 @@ def main():
             return
 
         reason = opus_on_routine_reason(model, prompt)
+        if reason:
+            output_block(reason)
+            return
+
+        reason = fable_without_justification_reason(model, prompt)
         if reason:
             output_block(reason)
             return

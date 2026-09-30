@@ -203,6 +203,232 @@ class TestEditBlockMessage(unittest.TestCase):
         self.assertIn('WF_SOMETHING_ELSE', msg)
 
 
+class TestEditDriftBlockVerdict(unittest.TestCase):
+    """_drift_block_verdict: hard-threshold enforcement pure function.
+
+    Fail-open (returns None, no block) with no session id, no stream file, or
+    no WM file. Denies once count_task_work_since_delegation reaches
+    DRIFT_HARD_THRESHOLD UNLESS the WM file records 'single-agent: <reason>'.
+    """
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.cwd = self.tmp.name
+        self.session_id = 'deadbeef'
+        self.streams_dir = os.path.join(self.cwd, '.serena', 'streams')
+        self.memories_dir = os.path.join(self.cwd, '.serena', 'memories')
+        os.makedirs(self.streams_dir, exist_ok=True)
+        os.makedirs(self.memories_dir, exist_ok=True)
+        self._orig_stream_path = edit_mod.get_stream_path
+        edit_mod.get_stream_path = (
+            lambda sid: os.path.join(self.streams_dir, f'{sid}.jsonl'))
+        from swe_hooks.core import session as core_session
+        self._orig_root = core_session.get_project_root
+        core_session.get_project_root = lambda: self.cwd
+
+    def tearDown(self):
+        edit_mod.get_stream_path = self._orig_stream_path
+        from swe_hooks.core import session as core_session
+        core_session.get_project_root = self._orig_root
+        self.tmp.cleanup()
+
+    def _write_stream(self, events):
+        path = os.path.join(self.streams_dir, f'{self.session_id}.jsonl')
+        with open(path, 'w') as f:
+            for e in events:
+                f.write(json.dumps(e) + '\n')
+        return path
+
+    def _write_wm(self, body):
+        with open(os.path.join(
+                self.memories_dir, f'WM_{self.session_id}.md'), 'w') as f:
+            f.write(body)
+
+    def test_no_session_id_returns_none(self):
+        self._write_stream([{'type': 'task_work'}] * 12)
+        self.assertIsNone(edit_mod._drift_block_verdict(None, self.cwd))
+
+    def test_no_stream_file_returns_none(self):
+        self.assertIsNone(
+            edit_mod._drift_block_verdict(self.session_id, self.cwd))
+
+    def test_below_hard_threshold_returns_none(self):
+        n = edit_mod.DRIFT_HARD_THRESHOLD - 1
+        self._write_stream([{'type': 'task_work'}] * n)
+        self._write_wm('## Context\nnormal session\n')
+        self.assertIsNone(
+            edit_mod._drift_block_verdict(self.session_id, self.cwd))
+
+    def test_at_hard_threshold_no_wm_note_denies(self):
+        self._write_stream(
+            [{'type': 'task_work'}] * edit_mod.DRIFT_HARD_THRESHOLD)
+        self._write_wm('## Context\nnormal session\n')
+        msg = edit_mod._drift_block_verdict(self.session_id, self.cwd)
+        self.assertIsNotNone(msg)
+        self.assertIn('STOP doing the work yourself', msg)
+        self.assertIn(str(edit_mod.DRIFT_HARD_THRESHOLD), msg)
+
+    def test_at_hard_threshold_no_wm_file_fails_open(self):
+        # No WM file at all — fail open for THIS check specifically.
+        self._write_stream(
+            [{'type': 'task_work'}] * edit_mod.DRIFT_HARD_THRESHOLD)
+        self.assertIsNone(
+            edit_mod._drift_block_verdict(self.session_id, self.cwd))
+
+    def test_single_agent_note_in_wm_allows(self):
+        self._write_stream(
+            [{'type': 'task_work'}] * edit_mod.DRIFT_HARD_THRESHOLD)
+        self._write_wm(
+            '## Context\nsingle-agent: tight coupled fix in one file\n')
+        self.assertIsNone(
+            edit_mod._drift_block_verdict(self.session_id, self.cwd))
+
+    def test_single_agent_note_case_insensitive(self):
+        self._write_stream(
+            [{'type': 'task_work'}] * edit_mod.DRIFT_HARD_THRESHOLD)
+        self._write_wm('## Context\nSINGLE-AGENT: reason here\n')
+        self.assertIsNone(
+            edit_mod._drift_block_verdict(self.session_id, self.cwd))
+
+    def test_delegation_event_resets_count_below_threshold(self):
+        events = ([{'type': 'task_work'}] * (edit_mod.DRIFT_HARD_THRESHOLD - 1)
+                  + [{'type': 'delegation', 'tool': 'Agent'}]
+                  + [{'type': 'task_work'}])
+        self._write_stream(events)
+        self._write_wm('## Context\nnormal session\n')
+        self.assertIsNone(
+            edit_mod._drift_block_verdict(self.session_id, self.cwd))
+
+
+class TestEditGateDriftMainIntegration(unittest.TestCase):
+    """main() end-to-end: drift block only fires in EDIT_ALLOWED states,
+    after the sweep gate passes, and never for a spawned agent."""
+
+    SESSION = 'deadbeef'
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.cwd = self.tmp.name
+        self.streams_dir = os.path.join(self.cwd, '.serena', 'streams')
+        self.memories_dir = os.path.join(self.cwd, '.serena', 'memories')
+        os.makedirs(self.streams_dir, exist_ok=True)
+        os.makedirs(self.memories_dir, exist_ok=True)
+        reset_caches()
+
+        from swe_hooks.core import session as core_session
+        from swe_hooks.core import config as core_config
+        self._orig_session_root = core_session.get_project_root
+        self._orig_config_root = core_config.get_project_root
+        core_session.get_project_root = lambda: self.cwd
+        core_config.get_project_root = lambda: self.cwd
+
+        self._orig_stream_path = edit_mod.get_stream_path
+        edit_mod.get_stream_path = (
+            lambda sid: os.path.join(self.streams_dir, f'{sid}.jsonl'))
+
+        # State file: WF_EXECUTE, sweep sentinel present so the sweep gate
+        # never blocks (drift block runs strictly after it).
+        state_dir = os.path.join(self.cwd, '.serena', 'swe-state')
+        os.makedirs(state_dir, exist_ok=True)
+        with open(os.path.join(state_dir, f'{self.SESSION}.state'), 'w') as f:
+            json.dump({'current_state': 'WF_EXECUTE'}, f)
+        sweep_sentinel = os.path.join(
+            self.streams_dir, f'.sweep_feature_{self.SESSION}')
+        open(sweep_sentinel, 'w').close()
+
+    def tearDown(self):
+        from swe_hooks.core import session as core_session
+        from swe_hooks.core import config as core_config
+        core_session.get_project_root = self._orig_session_root
+        core_config.get_project_root = self._orig_config_root
+        edit_mod.get_stream_path = self._orig_stream_path
+        self.tmp.cleanup()
+        reset_caches()
+
+    def _transcript(self):
+        return f'/x/{self.SESSION}-0000-0000-0000-000000000000.jsonl'
+
+    def _write_stream(self, events):
+        path = os.path.join(self.streams_dir, f'{self.SESSION}.jsonl')
+        with open(path, 'w') as f:
+            for e in events:
+                f.write(json.dumps(e) + '\n')
+
+    def _write_wm(self, body):
+        with open(os.path.join(
+                self.memories_dir, f'WM_{self.SESSION}.md'), 'w') as f:
+            f.write(body)
+
+    def _run_main(self, tool_input, extra=None):
+        import io
+        payload = {
+            'tool_name': 'Edit',
+            'tool_input': tool_input,
+            'transcript_path': self._transcript(),
+            'cwd': self.cwd,
+        }
+        if extra:
+            payload.update(extra)
+        stdin_json = json.dumps(payload)
+        buf = io.StringIO()
+        from unittest import mock
+        with mock.patch('sys.stdin', io.StringIO(stdin_json)), \
+             mock.patch('select.select', return_value=([sys.stdin], [], [])), \
+             mock.patch('sys.stdout', buf):
+            with self.assertRaises(SystemExit):
+                edit_mod.main()
+        return json.loads(buf.getvalue() or '{}')
+
+    def test_blocked_at_hard_threshold_without_wm_note(self):
+        self._write_stream(
+            [{'type': 'task_work'}] * edit_mod.DRIFT_HARD_THRESHOLD)
+        self._write_wm('## Context\nnormal session\n')
+        result = self._run_main({'file_path': '/proj/src/x.py'})
+        out = result.get('hookSpecificOutput', {})
+        self.assertEqual(out.get('permissionDecision'), 'deny')
+        self.assertIn('STOP doing the work yourself',
+                       out.get('permissionDecisionReason', ''))
+
+    def test_allowed_with_single_agent_note(self):
+        self._write_stream(
+            [{'type': 'task_work'}] * edit_mod.DRIFT_HARD_THRESHOLD)
+        self._write_wm(
+            '## Context\nsingle-agent: one-file coupled fix, no split\n')
+        result = self._run_main({'file_path': '/proj/src/x.py'})
+        self.assertNotEqual(
+            result.get('hookSpecificOutput', {}).get('permissionDecision'),
+            'deny')
+
+    def test_allowed_after_delegation_resets_count(self):
+        events = ([{'type': 'task_work'}] * edit_mod.DRIFT_HARD_THRESHOLD
+                  + [{'type': 'delegation', 'tool': 'Agent'}])
+        self._write_stream(events)
+        self._write_wm('## Context\nnormal session\n')
+        result = self._run_main({'file_path': '/proj/src/x.py'})
+        self.assertNotEqual(
+            result.get('hookSpecificOutput', {}).get('permissionDecision'),
+            'deny')
+
+    def test_spawned_agent_never_blocked(self):
+        self._write_stream(
+            [{'type': 'task_work'}] * (edit_mod.DRIFT_HARD_THRESHOLD * 2))
+        self._write_wm('## Context\nnormal session\n')
+        result = self._run_main(
+            {'file_path': '/proj/src/x.py'}, extra={'agent_id': 'sub-1'})
+        self.assertNotEqual(
+            result.get('hookSpecificOutput', {}).get('permissionDecision'),
+            'deny')
+
+    def test_below_threshold_not_blocked(self):
+        self._write_stream(
+            [{'type': 'task_work'}] * (edit_mod.DRIFT_HARD_THRESHOLD - 1))
+        self._write_wm('## Context\nnormal session\n')
+        result = self._run_main({'file_path': '/proj/src/x.py'})
+        self.assertNotEqual(
+            result.get('hookSpecificOutput', {}).get('permissionDecision'),
+            'deny')
+
+
 # ---------------------------------------------------------------------------
 # swe_pre_tool_init_gate
 # ---------------------------------------------------------------------------

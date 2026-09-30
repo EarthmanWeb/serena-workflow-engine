@@ -3,6 +3,25 @@
 
 Ensures edits only happen in appropriate workflow states.
 No staleness blocking — checkpoint is informational only.
+
+Orchestrator-drift hard enforcement: in execution states, once all the
+existing checks above pass, an additional DRIFT BLOCK applies. When the main
+agent's consecutive task-work-since-delegation streak (the same counter
+swe_post_orchestrator_drift.py nudges on) reaches
+core.stream.DRIFT_HARD_THRESHOLD (12) AND the session's WM file does not
+record a 'single-agent: <reason>' override, the edit is DENIED — the
+orchestrator must fan the remaining work out to parallel subagents
+(FEATURE_SUBAGENTS) instead of continuing to do it directly. Launching a
+subagent (an 'Agent'/'Task'/'Workflow' call — a 'delegation' stream event)
+resets the counter and unlocks edits immediately.
+
+Spawned agents (Agent/Task tool) are exempt from this block — resolved via
+core.session.is_spawned_agent FIRST in main(), before any other logic — they
+are expected to do direct work and must never hit it (this exemption does
+NOT weaken the bypass-write / raw-memory-write security guards, which apply
+to every caller). Missing WM file / missing stream / unmanaged session all
+fail OPEN for this specific check (no block), matching the sweep gate's
+fail-open posture — every existing check above is unaffected.
 """
 
 import os
@@ -15,11 +34,15 @@ try:
     from swe_hooks.core.output import HookOutput, output_status
     from swe_hooks.core.input import read_stdin_safe, get_input_field
     from swe_hooks.core.state_manager import StateManager
-    from swe_hooks.core.session import extract_session_id
+    from swe_hooks.core.session import (
+        extract_session_id, is_spawned_agent, find_working_memory_for_session,
+    )
     from swe_hooks.core.config import get_project_root, resolve_setup_state
     from swe_hooks.core.stream import (
         get_stream_path, get_feature_sentinel_path,
         collect_values_since_task_start, normalize_memory_name,
+        count_task_work_since_delegation, wm_has_single_agent_note,
+        DRIFT_HARD_THRESHOLD,
     )
 except ImportError as e:
     swe_hooks.bootstrap.import_error_exit(e, "PreToolUse")
@@ -133,6 +156,55 @@ def _sweep_gate_verdict(session_id, tool_input):
     return None
 
 
+DRIFT_MANDATE_TEXT = (
+    "STOP doing the work yourself. Split the remaining work and launch "
+    "parallel subagents NOW (haiku=routine/recon/tests, sonnet=implementation "
+    "— FEATURE_SUBAGENTS). For a genuinely tight single-file coupled fix, "
+    "record 'single-agent: <reason>' in the WM Context section to continue "
+    "solo; the edit gate blocks further edits otherwise."
+)
+
+
+def _drift_block_message(drift_count: int) -> str:
+    return (
+        f"\U0001f6d1 ORCHESTRATOR DRIFT — edit blocked: {drift_count} direct "
+        f"task-work calls without delegating (>= hard threshold "
+        f"{DRIFT_HARD_THRESHOLD}).\n\n" + DRIFT_MANDATE_TEXT
+    )
+
+
+def _drift_block_verdict(session_id, cwd):
+    """Deny message when the orchestrator-drift hard threshold is hit and the
+    session WM carries no 'single-agent: <reason>' override, else None.
+
+    Fail-open by design: no session id, no stream, or no WM file → not
+    gated (this specific check only — every other check in this hook is
+    unaffected). A 'delegation' stream event resets the counter this reads,
+    so launching subagents unlocks edits immediately.
+    """
+    if not session_id:
+        return None
+    stream_path = get_stream_path(session_id)
+    if not os.path.exists(stream_path):
+        return None
+    drift_count = count_task_work_since_delegation(stream_path)
+    if drift_count < DRIFT_HARD_THRESHOLD:
+        return None
+
+    wm_path = find_working_memory_for_session(cwd, session_id)
+    if not wm_path:
+        return None
+    try:
+        with open(wm_path, 'r') as f:
+            wm_content = f.read()
+    except IOError:
+        return None
+    if wm_has_single_agent_note(wm_content):
+        return None
+
+    return _drift_block_message(drift_count)
+
+
 def _is_bypass_write_attempt(input_data):
     """True if this Edit/Write would enable the project bypass.
 
@@ -209,6 +281,14 @@ def main():
         input_data = read_stdin_safe(timeout_seconds=2.0)
         cwd = get_input_field(input_data, 'cwd', default=os.getcwd())
 
+        # Spawned-agent status is resolved FIRST (matching
+        # swe_pre_search_docs_gate.py's exemption order) so the drift block
+        # below can consult it — spawned agents are expected to do direct
+        # work and must NEVER hit that block. It does NOT bypass the
+        # security guards immediately below (bypass-write / raw-memory-write
+        # apply to every caller, spawned or not).
+        spawned_agent = is_spawned_agent(input_data)
+
         # HARD GUARD (runs before any state logic): the assistant may NEVER
         # set the project bypass. Only the user, via /swe-bypass, can do that.
         if _is_bypass_write_attempt(input_data):
@@ -270,6 +350,19 @@ def main():
                     output.block(verdict)
                     output.output_and_exit()
                     return
+
+            # Orchestrator-drift HARD enforcement: runs AFTER every check
+            # above passes, never weakening them. Spawned agents are exempt
+            # (core.session.is_spawned_agent, resolved above) — they are
+            # expected to do direct work and must never hit this block.
+            if not spawned_agent:
+                drift_verdict = _drift_block_verdict(session_id, cwd)
+                if drift_verdict:
+                    output = HookOutput(event_name="PreToolUse")
+                    output.block(drift_verdict)
+                    output.output_and_exit()
+                    return
+
             output_status(f"✓ Edit allowed ({current})", event="PreToolUse")
             return
 

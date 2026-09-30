@@ -86,7 +86,8 @@ When a user instruction contradicts a memory:
 
 ## Parallel Processing
 
-- Orchestrator mode is the DEFAULT for 2+ independent subtasks: classify, split into disjoint-file tracks, launch ALL as parallel background subagents in ONE message, collect, verify, chain the next stage — do NOT do the task work yourself. Every `Agent` call sets `model` explicitly (haiku=routine, sonnet=implementation, opus=novel design only). See `feature/FEATURE_SUBAGENTS` for the full stage loop, model-tier table, and prompt contract.
+- Orchestrator mode is the DEFAULT for 2+ independent subtasks: classify, split into disjoint-file tracks, launch ALL as parallel background subagents in ONE message, collect, verify, chain the next stage — do NOT do the task work yourself. Every `Agent` call sets `model` explicitly: `haiku`=routine, `sonnet`=implementation, `opus`=novel design only (requires `[opus-justified: <reason>]` on a routine-keyword prompt), `fable`=NEVER for subagents without `[fable-justified: <reason>]`. See `feature/FEATURE_SUBAGENTS` for the full stage loop, model-tier table, and prompt contract.
+- Parallel + cheaper agents are the PRIMARY token-reduction lever, not a nicety — solo main-agent grinding past 12 undelegated task-work calls is edit-gate BLOCKED (`swe_pre_edit_validate.py`) until a delegation happens or `single-agent: <reason>` is recorded in WM Context.
 
 ## Quality Standards
 

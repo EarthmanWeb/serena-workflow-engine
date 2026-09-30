@@ -52,8 +52,24 @@ Every `Agent` call MUST pass `model` EXPLICITLY. NEVER omit `model` / rely on in
 | haiku  | Routine/mechanical: run test suites, lint, grep/inventory sweeps, read-only audits against a precise checklist, link checks, status collection |
 | sonnet | Implementation, doc rewrites, bug fixes, verification of cheap-agent output, test-failure diagnosis                                            |
 | opus   | ONLY: novel architecture/design, cross-system debugging after a sonnet attempt failed, or explicit operator request                            |
+| fable  | NEVER for subagents without a literal `[fable-justified: <reason>]` tag in the prompt                                                          |
 
-- `swe_pre_agent_model_gate.py` enforces this: Agent calls without `model` + the bypass line are denied; a routine-task prompt requesting `opus` is denied.
+- The orchestrator ALREADY runs the premium model. Delegation exists to move work OFF it, never to spend a second premium call on work a cheaper tier can do.
+- `opus` tag alias: `[premium-justified: <reason>]` is accepted interchangeably with `[opus-justified: <reason>]` — same enforcement, same requirement (reason required, no bare tag).
+- `fable` tag: `[fable-justified: <reason>]` (or `[premium-justified: <reason>]`) is REQUIRED on every `fable`-model subagent call, no exceptions for "routine" vs "novel" — fable subagents are denied by default regardless of task shape.
+- `swe_pre_agent_model_gate.py` enforces this: Agent calls without `model` + the bypass line are denied; a routine-task prompt requesting `opus` is denied; a `fable`-model subagent without the justification tag is denied.
+
+## Delegation Economics
+
+Parallel execution + routing work to the cheapest sufficient model is THE token-reduction mechanism for this harness, not a style preference. It is enforced by hooks, not left to judgment.
+
+- Recon/inventory/grep sweeps, test runs, lint, link checks → `haiku`, launched in PARALLEL — ALL tracks in ONE message, never sequential single-track calls for independent work.
+- Implementation, doc rewrites, verification of haiku output → `sonnet`.
+- `opus` ONLY for novel design or after a `sonnet` attempt has already failed on the same problem.
+- `fable` NEVER delegated without a `[fable-justified: <reason>]` (or `[premium-justified: <reason>]`) tag — see Model-Tier Routing above.
+- The main agent NEVER burns premium-model tokens on routine tool loops. `swe_post_orchestrator_drift.py` counts consecutive main-agent task-work calls since the last delegation:
+  - At 6 consecutive calls (`DRIFT_THRESHOLD`) — advisory nudge to split remaining work into parallel subagents.
+  - At 12 consecutive calls (`DRIFT_HARD_THRESHOLD`) — `swe_pre_edit_validate.py` DENIES further main-agent edits until either a subagent is launched (any delegation resets the counter) or `single-agent: <reason>` is recorded in WM `## Workflow Context` (the tight single-file coupled-fix exception from the Stage Loop section above — use it ONLY for that case, not as a routine bypass).
 
 ## Cheap-Output Verification Rule
 
@@ -109,8 +125,9 @@ Agent({ description: "Task A", run_in_background: true, model: "sonnet",
 
 ## Enforcement
 
-- `swe_pre_agent_model_gate.py` — Agent calls must set `model` + the bypass line; routine-task prompts denied on `opus`.
-- WF_EXECUTE carries an orchestrator-drift nudge — flags the orchestrator when it starts doing file-edit/test-run work itself instead of delegating.
+- `swe_pre_agent_model_gate.py` — Agent calls must set `model` + the bypass line; routine-task prompts denied on `opus`; `fable`-model subagents denied without `[fable-justified: <reason>]`/`[premium-justified: <reason>]`.
+- WF_EXECUTE carries an orchestrator-drift nudge — flags the orchestrator when it starts doing file-edit/test-run work itself instead of delegating (6 consecutive calls, `DRIFT_THRESHOLD`).
+- `swe_pre_edit_validate.py` — HARD BLOCK: denies main-agent edits at ≥12 consecutive undelegated task-work calls (`DRIFT_HARD_THRESHOLD`) until a delegation resets the counter or `single-agent: <reason>` is recorded in WM Context.
 
 ## Tooling
 

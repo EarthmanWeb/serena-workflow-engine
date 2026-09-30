@@ -3,10 +3,14 @@
 
 Counts consecutive direct task-work calls (Edit, Write, NotebookEdit, Serena
 edit tools, Bash) made by the MAIN agent since the last Agent/Workflow launch
-in this session. At a threshold, nudges the orchestrator to stop doing the
-work itself and split what remains into parallel subagents — the
+in this session. At DRIFT_THRESHOLD (6), nudges the orchestrator to stop
+doing the work itself and split what remains into parallel subagents — the
 "orchestrator + swarm delegation" model this session is meant to follow
-(FEATURE_SUBAGENTS).
+(FEATURE_SUBAGENTS). At DRIFT_HARD_THRESHOLD (12), the advisory escalates
+into a MANDATE: split remaining work into parallel subagents NOW, or record a
+'single-agent: <reason>' override in the WM Context section — the sibling
+PreToolUse edit gate (swe_pre_edit_validate.py) hard-enforces this same
+threshold by DENYING further edits without that override.
 
 An Agent or Workflow call resets the streak (the orchestrator just
 delegated). Informational only — PostToolUse cannot block, and this hook
@@ -37,12 +41,25 @@ try:
     from swe_hooks.core.output import HookOutput, output_status, output_empty
     from swe_hooks.core.input import read_stdin_safe, get_input_field
     from swe_hooks.core.session import extract_session_id, is_spawned_agent, is_subagent_transcript
-    from swe_hooks.core.stream import get_stream_path, append_event, count_task_work_since_delegation
+    from swe_hooks.core.stream import (
+        get_stream_path, append_event, count_task_work_since_delegation,
+        DRIFT_HARD_THRESHOLD,
+    )
 except ImportError as e:
     swe_hooks.bootstrap.import_error_exit(e)
 
-# Consecutive direct task-work calls before the drift nudge.
+# Consecutive direct task-work calls before the advisory drift nudge.
 DRIFT_THRESHOLD = 6
+
+# At this streak, the advisory becomes a MANDATE (see core.stream for the
+# shared constant the sibling edit gate also enforces against).
+MANDATE_TEXT = (
+    "STOP doing the work yourself. Split the remaining work and launch "
+    "parallel subagents NOW (haiku=routine/recon/tests, sonnet=implementation "
+    "— FEATURE_SUBAGENTS). For a genuinely tight single-file coupled fix, "
+    "record 'single-agent: <reason>' in the WM Context section to continue "
+    "solo; the edit gate blocks further edits otherwise."
+)
 
 DELEGATION_TOOL_NAMES = {'Agent', 'Task', 'Workflow'}
 
@@ -127,6 +144,16 @@ def main():
 
         append_event(stream_path, 'task_work', tool=tool_name, s=session_id)
         drift_count = count_task_work_since_delegation(stream_path)
+
+        if drift_count >= DRIFT_HARD_THRESHOLD:
+            output = HookOutput(event_name="PostToolUse")
+            output.add_message(
+                f"Orchestrator drift: {drift_count} direct task-work calls without "
+                f"delegating (>= hard threshold {DRIFT_HARD_THRESHOLD}). "
+                + MANDATE_TEXT
+            )
+            output.output_and_exit()
+            return
 
         if drift_count >= DRIFT_THRESHOLD:
             output = HookOutput(event_name="PostToolUse")

@@ -276,6 +276,26 @@ def count_task_work_since_delegation(stream_path: str) -> int:
     )
 
 
+# Consecutive main-agent task-work events since last delegation at which the
+# orchestrator-drift nudge (swe_post_orchestrator_drift.py) escalates from an
+# advisory to a hard mandate, and the edit gate (swe_pre_edit_validate.py)
+# starts hard-enforcing it. Shared here so both hooks read one constant
+# instead of duplicating the number.
+DRIFT_HARD_THRESHOLD = 12
+
+# A logged, deliberate exception recorded in the session's WM file: a
+# genuinely tight single-file coupled fix that justifies continuing solo past
+# DRIFT_HARD_THRESHOLD instead of splitting into parallel subagents.
+SINGLE_AGENT_NOTE_RE = re.compile(r'single-agent\s*:', re.IGNORECASE)
+
+
+def wm_has_single_agent_note(wm_content: str) -> bool:
+    """True when `wm_content` (a session WM file's text) records a
+    'single-agent: <reason>' override line, case-insensitive. Pure string
+    check — callers resolve and read the WM file themselves."""
+    return bool(SINGLE_AGENT_NOTE_RE.search(wm_content or ''))
+
+
 # ---------------------------------------------------------------------------
 # Init-gate degraded mode (circuit breaker for an unreachable Serena MCP)
 # ---------------------------------------------------------------------------
