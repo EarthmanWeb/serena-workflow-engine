@@ -25,25 +25,25 @@ Subflows (not FSM states, never `set_state` targets): WF_INIT · WF_CLEANUP · W
 
 ## State Roles
 
-| State | Category | Role |
-| ----- | -------- | ---- |
-| WF_INIT | Entry | Init pseudo-state; chain ends by routing to WF_CLASSIFY |
-| WF_CLASSIFY | Entry | Post-init entry; route by complexity (simple/medium/large/operational) |
-| WF_CONTINUE | Entry | Resume from WORKING_MEMORY |
-| WF_RESEARCH | Analysis | Read-only exploration |
-| WF_ARCH_REVIEW | Planning (Plan Mode) | Design, compliance review, parallel-subagent assessment & approval |
-| WF_CLARIFY | Gate | Ask user questions |
-| WF_EXECUTE | Execution | Make changes (allows Edit/Write) |
-| WF_CHECKPOINT | Execution | Save progress every 10 edits (`CHECKPOINT_THRESHOLD`) |
-| WF_DEBUG_TDD | Execution | Test-driven debugging |
-| WF_VERIFY | Completion | Test and validate |
-| WF_DONE | Completion | Record reusable learnings in WM (mandatory) |
+| State          | Category             | Role                                                                   |
+| -------------- | -------------------- | ---------------------------------------------------------------------- |
+| WF_INIT        | Entry                | Init pseudo-state; chain ends by routing to WF_CLASSIFY                |
+| WF_CLASSIFY    | Entry                | Post-init entry; route by complexity (simple/medium/large/operational) |
+| WF_CONTINUE    | Entry                | Resume from WORKING_MEMORY                                             |
+| WF_RESEARCH    | Analysis             | Read-only exploration                                                  |
+| WF_ARCH_REVIEW | Planning (Plan Mode) | Design, compliance review, parallel-subagent assessment & approval     |
+| WF_CLARIFY     | Gate                 | Ask user questions                                                     |
+| WF_EXECUTE     | Execution            | Make changes (allows Edit/Write)                                       |
+| WF_CHECKPOINT  | Execution            | Save progress every 10 edits (`CHECKPOINT_THRESHOLD`)                  |
+| WF_DEBUG_TDD   | Execution            | Test-driven debugging                                                  |
+| WF_VERIFY      | Completion           | Test and validate                                                      |
+| WF_DONE        | Completion           | Record reusable learnings in WM (mandatory)                            |
 
 ## Complexity Routing (WF_CLASSIFY)
 
-| Complexity | Files | Layers | Route To |
-| ---------- | ----- | ------ | -------- |
-| All | Any | Any | WF_ARCH_REVIEW (code) / WF_EXECUTE (operational) |
+| Complexity | Files | Layers | Route To                                         |
+| ---------- | ----- | ------ | ------------------------------------------------ |
+| All        | Any   | Any    | WF_ARCH_REVIEW (code) / WF_EXECUTE (operational) |
 
 - Run the parallel-subagent assessment at WF_ARCH_REVIEW AFTER feature context is loaded. NEVER assess before feature context loads.
 
@@ -55,14 +55,14 @@ Subflows (not FSM states, never `set_state` targets): WF_INIT · WF_CLEANUP · W
 
 ## Edit Permissions
 
-| State | Edit | Write |
-| ----- | ---- | ----- |
-| WF_EXECUTE | ✓ | ✓ |
-| WF_CHECKPOINT | ✓ | ✓ |
-| WF_DEBUG_TDD | ✓ | ✓ |
-| WF_VERIFY | ✓ | ✓ |
-| WF_ONBOARD | ✓ | ✓ |
-| Others | ✗ | ✗ |
+| State         | Edit | Write |
+| ------------- | ---- | ----- |
+| WF_EXECUTE    | ✓    | ✓     |
+| WF_CHECKPOINT | ✓    | ✓     |
+| WF_DEBUG_TDD  | ✓    | ✓     |
+| WF_VERIFY     | ✓    | ✓     |
+| WF_ONBOARD    | ✓    | ✓     |
+| Others        | ✗    | ✗     |
 
 - NEVER Edit/Write in any state marked ✗.
 

@@ -51,15 +51,15 @@ Auto-memory files are flat (e.g., `feedback_test.md`, `user_role.md`). SWE organ
 
 #### Prefix-to-Subdirectory Mapping
 
-| Auto-Memory Pattern | Target Subdirectory | Rename Rule |
-|---|---|---|
-| `feedback_*.md` | `feedback/` | `FEEDBACK_*.md` |
-| `user_*.md` | `user/` | `USER_*.md` |
-| `project_*.md` | `project/` | `PROJECT_*.md` |
-| `reference_*.md` | `ref/` | `REF_*.md` (note: `reference` → `ref`) |
-| `SPEC_*.md` | `spec/` | Keep as-is (already uppercase) |
-| `MEMORY.md` | root | **Merge** (see below) |
-| Other `*.md` | root | Uppercase the filename |
+| Auto-Memory Pattern | Target Subdirectory | Rename Rule                            |
+| ------------------- | ------------------- | -------------------------------------- |
+| `feedback_*.md`     | `feedback/`         | `FEEDBACK_*.md`                        |
+| `user_*.md`         | `user/`             | `USER_*.md`                            |
+| `project_*.md`      | `project/`          | `PROJECT_*.md`                         |
+| `reference_*.md`    | `ref/`              | `REF_*.md` (note: `reference` → `ref`) |
+| `SPEC_*.md`         | `spec/`             | Keep as-is (already uppercase)         |
+| `MEMORY.md`         | root                | **Merge** (see below)                  |
+| Other `*.md`        | root                | Uppercase the filename                 |
 
 #### Migration Script
 

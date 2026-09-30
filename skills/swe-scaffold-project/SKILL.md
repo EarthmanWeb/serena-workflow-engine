@@ -58,6 +58,7 @@ fi
 ```
 
 **If no git repo exists:**
+
 1. Ask the user: "No git repository detected. Initialize one? (recommended for SWE workflow)"
 2. If yes:
    ```bash
@@ -69,6 +70,7 @@ fi
 3. If no: Warn that some features may not work (project root detection, .gitignore integration) but proceed.
 
 **Why git is needed:**
+
 - Serena uses `.git/` to detect project root (`_get_project_root()` in init gate)
 - SWE hooks use `CLAUDE_PROJECT_DIR` with `.git/` fallback for root resolution
 - `.gitignore` integration for ignoring `WM_*.md`, `.serena/swe-state/`, etc.
@@ -103,13 +105,13 @@ resolution from third-party code.
 
 **Auto-detected categories:**
 
-| Category | Examples |
-|----------|----------|
-| Dependencies | `node_modules/`, `vendor/`, `.pnpm-store/`, `.venv/` |
-| Build output | `dist/`, `build/`, `target/`, `.next/`, `.nuxt/` |
+| Category        | Examples                                                            |
+| --------------- | ------------------------------------------------------------------- |
+| Dependencies    | `node_modules/`, `vendor/`, `.pnpm-store/`, `.venv/`                |
+| Build output    | `dist/`, `build/`, `target/`, `.next/`, `.nuxt/`                    |
 | Framework infra | `wp/`, `uploads/` (WordPress); `storage/` (Laravel); `tmp/` (Rails) |
-| Infrastructure | `.devcontainer/`, `.pantheon/`, `.docker/` |
-| Caches | `.cache/`, `__pycache__/`, `.mypy_cache/`, `coverage/` |
+| Infrastructure  | `.devcontainer/`, `.pantheon/`, `.docker/`                          |
+| Caches          | `.cache/`, `__pycache__/`, `.mypy_cache/`, `coverage/`              |
 
 **Only directories that actually exist in the project are added.** Framework-specific
 paths are detected by framework markers (e.g., `wp-config.php` → WordPress).
@@ -134,15 +136,15 @@ The bootstrap script (`swe-bootstrap.py`) auto-detects project name, primary lan
 
 **Template variables auto-detected:**
 
-| Variable | Source |
-|----------|--------|
-| `{{project_name}}` | Manifest `name` field, or directory name |
-| `{{primary_language}}` | Most common language by file count |
-| `{{languages}}` | All detected languages, comma-separated |
-| `{{test_framework}}` | Detected from devDependencies/require-dev |
-| `{{test_commands}}` | Default commands for detected framework |
-| `{{test_root}}` | Default test directory for detected framework |
-| `{{year}}` | Current year |
+| Variable               | Source                                        |
+| ---------------------- | --------------------------------------------- |
+| `{{project_name}}`     | Manifest `name` field, or directory name      |
+| `{{primary_language}}` | Most common language by file count            |
+| `{{languages}}`        | All detected languages, comma-separated       |
+| `{{test_framework}}`   | Detected from devDependencies/require-dev     |
+| `{{test_commands}}`    | Default commands for detected framework       |
+| `{{test_root}}`        | Default test directory for detected framework |
+| `{{year}}`             | Current year                                  |
 
 **Templates rendered (from `memories/templates/`):**
 

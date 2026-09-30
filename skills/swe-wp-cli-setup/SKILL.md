@@ -192,7 +192,7 @@ Report a table of each site and its verification result.
 
 | Site | Container | LOCAL_PATH | SSH | Verify |
 | ---- | --------- | ---------- | --- | ------ |
-| ...  | ...       | ...        | y/n | ✅/⚠️  |
+| ...  | ...       | ...        | y/n | ✅/⚠️   |
 
 - Layout: mono-repo | multi-repo (N sites)
 - DEFAULT_SITE: <name | none>

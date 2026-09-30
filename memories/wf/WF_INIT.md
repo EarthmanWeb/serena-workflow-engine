@@ -41,6 +41,7 @@ Check for spawned-agent status BEFORE initializing. You are a spawned agent when
 - Explicit task-only instructions without a user conversation
 
 If spawned agent:
+
 - Skip this file, WF_CLASSIFY, and all workflow steps.
 - Do NOT create a WM file. Do NOT read CLAUDE_OBLIGATIONS.
 - Execute only the task in your initial prompt.
@@ -99,22 +100,22 @@ Use Serena symbolic tools before reading full files:
 
 ### `depth` Levels
 
-| depth | Returns |
-|-------|---------|
-| `0` | Top-level symbols only (classes, standalone functions, constants) |
-| `1` | Top-level + immediate children (e.g. class methods, function-local variables) |
-| `2+` | Deeper nesting levels |
+| depth | Returns                                                                       |
+| ----- | ----------------------------------------------------------------------------- |
+| `0`   | Top-level symbols only (classes, standalone functions, constants)             |
+| `1`   | Top-level + immediate children (e.g. class methods, function-local variables) |
+| `2+`  | Deeper nesting levels                                                         |
 
 ### Language Server Coverage
 
-| File Type | Symbol Quality | Notes |
-|-----------|---------------|-------|
-| **PHP** | Excellent | Functions, classes, variables, DOM elements in templates |
-| **Python** | Excellent | Classes, functions, variables |
-| **TypeScript/JavaScript** | Good | Named exports, classes, functions. jQuery wrappers may return empty |
-| **Markdown** | Limited | Headings only (H2/H3 as symbols) |
-| **SCSS/CSS** | Poor | Language server rarely exposes selectors or variables |
-| **JSON/YAML/Config** | None | No symbolic structure — use `Read` or `search_for_pattern` |
+| File Type                 | Symbol Quality | Notes                                                               |
+| ------------------------- | -------------- | ------------------------------------------------------------------- |
+| **PHP**                   | Excellent      | Functions, classes, variables, DOM elements in templates            |
+| **Python**                | Excellent      | Classes, functions, variables                                       |
+| **TypeScript/JavaScript** | Good           | Named exports, classes, functions. jQuery wrappers may return empty |
+| **Markdown**              | Limited        | Headings only (H2/H3 as symbols)                                    |
+| **SCSS/CSS**              | Poor           | Language server rarely exposes selectors or variables               |
+| **JSON/YAML/Config**      | None           | No symbolic structure — use `Read` or `search_for_pattern`          |
 
 - When symbol extraction returns empty, fall back to `search_for_pattern` with regex.
 - Read full files ONLY for config files, files with poor language server support, or when full file context is explicitly needed.

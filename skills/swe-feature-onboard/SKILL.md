@@ -45,14 +45,14 @@ Interactive wizard for registering features in the workflow system.
 
 ## Quick Mode vs Full Mode
 
-| Aspect          | Quick Mode                  | Full Mode              |
-| --------------- | --------------------------- | ---------------------- |
-| Time            | ~30 sec                     | 2-5 min                |
-| Parallel subagents | No                       | Optional (10 subagents)|
-| DOM_* memories  | No                          | Yes (if domains found) |
-| SYS_* memories  | No                          | Yes (if systems found) |
-| Layer detection | Basic                       | Detailed               |
-| Best for        | Small features, prototyping | Large codebases        |
+| Aspect             | Quick Mode                  | Full Mode               |
+| ------------------ | --------------------------- | ----------------------- |
+| Time               | ~30 sec                     | 2-5 min                 |
+| Parallel subagents | No                          | Optional (10 subagents) |
+| DOM_* memories     | No                          | Yes (if domains found)  |
+| SYS_* memories     | No                          | Yes (if systems found)  |
+| Layer detection    | Basic                       | Detailed                |
+| Best for           | Small features, prototyping | Large codebases         |
 
 ---
 
@@ -198,7 +198,7 @@ mcp__plugin_swe_serena__read_memory("feature/FEATURE_SUBAGENTS")
 
 This loads subagent types, model selection, and parallel-launch patterns.
 
-Launch 10 read-only analysis subagents in ONE message via the `Agent` tool (`run_in_background: true`, `model: "haiku"` for read-only scans). Each covers one focus area; a final synthesis pass compiles their results into DOM_*/SYS_* memories. Prefix every prompt with `You are a subagent. BYPASS WF_INIT. Do NOT read CLAUDE.md workflow.`
+Launch 10 read-only analysis subagents in ONE message via the `Agent` tool (`run_in_background: true`, `model: "haiku"` for read-only scans). Each covers one focus area; a final synthesis pass compiles their results into DOM__/SYS__ memories. Prefix every prompt with `You are a subagent. BYPASS WF_INIT. Do NOT read CLAUDE.md workflow.`
 
 ```javascript
 // Launch ALL in ONE message for parallel execution.
@@ -307,10 +307,10 @@ If user selects "No, needs changes", gather corrections manually.
 
 ## Related Memories
 
-| Memory        | Content           |
-| ------------- | ----------------- |
-| dom/DOM_[KEY]_*   | Domain behaviors  |
-| sys/SYS_[KEY]_*   | System references |
+| Memory              | Content           |
+| ------------------- | ----------------- |
+| dom/DOM_[KEY]_*     | Domain behaviors  |
+| sys/SYS_[KEY]_*     | System references |
 | index/INDEX_[KEY]_* | Indexes           |
 
 ## Testing
@@ -373,6 +373,7 @@ AskUserQuestion({
 ### If "Yes, write specs now":
 
 1. Create the specs directory:
+
 ```bash
 mkdir -p tests/specs
 ```
@@ -382,11 +383,13 @@ mkdir -p tests/specs
 ### If "Yes, but later":
 
 1. Create the specs directory:
+
 ```bash
 mkdir -p tests/specs
 ```
 
 2. Add a note to FEATURE_[KEY] memory:
+
 ```
 mcp__plugin_swe_serena__edit_memory(
   "feature/FEATURE_[KEY]",

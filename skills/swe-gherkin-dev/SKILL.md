@@ -56,7 +56,7 @@ Full TDD — if the functionality doesn't exist, build it.
 
 Extract the slug from `$ARGUMENTS` by stripping `.feature` or `.spec.*` extensions.
 
-**Strategy 1: Check SPEC_* memories**
+**Strategy 1: Check SPEC** memories_*
 
 ```
 mcp__plugin_swe_serena__list_memories(topic="spec")
@@ -108,12 +108,12 @@ Read(file_path="[spec_path]")
 
 Parse into a structured coverage map:
 
-| # | Type | Line | Covered | Implementation Exists |
-|---|------|------|---------|-----------------------|
-| 1 | Given | user is on the login page | No | ? |
-| 2 | When | user enters valid credentials | No | ? |
-| 3 | Then | user is redirected to dashboard | No | ? |
-| 4 | And | session token is stored | No | ? |
+| # | Type  | Line                            | Covered | Implementation Exists |
+| - | ----- | ------------------------------- | ------- | --------------------- |
+| 1 | Given | user is on the login page       | No      | ?                     |
+| 2 | When  | user enters valid credentials   | No      | ?                     |
+| 3 | Then  | user is redirected to dashboard | No      | ?                     |
+| 4 | And   | session token is stored         | No      | ?                     |
 
 **Every Given/When/Then/And line becomes a row.** Nothing is skipped.
 
@@ -134,6 +134,7 @@ mcp__plugin_swe_serena__read_memory("feature/FEATURE_[KEY]")
 ```
 
 Load ALL supporting memories referenced in the feature:
+
 - `DOM_*` — domain patterns
 - `SYS_*` — system architecture
 - `REF_*` — coding standards
@@ -149,6 +150,7 @@ mcp__plugin_swe_serena__find_symbol(name_path_pattern="...", relative_path="..."
 ```
 
 Update the coverage map column "Implementation Exists" with:
+
 - **Yes** — functionality exists, just needs test coverage
 - **Partial** — some logic exists, needs completion
 - **No** — must be built from scratch
@@ -162,12 +164,14 @@ Glob(pattern="tests/**/*{slug}*.*")
 ```
 
 Read every matched test file to understand:
+
 - Which tests exist (names, structure)
 - Which are real tests vs stubs
 - Which spec lines they already cover
 - What fixtures and helpers they use
 
 Update the coverage map:
+
 - Stubs (`fixme`, `skip`, `todo`) → Covered: **No**
 - Passing real tests → Covered: **Yes**
 - No matching test → Covered: **No**
@@ -200,6 +204,7 @@ mcp__plugin_swe_serena__get_symbols_overview("[test_root]/", depth=1)
 ```
 
 **Rules:**
+
 - Always use existing helper methods — never hand-roll setup that helpers already provide
 - Each test must be self-contained — create its own state, never share across tests
 - Check helper files for existing methods before creating inline functions
@@ -210,12 +215,14 @@ mcp__plugin_swe_serena__get_symbols_overview("[test_root]/", depth=1)
 **Only ask the user questions that could NOT be answered from the spec or codebase.**
 
 Valid questions:
+
 - Ambiguous behavior not specified in the Gherkin
 - Missing acceptance criteria for edge cases
 - Architectural choice between two valid patterns
 - External system dependencies not documented
 
 Invalid questions (answer from codebase):
+
 - "Where should this file go?" — check existing patterns
 - "What helper should I use?" — check test helpers
 - "What naming convention?" — check DEV_* memories
@@ -273,6 +280,7 @@ For each group of related spec lines:
 Create the test that will fail because functionality doesn't exist yet.
 
 **Test Standards (from FEATURE_TESTS and DEV_*):**
+
 - Follow the project's test file naming convention
 - Use the project's test framework and fixtures
 - Map each test to specific Given/When/Then lines via comments
@@ -299,6 +307,7 @@ Adapt the test structure to the project's framework (pytest, jest, playwright, p
 Implement the minimal functionality to make the test pass.
 
 **Follow existing patterns:**
+
 - Check codebase for similar implementations before creating new ones
 - Use Serena tools (`find_symbol`, `get_symbols_overview`) to locate insertion points
 - Follow DEV_* standards for the relevant language
@@ -326,6 +335,7 @@ Continue the RED/GREEN cycle until ALL spec lines are covered.
 Run every new or modified test one at a time using the project's test runner.
 
 **For EACH test:**
+
 - **PASS** → mark as passing, move to next
 - **FAIL** → enter the TDD fix loop (6b)
 
@@ -343,6 +353,7 @@ When a test fails:
 6. **Repeat until it passes**
 
 **Rules:**
+
 - **NEVER skip a failing test**
 - **NEVER add arbitrary delays or sleep to fix timing issues** — use proper waits
 - **NEVER weaken assertions** to make a test pass — fix the code
@@ -359,6 +370,7 @@ Only after ALL individual tests pass, run the full test file:
 ### 6d. Coverage Map Audit
 
 Re-check the coverage map — every row must show:
+
 - **Covered: Yes**
 - **Implementation Exists: Yes**
 
@@ -415,18 +427,23 @@ Update all coverage map rows to show Implemented: Yes, Tested: Yes.
 ## Edge Cases
 
 ### Spec references functionality that spans multiple features
+
 Load ALL affected feature memories. Follow cross-feature patterns from ARCH_INDEX.
 
 ### Spec line is a duplicate of an existing test
+
 Keep the existing test. Add a comment mapping it to the spec line.
 
 ### Existing test covers spec line partially
+
 Extend the test with additional assertions. Never remove existing assertions.
 
 ### Functionality exists but has no test
+
 Write the test. Verify it passes. If it fails, the functionality has a bug — fix the bug (TDD).
 
 ### No test framework configured
+
 Stop and inform the user. FEATURE_TESTS must be configured with a test runner before TDD can proceed. Suggest running `/swe-feature-onboard` or manually updating FEATURE_TESTS.
 
 ## Skill Return Format

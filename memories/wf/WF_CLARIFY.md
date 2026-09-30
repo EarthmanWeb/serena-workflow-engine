@@ -12,6 +12,7 @@ metadata:
 ## When To Enter
 
 Enter WF_CLARIFY when ANY holds:
+
 - Request is unclear.
 - Requirement conflicts with documented behavior.
 - User declined proposed changes.
@@ -84,13 +85,13 @@ AskUserQuestion({
 
 ## AskUserQuestion Parameters
 
-| Parameter     | Rule                                                |
-| ------------- | --------------------------------------------------- |
-| `questions`   | Array of 1-4 questions                              |
-| `question`    | Full question text to display                       |
-| `header`      | Short label, max 12 chars                           |
+| Parameter     | Rule                                                      |
+| ------------- | --------------------------------------------------------- |
+| `questions`   | Array of 1-4 questions                                    |
+| `question`    | Full question text to display                             |
+| `header`      | Short label, max 12 chars                                 |
 | `options`     | Array of 2-4 choices, each with `label` and `description` |
-| `multiSelect` | `true` allows multiple selections                   |
+| `multiSelect` | `true` allows multiple selections                         |
 
 Users can always select "Other" for custom text input.
 
@@ -102,9 +103,9 @@ Users can always select "Other" for custom text input.
 
 ## Routing
 
-| Return From   | Next State        |
-| ------------- | ----------------- |
-| CLASSIFY      | `WF_CLASSIFY`     |
-| ARCH_REVIEW   | `WF_ARCH_REVIEW`  |
+| Return From | Next State       |
+| ----------- | ---------------- |
+| CLASSIFY    | `WF_CLASSIFY`    |
+| ARCH_REVIEW | `WF_ARCH_REVIEW` |
 
 Update WM via `/swe-wm-update` before transitioning.

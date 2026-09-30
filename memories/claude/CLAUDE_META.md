@@ -27,18 +27,18 @@ metadata:
 
 - Each WF_* memory starts with its step name. Claude MUST output the report line before executing the step. This blocks silent step-skipping and creates the audit trail.
 
-| Step                  | Report                         |
-| --------------------- | ------------------------------ |
-| WF_CLASSIFY           | **On step WF_CLASSIFY**        |
-| WF_UPDATE_MEMORY      | **On step WF_UPDATE_MEMORY**   |
-| WF_CLARIFY            | **On step WF_CLARIFY**         |
-| WF_ARCH_REVIEW        | **On step WF_ARCH_REVIEW**     |
-| WF_EXECUTE            | **On step WF_EXECUTE**         |
-| WF_CHECKPOINT         | **On step WF_CHECKPOINT**      |
-| WF_VERIFY             | **On step WF_VERIFY**          |
-| WF_CONTINUE           | **On step WF_CONTINUE**        |
-| WF_RESEARCH           | **On step WF_RESEARCH**        |
-| WF_DONE               | **On step WF_DONE**            |
+| Step             | Report                       |
+| ---------------- | ---------------------------- |
+| WF_CLASSIFY      | **On step WF_CLASSIFY**      |
+| WF_UPDATE_MEMORY | **On step WF_UPDATE_MEMORY** |
+| WF_CLARIFY       | **On step WF_CLARIFY**       |
+| WF_ARCH_REVIEW   | **On step WF_ARCH_REVIEW**   |
+| WF_EXECUTE       | **On step WF_EXECUTE**       |
+| WF_CHECKPOINT    | **On step WF_CHECKPOINT**    |
+| WF_VERIFY        | **On step WF_VERIFY**        |
+| WF_CONTINUE      | **On step WF_CONTINUE**      |
+| WF_RESEARCH      | **On step WF_RESEARCH**      |
+| WF_DONE          | **On step WF_DONE**          |
 
 Feature loading is a step inside `WF_CLASSIFY` (Step 4), not a separate state. Approval/consent is a step inside `WF_ARCH_REVIEW` (the Single Question + Consent Gate), not a separate state.
 
@@ -60,15 +60,15 @@ project/
 
 ## Memory Types
 
-| Type                 | Contains                                                              | Constraint                                    |
-| -------------------- | -------------------------------------------------------------------- | --------------------------------------------- |
-| CLAUDE.md            | Entry point only; reads `WF_INIT`                                    | ~20 lines; only file read from disk at start  |
-| `WF_*`               | What to do, what to read, next state(s)                              | 10-20 lines each; split if longer             |
-| `CLAUDE_OBLIGATIONS` | Behavioral constraints (NEVER/ALWAYS)                               | ~20 lines                                     |
-| `ARCH_*`             | Architecture documentation (system overview or one layer)           | ~50 lines each; agents load only their layer  |
-| `DOM_*`              | Domain requirements (WHAT, not HOW); NO signatures/queries          | Variable; implementation lives in `ARCH_*`/Serena |
-| `INDEX_*`            | Lookup tables mapping logical names → file paths                    | Variable                                      |
-| `REF_*`              | How-to guides, coding/testing standards, framework syntax           | Variable                                      |
+| Type                 | Contains                                                   | Constraint                                        |
+| -------------------- | ---------------------------------------------------------- | ------------------------------------------------- |
+| CLAUDE.md            | Entry point only; reads `WF_INIT`                          | ~20 lines; only file read from disk at start      |
+| `WF_*`               | What to do, what to read, next state(s)                    | 10-20 lines each; split if longer                 |
+| `CLAUDE_OBLIGATIONS` | Behavioral constraints (NEVER/ALWAYS)                      | ~20 lines                                         |
+| `ARCH_*`             | Architecture documentation (system overview or one layer)  | ~50 lines each; agents load only their layer      |
+| `DOM_*`              | Domain requirements (WHAT, not HOW); NO signatures/queries | Variable; implementation lives in `ARCH_*`/Serena |
+| `INDEX_*`            | Lookup tables mapping logical names → file paths           | Variable                                          |
+| `REF_*`              | How-to guides, coding/testing standards, framework syntax  | Variable                                          |
 
 ## Workflow Design Rules
 

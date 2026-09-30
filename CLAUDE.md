@@ -42,7 +42,6 @@ Hooks will send you data to guide you. ALWAYS LISTEN TO THEM.
 - Did you use Serena tools before Read/Edit?
 - Did you check the codebase for existing patterns before creating new ones?
 
-
 ## Auto-Memory Symlink
 
 This project uses a symlink to redirect Claude Code's auto-memory into `.serena/memory/`.

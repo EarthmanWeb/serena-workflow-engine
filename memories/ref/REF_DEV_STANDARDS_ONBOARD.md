@@ -39,7 +39,7 @@ Research these config sources. Adapt file list to project.
 
 | Config Type         | Common Files                                         |
 | ------------------- | ---------------------------------------------------- |
-| PHP linting         | `ruleset.xml`, `phpcs.xml`, `.php-cs-fixer.php`       |
+| PHP linting         | `ruleset.xml`, `phpcs.xml`, `.php-cs-fixer.php`      |
 | JS linting          | `biome.json`, `.eslintrc`, `prettier.config.js`      |
 | SCSS formatting     | `.prettierrc`, `stylelint.config.js`                 |
 | Template formatting | `.bladeformatterrc.json`, `.twigcs.yml`              |

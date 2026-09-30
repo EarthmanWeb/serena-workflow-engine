@@ -43,6 +43,7 @@ Derive `type` from the directory prefix: ref→reference, feedback→feedback, f
 ## Legacy Markers (rewrite on sight)
 
 A memory is LEGACY and MUST be rewritten immediately if it has any of:
+
 - Conversational or explanatory prose ("Let me…", "This document describes…", "In order to…").
 - Suggestion-mood guidance ("should", "consider", "you might", "it's recommended").
 - Vague quantifiers ("some", "a few", "small", "large", "appropriate") where a concrete value fits.
@@ -51,12 +52,12 @@ A memory is LEGACY and MUST be rewritten immediately if it has any of:
 
 ## Conform / Reject Examples
 
-| REJECT (legacy) | CONFORM (standard) |
-| --- | --- |
-| "You should probably read the feature memory first." | "Read `mem:feature/FEATURE_[KEY]` before editing." |
-| "Try to keep changes small." | "Touch ≤5 files. If >5, STOP and route to `mem:wf/WF_ARCH_REVIEW`." |
-| "It's a good idea to verify state." | "Verify state with a tool call in the same turn before asserting it. If unverified, label it 'unverified'." |
-| "This section explains the init gate." | (delete the sentence; state the gate's rules directly) |
+| REJECT (legacy)                                      | CONFORM (standard)                                                                                          |
+| ---------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| "You should probably read the feature memory first." | "Read `mem:feature/FEATURE_[KEY]` before editing."                                                          |
+| "Try to keep changes small."                         | "Touch ≤5 files. If >5, STOP and route to `mem:wf/WF_ARCH_REVIEW`."                                         |
+| "It's a good idea to verify state."                  | "Verify state with a tool call in the same turn before asserting it. If unverified, label it 'unverified'." |
+| "This section explains the init gate."               | (delete the sentence; state the gate's rules directly)                                                      |
 
 ## Self-Compliance
 

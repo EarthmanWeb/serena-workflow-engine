@@ -17,7 +17,7 @@ Autonomous agent for initializing the SWE plugin. Completes all setup tasks and 
 1. **Environment Detection** - Check project state, git, resolve plugin root
 2. **Auto-Memory Symlink** - Redirect Claude Code auto-memory into `.serena/memory/` **first**, so every memory written during the rest of init lands in the right place
 3. **Prerequisite Check** - Run bootstrap if project not yet bootstrapped
-3.5. **Serena Reconnect Gate** - After bootstrap writes `memory-paths.conf`, STOP and have the user reconnect Serena so it reads the new memory path before any memory is written (two-pass flow)
+   3.5. **Serena Reconnect Gate** - After bootstrap writes `memory-paths.conf`, STOP and have the user reconnect Serena so it reads the new memory path before any memory is written (two-pass flow)
 4. **MCP Verification** - Test Serena and swe-wm MCP servers respond
 5. **Serena Onboarding** - Run one-time Serena setup + migrate default memories into SWE templates
 6. **Memory Maintenance** - Relocate Serena's `memory_maintenance` memory into the typed `ref/` folder + link it from MEMORY.md
@@ -156,6 +156,7 @@ python3 "$SWE_PLUGIN_ROOT/scripts/swe-bootstrap.py"
 ```
 
 Bootstrap handles:
+
 - Directory creation (`.serena/`, `.serena/memory/`, `.serena/swe-state/`)
 - Language detection → `project.yml`
 - `memory-paths.conf` creation/update
@@ -193,7 +194,7 @@ If any `{{variable}}` placeholders remain, they couldn't be auto-detected. Fill 
    - Run `/mcp` → select the `serena` server → **Reconnect** (or restart the session).
 4. Tell the user to **resume init by re-running `/swe-init`** once Serena has reconnected. This is safe and idempotent: bootstrap guards on `bootstrapped: true` (Task 3) and skips straight to this point, so the resume picks up at Task 4 with Serena now reading the correct memory paths.
 
-**End the turn here.** Everything below (Task 4 onward) runs on the *resume* invocation, after the reconnect.
+**End the turn here.** Everything below (Task 4 onward) runs on the _resume_ invocation, after the reconnect.
 
 > Resume detection: if `swe-setup-complete.json` shows `bootstrapped: true` and `complete: false`, you are on the resume pass — Serena has been reconnected. Skip Tasks 2–3.5 and continue from Task 4. **Before writing any memory on resume, re-verify the Task 2 auto-memory symlink is intact** (it may have failed silently on Pass 1) — re-run `/swe-symlink-memory` if the symlink at `~/.claude/projects/<encoded>/memory` does not resolve to `$(pwd)/.serena/memory`. This is idempotent and guarantees resume-pass memory writes still land in the project tree.
 
@@ -220,6 +221,7 @@ if (!status.performed) {
 ### Task 5b: Migrate Serena Default Memories Into SWE Templates
 
 Serena's onboarding (Task 5) creates project-knowledge memories (tech stack, conventions, commands, verification steps). Their names and layout VARY:
+
 - **Subfolder layout** (Serena defaults on a fresh project): `project/project_overview`, `style/style_conventions`, `suggested/suggested_commands`, `task/task_completion`.
 - **Flat layout** (a project that already had Serena memories before SWE): `project_overview.md`, `conventions.md`, `tech_stack.md`, `suggested_commands.md`, `task_completion.md`, `serena_repository_structure.md`, etc. — flat files at `.serena/memory/` root.
 
@@ -254,12 +256,12 @@ If `present` is empty, there is nothing to migrate — skip to Step 3's cleanup 
 
 Read each SWE template memory, then update it with the content from the Serena defaults:
 
-| Serena Default | Merge Into | What to Merge |
-|---|---|---|
-| `project/project_overview` | `feature/FEATURE_DEV_STANDARDS` | Add a `## Project Overview` section at the top with: project purpose, tech stack, architecture summary, entry points, class/file naming conventions |
-| `style/style_conventions` | `feature/FEATURE_DEV_STANDARDS` | Populate the language-specific sections (replace generic "follow existing conventions" advice with the actual discovered conventions per language) |
-| `suggested/suggested_commands` | `feature/FEATURE_DEV_STANDARDS` | Add a `## Commands` section with: build commands, lint commands, package management commands, git branch info |
-| `task/task_completion` | `feature/FEATURE_TESTS` | Add a `## Task Completion Checklist` section with the project-specific verification steps (lint, build, test commands) |
+| Serena Default                 | Merge Into                      | What to Merge                                                                                                                                       |
+| ------------------------------ | ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `project/project_overview`     | `feature/FEATURE_DEV_STANDARDS` | Add a `## Project Overview` section at the top with: project purpose, tech stack, architecture summary, entry points, class/file naming conventions |
+| `style/style_conventions`      | `feature/FEATURE_DEV_STANDARDS` | Populate the language-specific sections (replace generic "follow existing conventions" advice with the actual discovered conventions per language)  |
+| `suggested/suggested_commands` | `feature/FEATURE_DEV_STANDARDS` | Add a `## Commands` section with: build commands, lint commands, package management commands, git branch info                                       |
+| `task/task_completion`         | `feature/FEATURE_TESTS`         | Add a `## Task Completion Checklist` section with the project-specific verification steps (lint, build, test commands)                              |
 
 Use `mcp__plugin_swe_serena__edit_memory` to update each target memory. Preserve all existing template structure — add new sections, don't overwrite existing ones.
 
@@ -550,15 +552,15 @@ This creates a symlink from `~/.vscode/extensions/serena-log-viewer` to the exte
 
 **Step 1: Run all 7 verifications and collect a pass/fail per check.** Map each check to the task that produces it:
 
-| # | Verification | Owning task to resume on failure |
-| - | --- | --- |
-| 1 | MCP servers (serena, swe-wm) respond | Task 4 |
-| 2 | SWE plugin enabled | Task 8 |
-| 3 | Plugin hooks.json present | Task 8 |
-| 4 | Template memories rendered, no `{{placeholders}}` | Task 3 |
-| 5 | Serena onboarding complete | Task 5 |
-| 6 | Log Viewer extension installed | Task 10 |
-| 7 | Auto-memory symlink correct | Task 2 |
+| # | Verification                                      | Owning task to resume on failure |
+| - | ------------------------------------------------- | -------------------------------- |
+| 1 | MCP servers (serena, swe-wm) respond              | Task 4                           |
+| 2 | SWE plugin enabled                                | Task 8                           |
+| 3 | Plugin hooks.json present                         | Task 8                           |
+| 4 | Template memories rendered, no `{{placeholders}}` | Task 3                           |
+| 5 | Serena onboarding complete                        | Task 5                           |
+| 6 | Log Viewer extension installed                    | Task 10                          |
+| 7 | Auto-memory symlink correct                       | Task 2                           |
 
 **Step 2a: If ANY verification fails**, do NOT finalize. Report exactly which checks failed and the owning task to resume, then STOP:
 
@@ -678,6 +680,7 @@ rm -rf ~/.serena/language_servers/static/BashLanguageServer
 **Cause:** `ruby-lsp` is installed under the system/Homebrew Ruby but NOT under the rbenv-managed Ruby. Serena detects `.ruby-version` + rbenv and uses `rbenv exec` to launch `ruby-lsp`. If the gem doesn't exist in that Ruby version, the Ruby LS silently fails to start and all `.rb` files fall back to a non-Ruby LS that returns `{}`.
 
 **Diagnosis:**
+
 ```bash
 # Check which Ruby rbenv uses
 rbenv version
@@ -688,6 +691,7 @@ rbenv exec gem list ruby-lsp
 ```
 
 **Fix:**
+
 ```bash
 rbenv exec gem install ruby-lsp
 # Then restart Serena MCP server
@@ -702,6 +706,7 @@ rbenv exec gem install ruby-lsp
 1. **Serena handles this automatically** — pre-creates `.ruby-lsp/bundle_is_composed` marker so ruby-lsp skips the composed bundle install entirely.
 
 2. **Manual marker creation:**
+
 ```bash
 mkdir -p .ruby-lsp && touch .ruby-lsp/bundle_is_composed
 # Then restart Serena MCP server

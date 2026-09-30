@@ -25,8 +25,8 @@ Run the onboarding skill:
 
 ## Routing
 
-| Condition                           | Read Next        |
-| ----------------------------------- | ---------------- |
-| Feature configured (quick/manual)   | `WF_CLASSIFY`    |
-| Feature configured (task pending)   | `WF_CLASSIFY`    |
-| User cancelled                      | End conversation |
+| Condition                         | Read Next        |
+| --------------------------------- | ---------------- |
+| Feature configured (quick/manual) | `WF_CLASSIFY`    |
+| Feature configured (task pending) | `WF_CLASSIFY`    |
+| User cancelled                    | End conversation |

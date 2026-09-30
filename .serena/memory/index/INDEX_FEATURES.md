@@ -11,7 +11,7 @@ Registry of all features. Load `mem:feature/FEATURE_[KEY]` for the primary featu
 
 ## Registered Features
 
-| Key   | Name                              | Type              | Language                    | Status |
-|-------|-----------------------------------|-------------------|-----------------------------|--------|
-| SUBAGENTS | Native Subagents & Workflows  | Workflow Routing  | Markdown/Config             | Active |
-| SWE   | Serena Workflow Engine            | Plugin            | Python/Bash/JSON/Markdown   | Active |
+| Key       | Name                         | Type             | Language                  | Status |
+| --------- | ---------------------------- | ---------------- | ------------------------- | ------ |
+| SUBAGENTS | Native Subagents & Workflows | Workflow Routing | Markdown/Config           | Active |
+| SWE       | Serena Workflow Engine       | Plugin           | Python/Bash/JSON/Markdown | Active |

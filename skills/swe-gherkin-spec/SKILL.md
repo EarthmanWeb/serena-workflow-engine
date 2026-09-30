@@ -80,7 +80,7 @@ AskUserQuestion({
 mcp__plugin_swe_serena__read_memory("feature/FEATURE_[KEY]")
 ```
 
-Load all supporting memories from the feature's Related Memories table (DOM_*, SYS_*, ARCH_*).
+Load all supporting memories from the feature's Related Memories table (DOM__, SYS__, ARCH_*).
 
 ### 0c. Determine spec directory
 
@@ -203,11 +203,11 @@ Present the draft spec with a coverage summary:
 
 ### Coverage Summary
 
-| # | Scenario | Type | Requirement Source |
-|---|----------|------|--------------------|
-| 1 | [name]   | Happy path | User request / DOM_* / Existing code |
-| 2 | [name]   | Error case | Inferred from domain rules |
-| ...
+| #   | Scenario | Type       | Requirement Source                   |
+| --- | -------- | ---------- | ------------------------------------ |
+| 1   | [name]   | Happy path | User request / DOM_* / Existing code |
+| 2   | [name]   | Error case | Inferred from domain rules           |
+| ... |          |            |                                      |
 
 ### Questions
 
@@ -248,28 +248,28 @@ Memory content:
 
 ## Spec File
 
-| Property | Value |
-|----------|-------|
-| **File** | `tests/specs/[feature-key]-[slug].feature` |
-| **Feature Key** | [KEY] |
-| **Created** | [date] |
-| **Status** | draft |
+| Property        | Value                                      |
+| --------------- | ------------------------------------------ |
+| **File**        | `tests/specs/[feature-key]-[slug].feature` |
+| **Feature Key** | [KEY]                                      |
+| **Created**     | [date]                                     |
+| **Status**      | draft                                      |
 
 ## Coverage Map
 
-| # | Type | Line | Implemented | Tested |
-|---|------|------|-------------|--------|
-| 1 | Given | [step text] | No | No |
-| 2 | When | [step text] | No | No |
-| 3 | Then | [step text] | No | No |
+| # | Type  | Line        | Implemented | Tested |
+| - | ----- | ----------- | ----------- | ------ |
+| 1 | Given | [step text] | No          | No     |
+| 2 | When  | [step text] | No          | No     |
+| 3 | Then  | [step text] | No          | No     |
 
 ## Linked Artifacts
 
-| Type | Path |
-|------|------|
-| Spec file | `tests/specs/[filename].feature` |
-| Test file | _(not yet created)_ |
-| Feature memory | `feature/FEATURE_[KEY]` |
+| Type           | Path                             |
+| -------------- | -------------------------------- |
+| Spec file      | `tests/specs/[filename].feature` |
+| Test file      | _(not yet created)_              |
+| Feature memory | `feature/FEATURE_[KEY]`          |
 ```
 
 ### 4d. Update FEATURE_[KEY] memory

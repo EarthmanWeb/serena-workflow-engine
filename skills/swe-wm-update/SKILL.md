@@ -39,12 +39,12 @@ entire file and risk clobbering daemon-managed fields.
 
 **ALWAYS use `swe-wm` MCP tools:**
 
-| Tool                      | Purpose                                       |
-| ------------------------- | --------------------------------------------- |
-| `swe_wm_update`           | **CANONICAL** — batched status + all section updates in ONE call; returns post-update state |
-| `swe_wm_read`             | Read WM state + content (only when you need existing content to decide) |
-| `swe_wm_update_section`   | Legacy single-section update (agent-owned only) |
-| `swe_wm_update_status`    | Legacy status-only update of `**[STATUS]**:` tag |
+| Tool                    | Purpose                                                                                     |
+| ----------------------- | ------------------------------------------------------------------------------------------- |
+| `swe_wm_update`         | **CANONICAL** — batched status + all section updates in ONE call; returns post-update state |
+| `swe_wm_read`           | Read WM state + content (only when you need existing content to decide)                     |
+| `swe_wm_update_section` | Legacy single-section update (agent-owned only)                                             |
+| `swe_wm_update_status`  | Legacy status-only update of `**[STATUS]**:` tag                                            |
 
 **Daemon-managed fields** (updated automatically by Python hooks — DO NOT touch):
 
@@ -77,7 +77,7 @@ mcp__swe-wm__swe_wm_read(session_id="{session_id}")
 - [ ] Feature(s) identified from INDEX_FEATURES
 - [ ] Task description captured
 - [ ] FEATURE_[KEY] loaded for each feature (incl. fuzzy-fallback hits outside INDEX_FEATURES)
-- [ ] Feature Knowledge Sweep (Step 4d) completed — related FEATURE_*/REF_*/DOM_*/SYS_*/ARCH_* memories READ, list recorded in `Memories loaded`
+- [ ] Feature Knowledge Sweep (Step 4d) completed — related FEATURE__/REF__/DOM__/SYS__/ARCH_* memories READ, list recorded in `Memories loaded`
 - [ ] No spec/report/research/project memories read (unless the task explicitly targets one)
 - [ ] Requirements validated against domain memories (or "none detected")
 - [ ] Task type classified (simple / medium / large / operational)

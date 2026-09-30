@@ -9,13 +9,13 @@ metadata:
 
 ## Feature Overview
 
-| Property      | Value                  |
-| ------------- | ---------------------- |
-| **Name**      | Test Suite             |
-| **Key**       | TESTS                  |
-| **Type**      | infrastructure         |
-| **Language**  | python   |
-| **Framework** | unknown     |
+| Property      | Value          |
+| ------------- | -------------- |
+| **Name**      | Test Suite     |
+| **Key**       | TESTS          |
+| **Type**      | infrastructure |
+| **Language**  | python         |
+| **Framework** | unknown        |
 
 ## Running Tests
 
@@ -56,12 +56,12 @@ When adapting this template for a project:
 
 Gherkin `.feature` files define testable behavioral specifications using Given/When/Then syntax.
 
-| Property | Value |
-| -------- | ----- |
-| **Specs Directory** | `tests/specs/` |
-| **File Pattern** | `[feature-key]-[slug].feature` |
-| **Spec Authoring** | `/swe-gherkin-spec [KEY]` |
-| **TDD from Spec** | `/swe-gherkin-dev [slug]` |
+| Property            | Value                          |
+| ------------------- | ------------------------------ |
+| **Specs Directory** | `tests/specs/`                 |
+| **File Pattern**    | `[feature-key]-[slug].feature` |
+| **Spec Authoring**  | `/swe-gherkin-spec [KEY]`      |
+| **TDD from Spec**   | `/swe-gherkin-dev [slug]`      |
 
 ### Workflow Integration
 
@@ -80,20 +80,20 @@ Gherkin `.feature` files define testable behavioral specifications using Given/W
 
 ### Primary Directories
 
-| Directory           | Purpose                        |
-| ------------------- | ------------------------------ |
-| `tests/`    | Root of the test suite         |
+| Directory      | Purpose                         |
+| -------------- | ------------------------------- |
+| `tests/`       | Root of the test suite          |
 | `tests/specs/` | Gherkin BDD specification files |
 
 ## Test Runner Config
 
-| Setting      | Value                  |
-| ------------ | ---------------------- |
-| **Framework**| `unknown`   |
-| **Root**     | `tests/`        |
+| Setting       | Value     |
+| ------------- | --------- |
+| **Framework** | `unknown` |
+| **Root**      | `tests/`  |
 
 ## Test Suites
 
-| Suite   | File   | Focus   |
-| ------- | ------ | ------- |
-| _TODO: Add test suites_ | | |
+| Suite                   | File | Focus |
+| ----------------------- | ---- | ----- |
+| _TODO: Add test suites_ |      |       |

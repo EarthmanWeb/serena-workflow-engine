@@ -29,6 +29,7 @@ This repo's `.serena/memory/` was stamped from `memories/templates/`, then custo
 ## Consequence for shipped standards
 
 Anything that must govern every install lives in BOTH trees:
+
 - `ref/REF_MEMORY_STYLE` → `memories/templates/ref/REF_MEMORY_STYLE.md` (inherited by installs) AND local `.serena/memory/ref/` (governs local dev).
 - Enforcement hooks (e.g. `swe_post_memory_style.py`) live in plugin source `hooks/post/` so they ship and enforce everywhere.
 

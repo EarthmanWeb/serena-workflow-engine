@@ -15,8 +15,8 @@ metadata:
 
 <!-- Add DEV_* memories for each language used in the project -->
 
-| Language               | Memory          | Status      |
-| ---------------------- | --------------- | ----------- |
+| Language | Memory       | Status       |
+| -------- | ------------ | ------------ |
 | python   | `DEV_PYTHON` | TODO: Create |
 
 ## General Standards

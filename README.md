@@ -69,11 +69,11 @@ Side paths: `WF_RESEARCH` (read-only exploration), `WF_CONTINUE` (resume previou
 
 ### Storage Locations
 
-| Path | Purpose |
-|---|---|
-| `.serena/memory/` | Project memories (features, domain, refs, specs) -- persisted, committed |
-| `.serena/memories/` | Working Memory files (`WM_<session>.md`) -- ephemeral, gitignored |
-| `.serena/memory-paths.conf` | Serena memory path config |
+| Path                        | Purpose                                                                  |
+| --------------------------- | ------------------------------------------------------------------------ |
+| `.serena/memory/`           | Project memories (features, domain, refs, specs) -- persisted, committed |
+| `.serena/memories/`         | Working Memory files (`WM_<session>.md`) -- ephemeral, gitignored        |
+| `.serena/memory-paths.conf` | Serena memory path config                                                |
 
 ### Auto-Memory Symlink
 
@@ -104,11 +104,11 @@ Append `:ro` for read-only access. The first two paths are always present.
 
 Bootstrap auto-detects project info and fills template placeholders:
 
-| Detected From | Values Filled |
-|---|---|
-| `package.json`, `composer.json`, `Cargo.toml` | Project name, test framework, test commands |
-| File extensions scan | Primary language, all languages |
-| Dev dependencies | Test runner (Playwright, Jest, Vitest, PHPUnit, Pest, pytest, etc.) |
+| Detected From                                 | Values Filled                                                       |
+| --------------------------------------------- | ------------------------------------------------------------------- |
+| `package.json`, `composer.json`, `Cargo.toml` | Project name, test framework, test commands                         |
+| File extensions scan                          | Primary language, all languages                                     |
+| Dev dependencies                              | Test runner (Playwright, Jest, Vitest, PHPUnit, Pest, pytest, etc.) |
 
 Templates rendered to `.serena/memory/`:
 
@@ -123,36 +123,36 @@ Unresolved placeholders are left as-is for manual fill-out.
 
 When initializing a project that already has Claude Code auto-memory files, bootstrap automatically migrates, reorganizes, and symlinks them:
 
-| Original | Migrated To |
-|---|---|
-| `feedback_*.md` | `feedback/FEEDBACK_*.md` |
-| `user_*.md` | `user/USER_*.md` |
-| `project_*.md` | `project/PROJECT_*.md` |
-| `reference_*.md` | `ref/REF_*.md` |
-| `SPEC_*.md` | `spec/SPEC_*.md` |
-| `MEMORY.md` | Merged with updated paths |
+| Original         | Migrated To               |
+| ---------------- | ------------------------- |
+| `feedback_*.md`  | `feedback/FEEDBACK_*.md`  |
+| `user_*.md`      | `user/USER_*.md`          |
+| `project_*.md`   | `project/PROJECT_*.md`    |
+| `reference_*.md` | `ref/REF_*.md`            |
+| `SPEC_*.md`      | `spec/SPEC_*.md`          |
+| `MEMORY.md`      | Merged with updated paths |
 
 After migration, the symlink ensures all future auto-memory writes go to `.serena/memory/`.
 
 ## Commands & Skills
 
-| Command | Purpose |
-|---|---|
-| `/swe-init` | Full first-time setup (autonomous agent) |
-| `/swe-scaffold-project` | Lightweight setup (no MCP/LSP verification) |
-| `/swe-feature-onboard` | Register a feature to the workflow |
-| `/swe-feature-update` | Sync feature memory with current code |
-| `/swe-status` | Show workflow state and transitions |
-| `/swe-reset` | Reset workflow state |
-| `/swe-goto [STATE]` | Force transition (debug/recovery) |
-| `/swe-cleanup` | Archive completed memories |
-| `/swe-symlink-memory` | Set up auto-memory symlink with migration |
-| `/swe-wm-update` | Update Working Memory sections |
-| `/swe-workflow-research` | Read-only code exploration |
-| `/swe-workflow-verify` | Verify against requirements |
-| `/swe-workflow-arch-review` | Architecture compliance review |
-| `/swe-workflow-debug-tdd` | Test-driven debugging |
-| `/swe-symbol-index` | Generate symbol index for feature docs |
+| Command                     | Purpose                                     |
+| --------------------------- | ------------------------------------------- |
+| `/swe-init`                 | Full first-time setup (autonomous agent)    |
+| `/swe-scaffold-project`     | Lightweight setup (no MCP/LSP verification) |
+| `/swe-feature-onboard`      | Register a feature to the workflow          |
+| `/swe-feature-update`       | Sync feature memory with current code       |
+| `/swe-status`               | Show workflow state and transitions         |
+| `/swe-reset`                | Reset workflow state                        |
+| `/swe-goto [STATE]`         | Force transition (debug/recovery)           |
+| `/swe-cleanup`              | Archive completed memories                  |
+| `/swe-symlink-memory`       | Set up auto-memory symlink with migration   |
+| `/swe-wm-update`            | Update Working Memory sections              |
+| `/swe-workflow-research`    | Read-only code exploration                  |
+| `/swe-workflow-verify`      | Verify against requirements                 |
+| `/swe-workflow-arch-review` | Architecture compliance review              |
+| `/swe-workflow-debug-tdd`   | Test-driven debugging                       |
+| `/swe-symbol-index`         | Generate symbol index for feature docs      |
 
 ## Alternative Setup
 
@@ -180,6 +180,7 @@ Remove the file to re-enable.
 ## Troubleshooting
 
 **Stale plugin version:**
+
 ```bash
 rm -rf ~/.cache/uv/environments-v2/ ~/.cache/uv/git-v0/ ~/.cache/uv/builds-v0/
 rm -rf ~/.claude/plugins/cache/EarthmanWeb/
@@ -198,11 +199,11 @@ git submodule update --init .claude/plugins/serena-workflow-engine
 bash .claude/plugins/serena-workflow-engine/scripts/install-hooks.sh
 ```
 
-| Location | Path | Purpose |
-|---|---|---|
-| Plugin folder | `.claude/plugins/serena-workflow-engine/` | Generic/portable code |
-| Local memories | `.serena/memory/` | Project-specific feature memories |
-| Working memory | `.serena/memories/` | Session-scoped WM files |
-| State files | `.serena/swe-state/` | Authoritative workflow state |
+| Location       | Path                                      | Purpose                           |
+| -------------- | ----------------------------------------- | --------------------------------- |
+| Plugin folder  | `.claude/plugins/serena-workflow-engine/` | Generic/portable code             |
+| Local memories | `.serena/memory/`                         | Project-specific feature memories |
+| Working memory | `.serena/memories/`                       | Session-scoped WM files           |
+| State files    | `.serena/swe-state/`                      | Authoritative workflow state      |
 
 See `memories/REF_SWE_DEVELOPMENT.md` for development standards.

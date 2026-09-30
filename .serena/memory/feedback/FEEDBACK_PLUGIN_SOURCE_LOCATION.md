@@ -14,6 +14,7 @@ This repo (`serena-workflow-engine`) IS the plugin source. Write ALL plugin edit
 **Why:** User correction — edits went to the cache, became non-persistent and git-invisible.
 
 **How to apply:**
+
 - Hook scripts: `<repo>/hooks/{session,prompt,pre,post,stop}/*.py`
 - Core modules: `<repo>/hooks/swe_hooks/core/*.py`
 - Hook config: `<repo>/hooks/hooks.json`

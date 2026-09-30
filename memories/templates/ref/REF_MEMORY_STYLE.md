@@ -43,6 +43,7 @@ Derive `type` from the directory prefix: ref→reference, feedback→feedback, f
 ## Legacy Markers (rewrite on sight)
 
 A memory is LEGACY and MUST be rewritten immediately if it has any of:
+
 - Conversational or explanatory prose ("Let me…", "This document describes…", "In order to…").
 - Suggestion-mood guidance ("should", "consider", "you might", "it's recommended").
 - Vague quantifiers ("some", "a few", "small", "large", "appropriate") where a concrete value fits.

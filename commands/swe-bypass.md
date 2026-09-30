@@ -12,7 +12,7 @@ notice that the workflow is bypassed and how to re-enable it.
 
 ## ⛔ User-only
 
-This command exists **only** so that *you* (the user) can deliberately turn the
+This command exists **only** so that _you_ (the user) can deliberately turn the
 workflow off. It is `disable-model-invocation: true` — the assistant cannot run
 it, cannot set the bypass on your behalf, and must never edit
 `swe-setup-complete.json` to add the bypass field. Enabling the bypass is always
@@ -29,7 +29,7 @@ the assistant editing the file. The PreToolUse guards hard-block any Edit /
 Write / `write_memory` / ad-hoc Bash that injects `"bypass": true` into the
 setup file — so the assistant cannot set the bypass on its own or by inferring
 intent. The guards make one narrow exception: running `swe-bypass.py`, the
-single auditable write path, which only happens because *you* typed this
+single auditable write path, which only happens because _you_ typed this
 command (`disable-model-invocation: true`).
 
 ## Implementation

@@ -25,3 +25,4 @@ __init__.*
 !.serena/memories/
 !.serena/memories/**/*.md
 .serena/memories/WM_*.md
+.serena/memory/spec/SPEC_HARNESS_EFFICIENCY_TUNING.md

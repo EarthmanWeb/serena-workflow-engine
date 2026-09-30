@@ -99,11 +99,11 @@ mcp__plugin_swe_serena__get_symbols_overview({
 
 ### Depth Parameter Reference
 
-| depth | Returns |
-|-------|---------|
-| `0` (default) | Top-level symbols only |
-| `1` | Top-level + immediate children (recommended for indexes) |
-| `2+` | Deeper nesting — rarely needed for memory docs |
+| depth         | Returns                                                  |
+| ------------- | -------------------------------------------------------- |
+| `0` (default) | Top-level symbols only                                   |
+| `1`           | Top-level + immediate children (recommended for indexes) |
+| `2+`          | Deeper nesting — rarely needed for memory docs           |
 
 **Memory subdirectory mapping:**
 
@@ -263,13 +263,13 @@ Consider running /swe-feature-update [KEY] first.
 
 Not all language servers expose symbols equally. Known limitations:
 
-| File Type | Symbol Quality | Fallback |
-|-----------|---------------|----------|
-| **PHP** | Excellent | — |
-| **Python/TS/JS** | Good | Named exports work; jQuery wrappers may be empty |
-| **SCSS/CSS** | Poor | Use `search_for_pattern` with `^\\.classname` or `^\\$variable` |
-| **Markdown** | Limited | Headings only (H2/H3) |
-| **JSON/Config** | None | Use `Read` or `search_for_pattern` |
+| File Type        | Symbol Quality | Fallback                                                        |
+| ---------------- | -------------- | --------------------------------------------------------------- |
+| **PHP**          | Excellent      | —                                                               |
+| **Python/TS/JS** | Good           | Named exports work; jQuery wrappers may be empty                |
+| **SCSS/CSS**     | Poor           | Use `search_for_pattern` with `^\\.classname` or `^\\$variable` |
+| **Markdown**     | Limited        | Headings only (H2/H3)                                           |
+| **JSON/Config**  | None           | Use `Read` or `search_for_pattern`                              |
 
 When indexing **code files** (not memory docs), use `depth=1` on `get_symbols_overview` and `find_symbol` to capture class methods and nested symbols. Fall back to `search_for_pattern` for SCSS/CSS assets.
 

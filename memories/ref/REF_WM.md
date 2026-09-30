@@ -14,11 +14,11 @@ metadata:
 
 ## Lifecycle
 
-| Stage       | When                    | Action                                                                          |
-| ----------- | ----------------------- | ------------------------------------------------------------------------------- |
+| Stage       | When                    | Action                                                                            |
+| ----------- | ----------------------- | --------------------------------------------------------------------------------- |
 | Auto-Create | Entry into WF_CLASSIFY  | Prompt hook creates `WM_{session_id}.md` on the first transition into WF_CLASSIFY |
-| Load        | Session resume          | Read file → verify session ID matches → echo to chat                            |
-| Update      | After edits/transitions | Write changes → echo `📋 Updated Working Memory: WM_{session_id}`                |
+| Load        | Session resume          | Read file → verify session ID matches → echo to chat                              |
+| Update      | After edits/transitions | Write changes → echo `📋 Updated Working Memory: WM_{session_id}`                 |
 
 - Update WM after EVERY: memory edit, file edit, workflow transition, state change.
 
@@ -83,22 +83,22 @@ Session: <SESSION_ID>
 
 ## Workflow Context Fields (REQUIRED for Stop Hook)
 
-| Field                         | Purpose                                                    |
-| ----------------------------- | ---------------------------------------------------------- |
-| `Calling Step`                | Which WF_* invoked the current action                      |
-| `Current State`               | CRITICAL — active state, read by the stop hook             |
-| `Feature Key(s)`              | Active feature(s) from `INDEX_FEATURES`                    |
-| `Session ID`                  | 8-char unique ID                                           |
-| `Return Step`                 | Where to return after completion                           |
-| `Invocation Mode`             | `workflow` \| `standalone` \| `subagent`                   |
-| `Task Iteration`              | Counter for tasks in same session (starts at 1)            |
-| `Edit Count Since Checkpoint` | Edits since last WM update (reset on new task)             |
+| Field                         | Purpose                                         |
+| ----------------------------- | ----------------------------------------------- |
+| `Calling Step`                | Which WF_* invoked the current action           |
+| `Current State`               | CRITICAL — active state, read by the stop hook  |
+| `Feature Key(s)`              | Active feature(s) from `INDEX_FEATURES`         |
+| `Session ID`                  | 8-char unique ID                                |
+| `Return Step`                 | Where to return after completion                |
+| `Invocation Mode`             | `workflow` \| `standalone` \| `subagent`        |
+| `Task Iteration`              | Counter for tasks in same session (starts at 1) |
+| `Edit Count Since Checkpoint` | Edits since last WM update (reset on new task)  |
 
 ## Stop Hook Behavior
 
-| State                                     | Behavior                    |
-| ----------------------------------------- | --------------------------- |
-| `WF_DONE`, `WF_CLEANUP`                   | Clean exit                  |
+| State                                     | Behavior                   |
+| ----------------------------------------- | -------------------------- |
+| `WF_DONE`, `WF_CLEANUP`                   | Clean exit                 |
 | `WF_EXECUTE`, `WF_DEBUG_TDD`, `WF_VERIFY` | ⚠️ Warning: incomplete work |
 
 ## Skill Return Section (Optional)

@@ -52,9 +52,9 @@ Before debugging, load:
 
 ## Routing
 
-| Condition | Next State |
-| --------- | ---------- |
-| Bug fixed | `WF_EXECUTE` |
+| Condition     | Next State   |
+| ------------- | ------------ |
+| Bug fixed     | `WF_EXECUTE` |
 | Stuck/unclear | `WF_CLARIFY` |
 
 Update WM via `/swe-wm-update` before transitioning.

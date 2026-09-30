@@ -10,25 +10,28 @@ The write_memory hook warns when these are violated; trim on the warning.
 -->
 
 ## Response & Style
+
 - [Response Format](feedback/FEEDBACK_RESPONSE_FORMAT.md) — no conversational language, use functional/direct phrasing only
 - [Read docs = list memories](feedback/FEEDBACK_READ_DOCS_MEANS_LIST.md) — "read the docs" means check MEMORY.md and use Serena to list_memories, not external docs
 
 ## Features
+
 - [Feature Index](index/INDEX_FEATURES.md) — Feature registry with relationships and types
 
 ## Architecture
+
 - [Architecture Overview](arch/ARCH_SWE.md) — Workflow system architecture
 
 ## Workflow Routing
 
-| Situation                  | Go To                                         |
-| -------------------------- | --------------------------------------------- |
-| Simple lookup ("find X")   | `WF_RESEARCH`                                 |
-| Starting work (full)       | `WF_INIT` → `WF_CLASSIFY`                     |
-| Researching                | `WF_RESEARCH`                                 |
-| Making changes             | `WF_CLASSIFY`                                 |
-| Continuing                 | `WF_CONTINUE`                                 |
-| Verifying                  | `WF_VERIFY`                                   |
+| Situation                | Go To                     |
+| ------------------------ | ------------------------- |
+| Simple lookup ("find X") | `WF_RESEARCH`             |
+| Starting work (full)     | `WF_INIT` → `WF_CLASSIFY` |
+| Researching              | `WF_RESEARCH`             |
+| Making changes           | `WF_CLASSIFY`             |
+| Continuing               | `WF_CONTINUE`             |
+| Verifying                | `WF_VERIFY`               |
 
 ## Memory Types
 

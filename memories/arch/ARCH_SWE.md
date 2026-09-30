@@ -25,15 +25,15 @@ The workflow system is a finite state machine over Serena memories. Each `WF_*` 
 
 ## Routing Layers
 
-| Layer      | States                                                              |
-| ---------- | ------------------------------------------------------------------ |
-| Entry      | `WF_INIT` → `WF_CLASSIFY` → routing decision                       |
-| Research   | `WF_RESEARCH`                                                       |
-| Code tasks | routed via `WF_CLASSIFY`                                            |
+| Layer      | States                                                                |
+| ---------- | --------------------------------------------------------------------- |
+| Entry      | `WF_INIT` → `WF_CLASSIFY` → routing decision                          |
+| Research   | `WF_RESEARCH`                                                         |
+| Code tasks | routed via `WF_CLASSIFY`                                              |
 | Review     | `WF_ARCH_REVIEW` (design + compliance + parallel-subagent assessment) |
-| Gate       | `WF_ARCH_REVIEW` (includes approval) ←→ `WF_CLARIFY`               |
-| Execution  | `WF_EXECUTE` ←→ `WF_CHECKPOINT` ←→ `WF_DEBUG_TDD`                  |
-| Completion | `WF_VERIFY` → `WF_DONE`                                            |
+| Gate       | `WF_ARCH_REVIEW` (includes approval) ←→ `WF_CLARIFY`                  |
+| Execution  | `WF_EXECUTE` ←→ `WF_CHECKPOINT` ←→ `WF_DEBUG_TDD`                     |
+| Completion | `WF_VERIFY` → `WF_DONE`                                               |
 
 ## Integration Points
 
@@ -102,10 +102,10 @@ When modifying the workflow system:
 
 ## Dependencies
 
-| Component        | Depends On                                                                       |
-| ----------------- | --------------------------------------------------------------------------------------- |
+| Component        | Depends On                                                                                |
+| ---------------- | ----------------------------------------------------------------------------------------- |
 | `WF_CLASSIFY`    | `claude/CLAUDE_OBLIGATIONS`, `index/INDEX_FEATURES`, WM, `MEMORY.md`, `feature/FEATURE_*` |
-| `WF_CLASSIFY`    | (also) `dom/DOM_*`, `ref/REF_*`                                                   |
-| `WF_ARCH_REVIEW` | `feature/FEATURE_DEV_STANDARDS`, `dev/DEV_*`, `dom/DOM_*`, `ref/REF_*`            |
-| `WF_VERIFY`      | `claude/CLAUDE_OBLIGATIONS`, `feature/FEATURE_DEV_STANDARDS`                      |
-| Skills           | `ref/REF_WM`, WM                                                                  |
+| `WF_CLASSIFY`    | (also) `dom/DOM_*`, `ref/REF_*`                                                           |
+| `WF_ARCH_REVIEW` | `feature/FEATURE_DEV_STANDARDS`, `dev/DEV_*`, `dom/DOM_*`, `ref/REF_*`                    |
+| `WF_VERIFY`      | `claude/CLAUDE_OBLIGATIONS`, `feature/FEATURE_DEV_STANDARDS`                              |
+| Skills           | `ref/REF_WM`, WM                                                                          |

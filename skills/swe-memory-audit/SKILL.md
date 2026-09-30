@@ -48,14 +48,14 @@ Run `/swe-memory-frontmatter` first for a fast front-matter-only pass, then this
 
 A memory is LEGACY and MUST be rewritten if it has any of:
 
-| Marker | Fix |
-| --- | --- |
-| Suggestion mood ("you should", "consider", "it's a good idea to", "try to", "feel free to") | Rewrite as an imperative command. |
-| Conversational opener ("Let me…", "Now …", "This document describes…", "In order to…") | Delete; lead with the command. |
-| Vague quantifier ("a few", "some", "small", "large", "as appropriate") where a value fits | Replace with a concrete threshold/count. |
-| Prose paragraphs where bullets/tables fit | Convert to one-rule-per-bullet or a condition→action table. |
-| Missing front-matter block | Add `--- name / description / metadata.type ---`. |
-| Rationale/examples that do NOT prevent a specific misapplication | Delete. KEEP only anti-misapplication "why" clauses. |
+| Marker                                                                                      | Fix                                                         |
+| ------------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| Suggestion mood ("you should", "consider", "it's a good idea to", "try to", "feel free to") | Rewrite as an imperative command.                           |
+| Conversational opener ("Let me…", "Now …", "This document describes…", "In order to…")      | Delete; lead with the command.                              |
+| Vague quantifier ("a few", "some", "small", "large", "as appropriate") where a value fits   | Replace with a concrete threshold/count.                    |
+| Prose paragraphs where bullets/tables fit                                                   | Convert to one-rule-per-bullet or a condition→action table. |
+| Missing front-matter block                                                                  | Add `--- name / description / metadata.type ---`.           |
+| Rationale/examples that do NOT prevent a specific misapplication                            | Delete. KEEP only anti-misapplication "why" clauses.        |
 
 ## Stages
 
@@ -66,6 +66,7 @@ mcp__plugin_swe_serena__list_memories(topic="<scope>")   # scope arg, or omit to
 ```
 
 Skip (managed elsewhere or exempt):
+
 - `WM_*` / `wm/*` — ephemeral session working memory.
 - `MEMORY` — the index (governed by `swe_post_memory_index.py`, not this skill).
 - `ref/REF_MEMORY_STYLE` — the authority; it quotes the anti-patterns it forbids.
@@ -87,6 +88,7 @@ mcp__plugin_swe_serena__write_memory(memory_name="<name>", content="<rewritten>"
 ```
 
 **MANDATORY preservation — ZERO rule loss.** The rewrite changes language density and framing ONLY. Every one of these MUST survive verbatim in meaning:
+
 - Every behavioral rule and prohibition.
 - Every routing-table row and transition target.
 - Every threshold, count, path, tool name, flag, and gate condition.
@@ -115,7 +117,7 @@ Running twice is safe. A memory already conforming reports `ok` and is left unto
 - **Audited**: <count>
 - **Rewritten**: <count>
 - **OK**: <count>
-- **Skipped**: <count>   (read-only / WM / index / authority)
+- **Skipped**: <count> (read-only / WM / index / authority)
 - **Next Step Hint**: WF_CLASSIFY
 ```
 

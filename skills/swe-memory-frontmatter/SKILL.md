@@ -43,7 +43,7 @@ can only match memories that actually carry front-matter — this skill fills th
 For every memory in scope:
 
 1. **Read** the memory (`mcp__plugin_swe_serena__read_memory`).
-2. **Classify** its current front-matter. Having *any* front-matter is NOT a pass — every block is
+2. **Classify** its current front-matter. Having _any_ front-matter is NOT a pass — every block is
    validated against the standard and repaired if it deviates:
    - **None** (starts with `#`, prose, or anything other than a `---` fence) → block ADDED.
    - **Stacked** (TWO or more consecutive leading `---…---` blocks — e.g. an edit inserted a new
@@ -106,14 +106,14 @@ identifiers (see Derive rules); a keywords-free block is still standard.
 
 Derive `metadata.type` from the leading path segment of the memory name (case-insensitive):
 
-| prefix | type | | prefix | type |
-| --- | --- | --- | --- | --- |
-| `ref` | `reference` | | `feature` | `feature` |
-| `feedback` | `feedback` | | `dom` | `domain` |
-| `project` | `project` | | `sys` | `system` |
-| `arch` | `architecture` | | `spec` | `spec` |
-| `report` | `report` | | `research` | `research` |
-| `content` | `content` | | `wf` | `workflow` |
+| prefix     | type           |   | prefix     | type       |
+| ---------- | -------------- | - | ---------- | ---------- |
+| `ref`      | `reference`    |   | `feature`  | `feature`  |
+| `feedback` | `feedback`     |   | `dom`      | `domain`   |
+| `project`  | `project`      |   | `sys`      | `system`   |
+| `arch`     | `architecture` |   | `spec`     | `spec`     |
+| `report`   | `report`       |   | `research` | `research` |
+| `content`  | `content`      |   | `wf`       | `workflow` |
 
 - Prefix not in the map → use the prefix itself, lowercased, as the type (do not invent a bucket).
 - A flat memory at the root (no `/` prefix, e.g. `MEMORY`) → type `index`.
@@ -129,6 +129,7 @@ mcp__plugin_swe_serena__list_memories(topic="<scope>")   # scope arg, or omit to
 ```
 
 Skip these — they are managed elsewhere or intentionally front-matter-free:
+
 - `WM_*` / `wm/*` (working memory, ephemeral)
 - `wf/*`, `claude/*` (read-only workflow/obligation memories)
 - `MEMORY` (the index file)
@@ -181,13 +182,13 @@ memory finds its identifiers already in the front-matter and reports `ok`.
 - **Status**: success | needs_clarification
 - **Scope**: <scope or "all">
 - **Audited**: <count>
-- **Added**: <count>   (front-matter created)
-- **Collapsed**: <count>   (stacked blocks → one)
-- **Converted**: <count>   (flat → nested)
-- **Repaired**: <count>   (nested but non-standard → standard)
-- **Enriched**: <count>   (search-poor description/keywords)
-- **OK**: <count>   (already exactly the standard)
-- **Skipped**: <count>   (read-only / WM / index / wf / claude)
+- **Added**: <count> (front-matter created)
+- **Collapsed**: <count> (stacked blocks → one)
+- **Converted**: <count> (flat → nested)
+- **Repaired**: <count> (nested but non-standard → standard)
+- **Enriched**: <count> (search-poor description/keywords)
+- **OK**: <count> (already exactly the standard)
+- **Skipped**: <count> (read-only / WM / index / wf / claude)
 - **Next Step Hint**: WF_CLASSIFY
 ```
 

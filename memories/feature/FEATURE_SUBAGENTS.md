@@ -16,12 +16,12 @@ Single-agent delegation to a swarm of subagents is the standard operating mode, 
 
 Orchestrator mode APPLIES when ANY hold:
 
-| Condition | Threshold |
-| --------- | --------- |
-| Independent subtasks | 2 or more can run concurrently |
+| Condition                | Threshold                                            |
+| ------------------------ | ---------------------------------------------------- |
+| Independent subtasks     | 2 or more can run concurrently                       |
 | Explicit fan-out request | Operator asks to parallelize / use subagents / swarm |
-| File scale | 6+ files affected |
-| Layer scale | 3+ architectural layers |
+| File scale               | 6+ files affected                                    |
+| Layer scale              | 3+ architectural layers                              |
 
 The orchestrator may do ITSELF, and ONLY this:
 
@@ -47,11 +47,11 @@ Exception — single-agent (or the orchestrator itself) may continue a TIGHT cou
 
 Every `Agent` call MUST pass `model` EXPLICITLY. NEVER omit `model` / rely on inherited default.
 
-| Model | Use for |
-| ----- | ------- |
-| haiku | Routine/mechanical: run test suites, lint, grep/inventory sweeps, read-only audits against a precise checklist, link checks, status collection |
-| sonnet | Implementation, doc rewrites, bug fixes, verification of cheap-agent output, test-failure diagnosis |
-| opus | ONLY: novel architecture/design, cross-system debugging after a sonnet attempt failed, or explicit operator request |
+| Model  | Use for                                                                                                                                        |
+| ------ | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| haiku  | Routine/mechanical: run test suites, lint, grep/inventory sweeps, read-only audits against a precise checklist, link checks, status collection |
+| sonnet | Implementation, doc rewrites, bug fixes, verification of cheap-agent output, test-failure diagnosis                                            |
+| opus   | ONLY: novel architecture/design, cross-system debugging after a sonnet attempt failed, or explicit operator request                            |
 
 - `swe_pre_agent_model_gate.py` enforces this: Agent calls without `model` + the bypass line are denied; a routine-task prompt requesting `opus` is denied.
 
@@ -72,11 +72,11 @@ Every subagent prompt MUST include, in this order:
 
 ## Subagent Types
 
-| Type | Model | Tools | Use for |
-| ---- | ----- | ----- | ------- |
-| Explore | Haiku | Read-only (Glob, Grep, Read) | Fast codebase search, file discovery |
-| Plan | Inherits parent | Read-only | Architecture planning, design |
-| general-purpose | Inherits parent | All tools | Complex multi-step tasks |
+| Type            | Model           | Tools                        | Use for                              |
+| --------------- | --------------- | ---------------------------- | ------------------------------------ |
+| Explore         | Haiku           | Read-only (Glob, Grep, Read) | Fast codebase search, file discovery |
+| Plan            | Inherits parent | Read-only                    | Architecture planning, design        |
+| general-purpose | Inherits parent | All tools                    | Complex multi-step tasks             |
 
 ## Background vs Foreground
 
@@ -97,15 +97,15 @@ Agent({ description: "Task A", run_in_background: true, model: "sonnet",
 
 ## Anti-Patterns
 
-| Anti-pattern | Fix |
-| ------------ | --- |
-| Orchestrator doing file edits or running tests itself | Delegate to a subagent — orchestrator does classification/routing/synthesis only |
-| Serial agent calls for independent work | Batch ALL independent tracks into ONE message |
-| Launching only 1 of N subagents | Launch ALL in ONE message |
-| Subagent re-runs WF_INIT | Include the bypass line in EVERY prompt |
-| `opus` or inherited/omitted model for routine work | Pass `model` explicitly; haiku/sonnet per the routing table |
-| Trusting a haiku "0 findings" without a positive control | Re-verify with sonnet or a validated probe before acting on a negative |
-| Coordinator doing file reads itself | Delegate file work to subagents (separate context windows) |
+| Anti-pattern                                             | Fix                                                                              |
+| -------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| Orchestrator doing file edits or running tests itself    | Delegate to a subagent — orchestrator does classification/routing/synthesis only |
+| Serial agent calls for independent work                  | Batch ALL independent tracks into ONE message                                    |
+| Launching only 1 of N subagents                          | Launch ALL in ONE message                                                        |
+| Subagent re-runs WF_INIT                                 | Include the bypass line in EVERY prompt                                          |
+| `opus` or inherited/omitted model for routine work       | Pass `model` explicitly; haiku/sonnet per the routing table                      |
+| Trusting a haiku "0 findings" without a positive control | Re-verify with sonnet or a validated probe before acting on a negative           |
+| Coordinator doing file reads itself                      | Delegate file work to subagents (separate context windows)                       |
 
 ## Enforcement
 
