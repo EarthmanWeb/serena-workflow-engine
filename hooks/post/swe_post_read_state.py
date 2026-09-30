@@ -20,7 +20,7 @@ try:
     from swe_hooks.core.output import HookOutput, output_empty, output_status, emit_once
     from swe_hooks.core.input import read_stdin_safe, get_input_field
     from swe_hooks.core.state_manager import StateManager, STATE_ICONS, is_forward_read_transition
-    from swe_hooks.core.session import extract_session_id, get_project_root, find_working_memory_for_session, is_spawned_agent, is_subagent_transcript
+    from swe_hooks.core.session import extract_session_id, get_project_root, find_working_memory_for_session, is_spawned_agent, is_subagent_transcript, get_agent_id
     from swe_hooks.core.config import append_transition_to_wm, write_state_file, resolve_installed_plugin, resolve_plugin_root
     from swe_hooks.core.stream import (
         get_stream_path, append_event, get_sentinel_path,
@@ -343,8 +343,11 @@ def main():
         if is_spawned_agent(input_data) or is_subagent_transcript(transcript_path):
             if 'search_memories' not in tool_name:
                 try:
-                    append_event(get_stream_path(session_id), 'docread',
-                                 s=session_id, name=memory_name or tool_name)
+                    agent_id = get_agent_id(input_data)
+                    event_kwargs = {'s': session_id, 'name': memory_name or tool_name}
+                    if agent_id:
+                        event_kwargs['agent'] = agent_id
+                    append_event(get_stream_path(session_id), 'docread', **event_kwargs)
                 except Exception:
                     pass
             output_empty()

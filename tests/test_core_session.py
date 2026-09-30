@@ -122,6 +122,48 @@ class IsSpawnedAgentTests(unittest.TestCase):
         self.assertFalse(session.is_spawned_agent([]))
 
 
+class GetAgentIdTests(unittest.TestCase):
+    """get_agent_id: agent_id/agentId ONLY — never falls back to
+    agent_type/agentType, since a type name (e.g. "Explore") identifies a
+    CLASS of agent, not one specific instance, and per-agent docread
+    tracking must not collapse distinct agents of the same type together."""
+
+    def test_agent_id_returned(self):
+        self.assertEqual(
+            session.get_agent_id({'agent_id': 'aac4dea2590360b94'}),
+            'aac4dea2590360b94')
+
+    def test_agent_id_preferred_over_agentid(self):
+        self.assertEqual(
+            session.get_agent_id({'agent_id': 'a1', 'agentId': 'a2'}), 'a1')
+
+    def test_camelcase_agentid_used_when_snake_absent(self):
+        self.assertEqual(session.get_agent_id({'agentId': 'a2'}), 'a2')
+
+    def test_agent_type_alone_returns_none(self):
+        # A type is not an identity — no fallback.
+        self.assertIsNone(session.get_agent_id({'agent_type': 'Explore'}))
+        self.assertIsNone(session.get_agent_id({'agentType': 'Explore'}))
+
+    def test_no_agent_fields_returns_none(self):
+        self.assertIsNone(session.get_agent_id({'tool_name': 'Grep'}))
+
+    def test_empty_or_whitespace_agent_id_returns_none(self):
+        self.assertIsNone(session.get_agent_id({'agent_id': ''}))
+        self.assertIsNone(session.get_agent_id({'agent_id': '   '}))
+
+    def test_non_string_agent_id_returns_none(self):
+        self.assertIsNone(session.get_agent_id({'agent_id': 123}))
+
+    def test_non_dict_input_returns_none(self):
+        self.assertIsNone(session.get_agent_id(None))
+        self.assertIsNone(session.get_agent_id("agent_id=x"))
+        self.assertIsNone(session.get_agent_id([]))
+
+    def test_value_is_stripped(self):
+        self.assertEqual(session.get_agent_id({'agent_id': '  a1  '}), 'a1')
+
+
 class FindProjectRootTests(unittest.TestCase):
     def test_finds_git_at_start_dir(self):
         with tempfile.TemporaryDirectory() as tmp:

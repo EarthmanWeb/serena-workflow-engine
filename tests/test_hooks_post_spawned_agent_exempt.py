@@ -144,6 +144,38 @@ class TestPostReadStateSpawnedAgentExempt(SpawnedAgentHookTestCase):
         self.assertEqual(len(docreads), 1)
         self.assertEqual(docreads[0].get("name"), "dom/DOM_TEST")
 
+    def test_docread_event_carries_agent_field_for_spawned_agent(self):
+        # Per-agent docread tracking (core.session.get_agent_id): a spawned
+        # agent's docread event must be tagged with its agent_id so
+        # collect_values_since_task_start(agent_id=...) can partition reads
+        # by which subagent made them.
+        _run_main(read_state_mod, self._payload("wf/WF_EXECUTE", agent_id="agent-xyz"))
+        events = _read_events(self.stream_path)
+        docreads = [e for e in events if e.get("type") == "docread"]
+        self.assertEqual(len(docreads), 1)
+        self.assertEqual(docreads[0].get("agent"), "agent-xyz")
+
+    def test_docread_event_prefers_agent_id_over_agentid(self):
+        payload = self._payload("wf/WF_EXECUTE", agent_id="a1")
+        payload["agentId"] = "a2"
+        _run_main(read_state_mod, payload)
+        events = _read_events(self.stream_path)
+        docreads = [e for e in events if e.get("type") == "docread"]
+        self.assertEqual(docreads[0].get("agent"), "a1")
+
+    def test_docread_event_has_no_agent_field_when_only_agent_type(self):
+        # agent_type alone is NOT an identity (core.session.get_agent_id
+        # never falls back to it) — the docread event must carry no 'agent'
+        # key at all in that case, not a type name masquerading as an id.
+        payload = self._payload("wf/WF_EXECUTE", agent_id=None)
+        del payload["agent_id"]
+        payload["agent_type"] = "Explore"
+        _run_main(read_state_mod, payload)
+        events = _read_events(self.stream_path)
+        docreads = [e for e in events if e.get("type") == "docread"]
+        self.assertEqual(len(docreads), 1)
+        self.assertNotIn("agent", docreads[0])
+
     def test_agentType_field_also_recognized(self):
         payload = self._payload("wf/WF_EXECUTE", agent_id=None)
         del payload["agent_id"]

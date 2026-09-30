@@ -86,6 +86,24 @@ def is_spawned_agent(hook_input: dict) -> bool:
     return False
 
 
+def get_agent_id(hook_input: dict) -> Optional[str]:
+    """Return the spawned agent's identity from a hook payload, or None.
+
+    Checks 'agent_id' then 'agentId' (first non-empty string wins). Does NOT
+    fall back to agent_type/agentType — a type name (e.g. "Explore") is a
+    CLASS of agent, not an identity, and collapsing per-agent doc-read
+    tracking onto a shared type would let one "Explore" agent's reads credit
+    every other "Explore" agent's docread budget. Non-dict input -> None.
+    """
+    if not isinstance(hook_input, dict):
+        return None
+    for key in ('agent_id', 'agentId'):
+        val = hook_input.get(key)
+        if isinstance(val, str) and val.strip():
+            return val.strip()
+    return None
+
+
 def find_project_root(start_dir: str) -> str:
     """Find the project root by walking up looking for .git/.
 

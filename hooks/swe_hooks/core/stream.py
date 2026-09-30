@@ -155,7 +155,8 @@ def append_task_boundary(stream_path: str, from_state: str, session_id: str):
 
 def collect_values_since_task_start(stream_path: str, count_type: str = 'docread',
                                     value_key: str = 'name',
-                                    since_sweep: bool = False) -> set:
+                                    since_sweep: bool = False,
+                                    agent_id: Optional[str] = None) -> set:
     """Collect normalized value_key values from count_type events since the
     current task started. A list-valued key contributes every element.
 
@@ -164,10 +165,24 @@ def collect_values_since_task_start(stream_path: str, count_type: str = 'docread
 
     since_sweep=True narrows the window to after the last successful sweep as
     well as the task boundary (used for docpending accounting).
+
+    agent_id partitions events by WHO produced them (per-subagent docread
+    tracking, core.session.get_agent_id): when given, only events whose
+    'agent' field equals agent_id are counted; when None (default), only
+    events WITHOUT an 'agent' field are counted — i.e. main-agent events.
+    Pre-existing events carry no 'agent' field at all, so the default
+    (agent_id=None) preserves prior main-agent-only behavior unchanged; every
+    current caller omits agent_id and keeps seeing exactly what it always saw.
     """
     values = set()
     for event in events_since_task_start(stream_path, since_sweep=since_sweep):
         if event.get('type') != count_type:
+            continue
+        event_agent = event.get('agent')
+        if agent_id is None:
+            if event_agent:
+                continue
+        elif event_agent != agent_id:
             continue
         value = event.get(value_key)
         items = value if isinstance(value, list) else [value]

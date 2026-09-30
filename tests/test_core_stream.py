@@ -521,5 +521,51 @@ class TestDegradedToolAllowed(unittest.TestCase):
         self.assertFalse(stream.degraded_tool_allowed("mcp__plugin_swe_serena__write_memory"))
 
 
+class TestCollectValuesSinceTaskStartAgentFilter(BaseStreamTest):
+    """agent_id partitions docread accounting by WHO produced the event
+    (core.session.get_agent_id). Default (agent_id=None) must keep counting
+    ONLY events with no 'agent' field at all — pre-existing events never had
+    one, so main-agent callers see identical behavior to before this param
+    existed."""
+
+    def _write(self, events):
+        self._write_jsonl([{"type": "session_start"}] + events)
+
+    def test_default_counts_only_events_without_agent_field(self):
+        self._write([
+            {"type": "docread", "name": "feature/FEATURE_X"},
+            {"type": "docread", "name": "feature/FEATURE_Y", "agent": "a1"},
+        ])
+        result = stream.collect_values_since_task_start(self.stream_path)
+        self.assertEqual(result, {"feature/feature_x"})
+
+    def test_agent_id_counts_only_matching_agent(self):
+        self._write([
+            {"type": "docread", "name": "feature/FEATURE_X"},
+            {"type": "docread", "name": "feature/FEATURE_Y", "agent": "a1"},
+            {"type": "docread", "name": "feature/FEATURE_Z", "agent": "a2"},
+        ])
+        result = stream.collect_values_since_task_start(
+            self.stream_path, agent_id="a1")
+        self.assertEqual(result, {"feature/feature_y"})
+
+    def test_unknown_agent_id_yields_empty(self):
+        self._write([
+            {"type": "docread", "name": "feature/FEATURE_X", "agent": "a1"},
+        ])
+        result = stream.collect_values_since_task_start(
+            self.stream_path, agent_id="does-not-exist")
+        self.assertEqual(result, set())
+
+    def test_preexisting_events_with_no_agent_field_unaffected(self):
+        # Simulates pre-upgrade stream data: no event ever carries 'agent'.
+        self._write([
+            {"type": "docread", "name": "feature/FEATURE_A"},
+            {"type": "docread", "name": "dom/DOM_B"},
+        ])
+        result = stream.collect_values_since_task_start(self.stream_path)
+        self.assertEqual(result, {"feature/feature_a", "dom/dom_b"})
+
+
 if __name__ == "__main__":
     unittest.main()
