@@ -30,6 +30,7 @@ from swe_hooks.core.session import (
     find_working_memory_for_session,
     get_project_root,
 )
+from swe_hooks.core.state_manager import perform_transition
 from swe_hooks.core.stream import (
     append_event,
     get_stream_path,
@@ -94,7 +95,8 @@ TOOL_DEFINITIONS = [
             "any number of section updates in ONE call (replaces serial "
             "swe_wm_update_section/swe_wm_update_status calls). Returns the "
             "post-update workflow state, so a separate swe_wm_read is not needed. "
-            "Sections apply in order; the call stops at the first error."
+            "Sections apply in order; the call stops at the first error. Cannot "
+            "change Current State — use swe_wm_transition for that."
         ),
         "inputSchema": {
             "type": "object",
@@ -141,7 +143,8 @@ TOOL_DEFINITIONS = [
         "description": (
             "Update a specific section of Working Memory WITHOUT touching daemon-managed "
             "fields (Current State, Previous State, Transitions, Edit Count, Last Updated). "
-            "Targets agent-owned sections only. Uses atomic write to prevent corruption."
+            "Targets agent-owned sections only. Uses atomic write to prevent corruption. "
+            "Cannot change Current State — use swe_wm_transition for that."
         ),
         "inputSchema": {
             "type": "object",
@@ -201,6 +204,40 @@ TOOL_DEFINITIONS = [
                 },
             },
             "required": ["status"],
+        },
+    },
+    {
+        "name": "swe_wm_transition",
+        "description": (
+            "The ONLY MCP way to change Current State. Validates the target against "
+            "states.json (transition matrix + CLARIFY return rules + loop caps + "
+            "subflows) — never a raw field write. Writes .serena/swe-state/<id>.state "
+            "and appends the WM Transitions line; returns the new state. Use this for "
+            "a declared exit a read cannot take on its own, or to drive a transition "
+            "explicitly — e.g. WF_RESEARCH's needs_implementation -> WF_CLASSIFY exit."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "session_id": {
+                    "type": "string",
+                    "description": "8-character session ID. If omitted, uses SWE_SESSION_ID env var.",
+                },
+                "target_state": {
+                    "type": "string",
+                    "description": "The FSM state to transition into (e.g. 'WF_CLASSIFY'). Never a subflow (WF_INIT, WF_CLEANUP, WF_RESEARCH_LITE, WF_UPDATE_MEMORY).",
+                },
+                "reason": {
+                    "type": "string",
+                    "description": "Why this transition is happening. Required, non-empty.",
+                },
+                "force": {
+                    "type": "boolean",
+                    "description": "Skip transition-matrix/CLARIFY/loop-cap validation. Default: false.",
+                    "default": False,
+                },
+            },
+            "required": ["target_state", "reason"],
         },
     },
 ]
@@ -1009,6 +1046,35 @@ def tool_swe_wm_update(
     }
 
 
+def tool_swe_wm_transition(target_state: str, reason: str, session_id: str = None,
+                            force: bool = False) -> dict:
+    """The ONLY MCP way to change Current State. Delegates to the shared
+    perform_transition driver (core.state_manager) — same validation and
+    side effects as the set_state.py CLI, using the project root this server
+    already resolves for every other tool."""
+    session_id = _resolve_session_id(session_id)
+    if not session_id:
+        return {"error": "No session_id provided and no SWE_SESSION_ID env var set — pass session_id explicitly (it is printed in every workflow hook message, e.g. WM[<id>] / session=\"<id>\")"}
+
+    if not reason or not str(reason).strip():
+        return {"error": "reason is required and must be non-empty."}
+
+    if not target_state:
+        return {"error": "target_state is required."}
+
+    cwd = get_project_root()
+    result = perform_transition(cwd, session_id, target_state, force=bool(force), reason=reason)
+
+    if not result.get("success"):
+        return result
+
+    result["summary"] = (
+        f"✅ WM[{session_id}] transitioned {result['previous_state']} → "
+        f"{result['new_state']}" + (" (forced)" if result.get("forced") else "")
+    )
+    return result
+
+
 def tool_swe_wm_list() -> dict:
     """List all WM files in the project's .serena/memories/ directory."""
     import glob as _glob
@@ -1041,6 +1107,7 @@ TOOL_REGISTRY = {
     "swe_wm_update": tool_swe_wm_update,
     "swe_wm_update_section": tool_swe_wm_update_section,
     "swe_wm_update_status": tool_swe_wm_update_status,
+    "swe_wm_transition": tool_swe_wm_transition,
 }
 
 # ──────────────────────────────────────────────────────────────────

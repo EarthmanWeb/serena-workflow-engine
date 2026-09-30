@@ -92,6 +92,28 @@ def load_subflows() -> List[str]:
     return list(data.get('subflows', []))
 
 
+def load_read_backward() -> Dict[str, List[str]]:
+    """Per-state declared backward-read allowlist from states.json.
+
+    Each state may declare a "readBackward" list of target states a READ is
+    still allowed to transition into despite having a lower-or-equal rank
+    than the current state (e.g. WF_RESEARCH declares WF_CLASSIFY so reading
+    wf/WF_CLASSIFY from WF_RESEARCH can complete the declared
+    needs_implementation -> WF_CLASSIFY exit). This is a narrow, explicit
+    exception to the forward-only read-advance rule — it never invents a new
+    matrix edge, it only lets a read ride an edge that already goes backward
+    by rank. Returns {} if states.json is missing/invalid or no state
+    declares readBackward.
+    """
+    data = load_states_document()
+    states = data.get('states', {})
+    result = {}
+    for name, info in states.items():
+        if isinstance(info, dict) and info.get('readBackward'):
+            result[name] = list(info['readBackward'])
+    return result
+
+
 def load_loop_caps() -> Dict[str, int]:
     """Loop-traversal caps keyed 'A->B' (directed) or 'A<->B' (either
     direction counted together). See loop_guard.check_loop_cap."""
@@ -215,15 +237,24 @@ def clarify_allowed_targets(previous_state: Optional[str]) -> List[str]:
 def is_forward_read_transition(from_state: str, to_state: str) -> Tuple[bool, str]:
     """Decide whether READING to_state's memory should advance the FSM.
 
-    A read advances state only when BOTH hold:
-      1. from_state → to_state is a valid matrix transition, AND
-      2. it is a FORWARD move (to_state rank >= from_state rank) and to_state
-         is not a return-only gate (WF_CLARIFY).
+    A read advances state when EITHER holds:
+      1. from_state → to_state is a valid matrix transition AND it is a
+         FORWARD move (to_state rank >= from_state rank) and to_state is not
+         a return-only gate (WF_CLARIFY); OR
+      2. to_state is explicitly listed in from_state's "readBackward"
+         allowlist in states.json — a narrow, explicit exception for a
+         declared backward exit (e.g. WF_RESEARCH's
+         needs_implementation -> WF_CLASSIFY transition, rank 2 -> rank 1)
+         that a read should still be able to complete. An undeclared
+         backward/same-rank move is NOT navigation — it stays False
+         ("inspecting, not navigating").
 
-    Reading a non-adjacent, backward, or gate memory (i.e. inspecting it, or
-    reading ahead during analysis) returns False — the read is logged as
-    "ON STEP" but the FSM is NOT moved. This restores the pre-v4 read-driven
-    flow without the accidental wrong-direction jumps.
+    Reading a non-adjacent, undeclared-backward, or gate memory (i.e.
+    inspecting it, or reading ahead during analysis) returns False — the read
+    is logged as "ON STEP" but the FSM is NOT moved. This restores the pre-v4
+    read-driven flow without the accidental wrong-direction jumps, while
+    fixing the read-driven deadlock where a declared backward exit (like
+    WF_RESEARCH -> WF_CLASSIFY) could never be reached by reading.
 
     Returns (should_transition, reason).
     """
@@ -258,6 +289,12 @@ def is_forward_read_transition(from_state: str, to_state: str) -> Tuple[bool, st
     from_rank = ranks[from_state]
     to_rank = ranks[to_state]
     if to_rank < from_rank:
+        backward = load_read_backward()
+        if to_state in backward.get(from_state, []):
+            return True, (
+                f"declared backward read transition {from_state} → {to_state} "
+                f"(readBackward)"
+            )
         return False, (
             f"read-ahead/back: {to_state} (rank {to_rank}) is behind "
             f"{from_state} (rank {from_rank}); inspecting, not navigating"
@@ -674,3 +711,116 @@ class StateManager:
                 self.state.get("current_state", "WF_INIT")
             )
         return False  # No WM or session to save to
+
+
+def perform_transition(cwd: str, session_id: str, target_state: str,
+                        force: bool = False, reason: str = None) -> Dict[str, Any]:
+    """Shared transition driver used by set_state.py CLI and the
+    swe_wm_transition MCP tool — the ONE place that actually moves the FSM
+    on an explicit request (vs. a read-advance transition, which goes
+    through StateManager.transition_to directly from the post-read hook).
+
+    session_id is REQUIRED — no most-recent-WM guessing across concurrent
+    sessions (see FEATURE_SWE). Rejects a subflow target and an unknown
+    state before touching any StateManager (force does not override either —
+    there is no FSM node to land on). Delegates the actual matrix/CLARIFY/
+    loop-cap/doc-claims validation to StateManager.transition_to, which also
+    clears the sweep sentinel on entry to WF_CLASSIFY and persists the new
+    state (.state file, and WM if one exists). On success, additionally
+    appends a 'state' stream event and the WM Transitions line — the same
+    side effects swe_post_read_state.py performs for a read-driven
+    transition — so an explicit set_state/MCP transition looks identical in
+    the stream/WM to a read-driven one.
+
+    Returns a dict:
+      success True:  {success, session_id, previous_state, new_state,
+                       forced, reason, message, wm_file}
+      success False: {success, error, ...} — exact extra keys vary by the
+                      failure reason (subflow list, valid_states list, or
+                      just the blocking message from transition_to).
+    """
+    if not session_id:
+        return {
+            'success': False,
+            'error': 'session_id is required — no most-recent-WM guessing '
+                     'across concurrent sessions.',
+        }
+
+    # Subflows (WF_INIT, WF_CLEANUP, ...) are documented procedures, not FSM
+    # states — never a set_state/transition target, force or not.
+    subflows = load_subflows()
+    if target_state in subflows:
+        return {
+            'success': False,
+            'error': (
+                f'{target_state} is a subflow, not an FSM state — it is a '
+                f'documented procedure entered by reading its memory, not by '
+                f'transitioning.'
+            ),
+            'subflows': sorted(subflows),
+        }
+
+    # Validate target exists in states.json (as a matrix key or a target).
+    matrix = load_transition_matrix()
+    all_states = set(matrix.keys())
+    for targets in matrix.values():
+        for t in targets:
+            if t:
+                all_states.add(t)
+    if target_state not in all_states:
+        return {
+            'success': False,
+            'error': f'Unknown state: {target_state}',
+            'valid_states': sorted(all_states),
+        }
+
+    state_mgr = StateManager(cwd, session_id=session_id)
+    previous_state = state_mgr.get_current_state()
+
+    if previous_state == target_state:
+        return {
+            'success': False,
+            'error': f'Already in state {target_state} — no-op.',
+            'session_id': session_id,
+            'previous_state': previous_state,
+            'new_state': target_state,
+        }
+
+    success, message = state_mgr.transition_to(target_state, force=force)
+    if not success:
+        return {
+            'success': False,
+            'error': message,
+            'session_id': session_id,
+            'previous_state': previous_state,
+            'target_state': target_state,
+            'forced': force,
+        }
+
+    # Mirror swe_post_read_state.py's side effects for a read-driven
+    # transition, so an explicit transition looks identical in the stream
+    # and WM.
+    from .stream import get_stream_path, append_event
+    try:
+        append_event(get_stream_path(session_id), 'state',
+                     from_s=previous_state, to_s=target_state, s=session_id)
+    except Exception:
+        pass
+
+    if state_mgr.wm_filepath:
+        from .config import append_transition_to_wm
+        try:
+            append_transition_to_wm(state_mgr.wm_filepath, previous_state, target_state)
+        except Exception:
+            pass
+
+    return {
+        'success': True,
+        'session_id': session_id,
+        'previous_state': previous_state,
+        'new_state': target_state,
+        'forced': force,
+        'reason': reason,
+        'message': message,
+        'wm_file': state_mgr.wm_filename,
+    }

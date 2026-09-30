@@ -135,6 +135,11 @@ class IsValidTransitionTest(unittest.TestCase):
 
 
 class IsForwardReadTransitionTest(unittest.TestCase):
+    """Seeds BOTH the transition-matrix cache AND a synthetic states.json
+    document (ranks + readBackward), so this test class never depends on the
+    real state-machine/states.json's rank/readBackward content leaking in via
+    load_states_document()/load_forward_rank()/load_read_backward()."""
+
     def setUp(self):
         reset_caches()
         mod._transition_matrix_cache = {
@@ -145,6 +150,24 @@ class IsForwardReadTransitionTest(unittest.TestCase):
             "WF_ARCH_REVIEW": ["WF_EXECUTE", "WF_ARCH_REVIEW", "WF_CLARIFY"],
             "WF_DONE": ["WF_CLASSIFY"],
         }
+        # Synthetic states doc: ranks matching the matrix above, plus a
+        # readBackward declaration on WF_RESEARCH only — mirrors the real
+        # states.json shape (rank + readBackward per state) without reading
+        # the real file. load_states_document() compares the cached mtime
+        # against os.path.getmtime(real states.json) — match it exactly so
+        # the synthetic doc is NOT invalidated/replaced by a real-file re-read.
+        _real_mtime = os.path.getmtime(mod.get_states_file_path())
+        mod._states_doc_cache = (_real_mtime, {
+            "states": {
+                "WF_CLASSIFY": {"rank": 1},
+                "WF_EXECUTE": {"rank": 4},
+                "WF_CHECKPOINT": {"rank": 4},
+                "WF_RESEARCH": {"rank": 2, "readBackward": ["WF_CLASSIFY"]},
+                "WF_VERIFY": {"rank": 5},
+                "WF_ARCH_REVIEW": {"rank": 3},
+                "WF_DONE": {"rank": 6},
+            }
+        })
 
     def tearDown(self):
         reset_caches()
@@ -183,11 +206,79 @@ class IsForwardReadTransitionTest(unittest.TestCase):
         self.assertFalse(ok)
         self.assertIn("BLOCKED", reason)
 
-    def test_research_backward_to_classify_not_advanced(self):
-        # WF_RESEARCH (rank 2) -> WF_CLASSIFY (rank 1): valid but backward.
+    def test_research_backward_to_classify_advances_via_readbackward(self):
+        # WF_RESEARCH (rank 2) -> WF_CLASSIFY (rank 1): backward by rank.
+        # WF_RESEARCH declares WF_CLASSIFY in its readBackward allowlist (its
+        # needs_implementation -> WF_CLASSIFY exit), so a read of
+        # wf/WF_CLASSIFY from WF_RESEARCH completes this declared exit.
         ok, reason = mod.is_forward_read_transition("WF_RESEARCH", "WF_CLASSIFY")
+        self.assertTrue(ok)
+        self.assertIn("readBackward", reason)
+        self.assertIn("WF_RESEARCH", reason)
+        self.assertIn("WF_CLASSIFY", reason)
+
+    def test_undeclared_backward_does_not_advance(self):
+        # WF_EXECUTE (rank 4) -> WF_RESEARCH (rank 2): backward by rank.
+        # WF_EXECUTE has no readBackward entry in the synthetic doc and
+        # WF_EXECUTE -> WF_RESEARCH is not even a matrix edge here, so this
+        # stays False.
+        ok, reason = mod.is_forward_read_transition("WF_EXECUTE", "WF_RESEARCH")
         self.assertFalse(ok)
-        self.assertIn("read-ahead/back", reason)
+        self.assertIn("BLOCKED", reason)
+
+
+class RealGraphReadBackwardTest(unittest.TestCase):
+    """Regression guard against the REAL state-machine/states.json — the
+    exact deadlock scenario and its declared fix, plus the other
+    readBackward-declaring states. No cache seeding: these read the shipped
+    graph directly."""
+
+    def setUp(self):
+        reset_caches()
+
+    def tearDown(self):
+        reset_caches()
+
+    def test_research_to_classify_advances(self):
+        ok, reason = mod.is_forward_read_transition("WF_RESEARCH", "WF_CLASSIFY")
+        self.assertTrue(ok)
+        self.assertIn("readBackward", reason)
+
+    def test_execute_to_research_undeclared_stays_false(self):
+        ok, reason = mod.is_forward_read_transition("WF_EXECUTE", "WF_RESEARCH")
+        self.assertFalse(ok)
+
+    def test_verify_to_execute_declared_backward_advances(self):
+        ok, reason = mod.is_forward_read_transition("WF_VERIFY", "WF_EXECUTE")
+        self.assertTrue(ok)
+        self.assertIn("readBackward", reason)
+
+    def test_done_to_classify_stays_false(self):
+        # WF_DONE has no readBackward entry — post-completion re-entry is
+        # owned by the prompt hook, not a read.
+        ok, reason = mod.is_forward_read_transition("WF_DONE", "WF_CLASSIFY")
+        self.assertFalse(ok)
+
+    def test_execute_to_clarify_stays_false(self):
+        ok, reason = mod.is_forward_read_transition("WF_EXECUTE", "WF_CLARIFY")
+        self.assertFalse(ok)
+        self.assertIn("WF_CLARIFY", reason)
+
+    def test_every_readbackward_declaring_state_reaches_classify(self):
+        # All of these are rank > WF_CLASSIFY's rank (1) EXCEPT WF_CONTINUE,
+        # which shares rank 1 with WF_CLASSIFY — an equal-rank move counts as
+        # an ordinary forward read (see test_forward_equal_rank_advances), so
+        # it reaches WF_CLASSIFY without needing its readBackward declaration
+        # at all. The others are strictly higher rank, so they only reach
+        # WF_CLASSIFY via the declared readBackward allowlist.
+        for state in ("WF_ARCH_REVIEW", "WF_EXECUTE", "WF_CHECKPOINT",
+                      "WF_DEBUG_TDD", "WF_VERIFY"):
+            ok, reason = mod.is_forward_read_transition(state, "WF_CLASSIFY")
+            self.assertTrue(ok, f"{state} -> WF_CLASSIFY: {reason}")
+            self.assertIn("readBackward", reason)
+
+        ok, reason = mod.is_forward_read_transition("WF_CONTINUE", "WF_CLASSIFY")
+        self.assertTrue(ok, reason)
 
 
 class ForwardRankConstantTest(unittest.TestCase):
@@ -472,6 +563,105 @@ class DocClaimsGateTest(_StateManagerBase):
         ok, msg = sm.transition_to("WF_DONE", force=True)
         self.assertTrue(ok, msg)
         self.assertEqual(sm.get_current_state(), "WF_DONE")
+
+
+class PerformTransitionTest(_StateManagerBase):
+    """Tests for the shared perform_transition() driver used by set_state.py
+    and swe_wm_transition. Uses the real states.json (no matrix seeding) —
+    the SID's WM starts at WF_RESEARCH, matching the deadlock scenario."""
+
+    SID = "abcd1234"
+
+    def setUp(self):
+        super().setUp()
+        self._write_wm(name=f"WM_{self.SID}", current_state="WF_RESEARCH", session_id=self.SID)
+        # A real session has already written a .state file by the time it's
+        # deep enough in the workflow to be at WF_RESEARCH — write_state_file
+        # derives `prev_state` from what's already on disk
+        # (write_working_memory_state reads read_state_file() for `prev`), so
+        # seed one here to match a realistic prior transition into WF_RESEARCH.
+        config.write_state_file(self.SID, "WF_RESEARCH", prev_state="WF_CLASSIFY")
+
+    def _stream_path(self):
+        stream_mod = import_core("swe_hooks.core.stream")
+        return stream_mod.get_stream_path(self.SID)
+
+    def test_research_to_classify_succeeds(self):
+        result = mod.perform_transition(self.root, self.SID, "WF_CLASSIFY")
+        self.assertTrue(result["success"], result)
+        self.assertEqual(result["session_id"], self.SID)
+        self.assertEqual(result["previous_state"], "WF_RESEARCH")
+        self.assertEqual(result["new_state"], "WF_CLASSIFY")
+        self.assertFalse(result["forced"])
+        self.assertIn("wm_file", result)
+
+    def test_research_to_classify_state_file_keys(self):
+        mod.perform_transition(self.root, self.SID, "WF_CLASSIFY")
+        state_file = config.read_state_file(self.SID)
+        self.assertIsNotNone(state_file)
+        self.assertEqual(state_file["current_state"], "WF_CLASSIFY")
+        self.assertEqual(state_file["prev_state"], "WF_RESEARCH")
+
+    def test_research_to_classify_stream_has_state_event(self):
+        mod.perform_transition(self.root, self.SID, "WF_CLASSIFY")
+        stream_path = self._stream_path()
+        self.assertTrue(os.path.exists(stream_path))
+        with open(stream_path) as f:
+            lines = [line for line in f if line.strip()]
+        events = [__import__("json").loads(line) for line in lines]
+        state_events = [e for e in events if e.get("type") == "state"]
+        self.assertTrue(
+            any(e.get("from_s") == "WF_RESEARCH" and e.get("to_s") == "WF_CLASSIFY"
+                for e in state_events),
+            state_events,
+        )
+
+    def test_research_to_classify_appends_wm_transitions_line(self):
+        mod.perform_transition(self.root, self.SID, "WF_CLASSIFY")
+        wm_path = os.path.join(self.memories_dir, f"WM_{self.SID}.md")
+        with open(wm_path) as f:
+            content = f.read()
+        self.assertIn("### Transitions", content)
+        self.assertIn("WF_RESEARCH → WF_CLASSIFY", content)
+
+    def test_subflow_target_rejected_even_with_force(self):
+        result = mod.perform_transition(self.root, self.SID, "WF_INIT", force=True)
+        self.assertFalse(result["success"])
+        self.assertIn("subflow", result["error"])
+        self.assertIn("subflows", result)
+
+    def test_unknown_state_rejected(self):
+        result = mod.perform_transition(self.root, self.SID, "WF_NOT_A_REAL_STATE")
+        self.assertFalse(result["success"])
+        self.assertIn("Unknown state", result["error"])
+        self.assertIn("valid_states", result)
+
+    def test_missing_session_id_rejected(self):
+        result = mod.perform_transition(self.root, "", "WF_CLASSIFY")
+        self.assertFalse(result["success"])
+        self.assertIn("session_id", result["error"])
+
+    def test_invalid_transition_rejected_without_force(self):
+        # WF_RESEARCH -> WF_EXECUTE is not a declared matrix edge.
+        result = mod.perform_transition(self.root, self.SID, "WF_EXECUTE")
+        self.assertFalse(result["success"])
+        self.assertIn("error", result)
+
+    def test_invalid_transition_accepted_with_force(self):
+        result = mod.perform_transition(self.root, self.SID, "WF_EXECUTE", force=True)
+        self.assertTrue(result["success"], result)
+        self.assertEqual(result["new_state"], "WF_EXECUTE")
+        self.assertTrue(result["forced"])
+
+    def test_already_in_state_is_a_noop_failure(self):
+        result = mod.perform_transition(self.root, self.SID, "WF_RESEARCH")
+        self.assertFalse(result["success"])
+        self.assertIn("Already in state", result["error"])
+
+    def test_reason_is_echoed_on_success(self):
+        result = mod.perform_transition(self.root, self.SID, "WF_CLASSIFY",
+                                         reason="needs_implementation exit")
+        self.assertEqual(result["reason"], "needs_implementation exit")
 
 
 if __name__ == "__main__":

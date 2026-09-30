@@ -59,12 +59,12 @@ class TestConstants(unittest.TestCase):
 # ──────────────────────────────────────────────────────────────────
 
 class TestToolDefinitions(unittest.TestCase):
-    def test_lists_the_five_wm_tools(self):
+    def test_lists_the_six_wm_tools(self):
         names = {t["name"] for t in wm.TOOL_DEFINITIONS}
         self.assertEqual(
             names,
             {"swe_wm_read", "swe_wm_update", "swe_wm_update_section",
-             "swe_wm_list", "swe_wm_update_status"},
+             "swe_wm_list", "swe_wm_update_status", "swe_wm_transition"},
         )
 
     def test_batch_update_schema(self):
@@ -1221,3 +1221,83 @@ class TestUpdateSectionOtherSectionsWiring(_FSBase):
             ])
         self.assertIn("error", result)
         self.assertIn("dom/dom_planned", result["error"])
+
+
+class TestToolSweWmTransition(_FSBase):
+    """swe_wm_transition — the ONLY MCP way to change Current State."""
+
+    WM_BODY = (
+        "# Working Memory: Session abcd1234\n\n"
+        "## Current Task\n**[IN_PROGRESS]**: research\n\n"
+        "## Workflow Context\n**Current State**: WF_RESEARCH\n"
+    )
+
+    def test_no_session_id_error(self):
+        result = wm.tool_swe_wm_transition(target_state="WF_CLASSIFY", reason="done")
+        self.assertIn("error", result)
+        self.assertIn("No session_id", result["error"])
+
+    def test_empty_reason_rejected(self):
+        self._write_wm(self.WM_BODY)
+        result = wm.tool_swe_wm_transition(target_state="WF_CLASSIFY", reason="",
+                                            session_id=self.SID)
+        self.assertIn("error", result)
+        self.assertIn("reason", result["error"])
+
+    def test_whitespace_only_reason_rejected(self):
+        self._write_wm(self.WM_BODY)
+        result = wm.tool_swe_wm_transition(target_state="WF_CLASSIFY", reason="   ",
+                                            session_id=self.SID)
+        self.assertIn("error", result)
+        self.assertIn("reason", result["error"])
+
+    def test_subflow_target_rejected(self):
+        self._write_wm(self.WM_BODY)
+        result = wm.tool_swe_wm_transition(target_state="WF_INIT", reason="oops",
+                                            session_id=self.SID)
+        self.assertFalse(result.get("success", False))
+        self.assertIn("subflow", result["error"])
+
+    def test_unknown_target_rejected(self):
+        self._write_wm(self.WM_BODY)
+        result = wm.tool_swe_wm_transition(target_state="WF_NOT_REAL", reason="oops",
+                                            session_id=self.SID)
+        self.assertFalse(result.get("success", False))
+        self.assertIn("Unknown state", result["error"])
+
+    def test_declared_transition_succeeds_and_returns_new_state(self):
+        self._write_wm(self.WM_BODY)
+        self._write_state({"current_state": "WF_RESEARCH", "prev_state": "WF_CLASSIFY"})
+        result = wm.tool_swe_wm_transition(
+            target_state="WF_CLASSIFY", reason="needs_implementation",
+            session_id=self.SID)
+        self.assertTrue(result.get("success"), result)
+        self.assertEqual(result["previous_state"], "WF_RESEARCH")
+        self.assertEqual(result["new_state"], "WF_CLASSIFY")
+        self.assertEqual(result["reason"], "needs_implementation")
+        self.assertIn("summary", result)
+        state = config.read_state_file(self.SID)
+        self.assertEqual(state["current_state"], "WF_CLASSIFY")
+
+    def test_invalid_transition_rejected_without_force(self):
+        self._write_wm(self.WM_BODY)
+        self._write_state({"current_state": "WF_RESEARCH", "prev_state": "WF_CLASSIFY"})
+        result = wm.tool_swe_wm_transition(
+            target_state="WF_EXECUTE", reason="skip ahead", session_id=self.SID)
+        self.assertFalse(result.get("success", False))
+
+    def test_invalid_transition_accepted_with_force(self):
+        self._write_wm(self.WM_BODY)
+        self._write_state({"current_state": "WF_RESEARCH", "prev_state": "WF_CLASSIFY"})
+        result = wm.tool_swe_wm_transition(
+            target_state="WF_EXECUTE", reason="skip ahead", session_id=self.SID,
+            force=True)
+        self.assertTrue(result.get("success"), result)
+        self.assertTrue(result["forced"])
+        self.assertEqual(result["new_state"], "WF_EXECUTE")
+
+    def test_registered_in_tool_definitions_and_registry(self):
+        names = {t["name"] for t in wm.TOOL_DEFINITIONS}
+        self.assertIn("swe_wm_transition", names)
+        self.assertIn("swe_wm_transition", wm.TOOL_REGISTRY)
+        self.assertIs(wm.TOOL_REGISTRY["swe_wm_transition"], wm.tool_swe_wm_transition)

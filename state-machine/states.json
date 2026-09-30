@@ -11,7 +11,7 @@
 
   "readAdvance": {
     "enabled": true,
-    "description": "Reading a WF_* memory whose rank is higher than the current state's advances the FSM along a valid matrix edge; backward/same-rank reads and reads into WF_CLARIFY never transition."
+    "description": "Reading a WF_* memory whose rank is higher than the current state's advances the FSM along a valid matrix edge; backward/same-rank reads and reads into WF_CLARIFY never transition, UNLESS the target is explicitly listed in the current state's readBackward allowlist (a declared backward exit a read may still take)."
   },
 
   "subflows": ["WF_INIT", "WF_CLEANUP", "WF_RESEARCH_LITE", "WF_UPDATE_MEMORY"],
@@ -84,7 +84,8 @@
         "needs_clarification": "WF_CLARIFY",
         "reclassify": "WF_CLASSIFY",
         "pivot": "WF_CLASSIFY"
-      }
+      },
+      "readBackward": ["WF_CLASSIFY"]
     },
 
     "WF_RESEARCH": {
@@ -100,7 +101,8 @@
         "needs_implementation": "WF_CLASSIFY",
         "complete": "WF_DONE",
         "pivot": "WF_CLASSIFY"
-      }
+      },
+      "readBackward": ["WF_CLASSIFY"]
     },
 
     "WF_ARCH_REVIEW": {
@@ -117,7 +119,8 @@
         "needs_revision": "WF_ARCH_REVIEW",
         "needs_clarification": "WF_CLARIFY",
         "pivot": "WF_CLASSIFY"
-      }
+      },
+      "readBackward": ["WF_CLASSIFY"]
     },
 
     "WF_CLARIFY": {
@@ -145,7 +148,8 @@
         "checkpoint_needed": "WF_CHECKPOINT",
         "complete": "WF_VERIFY",
         "pivot": "WF_CLASSIFY"
-      }
+      },
+      "readBackward": ["WF_CLASSIFY"]
     },
 
     "WF_CHECKPOINT": {
@@ -161,7 +165,8 @@
         "continue": "WF_EXECUTE",
         "complete": "WF_VERIFY",
         "pivot": "WF_CLASSIFY"
-      }
+      },
+      "readBackward": ["WF_CLASSIFY"]
     },
 
     "WF_DEBUG_TDD": {
@@ -177,7 +182,8 @@
         "fixed": "WF_EXECUTE",
         "needs_help": "WF_CLARIFY",
         "pivot": "WF_CLASSIFY"
-      }
+      },
+      "readBackward": ["WF_CLASSIFY"]
     },
 
     "WF_VERIFY": {
@@ -193,7 +199,8 @@
         "passed": "WF_DONE",
         "failed": "WF_EXECUTE",
         "re_scope": "WF_CLASSIFY"
-      }
+      },
+      "readBackward": ["WF_EXECUTE", "WF_CLASSIFY"]
     },
 
     "WF_DONE": {

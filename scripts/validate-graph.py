@@ -269,6 +269,46 @@ def validate_graph(doc, wf_memory_names=None):
             is_edge = b in matrix.get(a, [])
             info.append(f"readAdvance candidate {a}(rank {ra}) -> {b}(rank {rb}): {'matrix edge' if is_edge else 'NOT a matrix edge, so a read never takes it'}")
 
+    # 9. readBackward allowlist validity: each declared backward-read target
+    # must (a) be a declared transition target of that state (both in its
+    # own node.transitions values AND in transitionMatrix[state] — the parity
+    # check in #1 above already keeps those two in sync), (b) have rank <=
+    # the state's own rank (it would not need to be in readBackward
+    # otherwise — is_forward_read_transition only consults it when
+    # to_rank < from_rank), and (c) never be WF_CLARIFY or a subflow (a read
+    # must never auto-enter the gate, and a subflow is not an FSM node a read
+    # could land on).
+    for name, info_dict in states.items():
+        read_backward = info_dict.get('readBackward', [])
+        if not read_backward:
+            continue
+        own_rank = info_dict.get('rank')
+        node_targets = {t for t in info_dict.get('transitions', {}).values() if t and t != RETURN_TO_CALLER}
+        matrix_targets = {t for t in matrix.get(name, []) if t and t != RETURN_TO_CALLER}
+        for target in read_backward:
+            if target == 'WF_CLARIFY':
+                errors.append(f"{name}.readBackward lists WF_CLARIFY — a read must never auto-enter the CLARIFY gate")
+                continue
+            if target in subflows:
+                errors.append(f"{name}.readBackward lists '{target}', which is a subflow, not an FSM state")
+                continue
+            if target not in node_targets or target not in matrix_targets:
+                errors.append(
+                    f"{name}.readBackward lists '{target}', which is not a declared "
+                    f"transition target of {name} (transitions + transitionMatrix)"
+                )
+                continue
+            target_rank = ranks.get(target)
+            if own_rank is None or target_rank is None:
+                errors.append(f"{name}.readBackward lists '{target}' but rank is missing for {name} or {target}")
+                continue
+            if target_rank > own_rank:
+                errors.append(
+                    f"{name}.readBackward lists '{target}' (rank {target_rank}), which is "
+                    f"HIGHER than {name}'s own rank ({own_rank}) — that is already a forward "
+                    f"read, readBackward is only for backward/same-rank declared exits"
+                )
+
     return {"errors": errors, "warnings": warnings, "info": info, "adjacency": adj}
 
 

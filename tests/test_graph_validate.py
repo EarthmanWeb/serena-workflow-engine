@@ -248,5 +248,94 @@ class ValidateGraphSyntheticTest(unittest.TestCase):
         self.assertTrue(any("A(rank 0) -> B(rank 1)" in i and "matrix edge" in i for i in result["info"]))
 
 
+class ReadBackwardValidationTest(unittest.TestCase):
+    """Validates the readBackward per-state allowlist (check #9)."""
+
+    def _states(self, **overrides):
+        # B (rank 2) -> A (rank 1) is a declared transition (matches both
+        # node.transitions and transitionMatrix) — the shape readBackward
+        # exists to allow a read to still take.
+        base = {
+            "A": {"rank": 1, "transitions": {"forward": "B"}},
+            "B": {"rank": 2, "transitions": {"back": "A"}},
+        }
+        base.update(overrides)
+        return base
+
+    def _matrix(self):
+        return {"SessionStart": ["A"], "A": ["B"], "B": ["A"]}
+
+    def test_valid_readbackward_declaration_passes(self):
+        doc = _minimal_doc(
+            states=self._states(B={"rank": 2, "transitions": {"back": "A"}, "readBackward": ["A"]}),
+            matrix=self._matrix(),
+        )
+        result = mod.validate_graph(doc)
+        self.assertEqual(
+            [e for e in result["errors"] if "readBackward" in e], [], result["errors"])
+
+    def test_undeclared_transition_target_reported(self):
+        # C is not in B's transitions/matrix targets at all.
+        doc = _minimal_doc(
+            states={
+                "A": {"rank": 1, "transitions": {"forward": "B"}},
+                "B": {"rank": 2, "transitions": {"back": "A"}, "readBackward": ["C"]},
+                "C": {"rank": 0, "transitions": {}, "terminal": True},
+            },
+            matrix={"SessionStart": ["A"], "A": ["B"], "B": ["A"], "C": []},
+        )
+        result = mod.validate_graph(doc)
+        self.assertTrue(
+            any("B.readBackward lists 'C'" in e and "not a declared transition target" in e
+                for e in result["errors"]),
+            result["errors"],
+        )
+
+    def test_over_rank_target_reported(self):
+        # A declares readBackward -> B, but B's rank (2) is HIGHER than A's
+        # own rank (1) — that's already a forward read, not a backward one.
+        doc = _minimal_doc(
+            states=self._states(A={"rank": 1, "transitions": {"forward": "B"}, "readBackward": ["B"]}),
+            matrix=self._matrix(),
+        )
+        result = mod.validate_graph(doc)
+        self.assertTrue(
+            any("A.readBackward lists 'B'" in e and "HIGHER than" in e for e in result["errors"]),
+            result["errors"],
+        )
+
+    def test_clarify_in_readbackward_reported(self):
+        doc = _minimal_doc(
+            states={
+                "A": {"rank": 1, "transitions": {"forward": "B", "clarify": "WF_CLARIFY"}, "readBackward": ["WF_CLARIFY"]},
+                "B": {"rank": 2, "transitions": {}},
+                "WF_CLARIFY": {"rank": -1, "transitions": {"clarified": "(return_to_caller)"}},
+            },
+            matrix={
+                "SessionStart": ["A"],
+                "A": ["B", "WF_CLARIFY"],
+                "B": [],
+                "WF_CLARIFY": ["(return_to_caller)"],
+            },
+        )
+        result = mod.validate_graph(doc)
+        self.assertTrue(
+            any("A.readBackward lists WF_CLARIFY" in e for e in result["errors"]),
+            result["errors"],
+        )
+
+    def test_subflow_in_readbackward_reported(self):
+        doc = _minimal_doc(
+            states=self._states(A={"rank": 1, "transitions": {"forward": "B", "init": "WF_INIT"}, "readBackward": ["WF_INIT"]}),
+            matrix={"SessionStart": ["A"], "A": ["B", "WF_INIT"], "B": ["A"]},
+            subflows=["WF_INIT"],
+        )
+        result = mod.validate_graph(doc)
+        self.assertTrue(
+            any("A.readBackward lists 'WF_INIT'" in e and "subflow" in e for e in result["errors"]),
+            result["errors"],
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
