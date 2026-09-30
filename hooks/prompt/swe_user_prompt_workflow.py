@@ -177,6 +177,22 @@ NEW_TASK_CUE_RE = re.compile(
 )
 
 
+# A WF_RESEARCH-specific escape hatch. Research is read-only exploration; once
+# findings are in, the user asking for the work to actually be done ("do
+# everything", "implement it", "fix it", "go ahead") is the DECLARED
+# needs_implementation transition into WF_CLASSIFY — not a pivot the model has
+# to weigh against feedback (pivot_analysis_note's framing). Word-boundary,
+# case-insensitive; matches an imperative to implement/apply/proceed with the
+# researched work, including a bare pronoun object ("do it/that/this/
+# everything/all of it").
+RESEARCH_IMPLEMENT_RE = re.compile(
+    r'\b(implement|do (it|that|this|everything|all of it)|go ahead|fix|add|'
+    r'change|update|apply|build|proceed|'
+    r'make (the|those|these) changes)\b',
+    re.IGNORECASE,
+)
+
+
 # Deploy/push/ship intent in a prompt: inject the docs-first pre-deploy gate
 # INTO the turn's context, at the decision point. Reading git/package.json to
 # "figure out the pipeline" instead of the deploy memories is the canonical
@@ -205,18 +221,19 @@ def deploy_note_for(prompt: str) -> str:
 
 
 def pivot_analysis_note(current_state: str, wm_file: str, stream_info: str,
-                        cue_hint: bool) -> str:
+                        cue_hint: bool, session_id: str = None) -> str:
     """Instruction for an ACTIVE state when intent is ambiguous.
 
     The deterministic hook cannot read meaning, so it does NOT force a
     transition. It stays in the current state and asks the MODEL — which has
     full conversation context — to decide pivot vs. feedback and self-transition
-    with /swe-goto WF_CLASSIFY only on a genuine pivot. Keyword cues are passed
-    as a HINT, never as the decision.
+    on a genuine pivot only. Keyword cues are passed as a HINT, never as the
+    decision.
     """
     hint_line = (
         "\nA new-task cue word was present, but that ALONE is not decisive — "
         "weigh it against the actual conversation.\n" if cue_hint else "\n")
+    sid = session_id or "<id>"
     return f"""➡️ CURRENT STATE: {current_state}
 Working Memory: {wm_file or 'None'}{stream_info}
 
@@ -227,11 +244,44 @@ conversation, not this message alone:
     (even phrased as "fix …" / "add …" / "no, do it differently") →
     STAY in {current_state} and apply it. Do NOT re-classify.
   • A genuine BRAND-NEW task or COMPLETE pivot (different feature/subject with
-    no dependency on the work in flight) → run /swe-goto WF_CLASSIFY yourself,
-    then classify.
+    no dependency on the work in flight) → call
+    mcp__plugin_swe_swe-wm__swe_wm_transition(session_id="{sid}",
+    target_state="WF_CLASSIFY", reason="pivot") yourself, then classify.
 
 Default to STAY when uncertain — re-classifying mid-task is the costly error.
 Review the current step if needed: mcp__plugin_swe_serena__read_memory(memory_name="wf/{current_state}")
+"""
+
+
+def research_exit_directive(session_id: str, wm_file: str, stream_info: str) -> str:
+    """Directive for WF_RESEARCH when the prompt asks for the researched work
+    to actually be implemented.
+
+    Unlike pivot_analysis_note, this is NOT an ambiguous-intent judgment call —
+    it is the DECLARED needs_implementation transition out of research into
+    WF_CLASSIFY. The hook does not auto-transition (directive only): the
+    primary action is reading wf/WF_CLASSIFY, which readAdvance now allows to
+    advance WF_RESEARCH -> WF_CLASSIFY directly. If that read reports
+    "inspecting — no transition" (readAdvance not wired for this edge), the
+    explicit swe_wm_transition MCP tool call is the fallback, with the
+    set_state.py CLI as a last resort.
+    """
+    sid = session_id or "<id>"
+    return f"""➡️ CURRENT STATE: WF_RESEARCH
+Working Memory: {wm_file or 'None'}{stream_info}
+
+DECLARED TRANSITION: needs_implementation (WF_RESEARCH → WF_CLASSIFY).
+This is not a pivot judgment call — the prompt asked for the researched work
+to actually be done. Findings are complete; move to classification and
+execution:
+
+1. PRIMARY: mcp__plugin_swe_serena__read_memory(memory_name="wf/WF_CLASSIFY")
+   — readAdvance now carries WF_RESEARCH → WF_CLASSIFY forward on this read.
+2. If that read reports "inspecting — no transition" (no forward edge fired),
+   call mcp__plugin_swe_swe-wm__swe_wm_transition(session_id="{sid}",
+   target_state="WF_CLASSIFY", reason="needs_implementation") explicitly.
+3. CLI fallback if the MCP tool is unavailable:
+   python3 "${{CLAUDE_PLUGIN_ROOT}}/hooks/swe_hooks/tools/set_state.py" {sid} WF_CLASSIFY
 """
 
 
@@ -606,13 +656,16 @@ Use: mcp__plugin_swe_serena__read_memory(memory_name="wf/WF_CLASSIFY")
                     event_count = get_event_count(stream_path)
                     if event_count > 0:
                         stream_info = f"\nStream Events: {event_count}"
-                context = f"""➡️ CONTINUING WORKFLOW: {current_state}
+                if current_state == 'WF_RESEARCH' and RESEARCH_IMPLEMENT_RE.search(prompt_lower):
+                    context = research_exit_directive(session_id, wm_file, stream_info)
+                else:
+                    context = f"""➡️ CONTINUING WORKFLOW: {current_state}
 Working Memory: {wm_file or 'None'}{stream_info}
 
 Continue with the current workflow step.
 If you need to review instructions: mcp__plugin_swe_serena__read_memory(memory_name="wf/{current_state}")
 """
-        
+
         elif prompt_intent == 'addition':
             # User is adding to current task - stay in current state
             # Get stream event count for observability
@@ -622,7 +675,10 @@ If you need to review instructions: mcp__plugin_swe_serena__read_memory(memory_n
                 event_count = get_event_count(stream_path)
                 if event_count > 0:
                     stream_info = f"\nStream Events: {event_count}"
-            context = f"""➕ TASK ADDITION - WORKFLOW STATE: {current_state}
+            if current_state == 'WF_RESEARCH' and RESEARCH_IMPLEMENT_RE.search(prompt_lower):
+                context = research_exit_directive(session_id, wm_file, stream_info)
+            else:
+                context = f"""➕ TASK ADDITION - WORKFLOW STATE: {current_state}
 Working Memory: {wm_file or 'None'}{stream_info}
 
 This message may relate to the current task. Evaluate whether it adds to the current step or changes direction.
@@ -706,9 +762,12 @@ Use: mcp__plugin_swe_serena__read_memory(memory_name="wf/{current_state}")
                 event_count = get_event_count(stream_path)
                 if event_count > 0:
                     stream_info = f"\nStream Events: {event_count}"
-            cue_hint = bool(NEW_TASK_CUE_RE.search(prompt_lower))
-            context = pivot_analysis_note(current_state, wm_file, stream_info,
-                                          cue_hint)
+            if current_state == 'WF_RESEARCH' and RESEARCH_IMPLEMENT_RE.search(prompt_lower):
+                context = research_exit_directive(session_id, wm_file, stream_info)
+            else:
+                cue_hint = bool(NEW_TASK_CUE_RE.search(prompt_lower))
+                context = pivot_analysis_note(current_state, wm_file, stream_info,
+                                              cue_hint, session_id=session_id)
 
         else:
             # Unknown intent. Only a VERIFIED pivot (an explicit new_task
@@ -739,11 +798,14 @@ Working Memory: {wm_file or 'None'}{stream_info}
 MANDATORY: Classify this task using WF_CLASSIFY.
 Use: mcp__plugin_swe_serena__read_memory(memory_name="wf/WF_CLASSIFY")
 """
+            elif current_state == 'WF_RESEARCH' and RESEARCH_IMPLEMENT_RE.search(prompt_lower):
+                context = research_exit_directive(session_id, wm_file, stream_info)
             else:
                 # Active task state — stay put and let the model judge pivot vs.
                 # feedback from full context (no verbiage-only decision).
                 context = pivot_analysis_note(current_state, wm_file,
-                                              stream_info, cue_hint=False)
+                                              stream_info, cue_hint=False,
+                                              session_id=session_id)
         
         output = {
             "hookSpecificOutput": {

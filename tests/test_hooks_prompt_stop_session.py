@@ -146,6 +146,39 @@ class TestAnalyzePrompt(unittest.TestCase):
         )
 
 
+class TestResearchExitDirective(unittest.TestCase):
+    """WF_RESEARCH needs_implementation exit: RESEARCH_IMPLEMENT_RE +
+    research_exit_directive() content."""
+    mod = import_hook("prompt/swe_user_prompt_workflow")
+
+    def test_research_implement_re_matches_common_phrasings(self):
+        for p in ("do everything", "implement it", "fix it", "okay, do it",
+                  "go ahead", "add the missing tests", "apply the changes",
+                  "make the changes", "please proceed", "build it",
+                  "update the docs"):
+            self.assertIsNotNone(
+                self.mod.RESEARCH_IMPLEMENT_RE.search(p.lower()), p)
+
+    def test_research_implement_re_does_not_match_question(self):
+        for p in ("what does X do?", "how does this work?",
+                  "can you explain the flow?"):
+            self.assertIsNone(
+                self.mod.RESEARCH_IMPLEMENT_RE.search(p.lower()), p)
+
+    def test_directive_content(self):
+        text = self.mod.research_exit_directive("abc12345", "WM_abc12345", "")
+        self.assertIn("wf/WF_CLASSIFY", text)
+        self.assertIn("swe_wm_transition", text)
+        self.assertIn("needs_implementation", text)
+        self.assertIn("abc12345", text)
+        self.assertIn("set_state.py", text)
+
+    def test_directive_interpolates_session_id_in_all_calls(self):
+        text = self.mod.research_exit_directive("sess9999", None, "")
+        # session_id appears in both the MCP tool call and the CLI fallback.
+        self.assertGreaterEqual(text.count("sess9999"), 2)
+
+
 class TestPromptPatternConstants(unittest.TestCase):
     mod = import_hook("prompt/swe_user_prompt_workflow")
 

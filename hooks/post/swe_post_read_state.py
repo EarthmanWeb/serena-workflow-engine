@@ -138,6 +138,81 @@ def _discovery_no_credit_message(new_names) -> str:
         "relevant ones are read (or deferred).")
 
 
+# Second (or later) "inspecting — no transition" read of the same WF_* memory
+# from the same current state, within this session's stream, trips the loop
+# guard — reading does not move the FSM here, so a repeated read is a stall
+# signal that the explicit transition tool must be used instead.
+INSPECT_LOOP_THRESHOLD = 2
+
+
+def count_inspect_loop(events: list, bare_name: str, from_state: str) -> int:
+    """Count 'inspect' events for `bare_name` read from `from_state` since the
+    last 'state' transition event in `events` (a stream event list, oldest
+    first or any order — see below).
+
+    Pure function: `events` is the already-loaded list of stream event dicts
+    (e.g. from events_since_task_start or a raw JSONL read), so this has no
+    IO of its own and is directly unit-testable. Only events AFTER the most
+    recent 'state' event count — an actual transition resets the loop guard,
+    since the FSM did move. Events are assumed to be in chronological order;
+    if the caller passes a reversed list, no 'state' event boundary will
+    matter incorrectly as long as ordering is consistent with how it's scanned
+    here (we scan forward and remember the last 'state' event's boundary).
+    """
+    if not events:
+        return 0
+    last_state_idx = -1
+    for i, event in enumerate(events):
+        if event.get('type') == 'state':
+            last_state_idx = i
+    count = 0
+    for event in events[last_state_idx + 1:]:
+        if (event.get('type') == 'inspect'
+                and event.get('m') == bare_name
+                and event.get('from_s') == from_state):
+            count += 1
+    return count
+
+
+def _read_all_events(stream_path: str) -> list:
+    """Load every event from a session's JSONL stream, in file order.
+    Best-effort: malformed lines are skipped, missing file returns []."""
+    if not stream_path or not os.path.exists(stream_path):
+        return []
+    events = []
+    try:
+        with open(stream_path, 'r') as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    events.append(json.loads(line))
+                except (json.JSONDecodeError, ValueError):
+                    continue
+    except IOError:
+        pass
+    return events
+
+
+def inspect_loop_guard_message(bare_name: str, from_state: str, session_id: str,
+                               count: int) -> str:
+    """Loop-guard advisory text once `count` reaches INSPECT_LOOP_THRESHOLD,
+    else ''. `count` is the count INCLUDING the read that just happened (i.e.
+    call this after appending the current 'inspect' event and recounting)."""
+    if count < INSPECT_LOOP_THRESHOLD:
+        return ""
+    sid = session_id or "<id>"
+    return (
+        f"🔁 LOOP GUARD: wf/{bare_name} read {count}x without transitioning "
+        f"from {from_state}. Reading does not move the FSM here. Take the "
+        "transition explicitly: mcp__plugin_swe_swe-wm__swe_wm_transition("
+        f'session_id="{sid}", target_state="{bare_name}", reason="<why>") — '
+        'CLI fallback: python3 "${CLAUDE_PLUGIN_ROOT}/hooks/swe_hooks/tools/'
+        f'set_state.py" {sid} {bare_name} [--force]'
+    )
+
+
 def create_feature_sentinel(session_id: str, gate_name: str) -> bool:
     """Create a sentinel file for a feature gate.
 
@@ -532,6 +607,25 @@ def main():
                 # Inspecting / reading-ahead — log the step, do NOT move the FSM.
                 output.add_message(f"{label} (inspecting — no transition)")
                 labelled = True
+                # Loop guard: a repeated no-transition read of the same WF_*
+                # memory from the same state is a stall signal (reading alone
+                # cannot move the FSM here) — nudge toward the explicit
+                # transition tool once the threshold is reached. Spawned
+                # agents already short-circuited to output_empty() earlier in
+                # main(), so this only ever runs for the orchestrator.
+                stream_path = get_stream_path(session_id)
+                try:
+                    append_event(stream_path, 'inspect', m=bare_name,
+                                 from_s=current, s=session_id)
+                    loop_count = count_inspect_loop(
+                        _read_all_events(stream_path), bare_name, current)
+                    loop_msg = inspect_loop_guard_message(
+                        bare_name, current, session_id, loop_count)
+                    if loop_msg:
+                        output.add_message("")
+                        output.add_message(loop_msg)
+                except Exception:
+                    pass
 
         if not labelled:
             output.add_message(label)
