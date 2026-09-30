@@ -683,6 +683,93 @@ class TestCheckMemorySweep(unittest.TestCase):
         self.assertIsNotNone(err)
         self.assertIn("em/feature/feature_tests", err.lower())
 
+    # ── USER DECISION (2026-09): spec/ and report/ fully excluded from ──
+    # ── the sweep — never demanded, never block the Affected Features ──
+    # ── write, but still accepted when explicitly loaded.             ──
+
+    def test_spec_docpending_never_blocks_write(self):
+        # A spec/ link surfaced this task (e.g. by a primary-feature
+        # [[spec/SPEC_X]] link) must never be demanded read/planned/ruled-out
+        # — spec/ is excluded from sweeps entirely, unlike an ordinary
+        # primary-sourced link which would otherwise reject bare omission.
+        _write_stream(self.stream_path, [
+            {"type": "docread", "name": "feature/FEATURE_X"},
+            {"type": "docpending", "new": ["spec/SPEC_COLD"],
+             "src": "feature/feature_x"},
+        ])
+        content = "- **Memories loaded**: feature/FEATURE_X\n"
+        err = wm._check_memory_sweep(self.session, content)
+        self.assertIsNone(err)
+        self.assertTrue(os.path.exists(self._sentinel()))
+
+    def test_report_docpending_never_blocks_write(self):
+        _write_stream(self.stream_path, [
+            {"type": "docread", "name": "feature/FEATURE_X"},
+            {"type": "docpending", "new": ["report/REPORT_OLD"],
+             "src": "feature/feature_paused"},
+        ])
+        content = "- **Memories loaded**: feature/FEATURE_X\n"
+        err = wm._check_memory_sweep(self.session, content)
+        self.assertIsNone(err)
+        self.assertTrue(os.path.exists(self._sentinel()))
+
+    def test_spec_under_memories_loaded_still_accepted_when_read(self):
+        # A task that explicitly reviews/authors/implements a spec still
+        # lists + reads it normally — exclusion from sweep DEMANDS never
+        # means rejection of an explicit load.
+        _write_stream(self.stream_path, [
+            {"type": "docread", "name": "feature/FEATURE_X"},
+            {"type": "docread", "name": "spec/SPEC_TARGET"},
+        ])
+        content = ("- **Memories loaded**: feature/FEATURE_X, "
+                   "spec/SPEC_TARGET\n")
+        err = wm._check_memory_sweep(self.session, content)
+        self.assertIsNone(err)
+        with open(self._sentinel()) as f:
+            self.assertIn("spec/spec_target", json.load(f)["memories"])
+
+    def test_spec_under_memories_loaded_but_unread_still_rejected(self):
+        # Explicit-load acceptance is not a free pass: an EXPLICITLY LISTED
+        # spec/ name must still have an actual read this session, exactly
+        # like any other listed name.
+        _write_stream(self.stream_path, [
+            {"type": "docread", "name": "feature/FEATURE_X"},
+        ])
+        content = ("- **Memories loaded**: feature/FEATURE_X, "
+                   "spec/SPEC_TARGET\n")
+        err = wm._check_memory_sweep(self.session, content)
+        self.assertIsNotNone(err)
+        self.assertIn("spec/spec_target", err.lower())
+
+    def test_aliased_spec_docpending_excluded(self):
+        # Alias form (em/spec/SPEC_X) is excluded the same as spec/SPEC_X —
+        # normalize_memory_name does not strip the alias segment, so the
+        # exclusion check must still match it.
+        _write_stream(self.stream_path, [
+            {"type": "docread", "name": "feature/FEATURE_X"},
+            {"type": "docpending", "new": ["em/spec/SPEC_ALIASED"],
+             "src": "feature/feature_x"},
+        ])
+        content = "- **Memories loaded**: feature/FEATURE_X\n"
+        err = wm._check_memory_sweep(self.session, content)
+        self.assertIsNone(err)
+
+    def test_non_excluded_lookalike_names_still_demanded(self):
+        # A DOM_/REF_ name that merely CONTAINS the word "spec" is not
+        # topic-excluded — only an actual spec/ or report/ PREFIX is.
+        _write_stream(self.stream_path, [
+            {"type": "docread", "name": "feature/FEATURE_X"},
+            {"type": "docpending",
+             "new": ["dom/DOM_SPECIAL", "ref/REF_SPEC_PARSER"],
+             "src": "feature/feature_x"},
+        ])
+        content = "- **Memories loaded**: feature/FEATURE_X\n"
+        err = wm._check_memory_sweep(self.session, content)
+        self.assertIsNotNone(err)
+        self.assertIn("dom/dom_special", err.lower())
+        self.assertIn("ref/ref_spec_parser", err.lower())
+        self.assertFalse(os.path.exists(self._sentinel()))
+
 
 class TestParseDeferredNames(unittest.TestCase):
     def test_absent_line_returns_empty(self):

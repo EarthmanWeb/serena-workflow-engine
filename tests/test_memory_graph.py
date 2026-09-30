@@ -162,6 +162,64 @@ class TestValidateSyntheticTree(unittest.TestCase):
         self.assertEqual(result["dangling"], [])
 
 
+class TestExcludedMemoriesGraph(unittest.TestCase):
+    """spec/ and report/ memories are excluded as link SOURCES (their
+    outbound dangling links are not reported) and as orphans, but remain
+    valid link TARGETS."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp(prefix="memgraph_excl_test_")
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def test_dangling_link_inside_spec_memory_not_reported(self):
+        write(self.tmp, "spec/SPEC_X.md", "# X\nSee `mem:spec/SPEC_GHOST` next.\n")
+        result = vmg.validate([self.tmp])
+        self.assertEqual(result["dangling"], [])
+
+    def test_spec_memory_not_reported_as_orphan(self):
+        write(self.tmp, "spec/SPEC_X.md", "# X\nNever referenced by anyone.\n")
+        result = vmg.validate([self.tmp])
+        self.assertNotIn("spec/SPEC_X", result["orphans"])
+
+    def test_dom_to_spec_link_still_resolves(self):
+        write(self.tmp, "dom/DOM_A.md", "# A\nSee `mem:spec/SPEC_X` next.\n")
+        write(self.tmp, "spec/SPEC_X.md", "# X\n")
+        result = vmg.validate([self.tmp])
+        self.assertEqual(result["dangling"], [])
+        # spec/SPEC_X receives inbound credit as a valid link TARGET, and is
+        # excluded from orphan reporting regardless.
+        self.assertNotIn("spec/SPEC_X", result["orphans"])
+
+    def test_report_topic_same_behavior(self):
+        write(self.tmp, "report/REPORT_Y.md", "# Y\nSee `mem:report/REPORT_GHOST` next.\n")
+        result = vmg.validate([self.tmp])
+        self.assertEqual(result["dangling"], [])
+        self.assertNotIn("report/REPORT_Y", result["orphans"])
+
+    def test_research_topic_same_behavior(self):
+        write(self.tmp, "research/RESEARCH_Y.md", "# Y\nSee `mem:research/RESEARCH_GHOST` next.\n")
+        result = vmg.validate([self.tmp])
+        self.assertEqual(result["dangling"], [])
+        self.assertNotIn("research/RESEARCH_Y", result["orphans"])
+
+    def test_project_topic_same_behavior(self):
+        write(self.tmp, "project/PROJECT_Y.md", "# Y\nSee `mem:project/PROJECT_GHOST` next.\n")
+        result = vmg.validate([self.tmp])
+        self.assertEqual(result["dangling"], [])
+        self.assertNotIn("project/PROJECT_Y", result["orphans"])
+
+    def test_excluded_count_in_result(self):
+        write(self.tmp, "spec/SPEC_X.md", "# X\n")
+        write(self.tmp, "report/REPORT_Y.md", "# Y\n")
+        write(self.tmp, "research/RESEARCH_Z.md", "# Z\n")
+        write(self.tmp, "project/PROJECT_Q.md", "# Q\n")
+        write(self.tmp, "dom/DOM_A.md", "# A\n")
+        result = vmg.validate([self.tmp])
+        self.assertEqual(result["excluded"], 4)
+
+
 class TestRootParityCLI(unittest.TestCase):
     """CLI-level root parity with scripts/memory-size-audit.py: aliased
     --root, .serena/memory-paths.conf default, and --plugin-root."""

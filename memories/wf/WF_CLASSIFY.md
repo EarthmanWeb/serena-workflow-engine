@@ -94,7 +94,7 @@ Body-content search sanctioned: when name/front-matter search misses, a Grep/Bas
 
 ### 4d. Feature Knowledge Sweep (MANDATORY — every route) — TWO-TIER
 
-Load the feature's knowledge set before transitioning — the sweep sentinel unlocking WF_EXECUTE edits is verified against this load (4e). TWO tiers, always: cheap front-matter digest (TIER 0) then a hard-capped full-body read of the task-relevant subset (TIER 1). Every candidate rule gets a disposition (read/planned/ruled-out/deferred) — nothing silently skipped. Full disposition rules, cross-cutting handling, idempotence, source enumeration: `mem:ref/REF_WF_CLASSIFY_SWEEP`.
+Load the feature's knowledge set before transitioning — the sweep sentinel unlocking WF_EXECUTE edits is verified against this load (4e). TWO tiers, always: cheap front-matter digest (TIER 0) then a hard-capped full-body read of the task-relevant subset (TIER 1). Every candidate rule gets a disposition (read/planned/ruled-out/deferred) — nothing silently skipped. Full rules, cross-cutting handling, idempotence, source enumeration: `mem:ref/REF_WF_CLASSIFY_SWEEP`.
 
 #### TIER 0 — Digest Pass (ALWAYS, ONE extraction)
 
@@ -112,15 +112,16 @@ No `obligations:` field → digest by `description:` alone.
 
 #### TIER 1 — Body Pass (task-relevant subset, HARD-CAPPED)
 
-READ — HARD CAP: primary `FEATURE_*` + secondary `FEATURE_*` the request EXPLICITLY touches + at most 3 directly-relevant `REF_*`/`DOM_*`/`SYS_*`/`ARCH_*` refs whose Tier-0 digest intersects the task's touched surfaces. DEFER cold refs. Canonical rule: a link surfaced by the PRIMARY feature cannot be deferred — READ it (counts against the cap) or, past the cap, PLAN or RULE IT OUT with a reason. Unsure → read it. Full mechanics incl. WM-write rejection: `mem:ref/REF_WF_CLASSIFY_SWEEP`.
+READ — HARD CAP: primary `FEATURE_*` + secondary `FEATURE_*` the request EXPLICITLY touches + at most 3 directly-relevant `REF_*`/`DOM_*`/`SYS_*`/`ARCH_*` refs whose Tier-0 digest intersects the task's touched surfaces. DEFER cold refs. Canonical rule: a link surfaced by the PRIMARY feature cannot be deferred — READ it (counts against the cap) or, past the cap, PLAN or RULE IT OUT with a reason. Unsure → read it. Full mechanics: `mem:ref/REF_WF_CLASSIFY_SWEEP`.
 
 Exclusions — do NOT bulk-read during the sweep:
 
-- `spec/`, `report/`, `research/`, `project/` — symptom-surfaced (4b) or explicitly requested `spec/` loads exactly that spec.
-- `dev/` standards — loaded at `WF_ARCH_REVIEW`/start of `WF_EXECUTE` instead, scoped to touched files.
+- `spec/`, `report/` — EXCLUDED from sweeps: never bulk-loaded/demanded, no disposition needed. Load one only when explicitly named.
+- `research/`, `project/` — excluded from bulk loading, general context only.
+- `dev/` standards — loaded at `WF_ARCH_REVIEW`/`WF_EXECUTE` start, scoped to files.
 - `wf/`, `claude/`, `WM_*` — workflow machinery.
 
-Sweep = memory reads ONLY — no source reads, no symbol lookups, no edits.
+Sweep = memory reads ONLY — no source reads, symbol lookups, or edits.
 
 ### 4e. Update WM with Features + Loaded Memories (ENFORCED)
 
@@ -144,9 +145,9 @@ mcp__plugin_swe_swe-wm__swe_wm_update(
 - **Rules ruled out**: [`<name> — <reason>` entries; reason MANDATORY]
 ```
 
-Docpending satisfaction: primary-feature links = read ∪ planned ∪ ruled-out; other links = read ∪ deferred ∪ planned ∪ ruled-out.
+Docpending satisfaction: primary links = read ∪ planned ∪ ruled-out; other links = read ∪ deferred ∪ planned ∪ ruled-out.
 
-HARD-ENFORCED per task: every `**Memories loaded**:` name needs an ACTUAL `read_memory` THIS SESSION or rejected; list must include ≥1 `feature/*` memory or state `no-feature`; every `**Rules planned**:` name cited as `(mem:<name>)` on a Compliance Checklist line, rejected otherwise. Verified write creates the sweep sentinel gating all edits. One docs-first read ≠ the sweep. Full enforcement + rejection mechanics: `mem:ref/REF_WF_CLASSIFY_SWEEP`.
+HARD-ENFORCED per task: every `**Memories loaded**:` name needs an ACTUAL `read_memory` THIS SESSION or rejected; list must include ≥1 `feature/*` memory or state `no-feature`; every `**Rules planned**:` name cited as `(mem:<name>)` on a Compliance Checklist line, rejected otherwise. Verified write creates the sweep sentinel gating all edits. One docs-first read ≠ the sweep. Full enforcement: `mem:ref/REF_WF_CLASSIFY_SWEEP`.
 
 ## Step 5: Validate Requirements Against Domain Memories
 

@@ -35,7 +35,8 @@ Cross-cutting tasks (≥3 sibling features): load the shared parent feature + it
 
 Do NOT bulk-read these during Step 4d, even when Tier-0 surfaces a hit:
 
-- `spec/`, `report/`, `research/`, `project/` — excluded from BULK loading as general context only. A `spec/` memory surfaced by the Step 4b SYMPTOM search MUST be loaded. A spec the task explicitly asks to review/author/implement loads too — exactly that spec, nothing else from the topic.
+- `spec/`, `report/` — EXCLUDED from sweeps entirely: never bulk-loaded, never demanded by a sweep, no disposition (read/planned/ruled-out/deferred) needed. A hit from ANY sweep search (4b feature/fuzzy/symptom) is not a sweep obligation — it is never turned into a docpending link or a required WM disposition. Load a spec/report ONLY when the task explicitly names it (asks to review, author, or implement that exact spec) — exactly that one, nothing else from the topic.
+- `research/`, `project/` — excluded from BULK loading as general context only.
 - `dev/` standards — edit-time compliance; load at `WF_ARCH_REVIEW` or the start of `WF_EXECUTE`, scoped to touched files.
 - `wf/`, `claude/`, `WM_*` — workflow machinery, not feature knowledge.
 

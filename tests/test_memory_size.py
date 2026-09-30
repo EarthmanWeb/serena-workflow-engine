@@ -169,6 +169,66 @@ class TestClassifySize(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
+# is_excluded_memory
+# ---------------------------------------------------------------------------
+class TestIsExcludedMemory(unittest.TestCase):
+    def test_spec_topic_excluded(self):
+        self.assertTrue(size_mod.is_excluded_memory("spec/SPEC_X"))
+
+    def test_aliased_spec_topic_excluded(self):
+        self.assertTrue(size_mod.is_excluded_memory("em/spec/SPEC_X"))
+
+    def test_report_topic_excluded(self):
+        self.assertTrue(size_mod.is_excluded_memory("report/REPORT_Y"))
+
+    def test_dom_topic_not_excluded(self):
+        self.assertFalse(size_mod.is_excluded_memory("dom/DOM_SPECIAL"))
+
+    def test_ref_spec_parser_not_excluded(self):
+        # Basename "REF_SPEC_PARSER" does not start with SPEC_/REPORT_, and
+        # no path segment other than the basename is an excluded topic.
+        self.assertFalse(size_mod.is_excluded_memory("ref/REF_SPEC_PARSER"))
+
+    def test_bare_spec_name_no_topic_excluded(self):
+        self.assertTrue(size_mod.is_excluded_memory("SPEC_Z"))
+
+    def test_bare_report_name_no_topic_excluded(self):
+        self.assertTrue(size_mod.is_excluded_memory("REPORT_Q"))
+
+    def test_research_topic_excluded(self):
+        self.assertTrue(size_mod.is_excluded_memory("research/RESEARCH_X"))
+
+    def test_project_topic_excluded(self):
+        self.assertTrue(size_mod.is_excluded_memory("project/PROJECT_Y"))
+
+    def test_aliased_research_topic_excluded(self):
+        self.assertTrue(size_mod.is_excluded_memory("em/research/RESEARCH_Z"))
+
+    def test_bare_project_name_no_topic_excluded(self):
+        self.assertTrue(size_mod.is_excluded_memory("PROJECT_Q"))
+
+    def test_dom_projection_not_excluded(self):
+        # Basename "DOM_PROJECTION" does not start with an excluded-topic
+        # prefix, and no path segment equals an excluded topic.
+        self.assertFalse(size_mod.is_excluded_memory("dom/DOM_PROJECTION"))
+
+    def test_ref_research_tools_not_excluded(self):
+        # Basename "REF_RESEARCH_TOOLS" does not start with an excluded-topic
+        # prefix, and no path segment equals an excluded topic.
+        self.assertFalse(size_mod.is_excluded_memory("ref/REF_RESEARCH_TOOLS"))
+
+    def test_case_insensitive_topic_and_basename(self):
+        self.assertTrue(size_mod.is_excluded_memory("Spec/spec_lower"))
+        self.assertTrue(size_mod.is_excluded_memory("report_lower"))
+
+    def test_empty_name_not_excluded(self):
+        self.assertFalse(size_mod.is_excluded_memory(""))
+
+    def test_unrelated_name_not_excluded(self):
+        self.assertFalse(size_mod.is_excluded_memory("wf/WF_INIT"))
+
+
+# ---------------------------------------------------------------------------
 # size_advisory
 # ---------------------------------------------------------------------------
 class TestSizeAdvisory(unittest.TestCase):
@@ -200,6 +260,22 @@ class TestSizeAdvisory(unittest.TestCase):
         self.assertIn(f"{size_mod.SPLIT_CHARS:,}", msg)
         self.assertIn(f"{size_mod.UNREADABLE_CHARS:,}", msg)
 
+    def test_none_for_oversized_spec_memory(self):
+        text = "x" * (size_mod.UNREADABLE_CHARS + 100)
+        self.assertIsNone(size_mod.size_advisory("spec/SPEC_BIG", text))
+
+    def test_none_for_oversized_report_memory(self):
+        text = "x" * (size_mod.SPLIT_CHARS + 100)
+        self.assertIsNone(size_mod.size_advisory("report/REPORT_BIG", text))
+
+    def test_none_for_oversized_research_memory(self):
+        text = "x" * (size_mod.UNREADABLE_CHARS + 100)
+        self.assertIsNone(size_mod.size_advisory("research/RESEARCH_BIG", text))
+
+    def test_none_for_oversized_project_memory(self):
+        text = "x" * (size_mod.SPLIT_CHARS + 100)
+        self.assertIsNone(size_mod.size_advisory("project/PROJECT_BIG", text))
+
 
 # ---------------------------------------------------------------------------
 # scripts/memory-size-audit.py — subprocess-level tests
@@ -225,6 +301,39 @@ class TestAuditScriptRoots(unittest.TestCase):
 
     def tearDown(self):
         self.tmp.cleanup()
+
+    def test_spec_and_report_memories_excluded_from_table_and_counts(self):
+        os.makedirs(os.path.join(self.root, "spec"))
+        os.makedirs(os.path.join(self.root, "report"))
+        with open(os.path.join(self.root, "spec", "SPEC_BIG.md"), "w") as f:
+            f.write("x" * (size_mod.UNREADABLE_CHARS + 100))
+        with open(os.path.join(self.root, "report", "REPORT_BIG.md"), "w") as f:
+            f.write("x" * (size_mod.SPLIT_CHARS + 100))
+        proc = run_script(["--root", self.root, "--json", "--all"], cwd=self.tmp.name)
+        data = json.loads(proc.stdout)
+        names = [m["name"] for m in data["memories"]]
+        self.assertNotIn("spec/SPEC_BIG", names)
+        self.assertNotIn("report/REPORT_BIG", names)
+        self.assertEqual(data["counts"]["excluded"], 2)
+        # excluded memories never affect the split/unreadable exit code.
+        text_proc = run_script(["--root", self.root], cwd=self.tmp.name)
+        self.assertIn("excluded=2", text_proc.stdout)
+
+    def test_research_and_project_memories_excluded_from_table_and_counts(self):
+        os.makedirs(os.path.join(self.root, "research"))
+        os.makedirs(os.path.join(self.root, "project"))
+        with open(os.path.join(self.root, "research", "RESEARCH_BIG.md"), "w") as f:
+            f.write("x" * (size_mod.UNREADABLE_CHARS + 100))
+        with open(os.path.join(self.root, "project", "PROJECT_BIG.md"), "w") as f:
+            f.write("x" * (size_mod.SPLIT_CHARS + 100))
+        proc = run_script(["--root", self.root, "--json", "--all"], cwd=self.tmp.name)
+        data = json.loads(proc.stdout)
+        names = [m["name"] for m in data["memories"]]
+        self.assertNotIn("research/RESEARCH_BIG", names)
+        self.assertNotIn("project/PROJECT_BIG", names)
+        self.assertEqual(data["counts"]["excluded"], 2)
+        text_proc = run_script(["--root", self.root], cwd=self.tmp.name)
+        self.assertIn("excluded=2", text_proc.stdout)
 
     def test_plain_root_json_shape_and_wm_skip(self):
         proc = run_script(["--root", self.root, "--json"], cwd=self.tmp.name)

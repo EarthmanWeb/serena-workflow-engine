@@ -20,6 +20,42 @@ UNREADABLE_CHARS = 50000
 
 CONF_PATH = os.path.join(".serena", "memory-paths.conf")
 
+# Topic segments excluded from size measurement/advisories everywhere.
+EXCLUDED_TOPICS = ("spec", "report", "research", "project")
+
+# Basename prefixes for excluded topics, derived from EXCLUDED_TOPICS (e.g.
+# "spec" -> "SPEC_"). Covers a bare "SPEC_Z" with no topic directory.
+_EXCLUDED_BASENAME_PREFIXES = tuple(f"{t.upper()}_" for t in EXCLUDED_TOPICS)
+
+
+def is_excluded_memory(name: str) -> bool:
+    """True when `name` belongs to an excluded topic (spec/, report/,
+    research/, project/).
+
+    `name` is a memory name as produced by the audit/validator tools:
+    an optional alias prefix, then path segments, then a basename, e.g.
+    "spec/SPEC_X", "em/spec/SPEC_X", "report/REPORT_Y", "research/RESEARCH_Z",
+    "project/PROJECT_Q", "dom/DOM_SPECIAL", "ref/REF_SPEC_PARSER", or a bare
+    "SPEC_Z" with no topic segment at all.
+
+    True when ANY path segment other than the basename equals an excluded
+    topic (case-insensitive), OR the basename itself starts with one of the
+    excluded-topic prefixes ("SPEC_", "REPORT_", "RESEARCH_", "PROJECT_",
+    case-insensitive) — covering a bare "SPEC_Z" with no topic directory.
+    """
+    if not name:
+        return False
+    parts = name.split("/")
+    basename = parts[-1]
+    dirs = parts[:-1]
+    for seg in dirs:
+        if seg.lower() in EXCLUDED_TOPICS:
+            return True
+    basename_upper = basename.upper()
+    if basename_upper.startswith(_EXCLUDED_BASENAME_PREFIXES):
+        return True
+    return False
+
 
 def parse_root_arg(raw):
     """Parse a --root value ([alias=]DIR) into (alias_or_None, dir)."""
@@ -184,10 +220,13 @@ def classify_size(chars, warn=WARN_CHARS, split=SPLIT_CHARS, unreadable=UNREADAB
 def size_advisory(name, text):
     """Return a one-line advisory string for a memory, or None when ok.
 
-    None is returned when classify_size(len(text)) == "ok". Otherwise a
-    single line naming the memory, its size, and the budget, pointing at
-    /swe-memory-size-audit.
+    None is returned when classify_size(len(text)) == "ok", OR when `name`
+    is an excluded memory (spec/, report/, research/, project/ — see
+    is_excluded_memory). Otherwise a single line naming the memory, its
+    size, and the budget, pointing at /swe-memory-size-audit.
     """
+    if is_excluded_memory(name):
+        return None
     chars = len(text or "")
     status = classify_size(chars)
     if status == "ok":

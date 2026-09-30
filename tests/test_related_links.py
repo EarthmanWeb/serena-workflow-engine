@@ -63,6 +63,42 @@ class TestRelatedLinks(unittest.TestCase):
         self.assertEqual(read_mod._related_links(""), set())
 
 
+class TestSearchCreditExcludesSweepTopics(unittest.TestCase):
+    """_search_credit (docs-first budget credit for search_memories calls)
+    must never withhold credit, or demand a read, for an unread spec/ or
+    report/ hit — USER DECISION (2026-09): those topics are fully excluded
+    from the sweep, including as SEARCH-surfaced obligations."""
+
+    def test_unread_spec_hit_alone_still_grants_credit(self):
+        credit, new_names = read_mod._search_credit(
+            {"spec/SPEC_COLD"}, set())
+        self.assertTrue(credit)
+        self.assertEqual(new_names, set())
+
+    def test_unread_report_hit_alone_still_grants_credit(self):
+        credit, new_names = read_mod._search_credit(
+            {"report/REPORT_OLD"}, set())
+        self.assertTrue(credit)
+        self.assertEqual(new_names, set())
+
+    def test_mixed_hits_spec_excluded_other_still_demanded(self):
+        # A genuine unread feature/dom hit alongside a spec hit still
+        # withholds credit — only the spec/report portion is excluded.
+        # _search_credit's inputs are already-normalized names (its callers
+        # normalize via _extract_memory_names before calling it).
+        credit, new_names = read_mod._search_credit(
+            {"spec/spec_cold", "dom/dom_x"}, set())
+        self.assertFalse(credit)
+        self.assertEqual(new_names, {"dom/dom_x"})
+
+    def test_aliased_spec_hit_excluded(self):
+        # Alias form (em/spec/SPEC_X) is excluded the same as spec/SPEC_X.
+        credit, new_names = read_mod._search_credit(
+            {"em/spec/spec_aliased"}, set())
+        self.assertTrue(credit)
+        self.assertEqual(new_names, set())
+
+
 class TestUnreadRelated(unittest.TestCase):
     def test_unread_is_links_minus_reads_minus_self(self):
         content = "mem:dev/DEV_PHP mem:feature/FEATURE_TESTS mem:ref/REF_X"

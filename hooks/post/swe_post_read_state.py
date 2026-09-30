@@ -49,10 +49,34 @@ MEMORY_LINK_RE = re.compile(
 # once this many stream events have accumulated since it was last shown.
 CONTINUATION_REEMIT_EVENTS = 20
 
+# USER DECISION (2026-09): spec/ and report/ are FULLY excluded from the
+# WF_CLASSIFY Feature Knowledge Sweep — never demanded, bulk-loaded, or
+# required to carry a disposition. A spec/report memory loads ONLY when the
+# task explicitly names it (review/author/implement exactly that one), never
+# because a sweep search or a read-surfaced link happened to mention it.
+# SWEEP_EXCLUDED_PREFIXES is intentionally duplicated (same name, same value)
+# in hooks/swe_hooks/mcp/wm_server.py — both files own their own copy of this
+# list rather than sharing an import (neither file may take on a new shared
+# core-module dependency without touching modules outside this task's
+# ownership); keep the two definitions identical on any future change.
+SWEEP_EXCLUDED_PREFIXES = ('spec/', 'report/')
+
 LINK_EXCLUDED_PREFIXES = (
-    'wf/', 'claude/', 'spec/', 'report/', 'research/', 'project/',
+    'wf/', 'claude/', 'research/', 'project/',
     'templates/',
-)
+) + SWEEP_EXCLUDED_PREFIXES
+
+
+def _is_sweep_excluded(name: str) -> bool:
+    """True when `name` (already normalize_memory_name'd) is spec/ or
+    report/ — directly, or behind one aliased leading segment (e.g.
+    'em/spec/SPEC_X' from a `--memory-path`/.serena/memory-paths.conf
+    `alias=path` entry). Duplicated identically in
+    hooks/swe_hooks/mcp/wm_server.py — see SWEEP_EXCLUDED_PREFIXES above."""
+    if name.startswith(SWEEP_EXCLUDED_PREFIXES):
+        return True
+    rest = name.split('/', 1)[1] if '/' in name else ''
+    return rest.startswith(SWEEP_EXCLUDED_PREFIXES)
 
 
 def _related_links(text: str) -> set:
@@ -69,8 +93,11 @@ def _related_links(text: str) -> set:
     links = set()
     for match in MEMORY_LINK_RE.findall(str(text)):
         name = normalize_memory_name(match)
-        if is_valid_memory_name(name) and not name.startswith(LINK_EXCLUDED_PREFIXES):
-            links.add(name)
+        if not is_valid_memory_name(name):
+            continue
+        if name.startswith(LINK_EXCLUDED_PREFIXES) or _is_sweep_excluded(name):
+            continue
+        links.add(name)
     return links
 
 
@@ -98,8 +125,15 @@ def _search_credit(hit_names: set, read_names: set):
     (nothing documented → exploring source is legitimate) or every hit already
     read (re-search confirming the same authoritative docs). NEW names mean
     unread documentation was just surfaced: no credit until it is read.
+
+    spec/ and report/ hits are excluded from "new" before the credit decision
+    (USER DECISION 2026-09, sweep-excluded topics): an unread SPEC_*/REPORT_*
+    name a search happens to surface must never withhold docs-first credit or
+    get demanded as a designated next read — those topics are never bulk-load
+    obligations.
     """
-    new_names = set(hit_names) - set(read_names)
+    new_names = {n for n in (set(hit_names) - set(read_names))
+                 if not _is_sweep_excluded(n)}
     return (len(new_names) == 0, new_names)
 
 
@@ -181,17 +215,18 @@ def _get_continuation(current_state: str, session_id: str = None) -> str:
     """
     sid = f'session_id="{session_id}"' if session_id else 'session_id="<id>"'
     # WF_CLASSIFY wording MUST agree with WF_CLASSIFY.md Step 4d (tiered
-    # loading; spec/ excluded from bulk loading) — between-call banners
-    # outweigh the state doc at decision time, so a "Load ALL … SPEC_*"
-    # banner here mistrains the sweep. Linted by
-    # tests/test_banner_doc_consistency.py.
+    # loading; spec/ and report/ EXCLUDED from sweeps entirely — never
+    # bulk-loaded, never demanded, no disposition needed; a spec/report loads
+    # only when the task explicitly names it) — between-call banners outweigh
+    # the state doc at decision time, so a "Load ALL … SPEC_*" banner here
+    # mistrains the sweep. Linted by tests/test_banner_doc_consistency.py.
     directives = {
         "WF_CLASSIFY": (
             "Tiered sweep: read primary FEATURE_[KEY] + directly-relevant "
-            "DOM_*/REF_* (≤3 refs; symptom-surfaced spec/ counts), DEFER "
-            f"cold refs → ONE swe_wm_update call ({sid}, sections=[Affected "
-            "Features with '**Memories loaded**:' as PLAIN comma-separated "
-            "names]) → route to next step"),
+            "DOM_*/REF_* (≤3 refs; spec/, report/ excluded from sweeps), "
+            f"DEFER cold refs → ONE swe_wm_update call ({sid}, "
+            "sections=[Affected Features with '**Memories loaded**:' as "
+            "PLAIN comma-separated names]) → route to next step"),
         "WF_ARCH_REVIEW": "Complete architecture review → present plan → route to WF_EXECUTE",
         "WF_EXECUTE": "Continue implementation → checkpoint at 3+ edits → WF_VERIFY when done",
         "WF_RESEARCH": "Continue investigation → record findings → route when complete",

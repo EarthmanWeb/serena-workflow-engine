@@ -89,6 +89,8 @@ Split at >16,000 chars into hub + children per `/swe-memory-size-audit` SPLIT CO
 original name/path — existing `mem:` links stay valid. A `📏 MEMORY SIZE` advisory means act now — run
 `/swe-memory-size-audit`, not a manual edit.
 
+Exempt: `spec/` and `report/` memories (not loaded as general context; ignored by the size tooling).
+
 ## Self-Compliance
 
 This memory conforms to itself. When editing it, keep it imperative, concrete, and free of filler.

@@ -52,12 +52,16 @@ from swe_hooks.core.memory_size import (  # noqa: E402
     SPLIT_CHARS,
     UNREADABLE_CHARS,
     CONF_PATH,
+    EXCLUDED_TOPICS,
     measure_memory,
     classify_size,
     parse_root_arg,
     load_conf_roots,
     resolve_roots,
+    is_excluded_memory,
 )
+
+EXCLUDED_TOPICS_LABEL = ", ".join(f"{t}/" for t in EXCLUDED_TOPICS)
 
 
 def find_memory_files(root_dir):
@@ -87,6 +91,7 @@ def collect_memories(roots, topics, warn, split, unreadable, sections_n):
     """
     records = []
     missing = []
+    excluded_count = 0
     for alias, root_dir in roots:
         if not os.path.isdir(root_dir):
             label = f"{alias}={root_dir}" if alias else root_dir
@@ -95,6 +100,9 @@ def collect_memories(roots, topics, warn, split, unreadable, sections_n):
         for rel, abspath in find_memory_files(root_dir):
             name = f"{alias}/{rel}" if alias else rel
             if topics and not any(name.startswith(t) for t in topics):
+                continue
+            if is_excluded_memory(name):
+                excluded_count += 1
                 continue
             try:
                 with open(abspath, "r", encoding="utf-8") as f:
@@ -128,10 +136,10 @@ def collect_memories(roots, topics, warn, split, unreadable, sections_n):
     if missing:
         for label in missing:
             print(f"ERROR: memory root not found: {label}", file=sys.stderr)
-        return None
+        return None, 0
 
     records.sort(key=lambda r: r["chars"], reverse=True)
-    return records
+    return records, excluded_count
 
 
 def main():
@@ -174,7 +182,7 @@ def main():
         )
         return 2
 
-    records = collect_memories(
+    records, excluded_count = collect_memories(
         roots, args.topics, args.warn, args.split, args.unreadable, args.sections
     )
     if records is None:
@@ -182,7 +190,7 @@ def main():
         # found: ..." line per missing root to stderr.
         return 2
 
-    counts = {"ok": 0, "warn": 0, "split": 0, "unreadable": 0}
+    counts = {"ok": 0, "warn": 0, "split": 0, "unreadable": 0, "excluded": excluded_count}
     for r in records:
         counts[r["status"]] += 1
 
@@ -207,7 +215,8 @@ def main():
         print()
         print(
             f"counts: ok={counts['ok']} warn={counts['warn']} "
-            f"split={counts['split']} unreadable={counts['unreadable']}"
+            f"split={counts['split']} unreadable={counts['unreadable']} "
+            f"excluded={counts['excluded']} ({EXCLUDED_TOPICS_LABEL})"
         )
 
     return 1 if (counts["split"] or counts["unreadable"]) else 0

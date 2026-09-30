@@ -57,9 +57,13 @@ sys.path.insert(
 )
 from swe_hooks.core.memory_size import (  # noqa: E402
     CONF_PATH,
+    EXCLUDED_TOPICS,
     parse_root_arg,
     resolve_roots as _resolve_roots,
+    is_excluded_memory,
 )
+
+EXCLUDED_TOPICS_LABEL = ", ".join(f"{t}/" for t in EXCLUDED_TOPICS)
 
 LINK_MEM_RE = re.compile(r"mem:([A-Za-z0-9_./-]+)")
 LINK_WIKI_RE = re.compile(r"\[\[([A-Za-z0-9_./-]+)\]\]")
@@ -200,19 +204,31 @@ def validate(roots):
     orphans = []    # prefixed_name with zero inbound links
     word_counts = {}
     caps_counts = {}
+    excluded_count = 0
 
     inbound = {prefixed: 0 for prefixed, _, _, _ in files}
 
     for prefixed, bare, abspath, root in files:
+        if is_excluded_memory(prefixed):
+            excluded_count += 1
+
         try:
             with open(abspath, "r", encoding="utf-8") as f:
                 text = f.read()
         except OSError as e:
-            dangling.append((prefixed, f"<unreadable: {e}>"))
+            if not is_excluded_memory(prefixed):
+                dangling.append((prefixed, f"<unreadable: {e}>"))
             continue
 
         word_counts[prefixed] = len(text.split())
         caps_counts[prefixed] = {tok: text.count(tok) for tok in CAPS_TOKENS if text.count(tok)}
+
+        if is_excluded_memory(prefixed):
+            # Excluded memories are not validated as link SOURCES: their
+            # outbound links (dangling or not) are not reported. They still
+            # count as valid link TARGETS via `index` above, and their word
+            # counts / caps counts are still reported (informational only).
+            continue
 
         raw_links = extract_links(text)
         for raw in raw_links:
@@ -232,6 +248,8 @@ def validate(roots):
                 dangling.append((prefixed, link))
 
     for prefixed, _, _, _ in files:
+        if is_excluded_memory(prefixed):
+            continue
         if inbound.get(prefixed, 0) == 0:
             orphans.append(prefixed)
 
@@ -241,6 +259,7 @@ def validate(roots):
         "word_counts": word_counts,
         "caps_counts": caps_counts,
         "file_count": len(files),
+        "excluded": excluded_count,
     }
 
 
@@ -295,7 +314,10 @@ def main():
     if args.json:
         print(json.dumps(result, indent=2, ensure_ascii=False))
     else:
-        print(f"Scanned {result['file_count']} memory files under: {', '.join(root_labels)}")
+        print(
+            f"Scanned {result['file_count']} memory files under: {', '.join(root_labels)} "
+            f"(excluded={result['excluded']}: {EXCLUDED_TOPICS_LABEL})"
+        )
         print()
         if result["dangling"]:
             print(f"ERROR: {len(result['dangling'])} dangling link(s):")

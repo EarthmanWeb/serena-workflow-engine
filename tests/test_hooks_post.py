@@ -345,6 +345,31 @@ class TestStyleHookMainSizeAdvisory(unittest.TestCase):
         self.assertIn("suggestion-mood", out)
         self.assertIn("MEMORY SIZE", out)
 
+    def test_absent_for_oversized_spec_memory(self):
+        # spec/ memories are excluded from size measurement everywhere —
+        # size_advisory returns None for them regardless of size, so the
+        # hook (which calls size_advisory unchanged) emits no advisory.
+        big_body = "x" * (style_mod.size_advisory.__globals__["UNREADABLE_CHARS"] + 100)
+        self._write_memory("spec/SPEC_BIG.md", WITH_OBLIGATIONS_FM + big_body)
+        out = self._run_main("spec/SPEC_BIG")
+        self.assertNotIn("MEMORY SIZE", out)
+
+    def test_absent_for_oversized_research_memory(self):
+        # research/ memories are excluded from size measurement everywhere,
+        # same as spec/ and report/ — see test_absent_for_oversized_spec_memory.
+        big_body = "x" * (style_mod.size_advisory.__globals__["UNREADABLE_CHARS"] + 100)
+        self._write_memory("research/RESEARCH_BIG.md", WITH_OBLIGATIONS_FM + big_body)
+        out = self._run_main("research/RESEARCH_BIG")
+        self.assertNotIn("MEMORY SIZE", out)
+
+    def test_absent_for_oversized_project_memory(self):
+        # project/ memories are excluded from size measurement everywhere,
+        # same as spec/ and report/ — see test_absent_for_oversized_spec_memory.
+        big_body = "x" * (style_mod.size_advisory.__globals__["UNREADABLE_CHARS"] + 100)
+        self._write_memory("project/PROJECT_BIG.md", WITH_OBLIGATIONS_FM + big_body)
+        out = self._run_main("project/PROJECT_BIG")
+        self.assertNotIn("MEMORY SIZE", out)
+
     def test_exit_zero_and_json_only_even_when_oversized(self):
         import io
         from unittest import mock
