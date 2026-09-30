@@ -3,11 +3,11 @@
 A/B/control experiment comparing a headless Claude Code agent on one fixed
 coding task under three arms:
 
-| arm | description |
-|---|---|
-| `baseline` | SWE plugin at git ref `23ec65d` (v1.2.82) |
-| `v5` | SWE plugin at git ref `harness-v5-prototype` |
-| `control` | no plugin |
+| arm        | description                                  |
+| ---------- | -------------------------------------------- |
+| `baseline` | SWE plugin at git ref `23ec65d` (v1.2.82)    |
+| `v5`       | SWE plugin at git ref `harness-v5-prototype` |
+| `control`  | no plugin                                    |
 
 Arm definitions live in `arms.json`, each with an `"overlay"` field naming
 which `overlays/<name>/` directory (see below) is applied over the fixture
@@ -46,13 +46,13 @@ present, non-plugin arms get no overlay — so an old `arms.json` or a
 hand-built arm dict in a test keeps working unchanged.
 
 **What `control` sees:** `tasks/<name>/overlays/control/CLAUDE.md`, when it
-exists, is the *only* place the control arm is allowed to reference where
+exists, is the _only_ place the control arm is allowed to reference where
 project documentation lives — one line naming the `.serena/memory/`
 location, so the "doc" acceptance-test category (behavior only documented
 in a Serena memory) is a fair comparison and not an artificial handicap for
 an arm with no plugin/MCP access to `read_memory`. Nothing else about the
 plugin's workflow machinery (state names, gate language, tool names) may
-appear. `run.validate_claude_md` enforces this: every run's *effective*
+appear. `run.validate_claude_md` enforces this: every run's _effective_
 `CLAUDE.md` (fixture + overlay, exactly what the agent process actually
 sees) is checked before any `claude -p` call —
 
@@ -117,11 +117,11 @@ of the given `--task`.
 Each hidden test id is classified by its file-basename prefix
 (`acceptance.classify_test_category`):
 
-| prefix | category | meaning |
-|---|---|---|
-| `test_spec_*` | `spec` | behavior fully specified by `task.md` / derivable from the code |
-| `test_doc_*` | `doc` | behavior that is *only* documented in a Serena memory — passing requires having actually consulted the docs, not just reading the code |
-| anything else (e.g. `test_acceptance_*`, v1's convention) | `other` | ungrouped, kept for backward compat |
+| prefix                                                    | category | meaning                                                                                                                                |
+| --------------------------------------------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `test_spec_*`                                             | `spec`   | behavior fully specified by `task.md` / derivable from the code                                                                        |
+| `test_doc_*`                                              | `doc`    | behavior that is _only_ documented in a Serena memory — passing requires having actually consulted the docs, not just reading the code |
+| anything else (e.g. `test_acceptance_*`, v1's convention) | `other`  | ungrouped, kept for backward compat                                                                                                    |
 
 Per run, `acceptance["spec"]` / `["doc"]` / `["other"]` each hold
 `{"passed": n, "total": n}`.
@@ -187,19 +187,19 @@ stamp stays a plain timestamp for backward compatibility.
 
 Each `runs.jsonl` row carries a `"gates"` dict (`gate_conformance.py`,
 computed from the run's saved `transcript.jsonl` + `.serena/streams/*.jsonl`
-— pure derivation, no extra model calls) proving *whether the plugin's own
-gates were actually exercised*, not just how many tokens/turns a run took:
+— pure derivation, no extra model calls) proving _whether the plugin's own
+gates were actually exercised_, not just how many tokens/turns a run took:
 
-| field | meaning |
-|---|---|
-| `init_chain_complete` | `true` iff `read_memory` calls for `wf/WF_INIT`, `claude/CLAUDE_OBLIGATIONS`, `wf/WF_CLASSIFY` occur in that exact order before any other task-work tool call |
-| `sweep_verified` | `true` iff a `sweep` stream event (Feature Knowledge Sweep, WF_CLASSIFY step 4d) exists anywhere in the run |
-| `edits_before_sweep` | count of Edit/Write/NotebookEdit/Serena-structural-edit tool calls (main agent + subagents) that occur before the sweep marker — `0` means the edit gate held; nonzero is a conformance violation (or a fail-open path, e.g. a WM_\* write) |
-| `memories_read` | ordered, deduplicated list of memory names read this run, merged from stream `docread` events and transcript `read_memory` tool calls (main agent + subagents) |
-| `memories_read_channel` | `"serena+stream"` for a plugin arm, `"plain_read"` for the control arm (which has no MCP/plugin — its only channel is a plain `Read` of a `.serena/memory/...` file path) |
-| `doc_rule_memories_read` / `doc_rule_memories_coverage` | which of the task's `doc_rules.json` memories were actually read this run, and the fraction covered (`null` when the task ships no `doc_rules.json`) |
-| `states_visited` | ordered `to_s` values from `state` stream events |
-| `gate_denials` | counts of PreToolUse denials by kind (`init`/`sweep`/`edit`/`docs`/`stop`/`unclassified`), classified from `tool_result` error text against the exact deny-message prefixes each gate hook emits (`🛑 BLOCKED: ... called before WF_INIT complete`, `🛑 SWEEP GATE`, `📓 DOCS FIRST`, `🛑 BLOCKED: raw Edit/Write on a Serena memory file`, `🛑 BLOCKED: this write adds ... to MEMORY.md`, `Stop hook`) |
+| field                                                   | meaning                                                                                                                                                                                                                                                                                                                                                                                                  |
+| ------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `init_chain_complete`                                   | `true` iff `read_memory` calls for `wf/WF_INIT`, `claude/CLAUDE_OBLIGATIONS`, `wf/WF_CLASSIFY` occur in that exact order before any other task-work tool call                                                                                                                                                                                                                                            |
+| `sweep_verified`                                        | `true` iff a `sweep` stream event (Feature Knowledge Sweep, WF_CLASSIFY step 4d) exists anywhere in the run                                                                                                                                                                                                                                                                                              |
+| `edits_before_sweep`                                    | count of Edit/Write/NotebookEdit/Serena-structural-edit tool calls (main agent + subagents) that occur before the sweep marker — `0` means the edit gate held; nonzero is a conformance violation (or a fail-open path, e.g. a WM_\* write)                                                                                                                                                              |
+| `memories_read`                                         | ordered, deduplicated list of memory names read this run, merged from stream `docread` events and transcript `read_memory` tool calls (main agent + subagents)                                                                                                                                                                                                                                           |
+| `memories_read_channel`                                 | `"serena+stream"` for a plugin arm, `"plain_read"` for the control arm (which has no MCP/plugin — its only channel is a plain `Read` of a `.serena/memory/...` file path)                                                                                                                                                                                                                                |
+| `doc_rule_memories_read` / `doc_rule_memories_coverage` | which of the task's `doc_rules.json` memories were actually read this run, and the fraction covered (`null` when the task ships no `doc_rules.json`)                                                                                                                                                                                                                                                     |
+| `states_visited`                                        | ordered `to_s` values from `state` stream events                                                                                                                                                                                                                                                                                                                                                         |
+| `gate_denials`                                          | counts of PreToolUse denials by kind (`init`/`sweep`/`edit`/`docs`/`stop`/`unclassified`), classified from `tool_result` error text against the exact deny-message prefixes each gate hook emits (`🛑 BLOCKED: ... called before WF_INIT complete`, `🛑 SWEEP GATE`, `📓 DOCS FIRST`, `🛑 BLOCKED: raw Edit/Write on a Serena memory file`, `🛑 BLOCKED: this write adds ... to MEMORY.md`, `Stop hook`) |
 
 The control arm's row still gets a `"gates"` dict (so it's directly
 comparable), but with `init_chain_complete`/`sweep_verified` forced `false`
@@ -245,7 +245,7 @@ is wired correctly.
   --dangerously-skip-permissions ... [--plugin-dir <armdir>]`.
   `--setting-sources project,local` excludes user settings, so the
   operator's own installed SWE plugin and user hooks never load; a plugin
-  arm loads the plugin *only* via `--plugin-dir`.
+  arm loads the plugin _only_ via `--plugin-dir`.
 - The subprocess environment is a scrubbed copy of `os.environ`: every key
   starting with `CLAUDE` or `SWE_` is removed (except `CLAUDE_CONFIG_DIR`,
   kept if set) so a harness invoked from inside a Claude Code session itself
@@ -265,7 +265,7 @@ is wired correctly.
   runs `claude auth status` (read-only, no model call) and reports the
   result without aborting.
 - Each `claude` subprocess starts a new process group
-  (`start_new_session=True`). On timeout the harness kills the *whole group*
+  (`start_new_session=True`). On timeout the harness kills the _whole group_
   (SIGTERM, then SIGKILL after 10s) — plugin arms spawn MCP servers (uv/
   python) as children that would otherwise be orphaned.
 - Trial ordering interleaves arms (each trial shuffles arm order with a
@@ -360,7 +360,7 @@ with a clear message before any `claude -p` call if either is missing or
 not `> 0`:
 
 - **`--budget-usd <n>` (per-run cap, required, must be `> 0`)** — passed as
-  `--max-budget-usd <n>` to *every* `claude -p` invocation while API billing
+  `--max-budget-usd <n>` to _every_ `claude -p` invocation while API billing
   is allowed, including `--preflight`'s two probe calls and every run in a
   full experiment. On subscription auth this same flag stays optional (only
   passed at all if you supply it, as the runaway-cost guard described above).
@@ -421,7 +421,7 @@ below), a KPI row per arm, and these chart sections:
 - **spec vs doc-rule pass rate** — grouped bars per arm, spec vs doc
   distinguished by fill opacity (never hue alone), with a legend
 - **doc-rule pass/fail by run** — a sequential single-hue heatmap table,
-  arm-run rows x rule-id columns, every cell carrying an icon *and* a text
+  arm-run rows x rule-id columns, every cell carrying an icon _and_ a text
   label (✓/✗/– plus "pass"/"fail"/"no data")
 - **gate conformance per run** — a table of init-chain-complete /
   sweep-verified / edits-before-sweep / doc-rule-coverage / memory-read
@@ -443,11 +443,11 @@ premium on that basis, not penalized for costing more.
 
 `net_result(cell)` computes one composite quality score (0-100) per arm:
 
-| Component | Weight | What it measures |
-|---|---|---|
-| Acceptance (hidden-test pass %) | 0.5 | Was the fix thorough and working — leads the score, per the sr-only precedent |
-| Doc-rule pass % (`all_doc`) | 0.3 | House conventions applied |
-| Task-1 retention after pivot | 0.2 | Nothing broken by later work |
+| Component                       | Weight | What it measures                                                              |
+| ------------------------------- | ------ | ----------------------------------------------------------------------------- |
+| Acceptance (hidden-test pass %) | 0.5    | Was the fix thorough and working — leads the score, per the sr-only precedent |
+| Doc-rule pass % (`all_doc`)     | 0.3    | House conventions applied                                                     |
+| Task-1 retention after pivot    | 0.2    | Nothing broken by later work                                                  |
 
 A missing component (e.g. no pivot phase, so no retention was measured)
 drops out and the remaining weights renormalize to sum to 1.0.

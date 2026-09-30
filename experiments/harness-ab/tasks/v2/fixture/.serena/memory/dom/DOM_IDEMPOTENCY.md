@@ -49,7 +49,7 @@ malformed row without telling the caller which row it was.
   input rules reject), it must not raise and abort the whole batch. It
   collects that row's **1-based row number** (counting the first data
   row, i.e. excluding a header row if the source format has one, as row
-  1) into a rejection list and continues processing the remaining rows.
+  1. into a rejection list and continues processing the remaining rows.
 - The rejection list is returned to the caller as part of the operation's
   result — never only logged, never silently discarded — so the caller
   can see exactly which source rows failed.
@@ -67,5 +67,5 @@ the sync continues with the next row.
 
 Related: `mem:dom/DOM_INPUT_NORMALIZATION` (the normalization applied
 before fingerprinting), `mem:ref/REF_ERROR_HANDLING` (this policy is
-about *tolerating* bad rows in a batch, not the error raised for a
+about _tolerating_ bad rows in a batch, not the error raised for a
 single-record operation's invalid input), `mem:arch/ARCH_LEDGERLITE`.

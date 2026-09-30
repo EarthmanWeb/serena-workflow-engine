@@ -30,7 +30,7 @@ E_<AREA>_<CONDITION>
   a check in the weighted-distribution logic uses the area word `SPLIT`
   (see `mem:dom/DOM_MONEY_DISTRIBUTION`).
 - `<CONDITION>` is one or more words (all caps, underscore-joined)
-  describing *what* is wrong, using the same vocabulary the failing
+  describing _what_ is wrong, using the same vocabulary the failing
   rule's own specification uses for that condition — e.g. a period string
   that fails `mem:dom/DOM_FINANCE_CALENDAR`'s shape/range check uses the
   condition word `PERIOD`; a request for an output format the writer does

@@ -7,11 +7,11 @@ metadata:
 
 # ARCH_LEDGERLITE — ledgerlite Architecture
 
-| Property     | Value                       |
-| ------------ | ---------------------------- |
-| Key          | LEDGER                       |
-| Type         | Library + CLI                |
-| Language     | Python 3.11+ (stdlib only)    |
+| Property | Value                      |
+| -------- | -------------------------- |
+| Key      | LEDGER                     |
+| Type     | Library + CLI              |
+| Language | Python 3.11+ (stdlib only) |
 
 ## Layering
 
@@ -25,15 +25,15 @@ I/O, and do not put domain validation in the CLI layer.
 
 ## Modules
 
-| Module                     | Responsibility                                         |
-| --------------------------- | -------------------------------------------------------- |
-| `ledgerlite/money.py`        | Parse decimal strings to integer cents / format back      |
-| `ledgerlite/errors.py`       | `LedgerError` + `E_*` error code constants                 |
-| `ledgerlite/categories.py`   | Fixed allowed category set + input aliases                  |
-| `ledgerlite/models.py`       | Data model dataclasses (e.g. `Transaction`)                 |
-| `ledgerlite/store.py`        | JSON file persistence + queries (`Store`)                   |
-| `ledgerlite/cli.py`          | argparse CLI, `main(argv=None) -> int`                       |
-| `ledgerlite/__main__.py`     | `python3 -m ledgerlite` entry point                          |
+| Module                     | Responsibility                                       |
+| -------------------------- | ---------------------------------------------------- |
+| `ledgerlite/money.py`      | Parse decimal strings to integer cents / format back |
+| `ledgerlite/errors.py`     | `LedgerError` + `E_*` error code constants           |
+| `ledgerlite/categories.py` | Fixed allowed category set + input aliases           |
+| `ledgerlite/models.py`     | Data model dataclasses (e.g. `Transaction`)          |
+| `ledgerlite/store.py`      | JSON file persistence + queries (`Store`)            |
+| `ledgerlite/cli.py`        | argparse CLI, `main(argv=None) -> int`               |
+| `ledgerlite/__main__.py`   | `python3 -m ledgerlite` entry point                  |
 
 New feature modules (allocation/distribution logic, period-scoped reports,
 external-file export, and anything added after this memory was written)

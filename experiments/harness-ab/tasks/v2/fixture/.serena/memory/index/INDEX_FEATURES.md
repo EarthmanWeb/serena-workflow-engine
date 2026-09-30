@@ -11,6 +11,6 @@ Registry of all features. Load `mem:feature/FEATURE_[KEY]` for the primary featu
 
 ## Registered Features
 
-| Key    | Name              | Type         | Language | Status |
-| ------ | ----------------- | ------------ | -------- | ------ |
-| LEDGER | ledgerlite ledger | Library+CLI  | Python   | Active |
+| Key    | Name              | Type        | Language | Status |
+| ------ | ----------------- | ----------- | -------- | ------ |
+| LEDGER | ledgerlite ledger | Library+CLI | Python   | Active |

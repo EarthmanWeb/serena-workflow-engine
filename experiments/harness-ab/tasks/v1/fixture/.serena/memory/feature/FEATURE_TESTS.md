@@ -7,12 +7,12 @@ metadata:
 
 # FEATURE_TESTS — Test Suite
 
-| Property      | Value          |
-| -------------- | -------------- |
-| Key            | TESTS          |
-| Type           | infrastructure |
-| Language       | Python         |
-| Framework      | unittest (stdlib) |
+| Property  | Value             |
+| --------- | ----------------- |
+| Key       | TESTS             |
+| Type      | infrastructure    |
+| Language  | Python            |
+| Framework | unittest (stdlib) |
 
 ## Running Tests
 

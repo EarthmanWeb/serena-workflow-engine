@@ -13,6 +13,7 @@ metadata:
 standard library only (no third-party dependencies, no pip installs).
 
 **Entry points:**
+
 - Library: `ledgerlite/` package.
 - CLI: `python3 -m ledgerlite` (`ledgerlite/__main__.py` → `ledgerlite/cli.py:main`).
 - Tests: `tests/` (stdlib `unittest`).

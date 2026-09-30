@@ -61,9 +61,9 @@ The window `[window_start, window_end]` is INCLUSIVE on both ends.
   even if a budget exists for that category.
 - `remaining_cents` = `limit_cents - spent_cents` (may be negative when over budget).
 - `status` thresholds, evaluated as `spent_cents / limit_cents`:
-  - `ok`      — spent < 80% of limit (strictly less than 0.8)
+  - `ok` — spent < 80% of limit (strictly less than 0.8)
   - `warning` — 80% ≤ spent ≤ 100% of limit (inclusive both ends)
-  - `over`    — spent > 100% of limit (strictly greater than 1.0)
+  - `over` — spent > 100% of limit (strictly greater than 1.0)
 - A category with a budget set but zero spend in that month still appears in the
   report, with `spent_cents = 0` and `status = "ok"`.
 - A category with NO budget set for that month does not appear in the report at all.

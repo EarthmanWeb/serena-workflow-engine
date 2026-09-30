@@ -7,23 +7,23 @@ metadata:
 
 # FEATURE_LEDGER — ledgerlite Architecture
 
-| Property     | Value                       |
-| ------------ | ---------------------------- |
-| Key          | LEDGER                       |
-| Type         | Library + CLI                |
-| Language     | Python 3.11+ (stdlib only)    |
+| Property | Value                      |
+| -------- | -------------------------- |
+| Key      | LEDGER                     |
+| Type     | Library + CLI              |
+| Language | Python 3.11+ (stdlib only) |
 
 ## Modules
 
-| Module                     | Responsibility                                        |
-| --------------------------- | ------------------------------------------------------ |
-| `ledgerlite/money.py`        | Parse decimal strings to integer cents / format back    |
-| `ledgerlite/errors.py`       | `LedgerError` + `E_*` error code constants               |
-| `ledgerlite/categories.py`   | Fixed allowed category set                               |
-| `ledgerlite/models.py`       | `Transaction` dataclass                                  |
-| `ledgerlite/store.py`        | JSON file persistence + queries (`Store`)                 |
-| `ledgerlite/cli.py`          | argparse CLI, `main(argv=None) -> int`                    |
-| `ledgerlite/__main__.py`     | `python3 -m ledgerlite` entry point                        |
+| Module                     | Responsibility                                       |
+| -------------------------- | ---------------------------------------------------- |
+| `ledgerlite/money.py`      | Parse decimal strings to integer cents / format back |
+| `ledgerlite/errors.py`     | `LedgerError` + `E_*` error code constants           |
+| `ledgerlite/categories.py` | Fixed allowed category set                           |
+| `ledgerlite/models.py`     | `Transaction` dataclass                              |
+| `ledgerlite/store.py`      | JSON file persistence + queries (`Store`)            |
+| `ledgerlite/cli.py`        | argparse CLI, `main(argv=None) -> int`               |
+| `ledgerlite/__main__.py`   | `python3 -m ledgerlite` entry point                  |
 
 ## Data Flow
 

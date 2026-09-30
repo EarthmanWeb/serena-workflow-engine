@@ -17,11 +17,11 @@ further validation, storage, or output.
 
 ## Alias Table
 
-| Alias   | Canonical    |
-| ------- | ------------ |
-| `food`  | `groceries`  |
-| `car`   | `transport`  |
-| `fuel`  | `transport`  |
+| Alias  | Canonical   |
+| ------ | ----------- |
+| `food` | `groceries` |
+| `car`  | `transport` |
+| `fuel` | `transport` |
 
 - This table applies wherever a category is accepted as input, with no
   exceptions for a particular entry point — the same alias must resolve

@@ -7,6 +7,7 @@ so keep it lean — aim for < 200 lines.
 -->
 
 ## Features
+
 - [Feature Index](index/INDEX_FEATURES.md) — Feature registry
 
 ## Ledger
@@ -28,20 +29,20 @@ so keep it lean — aim for < 200 lines.
 
 ## Workflow Routing
 
-| Situation                  | Go To          |
-| --------------------------- | -------------- |
-| Simple lookup ("find X")    | `WF_RESEARCH`  |
-| Starting work (full)        | `WF_INIT`      |
-| Making changes               | `WF_CLASSIFY`  |
-| Continuing                   | `WF_CONTINUE`  |
-| Verifying                    | `WF_VERIFY`    |
+| Situation                | Go To         |
+| ------------------------ | ------------- |
+| Simple lookup ("find X") | `WF_RESEARCH` |
+| Starting work (full)     | `WF_INIT`     |
+| Making changes           | `WF_CLASSIFY` |
+| Continuing               | `WF_CONTINUE` |
+| Verifying                | `WF_VERIFY`   |
 
 ## Memory Types
 
-| Prefix   | Purpose           |
-| -------- | ----------------- |
-| FEATURE_ | Feature configs   |
-| DOM_     | Domain behaviors  |
-| REF_     | Reference docs    |
-| ARCH_    | Architecture      |
-| INDEX_   | Navigation        |
+| Prefix   | Purpose          |
+| -------- | ---------------- |
+| FEATURE_ | Feature configs  |
+| DOM_     | Domain behaviors |
+| REF_     | Reference docs   |
+| ARCH_    | Architecture     |
+| INDEX_   | Navigation       |
