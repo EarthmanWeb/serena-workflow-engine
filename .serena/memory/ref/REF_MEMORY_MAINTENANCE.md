@@ -1,6 +1,9 @@
 ---
 name: Memory Maintenance
 description: How memories should be created and maintained in this project — discovery model, style, add/update threshold, maintenance actions
+obligations:
+  - Reference other memories with a `mem:<topic>/<NAME>` prefix in backticks, and state in the REFERRING memory (never the referenced one) when/why to read it.
+  - Add or update a memory only for stable, non-obvious project conventions — NEVER for quick-read facts, generic language/framework knowledge, or one-off task notes.
 metadata:
   type: reference
 ---

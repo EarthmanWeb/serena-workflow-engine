@@ -261,6 +261,83 @@ class ParseTranscriptTest(unittest.TestCase):
         self.assertEqual(m["subagent_messages"], 2)  # 1 assistant + 1 user
 
 
+class ParseTranscriptHookAttachmentTest(unittest.TestCase):
+    """hook_attachment_blocks/hook_attachment_chars: every non-empty
+    tool_result and injected text content block on a user-role event,
+    counted unconditionally (not filtered to errors/hook-denial matches),
+    across main agent + subagents. See SPEC_HARNESS_EFFICIENCY_TUNING's
+    <=300 blocks / <=150k chars acceptance budget."""
+
+    def test_counts_tool_result_and_text_blocks(self):
+        events = [
+            {"type": "user", "message": {"content": [
+                {"type": "tool_result", "content": "ok, 5 chars is not this"},
+                {"type": "text", "text": "hook additionalContext here"},
+            ]}},
+        ]
+        m = run.parse_transcript([json.dumps(e) for e in events])
+        self.assertEqual(m["hook_attachment_blocks"], 2)
+        self.assertEqual(
+            m["hook_attachment_chars"],
+            len("ok, 5 chars is not this") + len("hook additionalContext here"))
+
+    def test_empty_blocks_not_counted(self):
+        events = [
+            {"type": "user", "message": {"content": [
+                {"type": "tool_result", "content": ""},
+                {"type": "text", "text": ""},
+                {"type": "tool_result"},  # no content key at all
+            ]}},
+        ]
+        m = run.parse_transcript([json.dumps(e) for e in events])
+        self.assertEqual(m["hook_attachment_blocks"], 0)
+        self.assertEqual(m["hook_attachment_chars"], 0)
+
+    def test_counted_unconditionally_not_gated_on_error_or_denial_match(self):
+        # A non-error tool_result with no hook-denial-pattern text still
+        # counts here, unlike hook_denials/stop_hook_blocks.
+        events = [
+            {"type": "user", "message": {"content": [
+                {"type": "tool_result", "is_error": False, "content": "plain output"},
+            ]}},
+        ]
+        m = run.parse_transcript([json.dumps(e) for e in events])
+        self.assertEqual(m["hook_attachment_blocks"], 1)
+        self.assertEqual(m["hook_attachment_chars"], len("plain output"))
+        self.assertEqual(m["hook_denials"], 0)
+
+    def test_counts_across_main_agent_and_subagent_events(self):
+        events = [
+            {"type": "user", "message": {"content": [
+                {"type": "tool_result", "content": "main agent block"},
+            ]}},
+            {"type": "user", "parent_tool_use_id": "toolu_01sub", "message": {"content": [
+                {"type": "tool_result", "content": "subagent block"},
+            ]}},
+        ]
+        m = run.parse_transcript([json.dumps(e) for e in events])
+        self.assertEqual(m["hook_attachment_blocks"], 2)
+        self.assertEqual(
+            m["hook_attachment_chars"],
+            len("main agent block") + len("subagent block"))
+
+    def test_content_list_shape_tool_result_counted_once(self):
+        # tool_result content may itself be a list of {"type": "text", ...}
+        # blocks (see _tool_result_text) -- still one hook_attachment block,
+        # with chars from the joined text.
+        events = [
+            {"type": "user", "message": {"content": [
+                {"type": "tool_result", "content": [
+                    {"type": "text", "text": "part one"},
+                    {"type": "text", "text": "part two"},
+                ]},
+            ]}},
+        ]
+        m = run.parse_transcript([json.dumps(e) for e in events])
+        self.assertEqual(m["hook_attachment_blocks"], 1)
+        self.assertEqual(m["hook_attachment_chars"], len("part one\npart two"))
+
+
 class ParseTranscriptMemoryFileReadsTest(unittest.TestCase):
     def test_counts_memory_mcp_tools_and_serena_memory_reads(self):
         events = [

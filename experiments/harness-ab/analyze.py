@@ -55,6 +55,8 @@ METRIC_FIELDS = [
     ("subagent_messages", lambda r: (r.get("metrics") or {}).get("subagent_messages")),
     ("hook_denials", lambda r: (r.get("metrics") or {}).get("hook_denials")),
     ("stop_hook_blocks", lambda r: (r.get("metrics") or {}).get("stop_hook_blocks")),
+    ("hook_attachment_blocks", lambda r: (r.get("metrics") or {}).get("hook_attachment_blocks")),
+    ("hook_attachment_chars", lambda r: (r.get("metrics") or {}).get("hook_attachment_chars")),
 ]
 
 METRIC_LABELS = {
@@ -671,7 +673,8 @@ def write_csv(rows, agg, out_dir):
                   "cache_read_tokens", "est_cost_usd", "tool_calls", "memory_file_reads",
                   "subagent_launches", "subagent_messages",
                   "assistant_turns_incl_subagents", "hook_denials",
-                  "stop_hook_blocks", "swe_gated_events", "acceptance_ok",
+                  "stop_hook_blocks", "hook_attachment_blocks",
+                  "hook_attachment_chars", "swe_gated_events", "acceptance_ok",
                   "acceptance_passed", "acceptance_total", "regression_ok"]
     with open(runs_csv, "w", newline="") as f:
         w = csv.DictWriter(f, fieldnames=fieldnames)
@@ -702,6 +705,8 @@ def write_csv(rows, agg, out_dir):
                 "assistant_turns_incl_subagents": m.get("assistant_turns_incl_subagents"),
                 "hook_denials": m.get("hook_denials"),
                 "stop_hook_blocks": m.get("stop_hook_blocks"),
+                "hook_attachment_blocks": m.get("hook_attachment_blocks"),
+                "hook_attachment_chars": m.get("hook_attachment_chars"),
                 "swe_gated_events": _swe_gate_count(r),
                 "acceptance_ok": acc.get("ok"),
                 "acceptance_passed": acc.get("passed"),

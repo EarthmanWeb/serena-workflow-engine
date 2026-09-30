@@ -1,6 +1,9 @@
 ---
 name: DOM_SWE_STATE_MACHINE
 description: State-transition logic for the 12-state workflow FSM plus the WF_INIT entry pseudo-state.
+obligations:
+  - NEVER `set_state` to a subflow (WF_INIT, WF_CLEANUP, WF_RESEARCH_LITE, WF_UPDATE_MEMORY) — they are documented procedures, not FSM states.
+  - NEVER Edit/Write outside WF_EXECUTE, WF_CHECKPOINT, WF_DEBUG_TDD, WF_VERIFY, or WF_ONBOARD.
 metadata:
   type: domain
 ---
@@ -15,7 +18,7 @@ metadata:
 - Pivot edges exist from every active state → `WF_CLASSIFY`, plus `SessionStart` → `WF_CONTINUE` and `WF_CLASSIFY` → `WF_ONBOARD`.
 - `loopCaps` bound repeated back-and-forth: `WF_EXECUTE` ↔ `WF_CHECKPOINT` (20), `WF_ARCH_REVIEW` self-loop (3), `WF_VERIFY` → `WF_EXECUTE` (3), `WF_CLASSIFY` → `WF_CLARIFY` (3). Exceeding a cap refuses the transition with an escape message; A→B→A→B oscillation warns without refusing.
 
-## State Set (v4)
+## State Set (v5)
 
 FSM = 12 state nodes in `states.json` PLUS the `WF_INIT` entry pseudo-state and 4 non-FSM subflows.
 

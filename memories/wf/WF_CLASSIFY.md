@@ -163,27 +163,51 @@ Body-content search is sanctioned:
 - `read_memory("feature/FEATURE_[KEY]")` — the primary feature.
 - Note its Related Memories section/table and any `[[linked]]` memory names — they seed the sweep in 4d.
 
-### 4d. Feature Knowledge Sweep (MANDATORY — every route)
+### 4d. Feature Knowledge Sweep (MANDATORY — every route) — TWO-TIER
 
 Load the feature's knowledge set before transitioning — work must not start on the primary FEATURE memory alone. This applies to every route: operational, research, audit, and code-change tasks alike. Skipping this is not just a style miss: the sweep sentinel that unlocks edits in WF_EXECUTE is verified against this load (Step 4e), so an incomplete sweep here blocks work later.
 
-Enumerate related memories from THREE sources:
+The sweep runs in TWO tiers: a cheap digest pass over every candidate memory's front-matter (TIER 0, always), then a full-body read of the task-relevant subset (TIER 1, hard-capped). Tier 0 gives complete AWARENESS at low cost; Tier 1 gives DEPTH where it is needed. Nothing enumerated by Tier 0 is silently skipped — every candidate rule gets a disposition (read, planned, ruled out, or deferred).
+
+#### TIER 0 — Digest Pass (ALWAYS, ONE extraction)
+
+Enumerate related memories from THREE sources first:
 
 1. The primary FEATURE memory's Related Memories section and `[[links]]`.
 2. `MEMORY.md` index lines whose title/hook matches the feature area or the request's domain terms.
 3. `search_memories_by_name("<feature key / domain terms>")` — catches memories neither the feature table nor MEMORY.md lists.
 
-Then load, TIERED by relevance — read the task-relevant set, defer the rest to on-miss expansion:
+Then run ONE sanctioned Bash/Grep extraction of front-matter (`name` + `description` + `obligations`) across the candidate memory dirs — `.serena/memory/{dom,ref,dev,feature}` plus any aliased trees in `.serena/memory-paths.conf`. This IS a credited docs consult (B2 docs-first budget refill); it is not a substitute for Tier 1 reads on the memories that matter.
 
-1. Read — HARD CAP: the primary `FEATURE_*` + the secondary `FEATURE_*` memories the request EXPLICITLY touches + at most 3 directly-relevant `REF_*`/`DOM_*`/`SYS_*`/`ARCH_*` refs. Judge relevance from the request's domain terms + the files/behavior in scope. Everything else is deferred; on-miss expansion is trusted.
-2. DEFER (do NOT read up front): enumerated refs that are cold to this task — tangential subsystems, sibling-feature detail the request never touches. Every link this task surfaces must end up either read (in `**Memories loaded**:`) or deferred (in `**Memories deferred**:`) — see the list rules at Step 4e for how. One exception: a link surfaced by your **Primary** feature is on-topic by construction, so read it rather than deferring (it counts against the 3-ref cap; past the cap, defer it too and trust on-miss).
-3. ON-MISS EXPANSION: the moment a deferred ref turns out to matter (a rule you need, a pattern the edit must follow, a `docpending` link the work surfaces), read it THEN, before the dependent edit. Reaching for a deferred ref mid-task is expected, not a failure.
+Exact command shape:
+
+```bash
+awk '
+  /^name:/ { name=$0 }
+  /^description:/ { desc=$0 }
+  /^obligations:/ { print FILENAME; print "  " name; print "  " desc; getline; while ($0 ~ /^  - /) { print $0; getline } }
+' .serena/memory/{dom,ref,dev,feature}/*.md
+```
+
+Fallback for a candidate with no `obligations:` field: digest it by its `description:` line alone (grep `-A6 '^obligations:'` finds none — the description is the whole digest for that memory).
+
+Output of Tier 0: complete awareness of every candidate rule's name + description + (if present) obligations, at roughly 1-2k tokens total. This is the input to the dispositions below — not a substitute for them.
+
+#### TIER 1 — Body Pass (task-relevant subset, HARD-CAPPED)
+
+Read, TIERED by relevance — read the task-relevant set, defer the rest to on-miss expansion:
+
+1. Read — HARD CAP: the primary `FEATURE_*` + the secondary `FEATURE_*` memories the request EXPLICITLY touches + at most 3 directly-relevant `REF_*`/`DOM_*`/`SYS_*`/`ARCH_*` refs whose Tier 0 digest intersects the task's touched surfaces. Judge relevance from the request's domain terms + the files/behavior in scope. Everything else is deferred; on-miss expansion is trusted.
+2. DEFER (do NOT read up front): enumerated refs that are cold to this task — tangential subsystems, sibling-feature detail the request never touches. Every link this task surfaces must end up in one of three buckets: read (`**Memories loaded**:`), planned (`**Rules planned**:` + a `## Compliance Checklist` line), or deferred (`**Memories deferred**:`) — see the list rules at Step 4e for how. One exception: a link surfaced by your **Primary** feature is on-topic by construction, so read it rather than deferring (it counts against the 3-ref cap; past the cap, plan or defer it too and trust on-miss).
+3. PLANNED disposition: a Tier-0 digest that intersects the task but does not clear the Tier-1 cap — its obligation lines are captured into WM `## Compliance Checklist` as `- [ ] <obligation text> (mem:<name>)`, unread. This is NOT a body read; it is a scoped IOU the checklist tracks. WF_EXECUTE reads the body on-miss before implementing that item; WF_VERIFY rejects a planned item verified from the digest alone.
+4. RULED OUT disposition: a Tier-0 digest judged genuinely irrelevant to the task's touched surfaces — note it on `**Rules ruled out**:` with a reason. A reason is MANDATORY for ruled-out (unlike deferred, where a reason is optional).
+5. ON-MISS EXPANSION: the moment a deferred or planned ref turns out to matter (a rule you need, a pattern the edit must follow, a `docpending` link the work surfaces), read the BODY then, before the dependent edit. Reaching for one mid-task is expected, not a failure.
 
 Cross-cutting tasks (≥3 sibling features): load the shared parent feature + its `ARCH_*` only; defer per-child feature memories to on-miss. Do NOT enumerate every sibling up front.
 
 Sweep idempotence: a memory already read THIS SESSION never re-loads on reclassify, `/swe-goto`, or `WF_CONTINUE`. WM `**Memories loaded**:` is the dedupe ledger; the verifier accepts prior-turn/prior-task reads from this session.
 
-Rationale: reading the entire `[[link]]` closure up front is the dominant per-task token cost and most of it goes unused. Tiered loading keeps the enforcement floor (primary + task-relevant feature knowledge in context before any edit) while deferring cold refs. When genuinely unsure whether a ref is relevant, read it — correctness beats token savings.
+Rationale: reading the entire `[[link]]` closure up front is the dominant per-task token cost and most of it goes unused. Tiered loading keeps the enforcement floor (primary + task-relevant feature knowledge in context before any edit) while deferring cold refs. The Tier-0 digest gives every deferred rule a representation — its obligation line lands as either planned into the checklist or explicitly ruled out, never silently absent. When genuinely unsure whether a ref is relevant, read it — correctness beats token savings.
 
 Exclusions — do NOT read during the sweep:
 
@@ -211,27 +235,41 @@ mcp__plugin_swe_swe-wm__swe_wm_update(
 - **Secondary**: [KEY2] - [reason]
 - **Memories loaded**: [comma-separated list of the task-relevant set read in 4d — tiered, not the full closure]
 - **Memories deferred**: [only if PAUSED/sibling-feature-sourced docpending links were deferred — just the memory names, e.g. `ref/REF_A, ref/REF_B`. A reason is OPTIONAL and free-form: add one note for the whole line (`ref/REF_A, ref/REF_B — all cold: PHP-only`) or none at all.]
+- **Rules planned**: [comma-separated list of Tier-0 digest names given the PLANNED disposition — e.g. `dom/DOM_A, ref/REF_B`. Every name here MUST also appear as a `- [ ] <obligation> (mem:<name>)` line in the WM `## Compliance Checklist`; the WM server rejects the write otherwise.]
+- **Rules ruled out**: [comma-separated `<name> — <reason>` entries for Tier-0 digests judged irrelevant — e.g. `sys/SYS_X — no touch on that subsystem`. A reason is MANDATORY per entry.]
 ```
 
 `**Memories loaded**:` list rules:
 
 - PLAIN comma-separated memory names ONLY — no annotations, parentheses, or trailing commentary on an entry (annotation after the first whitespace is stripped, but do not rely on it).
 - List the memories consulted for THIS task in Steps 4a–4d — including ones already read earlier this session (never re-read those; see sweep idempotence at 4d). Do NOT list the init chain (`wf/*`, `claude/*`) — those are workflow machinery, read before the task boundary; the verifier ignores them and they never count toward the sweep.
-- List the tier-1 (task-relevant) set you actually read — NOT deferred cold refs. Deferred refs read later via on-miss expansion still count toward the task's docreads; re-run the `Affected Features` write to append them only if a later gate needs them recorded.
+- List the tier-1 (task-relevant) set you actually read — NOT deferred or planned cold refs. Deferred refs read later via on-miss expansion still count toward the task's docreads; re-run the `Affected Features` write to append them only if a later gate needs them recorded.
 
 `**Memories deferred**:` — how it works:
 
-- A `docpending` link this task surfaced must be either READ (listed in `**Memories loaded**:`) or deferred here. Otherwise the write is rejected.
+- A `docpending` link this task surfaced must land in ONE of: `**Memories loaded**:` (read), `**Rules planned**:` (obligation captured, unread), or `**Memories deferred**:` (cold, not yet needed). Otherwise the write is rejected. Docpending satisfaction = loaded ∪ deferred ∪ planned ∪ ruled-out.
 - To defer, just put the memory names on a `**Memories deferred**:` line — comma-separated or one per line, either works. A reason is optional; if you add one it can cover the whole line.
   - e.g. `- **Memories deferred**: ref/REF_A, ref/REF_B — cold: PHP-only`
 - You can't defer a link surfaced by your **Primary** feature — read those. Deferral is for links raised by a paused/other feature during a pivot.
 - Only defer what's genuinely cold to this task. When unsure, read it.
 - You only ever deal with links surfaced since your LAST passed sweep. Once a sweep passes, its links are settled — a later sweep in the same session won't re-demand them, so you never re-defer a prior task's docs.
 
+`**Rules planned**:` — how it works:
+
+- Every name here is a Tier-0 digest whose intersection with the task earned it a PLANNED disposition (Step 4d, tier 1, item 3): the memory's `obligations:` front-matter lines are copied into WM `## Compliance Checklist` as `- [ ] <obligation text> (mem:<name>)`, one item per obligation line, without reading the memory body.
+- Citation is MANDATORY: the WM server cross-checks every `**Rules planned**:` name against the checklist's `(mem:<name>)` tags and rejects the write on a mismatch in either direction — a planned name with no checklist citation, or a checklist citation with no planned name.
+- WF_EXECUTE reads the body of a planned rule on-miss, before implementing the item it gates. WF_VERIFY rejects a planned item checked done without a body read backing it (digest alone never verifies an implementation).
+
+`**Rules ruled out**:` — how it works:
+
+- Every name here is a Tier-0 digest judged genuinely cold to this task's touched surfaces. The reason is mandatory and stays with the name on the same line/entry.
+- A ruled-out memory is NOT re-litigated later in the same sweep window; a later on-miss discovery that it actually matters reopens it as planned or loaded, superseding the ruled-out entry.
+
 The sweep is HARD-ENFORCED, per task (follow-up tasks re-arm the `Affected Features` WRITE; reads dedupe per session — see sweep idempotence at 4d):
 
 - The `Affected Features` write is verified by the WM server: every name in `**Memories loaded**:` must have an ACTUAL `read_memory` THIS SESSION — prior-turn/prior-task reads from this session count; never re-read a memory just to satisfy the verifier. Names with no read this session → the update is rejected.
 - The list must include ≥1 `feature/*` memory, or state `no-feature` (only when BOTH 4b searches returned nothing).
+- Every `**Rules planned**:` name must be cited as `(mem:<name>)` on a `## Compliance Checklist` line — the WM server rejects an uncited planned name.
 - A verified write creates the sweep sentinel; the edit gate (`swe_pre_edit_validate.py`) DENIES every Edit/Write/Serena-edit until it exists. Test-artifact edits additionally require `dev/DEV_TESTS` + `feature/FEATURE_TESTS` reads when the project has them.
 - Refilling the docs-first search budget with one memory read is NOT the sweep.
 

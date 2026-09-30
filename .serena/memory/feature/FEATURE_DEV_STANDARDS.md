@@ -1,6 +1,9 @@
 ---
 name: Development Standards
 description: Project overview, per-language conventions, and build/format/git commands for serena-workflow-engine.
+obligations:
+  - Hooks MUST always output JSON to STDOUT and exit 0 — NEVER exit 1.
+  - Format Markdown/JSON with dprint (`npm run fmt`) — memories follow `mem:ref/REF_MEMORY_STYLE`.
 metadata:
   type: feature
 ---

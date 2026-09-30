@@ -165,6 +165,124 @@ class TestScanStyle(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
+# Change Set H — swe_post_memory_style organic backfill nudge
+# ---------------------------------------------------------------------------
+WITH_OBLIGATIONS_FM = (
+    "---\n"
+    "name: DOM_TEST\n"
+    "description: test memory\n"
+    "obligations:\n"
+    "  - Do the concrete thing.\n"
+    "---\n\n"
+)
+
+EMPTY_OBLIGATIONS_FM = (
+    "---\n"
+    "name: REF_TEST\n"
+    "description: test memory\n"
+    "obligations: []\n"
+    "---\n\n"
+)
+
+
+class TestHasObligationsField(unittest.TestCase):
+    def test_present_list_detected(self):
+        self.assertTrue(style_mod.has_obligations_field(WITH_OBLIGATIONS_FM))
+
+    def test_present_empty_list_detected(self):
+        self.assertTrue(style_mod.has_obligations_field(EMPTY_OBLIGATIONS_FM))
+
+    def test_absent_returns_false(self):
+        self.assertFalse(style_mod.has_obligations_field(VALID_FRONT_MATTER))
+
+    def test_no_front_matter_returns_false(self):
+        self.assertFalse(style_mod.has_obligations_field("no front matter here"))
+
+
+class TestMemoryPrefixRuleBearing(unittest.TestCase):
+    def test_rule_bearing_prefixes_detected(self):
+        for name in ("dom/DOM_X", "ref/REF_X", "dev/DEV_X", "feature/FEATURE_X"):
+            self.assertIn(style_mod._memory_prefix(name), style_mod.RULE_BEARING_PREFIXES)
+
+    def test_non_rule_bearing_prefix_not_in_set(self):
+        self.assertNotIn(style_mod._memory_prefix("arch/ARCH_X"), style_mod.RULE_BEARING_PREFIXES)
+
+    def test_bare_name_no_prefix(self):
+        self.assertEqual(style_mod._memory_prefix("MEMORY"), "")
+
+
+class TestStyleHookMainObligationsNudge(unittest.TestCase):
+    """End-to-end main() coverage: the advisory nudge line appears exactly
+    when a rule-bearing memory lacks obligations:, alongside (or standing in
+    for) the existing style violations output — never for non-rule prefixes
+    or when the field is present."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self._orig_root = style_mod.get_project_root
+        style_mod.get_project_root = lambda: self.tmp.name
+
+    def tearDown(self):
+        style_mod.get_project_root = self._orig_root
+        self.tmp.cleanup()
+
+    def _write_memory(self, rel_path, content):
+        full = os.path.join(self.tmp.name, ".serena", "memory", rel_path)
+        os.makedirs(os.path.dirname(full), exist_ok=True)
+        with open(full, "w") as f:
+            f.write(content)
+
+    def _run_main(self, memory_name):
+        import io
+        from unittest import mock
+        payload = {"tool_input": {"memory_name": memory_name}}
+        buf = io.StringIO()
+        with mock.patch.object(sys, "stdin", io.StringIO(json.dumps(payload))), \
+             mock.patch("select.select", return_value=([sys.stdin], [], [])), \
+             mock.patch("sys.stdout", buf):
+            try:
+                style_mod.main()
+            except SystemExit:
+                pass
+        return buf.getvalue()
+
+    @staticmethod
+    def _decoded_context(raw):
+        """The hook writes JSON to stdout; decode additionalContext back to
+        plain text so nudge assertions match on the real string, not its
+        JSON-escaped form (em dash, backticks -> \\u2014 etc)."""
+        payload = json.loads(raw)
+        return payload["hookSpecificOutput"]["additionalContext"]
+
+    def test_nudge_present_when_rule_bearing_missing_obligations(self):
+        self._write_memory("dom/DOM_X.md", VALID_FRONT_MATTER + "Run the tests.\n")
+        out = self._decoded_context(self._run_main("dom/DOM_X"))
+        self.assertIn(style_mod.OBLIGATIONS_NUDGE, out)
+
+    def test_nudge_absent_when_obligations_field_present(self):
+        self._write_memory("dom/DOM_X.md", WITH_OBLIGATIONS_FM + "Run the tests.\n")
+        out = self._run_main("dom/DOM_X")
+        self.assertNotIn("Missing", out)
+
+    def test_nudge_absent_for_non_rule_bearing_prefix(self):
+        self._write_memory("arch/ARCH_X.md", VALID_FRONT_MATTER + "Run the tests.\n")
+        out = self._run_main("arch/ARCH_X")
+        self.assertNotIn("Missing", out)
+
+    def test_nudge_appended_alongside_existing_style_violation(self):
+        self._write_memory(
+            "dom/DOM_X.md", VALID_FRONT_MATTER + "You should run the tests.\n")
+        out = self._decoded_context(self._run_main("dom/DOM_X"))
+        self.assertIn("suggestion-mood", out)
+        self.assertIn(style_mod.OBLIGATIONS_NUDGE, out)
+
+    def test_empty_obligations_list_satisfies_field(self):
+        self._write_memory("ref/REF_X.md", EMPTY_OBLIGATIONS_FM + "Run the tests.\n")
+        out = self._run_main("ref/REF_X")
+        self.assertNotIn("Missing", out)
+
+
+# ---------------------------------------------------------------------------
 # swe_post_read_state._get_continuation
 # ---------------------------------------------------------------------------
 class TestGetContinuation(unittest.TestCase):

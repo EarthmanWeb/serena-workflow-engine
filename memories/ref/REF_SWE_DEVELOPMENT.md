@@ -1,6 +1,9 @@
 ---
 name: REF_SWE_DEVELOPMENT
 description: Development standards for the Serena Workflow Engine plugin — how to deploy (push to GitHub → auto-update next load), dual-location sync, hook synchronization, plugin-file edit method, pre-commit checklist.
+obligations:
+  - When modifying a hook, keep all THREE files in sync — the hook script, `hooks/hooks.json`, and `.claude/settings.json`.
+  - NEVER use Edit/Write on `.claude/` files — use Bash + Python for all plugin file edits (bypassPermissions hardcodes a write-prompt bug on `.claude/`).
 metadata:
   type: reference
   keywords: deploy, push, github, publish, release, plugin auto-update, cache priming, dual-location, hook sync

@@ -1792,9 +1792,15 @@ class TestMemoryIndexGateDedupe(unittest.TestCase):
             memidx_mod.read_stdin_safe = orig
         return json.loads(buf.getvalue())
 
+    # Rule-bearing fixtures carry obligations: the H obligations check runs
+    # BEFORE the dedupe check in main(), so these tests must pass it to reach
+    # (or cleanly skip) the dedupe path they exercise.
+    OBLIGATED = ('---\nname: x\ndescription: y\nmetadata:\n  type: reference\n'
+                 'obligations:\n  - Test obligation line.\n---\nbody')
+
     def test_main_denies_duplicate_creation(self):
         result = self._run_main(
-            {'memory_name': 'ref/REF_STYLE_MEMORY', 'content': 'dup'})
+            {'memory_name': 'ref/REF_STYLE_MEMORY', 'content': self.OBLIGATED})
         out = result['hookSpecificOutput']
         self.assertEqual(out['permissionDecision'], 'deny')
         self.assertIn('on-topic memory already exists',
@@ -1803,8 +1809,16 @@ class TestMemoryIndexGateDedupe(unittest.TestCase):
     def test_main_allows_unrelated_creation(self):
         result = self._run_main(
             {'memory_name': 'feature/FEATURE_PAYMENTS_GATEWAY',
-             'content': 'new area'})
+             'content': self.OBLIGATED})
         self.assertEqual(result, {})
+
+    def test_main_denies_rule_bearing_creation_without_obligations(self):
+        result = self._run_main(
+            {'memory_name': 'feature/FEATURE_PAYMENTS_GATEWAY',
+             'content': 'new area'})
+        out = result['hookSpecificOutput']
+        self.assertEqual(out['permissionDecision'], 'deny')
+        self.assertIn('obligations', out['permissionDecisionReason'])
 
 
 class TestDocsGateMemoryGrepLegitimization(unittest.TestCase):

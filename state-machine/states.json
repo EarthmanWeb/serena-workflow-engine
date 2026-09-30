@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "version": "4.1.0",
-  "description": "Serena Workflow Engine v4.1 - single declarative graph source. Reading a WF_* memory CAN advance the FSM: see readAdvance. A read only ever moves the FSM along a matrix edge, and only forward per `rank` (never backward/same-into-CLARIFY) — it never jumps to an arbitrary state. Explicit set_state/--force is still required for anything readAdvance would not do on its own.",
+  "version": "5.0.0",
+  "description": "Serena Workflow Engine v5 - single declarative graph source. Reading a WF_* memory CAN advance the FSM: see readAdvance. A read only ever moves the FSM along a matrix edge, and only forward per `rank` (never backward/same-into-CLARIFY) — it never jumps to an arbitrary state. Explicit set_state/--force is still required for anything readAdvance would not do on its own.",
 
   "complexityThresholds": {
     "simple": { "files": [1, 2], "layers": 1, "expectedTransitions": 7 },

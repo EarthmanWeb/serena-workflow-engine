@@ -16,7 +16,7 @@ The workflow system is a finite state machine over Serena memories. Each `WF_*` 
 - Output the step-report line immediately on entering a state: `> **On step WF_[NAME]**`.
 - WM (Working Memory) provides session continuity across turns and enables `WF_CONTINUE` to resume work.
 
-### Read-Advance (v4)
+### Read-Advance (v5)
 
 - `readAdvance` in `state-machine/states.json` is enabled: reading a `WF_*` memory whose per-state `rank` is HIGHER than the current state's rank advances the FSM along a valid `transitionMatrix` edge. Backward reads, same-rank reads, and reads into `WF_CLARIFY` NEVER transition.
 - `subflows` (`WF_INIT`, `WF_CLEANUP`, `WF_RESEARCH_LITE`, `WF_UPDATE_MEMORY`) are documented procedures, NOT FSM states — never `set_state` to them.

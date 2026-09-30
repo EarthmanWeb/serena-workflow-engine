@@ -158,7 +158,13 @@ Per run, parsed from `transcript.jsonl` (the `stream-json` output of
 - From `user` events: `tool_result` blocks with `is_error: true` (count),
   and among those, ones whose text matches a hook-denial pattern
   (`hook error|PreToolUse|BLOCKED|permissionDecision|denied by hook|...`) →
-  `hook_denials`; text blocks mentioning "Stop hook" → `stop_hook_blocks`.
+  `hook_denials`; text blocks mentioning "Stop hook" → `stop_hook_blocks`;
+  every non-empty `tool_result` and injected `text` block, counted
+  unconditionally (not filtered to errors/denials) → `hook_attachment_blocks`
+  (count) / `hook_attachment_chars` (total character length). These two
+  verify `SPEC_HARNESS_EFFICIENCY_TUNING`'s ≤300 blocks / ≤150k chars
+  acceptance budget for how much attached content an arm's hooks make the
+  agent read.
 - From the `system`/`init` event: loaded MCP servers + plugins, used to
   assert isolation (control arm shows no `swe` plugin/servers; plugin arms
   do).

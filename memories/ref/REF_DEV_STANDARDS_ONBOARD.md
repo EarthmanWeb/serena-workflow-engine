@@ -1,6 +1,9 @@
 ---
 name: REF_DEV_STANDARDS_ONBOARD
 description: Procedure for discovering, documenting, and indexing development standards in any codebase via parallel research agents.
+obligations:
+  - Launch one Agent per focus area in ONE message with `run_in_background: true`, `model: "sonnet"`, and the "You are a subagent. BYPASS WF_INIT." prefix.
+  - Create `FEATURE_DEV_STANDARDS` as a ~50-line index and split detailed standards into ~100-120 line `DEV_*` memories per Phase 4.
 metadata:
   type: reference
 ---

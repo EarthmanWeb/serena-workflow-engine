@@ -2,8 +2,8 @@
 name: Memory Instruction-Language Standard
 description: MANDATORY style for all project memories — terse, imperative, machine-readable commands for Claude. Every memory MUST conform; legacy-style memories MUST be rewritten on sight.
 obligations:
-  - Rewrite any memory found in legacy style (see Legacy Markers) immediately on sight — do not defer.
-  - Give every dom/ref/dev/feature memory 1-2 imperative, concrete obligations: lines, or obligations: [] when genuinely none.
+  - Write every memory in imperative mood with concrete thresholds/names/paths — NEVER suggestion-mood ("should", "consider") or vague quantifiers ("some", "a few").
+  - Every `dom/`/`ref/`/`dev/`/`feature/` memory MUST carry an `obligations:` field (or explicit `obligations: []`) as a top-level sibling of `description`.
 metadata:
   type: reference
 ---
@@ -25,7 +25,7 @@ Enforced by the `swe_post_memory_style.py` hook (flags violations on write_memor
 
 ## Required Structure
 
-- Front-matter block first (name / description / metadata.type) — REQUIRED for discovery.
+- Front-matter block first (name / description / obligations / metadata.type) — REQUIRED for discovery.
 - Body: headings + terse bullets or tables. One rule per bullet. No paragraphs of prose.
 - Use tables for routing/conditions/mappings (condition → action).
 - Reference other memories as `mem:<name>` in backticks.
@@ -42,6 +42,28 @@ metadata:
 ```
 
 Derive `type` from the directory prefix: ref→reference, feedback→feedback, feature→feature, dom→domain, wf→workflow, index→index, arch→architecture, spec→spec.
+
+## Obligations Field (REQUIRED for dom/, ref/, dev/, feature/)
+
+Add `obligations:` as a top-level sibling of `description` (not nested under `metadata`):
+
+```
+---
+name: <short title>
+description: <one sentence: what this memory is / when to open it>
+obligations:
+  - <imperative obligation, one line, concrete>
+  - <imperative obligation, one line, concrete>
+metadata:
+  type: <reference | domain | dev | feature | …>
+---
+```
+
+- REQUIRED on every `dom/`, `ref/`, `dev/`, `feature/` memory. `obligations: []` is the conscious-none escape — write it when the memory genuinely imposes no rule (pure reference/index content); an author who skips the field entirely, rather than declaring `[]`, has not made the call.
+- Each line: imperative mood, one line, concrete — the same Hard Rules that govern the body apply here, doubled. The digest IS the planning interface: WF_CLASSIFY's Tier-0 pass plans a task's Compliance Checklist FROM these lines alone, without reading the body. A vague obligation ("follow best practices") hides the rule from every task that plans against the digest instead of reading the body — write the threshold/name/path the body would state.
+- 1-2 lines per memory. More than 2 means the memory covers more than one obligation-bearing concern — split it or keep only the lines a Tier-0 planner needs to seed a checklist item correctly.
+- Optional (may be added, never required) outside dom/ref/dev/feature — `wf/`, `index/`, `arch/`, `spec/` carry no field requirement.
+- Enforced by: `swe_pre_memory_index_gate.py` DENIES a `write_memory`/direct-`Write` that CREATES or OVERWRITES a rule-bearing-prefix memory with no `obligations:` field (`edit_memory` partial edits are not denied); `swe_post_memory_style.py` nudges toward adding the field on an edit that lacks it; `/swe-memory-obligations` backfills the field across existing memories that predate this standard.
 
 ## Legacy Markers (rewrite on sight)
 

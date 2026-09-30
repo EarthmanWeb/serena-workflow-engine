@@ -1,6 +1,9 @@
 ---
 name: REF_WM
 description: Working Memory (WM) file spec — naming, lifecycle, update rules, template, and Stop-hook fields.
+obligations:
+  - Name WM files exactly `WM_<SESSION_ID>.md` — NEVER add a suffix, NEVER rename.
+  - NEVER update WM manually with `edit_memory`/`write_memory` — ALWAYS update via the `/swe-wm-update` skill.
 metadata:
   type: reference
 ---

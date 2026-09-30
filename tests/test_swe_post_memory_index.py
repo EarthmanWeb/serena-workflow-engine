@@ -8,6 +8,11 @@ Covers the terse-index enforcement considerations:
   - memory_name_in_index basename matching.
   - A clean, in-budget index produces NO warnings (no false positives).
 
+Also covers (Change Set H) hooks/pre/swe_pre_memory_index_gate.py's obligations-
+digest enforcement (missing_obligations_reason / obligations_denial_for_write):
+that check is unrelated to this file's namesake hook, but is grouped here per
+the Change Set H file-ownership split (see TestObligationsDigestGate below).
+
 Stdlib unittest only.
 """
 import os
@@ -18,6 +23,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from _hookutil import import_hook  # noqa: E402
 
 mod = import_hook("post/swe_post_memory_index")
+gate_mod = import_hook("pre/swe_pre_memory_index_gate")
 
 
 # A minimal, healthy index used as the "clean" baseline.
@@ -162,6 +168,148 @@ class TestHealthCheckLeakedCategories(unittest.TestCase):
         )
         warnings = mod.check_memory_md_health(content)
         self.assertFalse(any("NOT indexed" in w for w in warnings))
+
+
+WITH_OBLIGATIONS = """---
+name: DOM_X
+description: something
+obligations:
+  - Do the thing concretely.
+---
+
+# DOM_X
+"""
+
+NO_OBLIGATIONS = """---
+name: DOM_X
+description: something
+metadata:
+  type: domain
+---
+
+# DOM_X
+"""
+
+EMPTY_OBLIGATIONS = """---
+name: REF_X
+description: something
+obligations: []
+---
+
+# REF_X
+"""
+
+
+class TestMissingObligationsReason(unittest.TestCase):
+    """Change Set H — hooks/pre/swe_pre_memory_index_gate.missing_obligations_reason."""
+
+    def test_rule_bearing_prefix_missing_field_denied(self):
+        for name in ("dom/DOM_X", "ref/REF_X", "dev/DEV_X", "feature/FEATURE_X"):
+            reason = gate_mod.missing_obligations_reason(name, NO_OBLIGATIONS)
+            self.assertIsNotNone(reason, name)
+            self.assertIn("obligations:", reason)
+            self.assertIn("obligations: []", reason)
+
+    def test_rule_bearing_prefix_with_field_passes(self):
+        for name in ("dom/DOM_X", "ref/REF_X", "dev/DEV_X", "feature/FEATURE_X"):
+            self.assertIsNone(
+                gate_mod.missing_obligations_reason(name, WITH_OBLIGATIONS), name)
+
+    def test_conscious_none_empty_list_passes(self):
+        self.assertIsNone(
+            gate_mod.missing_obligations_reason("ref/REF_X", EMPTY_OBLIGATIONS))
+
+    def test_non_rule_bearing_prefixes_never_denied(self):
+        for name in ("arch/ARCH_X", "spec/SPEC_X", "wf/WF_X", "index/INDEX_X",
+                     "sys/SYS_X", "feedback/FEEDBACK_X"):
+            self.assertIsNone(
+                gate_mod.missing_obligations_reason(name, NO_OBLIGATIONS), name)
+
+    def test_no_dir_segment_never_denied(self):
+        self.assertIsNone(gate_mod.missing_obligations_reason("MEMORY", NO_OBLIGATIONS))
+
+
+class TestObligationsDenialForWrite(unittest.TestCase):
+    """obligations_denial_for_write: write_memory + direct Write wiring."""
+
+    def test_write_memory_create_missing_denied(self):
+        denial = gate_mod.obligations_denial_for_write(
+            "mcp__serena__write_memory",
+            {"memory_name": "dom/DOM_NEW", "content": NO_OBLIGATIONS},
+        )
+        self.assertIsNotNone(denial)
+
+    def test_write_memory_overwrite_missing_denied(self):
+        # Overwrites of EXISTING memories carry the same requirement — a full
+        # rewrite is fresh authoring, same as a create.
+        denial = gate_mod.obligations_denial_for_write(
+            "mcp__serena__write_memory",
+            {"memory_name": "ref/REF_EXISTING", "content": NO_OBLIGATIONS},
+        )
+        self.assertIsNotNone(denial)
+
+    def test_write_memory_with_field_passes(self):
+        denial = gate_mod.obligations_denial_for_write(
+            "mcp__serena__write_memory",
+            {"memory_name": "dom/DOM_NEW", "content": WITH_OBLIGATIONS},
+        )
+        self.assertIsNone(denial)
+
+    def test_direct_write_under_serena_memory_denied(self):
+        denial = gate_mod.obligations_denial_for_write(
+            "Write",
+            {"file_path": "/proj/.serena/memory/dom/DOM_X.md", "content": NO_OBLIGATIONS},
+        )
+        self.assertIsNotNone(denial)
+
+    def test_direct_write_under_serena_memory_with_field_passes(self):
+        denial = gate_mod.obligations_denial_for_write(
+            "Write",
+            {"file_path": "/proj/.serena/memory/dom/DOM_X.md", "content": WITH_OBLIGATIONS},
+        )
+        self.assertIsNone(denial)
+
+    def test_direct_write_outside_serena_memory_never_denied(self):
+        denial = gate_mod.obligations_denial_for_write(
+            "Write",
+            {"file_path": "/proj/some/other/dom/DOM_X.md", "content": NO_OBLIGATIONS},
+        )
+        self.assertIsNone(denial)
+
+    def test_direct_write_non_md_never_denied(self):
+        denial = gate_mod.obligations_denial_for_write(
+            "Write",
+            {"file_path": "/proj/.serena/memory/dom/DOM_X.py", "content": NO_OBLIGATIONS},
+        )
+        self.assertIsNone(denial)
+
+    def test_edit_memory_never_denied(self):
+        # edit_memory (partial edits) is exempt — tool_name doesn't match the
+        # write_memory or Write branches at all.
+        denial = gate_mod.obligations_denial_for_write(
+            "mcp__serena__edit_memory",
+            {"memory_name": "dom/DOM_X", "repl": NO_OBLIGATIONS},
+        )
+        self.assertIsNone(denial)
+
+    def test_non_rule_bearing_write_memory_never_denied(self):
+        denial = gate_mod.obligations_denial_for_write(
+            "mcp__serena__write_memory",
+            {"memory_name": "spec/SPEC_X", "content": NO_OBLIGATIONS},
+        )
+        self.assertIsNone(denial)
+
+
+class TestObligationsGateMainWiring(unittest.TestCase):
+    """main()-level wiring: the obligations check fires for non-index targets,
+    in addition to (not instead of) the existing B4 dedupe check."""
+
+    def test_targets_memory_index_excludes_obligations_named_memories(self):
+        # A write to MEMORY.md itself is never subject to the obligations
+        # check (it has its own leaked-category check) — confirm the routing
+        # predicate used by main() correctly separates the two paths.
+        self.assertTrue(gate_mod.targets_memory_index({"memory_name": "MEMORY"}))
+        self.assertFalse(gate_mod.targets_memory_index({"memory_name": "dom/DOM_X"}))
 
 
 if __name__ == "__main__":

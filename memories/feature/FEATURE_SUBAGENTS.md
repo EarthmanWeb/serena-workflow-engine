@@ -1,6 +1,9 @@
 ---
 name: FEATURE_SUBAGENTS
 description: Canonical authority for orchestrator-mode swarm delegation — when the main agent MUST fan out to parallel subagents instead of doing task work itself, model-tier routing, and the stage loop. Parallel work via Claude Code's native subagents (Agent/Task tool) and workflows.
+obligations:
+  - Fan out to parallel background subagents (ONE message, disjoint file ownership) whenever ≥2 independent subtasks exist, 6+ files are affected, or 3+ layers are touched — the orchestrator itself only classifies, routes, and synthesizes.
+  - Every Agent call MUST pass `model` explicitly per the routing table (haiku for routine/mechanical, sonnet for implementation, opus only for novel design or after a failed sonnet attempt) and MUST include the "BYPASS WF_INIT" prompt line.
 metadata:
   type: feature
 ---

@@ -1,6 +1,9 @@
 ---
 name: Memory Instruction-Language Standard
 description: MANDATORY style for all project memories — terse, imperative, machine-readable commands for Claude. Every memory MUST conform; legacy-style memories MUST be rewritten on sight.
+obligations:
+  - Write every memory in imperative mood with concrete thresholds/names/paths — NEVER suggestion-mood ("should", "consider") or vague quantifiers ("some", "a few").
+  - Rewrite a memory to this standard immediately on sight of any legacy marker (missing front-matter, conversational prose, suggestion mood) — do not defer.
 metadata:
   type: reference
 ---

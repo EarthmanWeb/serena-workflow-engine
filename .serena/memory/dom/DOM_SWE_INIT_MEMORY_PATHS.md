@@ -1,6 +1,9 @@
 ---
 name: Init memory-paths & Serena Reconnect Gate
 description: memory-paths.conf lists only ./.serena/memory (singular); Serena MUST reconnect after bootstrap or memories split-brain.
+obligations:
+  - Write only `./.serena/memory` (singular) to `memory-paths.conf` — NEVER re-add the plural `./.serena/memories` entry.
+  - After bootstrap writes `memory-paths.conf`, STOP and have the user reconnect Serena before writing any memory — never write onboarding/migration memories pre-reconnect.
 metadata:
   type: domain
 ---

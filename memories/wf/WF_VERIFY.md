@@ -46,6 +46,8 @@ If no compliance checklist exists in WM (task skipped WF_ARCH_REVIEW): use 2a ge
 Compliance verification when WM contains a Compliance Checklist:
 
 - Verify each checklist item against the implementation.
+- Every item MUST be either checked done or explicitly waived with a reason. An UNCHECKED item with no waiver is a BLOCKER — resolve it before `WF_DONE`.
+- A `(mem:<name>)`-cited planned-rule item verifies against the memory's BODY, never the digest alone — read the body now if WF_EXECUTE never did (on-miss), then check the implementation against it. Marking a planned item done from the front-matter digest without a body read is a violation; fix by reading the body and re-verifying.
 - Reference `DOM_*` memories for domain-specific validation rules.
 - Reference `DEV_*` memories for language-specific standards compliance.
 

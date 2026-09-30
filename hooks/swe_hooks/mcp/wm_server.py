@@ -380,6 +380,102 @@ NO_FEATURE_TOKEN = 'no-feature'
 # Memories-loaded list instead of failing the write.
 MACHINERY_PREFIXES = ('wf/', 'claude/')
 
+# ──────────────────────────────────────────────────────────────────
+# Change Set H — obligation-digest disposition parsing
+# ──────────────────────────────────────────────────────────────────
+# "Rules planned": digest-tier disposition — obligations captured into the
+# Compliance Checklist WITHOUT a body read. Same forgiving grammar as
+# "Memories deferred": comma-separated names, one per line or several lines,
+# findall so all lines are honored.
+#   - **Rules planned**: dom/DOM_X, ref/REF_Y
+RULES_PLANNED_RE = re.compile(
+    r'\*\*Rules planned\*\*:?[ \t]*(.*)$', re.IGNORECASE | re.MULTILINE)
+
+# "Rules ruled out": each entry REQUIRES a ' — ' reason (unlike deferred /
+# planned, which tolerate a bare name). Entries are comma-separated or one
+# per line; each entry's reason runs to the next comma or line end.
+#   - **Rules ruled out**: ref/REF_X — not applicable, dom/DOM_Y — superseded
+RULES_RULED_OUT_RE = re.compile(
+    r'\*\*Rules ruled out\*\*:?[ \t]*(.*)$', re.IGNORECASE | re.MULTILINE)
+
+# Compliance Checklist section heading (any level) — citations of
+# 'Rules planned' names as `mem:<name>` must appear within it.
+COMPLIANCE_CHECKLIST_RE = re.compile(
+    r'^#+\s*Compliance Checklist\s*\n(.*?)(?=\n#+\s|\Z)',
+    re.IGNORECASE | re.MULTILINE | re.DOTALL)
+
+# `mem:<name>` citation token.
+MEM_CITATION_RE = re.compile(r'mem:([A-Za-z0-9_/.-]+)')
+
+
+def _parse_rules_planned(content: str) -> set:
+    """Parse memory names from ALL '**Rules planned**:' line(s).
+
+    Same forgiving grammar as _parse_deferred_names: any token containing
+    '/' on a Rules-planned line counts, comma-separated or one per line.
+    """
+    names = set()
+    for line_tail in RULES_PLANNED_RE.findall(content or ''):
+        for token in re.split(r'[\s,]+', line_tail):
+            token = token.strip('[]`.,;:')
+            if '/' not in token:
+                continue
+            name = normalize_memory_name(token)
+            if name and '/' in name:
+                names.add(name)
+    return names
+
+
+def _parse_ruled_out(content: str) -> dict:
+    """Parse '<name> — <reason>' entries from ALL '**Rules ruled out**:'
+    line(s). Returns {normalized_name: reason}. An entry with no ' — '
+    reason is returned with reason='' so the caller can reject it by name
+    (a missing reason must not silently drop the entry from detection)."""
+    entries = {}
+    for line_tail in RULES_RULED_OUT_RE.findall(content or ''):
+        # Split entries on commas that are NOT inside a '<name> — <reason>'
+        # pair's reason text is impossible to fully disambiguate with commas
+        # allowed in reasons, so split entries by the ' — ' anchor instead:
+        # walk left-to-right, each entry starts at a memory-name-shaped token.
+        for raw_entry in re.split(r'(?<=[^\s])\s*,\s*(?=[A-Za-z0-9_.~-]+/)', line_tail.strip()):
+            raw_entry = raw_entry.strip().strip('[]`.,;:')
+            if not raw_entry:
+                continue
+            if '—' in raw_entry:
+                name_part, reason_part = raw_entry.split('—', 1)
+            elif ' - ' in raw_entry:
+                name_part, reason_part = raw_entry.split(' - ', 1)
+            else:
+                name_part, reason_part = raw_entry, ''
+            token = name_part.strip().strip('[]`.,;:').split()
+            token = token[0] if token else ''
+            if '/' not in token:
+                continue
+            name = normalize_memory_name(token)
+            if not name or '/' not in name:
+                continue
+            entries[name] = reason_part.strip()
+    return entries
+
+
+def _compliance_checklist_body(content: str) -> str:
+    """Return the body text of the '## Compliance Checklist' section, or ''
+    when absent."""
+    match = COMPLIANCE_CHECKLIST_RE.search(content or '')
+    return match.group(1) if match else ''
+
+
+def _cited_mem_names(content: str) -> set:
+    """Every `mem:<name>` citation inside the Compliance Checklist section,
+    normalized."""
+    body = _compliance_checklist_body(content)
+    names = set()
+    for token in MEM_CITATION_RE.findall(body):
+        name = normalize_memory_name(token.strip('[]`.,;:'))
+        if name:
+            names.add(name)
+    return names
+
 
 def _parse_memories_loaded(content: str) -> Optional[set]:
     """Parse the '**Memories loaded**:' list from an Affected Features write.
@@ -480,7 +576,9 @@ def _collect_session_docreads(stream_path: str) -> set:
     return names
 
 
-def _check_memory_sweep(session_id: str, content: str) -> Optional[str]:
+def _check_memory_sweep(
+    session_id: str, content: str, other_sections: Optional[List[Dict[str, Any]]] = None
+) -> Optional[str]:
     """Validate an Affected Features write against the ACTUAL memory reads of
     this session (WF_CLASSIFY Step 4d Feature Knowledge Sweep).
 
@@ -502,6 +600,16 @@ def _check_memory_sweep(session_id: str, content: str) -> Optional[str]:
         note is optional). Deferral is honored ONLY for a link surfaced solely
         by a paused/sibling-feature read during a task pivot; a link surfaced by
         the PRIMARY feature must be read.
+      - Change Set H (digest-tier disposition, both OPTIONAL): a
+        '**Rules planned**:' name is a docpending link whose obligations were
+        captured into the Compliance Checklist WITHOUT a body read — it counts
+        toward the read-or-defer satisfaction set ONLY when also cited as
+        `mem:<name>` inside a '## Compliance Checklist' section (checked in
+        `other_sections` first, then the existing WM file content); an
+        uncited planned name is rejected by name. A '**Rules ruled out**:'
+        entry likewise counts toward satisfaction, but EVERY entry must carry
+        a ' — ' reason or is rejected by name. Absent both lines, behavior is
+        identical to today.
 
     On success creates the 'sweep' sentinel that unlocks the edit gate.
     Returns an error string on violation, None on pass/skip.
@@ -560,6 +668,49 @@ def _check_memory_sweep(session_id: str, content: str) -> Optional[str]:
     # deferral is for links raised by a paused/sibling-feature read during a
     # pivot.
     deferred = _parse_deferred_names(content)
+
+    # Change Set H — digest-tier dispositions (both optional; absent lines =
+    # today's behavior unchanged).
+    planned = _parse_rules_planned(content)
+    ruled_out = _parse_ruled_out(content)
+
+    if planned:
+        # Citation lookup order: this call's OTHER sections first (a
+        # Compliance Checklist written earlier/later in the same batched
+        # swe_wm_update call), then the existing WM file content on disk.
+        cited = set()
+        for spec in (other_sections or []):
+            if not isinstance(spec, dict):
+                continue
+            cited |= _cited_mem_names(str(spec.get('content', '')))
+        cited |= _cited_mem_names(content)
+        cwd = get_project_root()
+        wm_filepath = find_working_memory_for_session(cwd, session_id)
+        if wm_filepath and os.path.exists(wm_filepath):
+            try:
+                with open(wm_filepath, 'r') as f:
+                    cited |= _cited_mem_names(f.read())
+            except IOError:
+                pass
+        uncited = sorted(planned - cited)
+        if uncited:
+            return (
+                "Sweep verification FAILED — 'Rules planned' names not cited "
+                f"as `mem:<name>` inside a '## Compliance Checklist' section: "
+                f"{', '.join(uncited)}. Add a `mem:{uncited[0]}`-style citation "
+                "for each in the Compliance Checklist, then re-run this update."
+            )
+
+    if ruled_out:
+        unreasoned = sorted(n for n, reason in ruled_out.items() if not reason)
+        if unreasoned:
+            return (
+                "Sweep verification FAILED — 'Rules ruled out' entries with no "
+                f"' — <reason>': {', '.join(unreasoned)}. Every ruled-out entry "
+                "needs a reason, e.g. '- **Rules ruled out**: "
+                f"{unreasoned[0]} — not applicable to this task'."
+            )
+
     stream_path = get_stream_path(session_id)
     # Docpending is accounted since the LAST successful sweep (not the whole
     # task): once a sweep passes, its links are settled, so a later sweep in the
@@ -589,7 +740,8 @@ def _check_memory_sweep(session_id: str, content: str) -> Optional[str]:
             "deferral is reserved for links raised by a paused/other-feature "
             "read during a pivot."
         )
-    outstanding = sorted(other_pending - read_names - deferred)
+    dispositioned = deferred | planned | set(ruled_out.keys())
+    outstanding = sorted(other_pending - read_names - dispositioned)
     if outstanding:
         names = ', '.join(outstanding)
         return (
@@ -611,7 +763,9 @@ def _check_memory_sweep(session_id: str, content: str) -> Optional[str]:
         os.makedirs(os.path.dirname(sentinel), exist_ok=True)
         with open(sentinel, 'w') as f:
             json.dump({"session_id": session_id, "memories": sorted(listed),
-                       "deferred": sorted(deferred)},
+                       "deferred": sorted(deferred),
+                       "planned": sorted(planned),
+                       "ruled_out": sorted(ruled_out.keys())},
                       f, separators=(',', ':'))
     except IOError:
         pass
@@ -623,12 +777,18 @@ def _check_memory_sweep(session_id: str, content: str) -> Optional[str]:
 
 
 def tool_swe_wm_update_section(
-    section: str, content: str, session_id: str = None, append: bool = False
+    section: str, content: str, session_id: str = None, append: bool = False,
+    other_sections: Optional[List[Dict[str, Any]]] = None,
 ) -> dict:
     """Update a specific WM section without touching daemon-managed fields.
 
     Also persists key fields (task, features, progress) to the JSON state file
     so state survives without WM markdown.
+
+    `other_sections` (internal, only passed by tool_swe_wm_update): the OTHER
+    section specs in the same batched call — lets the Affected Features sweep
+    check see a Compliance Checklist section written in the same call before
+    it lands on disk.
     """
     session_id = _resolve_session_id(session_id)
     if not session_id:
@@ -641,7 +801,7 @@ def tool_swe_wm_update_section(
     # verify every listed memory was ACTUALLY read this task before accepting
     # (creates the 'sweep' sentinel that unlocks the edit gate on pass).
     if section == "Affected Features":
-        sweep_error = _check_memory_sweep(session_id, content)
+        sweep_error = _check_memory_sweep(session_id, content, other_sections=other_sections)
         if sweep_error:
             return {"error": sweep_error}
 
@@ -779,9 +939,11 @@ def tool_swe_wm_update(
                 "error": f"sections[{i}] must be an object with `section` and `content`",
                 "applied": applied,
             }
+        siblings = [s for j, s in enumerate(sections or []) if j != i]
         result = tool_swe_wm_update_section(
             spec["section"], spec["content"],
             session_id=session_id, append=bool(spec.get("append", False)),
+            other_sections=siblings,
         )
         if result.get("error"):
             return {"error": f"sections[{i}] ({spec['section']}): {result['error']}", "applied": applied}

@@ -1,6 +1,9 @@
 ---
 name: Two Memory Trees
 description: This repo has TWO opposite-purpose memory trees — plugin SOURCE (memories/, ships to every install) vs this repo's OWN dev memories (.serena/memory/, local only). Never conflate them.
+obligations:
+  - Edit `memories/` (plugin source) as plain files with Read/Write/Edit — NEVER as a Serena memory store.
+  - Edit `.serena/memory/` ONLY via Serena memory MCP tools (`write_memory`/`edit_memory`) — NEVER raw Write/Edit.
 metadata:
   type: domain
 ---

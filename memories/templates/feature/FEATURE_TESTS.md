@@ -1,6 +1,8 @@
 ---
 name: Test Suite
 description: Test runner, verification approach, and task-completion checklist for this project.
+obligations:
+  - <fill in: 1-2 imperative, concrete rules this memory imposes, or replace with "obligations: []" if none>
 metadata:
   type: feature
 ---

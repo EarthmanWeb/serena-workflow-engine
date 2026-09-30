@@ -1,6 +1,9 @@
 ---
 name: REF_SWE_DEPLOY
 description: How to deploy the Serena Workflow Engine plugin — push source to GitHub, plugin auto-updates next load; cache priming allowed during active dev.
+obligations:
+  - Deploy by running `git push origin main` — NEVER a separate build/publish/release step.
+  - Treat cache priming (copying a source file over its installed cache copy) as a dev convenience only — still push; a primed cache with no push is never the source of truth.
 metadata:
   type: reference
   keywords: deploy, push, github, publish, release, plugin auto-update, cache priming

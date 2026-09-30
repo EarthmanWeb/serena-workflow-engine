@@ -1,6 +1,8 @@
 ---
 name: Development Standards
 description: Project overview, per-language conventions, and build/format/git commands. Index of DEV_* standards.
+obligations:
+  - <fill in: 1-2 imperative, concrete rules this memory imposes, or replace with "obligations: []" if none>
 metadata:
   type: feature
 ---

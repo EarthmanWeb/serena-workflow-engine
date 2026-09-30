@@ -1,15 +1,18 @@
 ---
-name: Memory Index
+name: memory-index
 description: Root index of project memories for serena-workflow-engine
 metadata:
+  node_type: memory
   type: index
+  originSessionId: dbb3904f-42eb-46b3-8d3f-558dc5fb6bb5
+  modified: 2026-09-30T07:52:10.842Z
 ---
 
 ## Critical Rules
 
 - [Plugin Source Location](feedback/FEEDBACK_PLUGIN_SOURCE_LOCATION.md) — this repo IS the plugin source; NEVER write to ~/.claude/plugins/cache/
 - [Bypass & Setup Location](feedback/FEEDBACK_BYPASS_AND_SETUP_LOCATION.md) — init gate detects setup in .serena AND legacy .claude; project bypass is user-only (/swe-bypass), un-settable by LLM
-- [v4 FSM Redesign](feedback/FEEDBACK_V4_FSM_REDESIGN.md) — WF_* reads never transition state (explicit set_state only); WF_START removed; arch review is complexity-gated
+- [v4 FSM Redesign](feedback/FEEDBACK_V4_FSM_REDESIGN.md) — reads CAN forward-advance via readAdvance (rank-forward matrix edges only); explicit set_state remains the only backward/pivot driver; WF_START removed; arch review is complexity-gated
 
 ## Response & Style
 

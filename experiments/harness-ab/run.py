@@ -242,6 +242,13 @@ def parse_transcript(lines):
     - `assistant_turns_incl_subagents`: total assistant-message events,
       main agent + every subagent combined (assistant_message_count is now
       main-agent-only; this new field is the previous ambiguous total).
+    - `hook_attachment_blocks` / `hook_attachment_chars`: count and total
+      character length of every non-empty `tool_result` and injected `text`
+      content block across all `user`-role events (main agent + subagents),
+      counted unconditionally (not filtered to errors/hook-denial matches).
+      These verify SPEC_HARNESS_EFFICIENCY_TUNING's ≤300 blocks / ≤150k
+      chars acceptance budget for how much attached content an arm's hooks
+      make the agent read.
     """
     metrics = {
         "subtype": None,
@@ -271,6 +278,8 @@ def parse_transcript(lines):
         "tool_result_errors": 0,
         "hook_denials": 0,
         "stop_hook_blocks": 0,
+        "hook_attachment_blocks": 0,
+        "hook_attachment_chars": 0,
         "mcp_servers": [],
         "plugins": [],
     }
@@ -338,12 +347,28 @@ def parse_transcript(lines):
                 for block in content:
                     if not isinstance(block, dict):
                         continue
-                    if block.get("type") == "tool_result" and block.get("is_error"):
+                    block_type = block.get("type")
+                    # hook_attachment_blocks/_chars: every tool_result and
+                    # injected text block a user-role event carries is content
+                    # the harness's own hooks attached (additionalContext,
+                    # gate denials, docs-first nudges, ...) that the agent has
+                    # to read on top of its own work — see
+                    # SPEC_HARNESS_EFFICIENCY_TUNING's ≤300 blocks / ≤150k
+                    # chars acceptance budget. Counted unconditionally (not
+                    # gated on is_error/hook-denial-regex like the metrics
+                    # below), over BOTH block kinds, for every non-empty block.
+                    if block_type in ("tool_result", "text"):
+                        block_text = (_tool_result_text(block) if block_type == "tool_result"
+                                      else (block.get("text") or ""))
+                        if block_text:
+                            metrics["hook_attachment_blocks"] += 1
+                            metrics["hook_attachment_chars"] += len(block_text)
+                    if block_type == "tool_result" and block.get("is_error"):
                         metrics["tool_result_errors"] += 1
                         text = _tool_result_text(block)
                         if HOOK_DENIAL_RE.search(text or ""):
                             metrics["hook_denials"] += 1
-                    if block.get("type") == "text":
+                    if block_type == "text":
                         text = block.get("text") or ""
                         if STOP_HOOK_RE.search(text):
                             metrics["stop_hook_blocks"] += 1

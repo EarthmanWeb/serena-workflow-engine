@@ -23,6 +23,15 @@ FEATURE_/SYS_ prefixes stripped) appears in one existing memory's basename or
 body. The remedy is edit_memory on the hit, not a near-duplicate file; the
 literal tag [new-memory-justified: <reason>] in the content overrides. Edits/
 overwrites of EXISTING memories and WM_ session files always pass.
+
+THIRD DUTY (Change Set H) — obligations-digest enforcement: a write_memory (or
+direct Write of a *.md under a /.serena/memory/ path) that CREATES or
+OVERWRITES a memory under a rule-bearing prefix (dom/, ref/, dev/, feature/)
+is denied when the content's front-matter carries no `obligations:` field.
+`obligations: []` is the conscious-none escape and always passes. edit_memory
+(partial edits) and non-rule-bearing prefixes are never denied by this check.
+The digest this field captures is what the two-tier sweep (wm_server
+_check_memory_sweep) plans obligations from without a full body read.
 """
 
 import os
@@ -184,6 +193,103 @@ def new_memory_dedupe_denial(tool_name, tool_input, cwd):
     )
 
 
+# ---------------------------------------------------------------------------
+# Change Set H — obligations-digest enforcement
+# ---------------------------------------------------------------------------
+# Prefixes that REQUIRE an `obligations:` front-matter field. All other
+# prefixes (arch/, spec/, wf/, index/, sys/, feedback/, ...) are optional.
+RULE_BEARING_PREFIXES = ("dom/", "ref/", "dev/", "feature/")
+
+# Front-matter block: opening '---', then an `obligations:` key as a top-level
+# sibling of `description:` (2-space-or-less indent, not nested under
+# metadata:), before the closing '---'.
+_FRONT_MATTER_BLOCK_RE = re.compile(r"^---\s*\n(.*?)\n---", re.DOTALL)
+_OBLIGATIONS_FIELD_RE = re.compile(r"^obligations:", re.MULTILINE)
+
+OBLIGATIONS_FIELD_GRAMMAR = (
+    "obligations:\n"
+    "  - <imperative obligation, one line, concrete>\n"
+    "(top-level sibling of `description`; `obligations: []` declares a "
+    "conscious none)"
+)
+
+
+def _memory_prefix(memory_name_or_path):
+    """Normalize a memory_name or file_path to its 'prefix/' dir segment
+    (e.g. 'dom/', 'ref/'), or '' when there is no dir segment."""
+    name = str(memory_name_or_path or "").replace("\\", "/").strip()
+    # A file_path may carry the full .serena/memory/<prefix>/NAME.md shape —
+    # take the segment immediately before the basename.
+    parts = [p for p in name.split("/") if p]
+    if len(parts) < 2:
+        return ""
+    return parts[-2].lower() + "/"
+
+
+def _has_obligations_field(content):
+    """True when the front-matter block contains a top-level `obligations:`
+    field (list or `[]`)."""
+    match = _FRONT_MATTER_BLOCK_RE.match(str(content or "").lstrip("﻿"))
+    if not match:
+        return False
+    return bool(_OBLIGATIONS_FIELD_RE.search(match.group(1)))
+
+
+def missing_obligations_reason(memory_name_or_path, content):
+    """Return the deny message when `content` authors/overwrites a
+    rule-bearing memory with no `obligations:` front-matter field, else None.
+
+    Applies only to prefixes in RULE_BEARING_PREFIXES; callers are
+    responsible for gating this to CREATE/overwrite (not edit_memory).
+    """
+    prefix = _memory_prefix(memory_name_or_path)
+    if prefix not in RULE_BEARING_PREFIXES:
+        return None
+    if _has_obligations_field(content):
+        return None
+    return (
+        "🛑 BLOCKED: \"{name}\" is a rule-bearing memory (prefix: {prefix}) "
+        "with no `obligations:` front-matter field. Add it — a top-level "
+        "sibling of `description`:\n{grammar}\n"
+        "`obligations: []` is the conscious-none escape when this memory "
+        "truly carries no obligations. This digest is what the two-tier "
+        "sweep plans from without a full body read.".format(
+            name=memory_name_or_path, prefix=prefix,
+            grammar=OBLIGATIONS_FIELD_GRAMMAR,
+        )
+    )
+
+
+def _is_memory_md_path_under_serena(file_path):
+    """True when file_path looks like a *.md write under a /.serena/memory/
+    tree (direct Write bypass of write_memory)."""
+    p = str(file_path or "").replace("\\", "/")
+    return bool(p) and p.endswith(".md") and "/.serena/memory/" in p
+
+
+def obligations_denial_for_write(tool_name, tool_input):
+    """Change Set H verdict for a write_memory or direct Write call, or None.
+
+    write_memory: denies on CREATE or OVERWRITE (both are full authoring —
+    edit_memory partial edits are exempt and never reach this check).
+    Direct Write: denies when file_path is a *.md under a /.serena/memory/
+    path (the write_memory bypass this gate also has to cover).
+    """
+    tool_input = tool_input or {}
+    name = str(tool_name or "")
+    if name.endswith("write_memory"):
+        memory_name = tool_input.get("memory_name", "")
+        content = tool_input.get("content", "")
+        return missing_obligations_reason(memory_name, content)
+    if name.endswith("Write") and not name.endswith("write_memory"):
+        file_path = tool_input.get("file_path", "")
+        if not _is_memory_md_path_under_serena(file_path):
+            return None
+        content = tool_input.get("content", "")
+        return missing_obligations_reason(file_path, content)
+    return None
+
+
 def targets_memory_index(tool_input):
     """True when the call writes the MEMORY.md index (by memory name or path)."""
     memory_name = str(tool_input.get("memory_name", ""))
@@ -216,6 +322,15 @@ def main():
         tool_input = input_data.get("tool_input", {}) or {}
 
         if not targets_memory_index(tool_input):
+            # Change Set H — obligations-digest enforcement: runs first, in
+            # addition to (not instead of) the B4 dedupe check below.
+            obligations_denial = obligations_denial_for_write(tool_name, tool_input)
+            if obligations_denial:
+                output = HookOutput(event_name="PreToolUse")
+                output.block(obligations_denial)
+                output.output_and_exit()
+                return
+
             # B4 — new-memory dedupe: deny a write_memory creating a memory
             # whose topic an existing memory already covers.
             cwd = str(input_data.get("cwd", "") or "") or os.getcwd()

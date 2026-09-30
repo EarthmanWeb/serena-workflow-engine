@@ -47,6 +47,39 @@ SKIP_PREFIXES = ("WM_",)
 #   MEMORY — the index; governed by swe_post_memory_index.py, not this hook.
 SKIP_BASENAMES = ("REF_MEMORY_STYLE", "MEMORY")
 
+# Change Set H — organic backfill nudge: prefixes that carry the
+# obligations-digest requirement (mirrors RULE_BEARING_PREFIXES in
+# hooks/pre/swe_pre_memory_index_gate.py — keep in sync).
+RULE_BEARING_PREFIXES = ("dom/", "ref/", "dev/", "feature/")
+
+_FRONT_MATTER_BLOCK_RE = re.compile(r"^---\s*\n(.*?)\n---", re.DOTALL)
+_OBLIGATIONS_FIELD_RE = re.compile(r"^obligations:", re.MULTILINE)
+
+OBLIGATIONS_NUDGE = (
+    "Missing `obligations:` front-matter — add 1-2 imperative digest lines "
+    "(or `obligations: []`); the sweep plans from digests. Backfill "
+    "repo-wide with /swe-memory-obligations."
+)
+
+
+def _memory_prefix(memory_name):
+    """Normalize a memory_name to its 'prefix/' dir segment, or '' when
+    there is no dir segment."""
+    name = str(memory_name or "").replace("\\", "/").strip()
+    parts = [p for p in name.split("/") if p]
+    if len(parts) < 2:
+        return ""
+    return parts[-2].lower() + "/"
+
+
+def has_obligations_field(content):
+    """True when the front-matter block contains a top-level `obligations:`
+    field (list or `[]`)."""
+    match = _FRONT_MATTER_BLOCK_RE.match(str(content or "").lstrip("﻿"))
+    if not match:
+        return False
+    return bool(_OBLIGATIONS_FIELD_RE.search(match.group(1)))
+
 # Suggestion-mood phrases. A rule phrased as a suggestion is treated as optional,
 # so these are the highest-value violations to catch. Word-boundary matched,
 # case-insensitive.
@@ -205,16 +238,32 @@ def main():
             content = f.read()
 
         violations = scan_style(content)
-        if not violations:
+
+        # Change Set H — organic backfill nudge: advisory only, appended to
+        # whatever style output already fires (or emitted alone when the
+        # memory is otherwise clean).
+        nudge = ""
+        if (_memory_prefix(memory_name) in RULE_BEARING_PREFIXES
+                and not has_obligations_field(content)):
+            nudge = OBLIGATIONS_NUDGE
+
+        if not violations and not nudge:
             output_empty()
             return
 
+        if not violations:
+            output_message(f"✍️ {nudge}")
+            return
+
         lines = "\n".join(f"  - {v}" for v in violations)
-        output_message(
+        message = (
             f"✍️ Memory style check — \"{memory_name}\" has legacy-style markers "
             f"(authority: ref/REF_MEMORY_STYLE). Rewrite it now to the terse-"
             f"imperative standard:\n{lines}"
         )
+        if nudge:
+            message += f"\n  - {nudge}"
+        output_message(message)
     except Exception:
         output_empty()
 

@@ -1,5 +1,5 @@
 {
-  "description": "SWE v4 - state-machine workflow (reads never transition; explicit set_state only) with failure tracking, session lifecycle, and metadata injection",
+  "description": "SWE v5 - state-machine workflow (readAdvance forward-advances on WF_* reads; explicit set_state remains the only backward/pivot driver) with failure tracking, session lifecycle, and metadata injection",
   "hooks": {
     "SessionStart": [
       {
@@ -74,7 +74,7 @@
         ]
       },
       {
-        "matcher": "Grep|Glob|Bash|Read|mcp__plugin_swe_serena__search_for_pattern|mcp__serena__search_for_pattern",
+        "matcher": "Grep|Glob|Bash|mcp__plugin_swe_serena__search_for_pattern|mcp__serena__search_for_pattern",
         "hooks": [
           {
             "type": "command",

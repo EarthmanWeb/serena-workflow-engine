@@ -963,3 +963,261 @@ class TestSweepSessionWindowWiring(_FSBase):
         self.assertIn("never read this session", result["error"])
         self.assertIn("Prior-turn reads count; do not re-read",
                       result["error"])
+
+
+# ──────────────────────────────────────────────────────────────────
+# Change Set H — obligation-digest disposition parsing + sweep wiring
+# ──────────────────────────────────────────────────────────────────
+
+class TestParseRulesPlanned(unittest.TestCase):
+    def test_absent_line_returns_empty(self):
+        self.assertEqual(wm._parse_rules_planned("no line here"), set())
+
+    def test_comma_separated_names(self):
+        content = "- **Rules planned**: dom/DOM_X, ref/REF_Y\n"
+        self.assertEqual(wm._parse_rules_planned(content),
+                         {"dom/dom_x", "ref/ref_y"})
+
+    def test_multiple_lines_all_honored(self):
+        content = ("- **Rules planned**: dom/DOM_X\n"
+                   "- **Rules planned**: ref/REF_Y\n")
+        self.assertEqual(wm._parse_rules_planned(content),
+                         {"dom/dom_x", "ref/ref_y"})
+
+
+class TestParseRulesRuledOut(unittest.TestCase):
+    def test_absent_line_returns_empty(self):
+        self.assertEqual(wm._parse_ruled_out("no line here"), {})
+
+    def test_em_dash_reason_captured(self):
+        content = "- **Rules ruled out**: ref/REF_X — not applicable\n"
+        self.assertEqual(wm._parse_ruled_out(content),
+                         {"ref/ref_x": "not applicable"})
+
+    def test_multiple_entries_comma_separated(self):
+        content = ("- **Rules ruled out**: ref/REF_X — not applicable, "
+                   "dom/DOM_Y — superseded\n")
+        result = wm._parse_ruled_out(content)
+        self.assertEqual(result["ref/ref_x"], "not applicable")
+        self.assertEqual(result["dom/dom_y"], "superseded")
+
+    def test_bare_name_no_reason_has_empty_reason(self):
+        content = "- **Rules ruled out**: ref/REF_X\n"
+        self.assertEqual(wm._parse_ruled_out(content), {"ref/ref_x": ""})
+
+    def test_multiple_lines_all_honored(self):
+        content = ("- **Rules ruled out**: ref/REF_X — reason one\n"
+                   "- **Rules ruled out**: dom/DOM_Y — reason two\n")
+        result = wm._parse_ruled_out(content)
+        self.assertEqual(set(result.keys()), {"ref/ref_x", "dom/dom_y"})
+        self.assertTrue(all(result.values()))
+
+
+class TestCitedMemNames(unittest.TestCase):
+    def test_citations_inside_checklist_captured(self):
+        content = ("## Compliance Checklist\n"
+                   "- [ ] mem:dom/dom_x done\n"
+                   "- [ ] mem:ref/ref_y\n")
+        self.assertEqual(wm._cited_mem_names(content),
+                         {"dom/dom_x", "ref/ref_y"})
+
+    def test_citations_outside_checklist_ignored(self):
+        content = "## Notes\nmem:dom/dom_x mentioned here, not in checklist\n"
+        self.assertEqual(wm._cited_mem_names(content), set())
+
+    def test_no_checklist_section_returns_empty(self):
+        self.assertEqual(wm._cited_mem_names("no checklist here"), set())
+
+
+class TestCheckMemorySweepDispositions(unittest.TestCase):
+    """_check_memory_sweep: Rules planned / Rules ruled out dispositions."""
+
+    def setUp(self):
+        reset_caches()
+        self.tmp = tempfile.TemporaryDirectory()
+        self.session = "dispotest"
+        self.stream_path = os.path.join(self.tmp.name, f"{self.session}.jsonl")
+        self._orig_stream_path = wm.get_stream_path
+        self._orig_sentinel = wm.get_feature_sentinel_path
+        self._orig_root = config._PROJECT_ROOT
+        wm.get_stream_path = lambda sid: os.path.join(self.tmp.name, f"{sid}.jsonl")
+        wm.get_feature_sentinel_path = (
+            lambda sid, gate: os.path.join(self.tmp.name, f".{gate}_feature_{sid}"))
+        # No WM file on disk for these tests unless explicitly created —
+        # find_working_memory_for_session then returns None and the citation
+        # lookup falls back to other_sections / current content only.
+        config._PROJECT_ROOT = self.tmp.name
+
+    def tearDown(self):
+        wm.get_stream_path = self._orig_stream_path
+        wm.get_feature_sentinel_path = self._orig_sentinel
+        config._PROJECT_ROOT = self._orig_root
+        self.tmp.cleanup()
+        reset_caches()
+
+    def _write_stream(self, events):
+        with open(self.stream_path, "w") as f:
+            for e in events:
+                f.write(json.dumps(e) + "\n")
+
+    def _sentinel(self):
+        return os.path.join(self.tmp.name, f".sweep_feature_{self.session}")
+
+    def test_planned_cited_in_same_content_passes_and_creates_sentinel(self):
+        self._write_stream([
+            {"type": "docread", "name": "feature/FEATURE_X"},
+            {"type": "docpending", "new": ["dom/dom_planned"]},
+        ])
+        content = (
+            "- **Memories loaded**: feature/FEATURE_X\n"
+            "- **Rules planned**: dom/DOM_PLANNED\n"
+            "## Compliance Checklist\n"
+            "- [ ] mem:dom/dom_planned addressed\n"
+        )
+        err = wm._check_memory_sweep(self.session, content)
+        self.assertIsNone(err)
+        self.assertTrue(os.path.exists(self._sentinel()))
+        with open(self._sentinel()) as f:
+            self.assertEqual(json.load(f)["planned"], ["dom/dom_planned"])
+
+    def test_planned_uncited_rejected(self):
+        self._write_stream([
+            {"type": "docread", "name": "feature/FEATURE_X"},
+        ])
+        content = (
+            "- **Memories loaded**: feature/FEATURE_X\n"
+            "- **Rules planned**: dom/DOM_PLANNED\n"
+        )
+        err = wm._check_memory_sweep(self.session, content)
+        self.assertIsNotNone(err)
+        self.assertIn("dom/dom_planned", err)
+        self.assertIn("Compliance Checklist", err)
+        self.assertFalse(os.path.exists(self._sentinel()))
+
+    def test_planned_cited_in_other_sections_passes(self):
+        self._write_stream([
+            {"type": "docread", "name": "feature/FEATURE_X"},
+        ])
+        content = (
+            "- **Memories loaded**: feature/FEATURE_X\n"
+            "- **Rules planned**: dom/DOM_PLANNED\n"
+        )
+        other_sections = [{
+            "section": "Notes",
+            "content": "## Compliance Checklist\n- [ ] mem:dom/dom_planned\n",
+        }]
+        err = wm._check_memory_sweep(self.session, content, other_sections=other_sections)
+        self.assertIsNone(err)
+        self.assertTrue(os.path.exists(self._sentinel()))
+
+    def test_ruled_out_with_reason_passes(self):
+        self._write_stream([
+            {"type": "docread", "name": "feature/FEATURE_X"},
+        ])
+        content = (
+            "- **Memories loaded**: feature/FEATURE_X\n"
+            "- **Rules ruled out**: ref/REF_X — not applicable to this task\n"
+        )
+        err = wm._check_memory_sweep(self.session, content)
+        self.assertIsNone(err)
+        with open(self._sentinel()) as f:
+            self.assertEqual(json.load(f)["ruled_out"], ["ref/ref_x"])
+
+    def test_ruled_out_without_reason_rejected(self):
+        self._write_stream([
+            {"type": "docread", "name": "feature/FEATURE_X"},
+        ])
+        content = (
+            "- **Memories loaded**: feature/FEATURE_X\n"
+            "- **Rules ruled out**: ref/REF_X\n"
+        )
+        err = wm._check_memory_sweep(self.session, content)
+        self.assertIsNotNone(err)
+        self.assertIn("ref/ref_x", err)
+        self.assertFalse(os.path.exists(self._sentinel()))
+
+    def test_docpending_satisfied_by_planned(self):
+        self._write_stream([
+            {"type": "docread", "name": "feature/FEATURE_X"},
+            {"type": "docpending", "new": ["dom/dom_planned"],
+             "src": "feature/feature_paused"},
+        ])
+        content = (
+            "- **Primary**: X - working feature\n"
+            "- **Memories loaded**: feature/FEATURE_X\n"
+            "- **Rules planned**: dom/DOM_PLANNED\n"
+            "## Compliance Checklist\n- [ ] mem:dom/dom_planned\n"
+        )
+        err = wm._check_memory_sweep(self.session, content)
+        self.assertIsNone(err)
+
+    def test_docpending_satisfied_by_ruled_out(self):
+        self._write_stream([
+            {"type": "docread", "name": "feature/FEATURE_X"},
+            {"type": "docpending", "new": ["ref/ref_cold"],
+             "src": "feature/feature_paused"},
+        ])
+        content = (
+            "- **Primary**: X - working feature\n"
+            "- **Memories loaded**: feature/FEATURE_X\n"
+            "- **Rules ruled out**: ref/REF_COLD — not relevant here\n"
+        )
+        err = wm._check_memory_sweep(self.session, content)
+        self.assertIsNone(err)
+
+    def test_absent_new_lines_behavior_unchanged(self):
+        # No 'Rules planned'/'Rules ruled out' lines at all — identical to
+        # pre-Change-Set-H behavior (full backward compatibility).
+        self._write_stream([
+            {"type": "docread", "name": "feature/FEATURE_X"},
+        ])
+        content = "- **Memories loaded**: feature/FEATURE_X\n"
+        err = wm._check_memory_sweep(self.session, content)
+        self.assertIsNone(err)
+        with open(self._sentinel()) as f:
+            sentinel = json.load(f)
+        self.assertEqual(sentinel["planned"], [])
+        self.assertEqual(sentinel["ruled_out"], [])
+
+
+class TestUpdateSectionOtherSectionsWiring(_FSBase):
+    """tool_swe_wm_update threads sibling section specs through to the sweep
+    check as `other_sections`, so a Compliance Checklist written in the SAME
+    batched call satisfies a Rules-planned citation before anything lands
+    on disk."""
+
+    WM_BODY = (
+        "# WM\n\n## Current Task\n\n**[IN_PROGRESS]**: x\n\n"
+        "## Affected Features\n\n(tbd)\n\n## Previous Task\n\n-\n"
+    )
+
+    def test_checklist_in_sibling_section_same_call_satisfies_citation(self):
+        self._write_wm(self.WM_BODY)
+        path = wm.get_stream_path(self.SID)
+        wm.append_event(path, "docread", name="feature/FEATURE_X")
+        result = wm.tool_swe_wm_update(
+            session_id=self.SID,
+            sections=[
+                {"section": "Notes",
+                 "content": "## Compliance Checklist\n- [ ] mem:dom/dom_planned\n"},
+                {"section": "Affected Features",
+                 "content": ("- **Memories loaded**: feature/FEATURE_X\n"
+                             "- **Rules planned**: dom/DOM_PLANNED\n")},
+            ])
+        self.assertTrue(result.get("success"), result)
+        self.assertTrue(os.path.exists(
+            wm.get_feature_sentinel_path(self.SID, "sweep")))
+
+    def test_checklist_missing_everywhere_rejected(self):
+        self._write_wm(self.WM_BODY)
+        path = wm.get_stream_path(self.SID)
+        wm.append_event(path, "docread", name="feature/FEATURE_X")
+        result = wm.tool_swe_wm_update(
+            session_id=self.SID,
+            sections=[
+                {"section": "Affected Features",
+                 "content": ("- **Memories loaded**: feature/FEATURE_X\n"
+                             "- **Rules planned**: dom/DOM_PLANNED\n")},
+            ])
+        self.assertIn("error", result)
+        self.assertIn("dom/dom_planned", result["error"])

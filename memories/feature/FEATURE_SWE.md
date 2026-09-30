@@ -1,6 +1,9 @@
 ---
 name: FEATURE_SWE
 description: Serena Workflow Engine plugin — source layout, state machine, hooks, MCP tools, feature gates, bootstrap/init flow, and dual-location edit rules.
+obligations:
+  - NEVER write to `.claude/plugins/serena-workflow-engine/` — it is the installed cache copy; this repo IS the plugin source, edit here.
+  - Always pass `session_id` explicitly to `swe-wm` MCP tools — NEVER rely on most-recent-WM guessing across concurrent sessions.
 metadata:
   type: feature
 ---
@@ -119,9 +122,9 @@ WF_INIT → WF_CLASSIFY → WF_ARCH_REVIEW → WF_EXECUTE
 | ---------------------------------- | --------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `swe_pre_tool_init_gate.py`        | PreToolUse                                                                              | Block ALL tools until WF_INIT read. TWO-TIER breaker, both clearing on next docread: Tier 1 "recovery" (3+ init denies, no `mcp_unavailable`) unlocks ONLY recovery/diagnostic Bash (`claude mcp list/get`, `ps`/`pgrep`, restricted log paths, `--reset-sentinel`) — not codebase Read/Grep/Glob. Tier 2 "degraded" (`mcp_unavailable` from a real Serena connection failure) unlocks Read/Grep/Glob/LS/ToolSearch + hardened read-only Bash; edits still deny. See `mem:dom/DOM_SWE_HOOKS` |
 | `swe_pre_edit_validate.py`         | PreToolUse (Edit/Write/Serena)                                                          | Validate edit permissions                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| `swe_pre_memory_index_gate.py`     | PreToolUse (Edit/Write/write_memory/edit_memory)                                        | HARD-DENY spec/report/research/project links entering MEMORY.md                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| `swe_pre_memory_index_gate.py`     | PreToolUse (Edit/Write/write_memory/edit_memory)                                        | HARD-DENY spec/report/research/project links entering MEMORY.md. ALSO DENIES a `write_memory`/direct-`Write` that creates or overwrites a dom/ref/dev/feature memory with no `obligations:` front-matter field (`obligations: []` passes; `edit_memory` partial edits are exempt) — see `mem:ref/REF_MEMORY_STYLE` "Obligations Field"                                                                                                                                                       |
 | `swe_pre_bash_test_gate.py`        | PreToolUse (Bash)                                                                       | Feature gate: FEATURE_TESTS                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| `swe_pre_search_docs_gate.py`      | PreToolUse (Grep/Glob/search_for_pattern/Bash-inspection; Read matched but never gated) | DOCS-FIRST gate, budget model: one FRESH docs consult clears the next 5 gated calls (re-reads don't refill); deny lists pending related docs; refill ≠ research; no-docs areas route to a FOREGROUND /swe-feature-onboard (or -update) agent — wait, then read its memories; spawned agents NEVER gated (exempt first via `is_spawned_agent` — non-empty agent_id/agent_type — with subagent-transcript shape as fallback)                                                                   |
+| `swe_pre_search_docs_gate.py`      | PreToolUse (Grep/Glob/search_for_pattern/Bash-inspection; Read matched but never gated) | DOCS-FIRST gate, budget model: one FRESH docs consult clears the next `GATED_CALL_BUDGET` (currently 15) gated calls (re-reads don't refill); deny lists pending related docs; refill ≠ research; no-docs areas route to a FOREGROUND /swe-feature-onboard (or -update) agent — wait, then read its memories; spawned agents NEVER gated (exempt first via `is_spawned_agent` — non-empty agent_id/agent_type — with subagent-transcript shape as fallback)                                  |
 | `swe_pre_question_consent_gate.py` | PreToolUse (AskUserQuestion)                                                            | Deny questions under blanket consent (`auto_approve`/`blanket_consent`)                                                                                                                                                                                                                                                                                                                                                                                                                      |
 
 ### Post-Tool Hooks (`hooks/post/`)
@@ -134,7 +137,7 @@ WF_INIT → WF_CLASSIFY → WF_ARCH_REVIEW → WF_EXECUTE
 | `swe_post_todo_wm_sync.py`     | PostToolUse (TodoWrite)                                      | WM sync reminder on todo changes                                                                                                                                                                                                                                              |
 | `swe_post_write_continue.py`   | PostToolUse (Write)                                          | Post-write continuation                                                                                                                                                                                                                                                       |
 | `swe_post_memory_index.py`     | PostToolUse (write_memory)                                   | Enforce MEMORY.md index update                                                                                                                                                                                                                                                |
-| `swe_post_memory_style.py`     | PostToolUse (write_memory/edit_memory)                       | Enforce terse-imperative memory style                                                                                                                                                                                                                                         |
+| `swe_post_memory_style.py`     | PostToolUse (write_memory/edit_memory)                       | Enforce terse-imperative memory style. Nudges toward adding `obligations:` front-matter on a write/edit of a dom/ref/dev/feature memory that lacks the field — advisory, not a deny (the pre-gate denies new writes; this covers edits and existing memories)                 |
 | `swe_post_tool_failure.py`     | PostToolUseFailure                                           | Flailing detection, failure logging                                                                                                                                                                                                                                           |
 
 ### Stop Hooks (`hooks/stop/`)
@@ -144,24 +147,25 @@ WF_INIT → WF_CLASSIFY → WF_ARCH_REVIEW → WF_EXECUTE
 | `swe_stop_continue_working.py` | Stop    | Block unnecessary stops, continue-working                                                                                                                                                                                                                                                                                                                                                                                                               |
 | `swe_stop_response_format.py`  | Stop    | Terse-format gate: block over-budget / recap-scaffolded replies. ON by default; config via `CLAUDE_PLUGIN_OPTION_RESPONSE_FORMAT_*` (plugin.json `userConfig` block); silent when SWE bypassed / uninitialized / disabled. NEVER blocks when `stop_hook_active` (max 1 forced rewrite/turn) and NEVER blocks a reply ending in a question; excludes code blocks/tables/path lists from the word count. Sentinel + offender log under `.serena/streams/` |
 
-## Skills (14 total)
+## Skills (15 total)
 
-| Skill                      | Purpose                                             |
-| -------------------------- | --------------------------------------------------- |
-| `swe-feature-onboard`      | Onboard new feature to workflow                     |
-| `swe-feature-update`       | Update feature memory files                         |
-| `swe-gherkin-spec`         | Author Gherkin BDD specs                            |
-| `swe-gherkin-dev`          | TDD implementation from Gherkin specs               |
-| `swe-memory-audit`         | Audit memories against the terse-imperative style   |
-| `swe-memory-frontmatter`   | Audit/backfill memory YAML front-matter             |
-| `swe-scaffold-project`     | Initialize new project                              |
-| `swe-symbol-index`         | Generate symbol index table for feature linked docs |
-| `swe-wm-update`            | Update Working Memory sections                      |
-| `swe-workflow-research`    | Code exploration/research                           |
-| `swe-workflow-arch-review` | Architecture compliance review                      |
-| `swe-workflow-debug-tdd`   | Test-driven debugging                               |
-| `swe-workflow-verify`      | Verify implementation                               |
-| `swe-wp-cli-setup`         | Configure the WP-CLI MCP server                     |
+| Skill                      | Purpose                                                                  |
+| -------------------------- | ------------------------------------------------------------------------ |
+| `swe-feature-onboard`      | Onboard new feature to workflow                                          |
+| `swe-feature-update`       | Update feature memory files                                              |
+| `swe-gherkin-spec`         | Author Gherkin BDD specs                                                 |
+| `swe-gherkin-dev`          | TDD implementation from Gherkin specs                                    |
+| `swe-memory-audit`         | Audit memories against the terse-imperative style                        |
+| `swe-memory-frontmatter`   | Audit/backfill memory YAML front-matter                                  |
+| `swe-memory-obligations`   | Backfill `obligations:` front-matter across dom/ref/dev/feature memories |
+| `swe-scaffold-project`     | Initialize new project                                                   |
+| `swe-symbol-index`         | Generate symbol index table for feature linked docs                      |
+| `swe-wm-update`            | Update Working Memory sections                                           |
+| `swe-workflow-research`    | Code exploration/research                                                |
+| `swe-workflow-arch-review` | Architecture compliance review                                           |
+| `swe-workflow-debug-tdd`   | Test-driven debugging                                                    |
+| `swe-workflow-verify`      | Verify implementation                                                    |
+| `swe-wp-cli-setup`         | Configure the WP-CLI MCP server                                          |
 
 ## Commands (9 total)
 
@@ -222,6 +226,8 @@ Feature gates block specific tools until the relevant FEATURE_* memory is read. 
 ### The `sweep` Gate (per-task, WM-verified)
 
 Unlike read-created feature gates, the sweep sentinel is created ONLY by the WM server: an `Affected Features` write whose `**Memories loaded**:` list is verified against the SESSION's actual named `docread` events (D2 idempotence: a read from any earlier turn/task this session counts — re-listing without re-reading passes) (`_check_memory_sweep` in `wm_server.py`). List parsing takes the FIRST whitespace token per comma-separated entry (annotation text stripped), and workflow-machinery names (`wf/*`, `claude/*` — read before the task boundary, excluded from the 4d sweep) are IGNORED rather than rejected; a list of ONLY machinery names still fails. Every transition INTO WF_CLASSIFY deletes it (`clear_sweep_sentinel` in `state_manager.py`), so same-session follow-up tasks must re-WRITE the Affected Features section before their first edit — but never re-READ memories already read this session. Contract: `wf/WF_CLASSIFY` Steps 4d/4e. Tests: `tests/test_sweep_gate.py`.
+
+Two-tier sweep dispositions (Change Set H): a docpending link this task surfaces satisfies verification via loaded ∪ deferred ∪ planned ∪ ruled-out — not loaded-or-deferred alone. `**Rules planned**:` names must each be cited as `(mem:<name>)` on a `## Compliance Checklist` line; the WM server rejects the write on an uncited planned name (or a checklist citation with no matching planned name). `**Rules ruled out**:` entries require a mandatory reason per name. See `mem:wf/WF_CLASSIFY` Step 4d (Tier 0 digest pass / Tier 1 body pass) and Step 4e (WM grammar).
 
 "This task" = events since the last task boundary in the stream: the last `session_start` event or `state` event with `to_s=WF_CLASSIFY` (`events_since_task_start` in `core/stream.py`). Boundaries are stamped ONLY at genuine task starts — the prompt hook's new_task / after-WF_DONE transitions (`append_task_boundary`) and first-time session creation. Continuation/unclear prompts and mid-session slash commands (FAST TRACK re-invocation) NEVER stamp, so a task's docreads keep counting across interleaved prompts. See `DOM_SWE_HOOKS` "Task-boundary stamping".
 

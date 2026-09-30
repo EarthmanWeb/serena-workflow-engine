@@ -44,7 +44,9 @@ Row format (exact, one per claim):
 
 ## Compliance Checklist at Entry
 
-At the START of WF_EXECUTE — INCLUDING `arch_review_skipped` routes — derive a SHORT `## Compliance Checklist` in WM from the loaded `DEV_*`/`DOM_*` rules scoped to the files being touched (≤10 items). If WF_ARCH_REVIEW already wrote one, verify it covers the touched files instead of re-deriving. Re-check the checklist before declaring done. Rules are applied at edit time, not just read at classify time.
+The checklist is SEEDED at WF_CLASSIFY: every Tier-0 digest given the PLANNED disposition (Step 4d) arrives here as an unchecked `- [ ] <obligation text> (mem:<name>)` item, its body still unread. At the START of WF_EXECUTE — INCLUDING `arch_review_skipped` routes — FINALIZE the seeded `## Compliance Checklist` in WM: add items from the loaded `DEV_*`/`DOM_*` rules scoped to the files being touched (≤10 items total, seeded + added), and drop/adjust seeded items the actual file scope makes irrelevant. If WF_ARCH_REVIEW already wrote one, finalize it in place instead of re-deriving from scratch.
+
+Before implementing a checklist item whose citing memory body was never read (a planned item, still digest-only), read the memory THEN — on-miss, before the dependent edit — and verify the implementation against the body, not the digest. Re-check the whole checklist before declaring done. Rules are applied at edit time, not just read at classify time.
 
 ## Feature Memory Verification
 
