@@ -14,5 +14,6 @@ metadata:
 **Why:** User correction (2026-09-29): "make commits, stop leaving the work tree so dirty."
 
 **How to apply:**
+
 - After every verification pass → `git add` the task files → commit on the current feature branch. Never push without asking.
 - Parallel subagents in THIS repo do NOT commit — `scripts/pre-commit` bumps the version and stages plugin.json/marketplace.json/package.json on every commit, so concurrent commits race and multiply version bumps. The orchestrator commits once per verified stage.

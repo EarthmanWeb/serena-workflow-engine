@@ -35,15 +35,15 @@ Agent({ description: "Task A", run_in_background: true, model: "sonnet",
 
 ## Anti-Patterns
 
-| Anti-pattern                                             | Fix                                                                              |
-| -------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| Orchestrator doing file edits or running tests itself    | Delegate to a subagent — orchestrator does classification/routing/synthesis only |
-| Serial agent calls for independent work                  | Batch ALL independent tracks into ONE message                                    |
-| Launching only 1 of N subagents                          | Launch ALL in ONE message                                                        |
-| Subagent re-runs WF_INIT                                 | Include the bypass line in EVERY prompt                                          |
-| `opus` or inherited/omitted model for routine work       | Pass `model` explicitly; haiku/sonnet per the routing table                      |
-| Trusting a haiku "0 findings" without a positive control | Re-verify with sonnet or a validated probe before acting on a negative           |
-| Coordinator doing file reads itself                      | Delegate file work to subagents (separate context windows)                       |
+| Anti-pattern                                                | Fix                                                                                                                                                                                                                     |
+| ----------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Orchestrator doing file edits or running tests itself       | Delegate to a subagent — orchestrator does classification/routing/synthesis only                                                                                                                                        |
+| Serial agent calls for independent work                     | Batch ALL independent tracks into ONE message                                                                                                                                                                           |
+| Launching only 1 of N subagents                             | Launch ALL in ONE message                                                                                                                                                                                               |
+| Subagent re-runs WF_INIT                                    | Include the bypass line in EVERY prompt                                                                                                                                                                                 |
+| `opus` or inherited/omitted model for routine work          | Pass `model` explicitly; haiku/sonnet per the routing table                                                                                                                                                             |
+| Trusting a haiku "0 findings" without a positive control    | Re-verify with sonnet or a validated probe before acting on a negative                                                                                                                                                  |
+| Coordinator doing file reads itself                         | Delegate file work to subagents (separate context windows)                                                                                                                                                              |
 | Changing a running background agent's scope via SendMessage | Put EVERY requirement in the initial prompt; background agents reject mid-task SendMessage scope changes as unverified injections. To change scope: stop the agent (TaskStop) and launch a new one with the full brief. |
 
 ## Tooling
