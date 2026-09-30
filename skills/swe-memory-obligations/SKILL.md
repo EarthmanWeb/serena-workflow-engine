@@ -76,21 +76,37 @@ obligations:
 obligations: []
 ```
 
+## ⛔ NO IMPROVISATION
+
+- Run the commands in this skill VERBATIM. NEVER compose alternative shell pipelines, `for` loops, scratch files (`/tmp` or anywhere), or awk/sed variants for a step that has a literal command below.
+- Discovery is the ONE `grep -L` command in Stage 1 — nothing else. Per-memory reads are `read_memory`. Writes are `edit_memory`. Direct file access ONLY via the documented Stage-3 fallback.
+- A verbatim command failing twice = STOP and report the failure output verbatim (`mem:claude/CLAUDE_OBLIGATIONS` Skill Failure Threshold). NEVER retry with an invented variant.
+
 ## Stages
 
 ### Stage 1: Discover
 
-List memories in scope, restricted to the four rule-bearing prefixes:
+Two calls, EXACTLY these — nothing else:
+
+1. The candidate list — files LACKING the field (one read-only grep; `-L` prints non-matching files; this is a memory-tree docs consult, credited by the docs gate):
+
+```bash
+find .serena/memory/dom .serena/memory/ref .serena/memory/dev .serena/memory/feature -maxdepth 1 -name '*.md' -exec grep -L "^obligations:" {} + 2>/dev/null
+```
+
+(`find -exec` form on purpose: a bare glob aborts zsh when a prefix directory is absent; this runs
+identically in bash/zsh with any subset of the four directories present. Exit 1 with no output = zero
+candidates.)
+
+2. The read-only set to exclude from writes:
 
 ```
-mcp__plugin_swe_serena__list_memories(topic="dom")     # or ref, dev, feature — or all four when scope omitted
+mcp__plugin_swe_serena__list_memories(topic="dom")     # repeat for ref, dev, feature (or only the scope arg's prefix)
 ```
 
-Skip: `WM_*`/`wm/*`, `wf/*`, `claude/*`, `MEMORY`, anything in `read_only_memories` — same exclusions as
-`mem:swe-memory-frontmatter`.
-
-For each listed memory, check its front-matter for an `obligations:` key (present, even as `[]`, is a pass;
-absent is a candidate). Record: `<count before>` per directory.
+- Candidates = grep output MINUS `read_only_memories`, `WM_*`, `MEMORY`. Present-even-as-`[]` files never appear in the grep output — already done.
+- The grep matches `^obligations:` anywhere in a file, not only front-matter. This is deliberately dumb (the key legally appears only in front-matter per `mem:ref/REF_MEMORY_STYLE`); accept the rare false "has" rather than build a parser.
+- Record `<count before>` per directory FROM THE GREP OUTPUT. No counting scripts, no scratch files.
 
 ### Stage 2: Fan Out Extraction (parallel, CHEAP agents)
 
@@ -101,10 +117,12 @@ work. Batch candidates into parallel `Agent` calls, ONE message, `run_in_backgro
 - `model: "haiku"` — ONLY for a batch that is a mechanical count/pass-through (e.g. confirming a memory is
   pure reference content and should get `obligations: []`) with no derivation judgment required.
 - Each agent gets a disjoint file list (no two agents touch the same memory), the field grammar above, and
-  both worked examples. Prompt contract: "You are a subagent. BYPASS WF_INIT. Read <memory names>. For each,
-  derive 1-2 imperative `obligations:` lines from the body (or `obligations: []` if genuinely none). Return
-  the derived block per memory — do NOT write yet." Extraction and write are separate stages so a bad
-  derivation is caught before it lands (Stage 3 review).
+  both worked examples. Prompt contract: "You are a subagent. BYPASS WF_INIT. Read each assigned memory via
+  `mcp__plugin_swe_serena__read_memory` (plain `Read` of the file path ONLY when Serena tools are absent
+  from your session). For each, derive 1-2 imperative `obligations:` lines from the body (or
+  `obligations: []` if genuinely none). Return the derived block per memory — do NOT write yet. Do NOT run
+  shell commands." Extraction and write are separate stages so a bad derivation is caught before it lands
+  (Stage 3 review).
 - `swe_pre_agent_model_gate.py` enforces `model` + the bypass marker on every call — include both.
 
 ### Stage 3: Write Back
@@ -118,8 +136,8 @@ Apply each derived block via `edit_memory`, prepending/merging `obligations:` in
 
 ### Stage 4: Report Coverage
 
-Per directory (dom/ref/dev/feature): `<count before>` lacking the field → `<count after>` (should be 0
-in scope, or explain any skipped/read-only remainder).
+Re-run the EXACT Stage-1 grep. It must print nothing in scope (or only the skipped/read-only remainder,
+each explained). Per directory (dom/ref/dev/feature): `<count before>` lacking the field → `<count after>`.
 
 ## Skill Return
 

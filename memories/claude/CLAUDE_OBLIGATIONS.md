@@ -50,13 +50,19 @@ Priority order: KISS → DRY → YAGNI.
 - Clean up after tasks: remove temp files, branches, agents.
 - Communicate blockers or uncertainties immediately.
 
+## Skill Execution Is VERBATIM
+
+- A skill's literal commands ARE the implementation. Run them EXACTLY as written — NEVER substitute improvised shell pipelines, loops, scratch files (/tmp or elsewhere), or awk/sed variants for a step that has a documented command.
+- A skill step with NO literal command and no named tool is a SKILL GAP: STOP and report the gap. Do NOT invent a command to fill it.
+- Prefer the named MCP/Serena tool a skill cites over any shell equivalent. Shell fallbacks are used ONLY where the skill documents them.
+
 ## Skill Failure Threshold
 
 After 2 consecutive command failures of the same type:
 
 1. STOP immediately.
 2. Re-read the relevant skill/memory.
-3. Retry with adjustments.
+3. Retry ONCE with the skill's own documented alternative (never an invented variant).
 4. Ask the user if still failing.
 
 Do not flail with variations of the same broken approach.
