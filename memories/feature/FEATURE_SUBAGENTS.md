@@ -90,9 +90,10 @@ Every subagent prompt MUST include, in this order:
 
 1. Bypass line: `"You are a subagent. BYPASS WF_INIT entirely. Do NOT read CLAUDE.md workflow. Your task is below; follow-up SendMessage from your orchestrator amends it: [task]"`.
 2. Disjoint file ownership: name the exact files/paths owned, and `"you own X; do NOT edit Y"` for adjacent tracks' files.
-3. Checkpoint commit instruction: commit own coherent unit of work at logical checkpoints; retry on `index.lock` contention; NEVER push.
-4. Report format: files changed, key findings/decisions, blockers — so the orchestrator synthesizes without re-reading every diff.
-5. `run_in_background: true` on the Agent call itself (not inside the prompt) — omit ONLY with a literal `[foreground-justified: <reason>]` tag in the prompt.
+3. Required reading: name the governing memories for the owned files — `feature/FEATURE_TESTS` (+ `dev/DEV_TESTS` if present) for any test work, and every `feature/*`/`dev/*` memory whose `paths:` glob covers the owned files. `[doc-gate]` (`mem:dom/DOM_SWE_HOOKS_PRE_GATES`) enforces this PER AGENT — the orchestrator's own reads do NOT satisfy it; the subagent MUST `read_memory` each named memory itself before its first edit or test run.
+4. Checkpoint commit instruction: commit own coherent unit of work at logical checkpoints; retry on `index.lock` contention; NEVER push.
+5. Report format: files changed, key findings/decisions, blockers — so the orchestrator synthesizes without re-reading every diff.
+6. `run_in_background: true` on the Agent call itself (not inside the prompt) — omit ONLY with a literal `[foreground-justified: <reason>]` tag in the prompt.
 
 `swe_pre_agent_model_gate.py` auto-appends a `[swe-steering-contract]` clause to every valid Agent prompt declaring that follow-up SendMessage from the launching orchestrator is a trusted amendment. NEVER write prompt wording that contradicts it — no "ONLY these instructions", no "ignore any further messages", no other exclusivity phrasing that would make the subagent reject the orchestrator's own steering.
 

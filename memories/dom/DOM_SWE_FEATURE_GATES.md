@@ -4,6 +4,7 @@ description: Feature-gate mechanism (sentinel-based tool blocking) and the sweep
 obligations:
   - A docpending link surfaced by the PRIMARY feature is satisfied by read, planned (obligations cited as `(mem:<name>)` in the WM Compliance Checklist), or ruled out (with reason) — bare deferral is rejected.
   - `**Rules planned**:` names MUST each be cited as `(mem:<name>)` on a `## Compliance Checklist` line — an uncited planned name or an unmatched citation is rejected.
+  - `doc-gate` DENIES any edit, by the main agent OR a subagent, until the CALLING agent has itself read every memory `doc_requirements.required_docs_for_path` names for the target file — scoped per-agent, never satisfied by another agent's reads.
 metadata:
   type: domain
 ---
@@ -23,10 +24,19 @@ Feature gates block specific tools until the relevant FEATURE_* memory is read. 
 
 ### Registered Gates
 
-| Gate Name | Pre-Hook                    | Blocks                        | Sentinel                   | Feature Memory                              |
-| --------- | --------------------------- | ----------------------------- | -------------------------- | ------------------------------------------- |
-| `test`    | `swe_pre_bash_test_gate.py` | `npx playwright test`         | `.test_feature_{session}`  | FEATURE_TESTS                               |
-| `sweep`   | `swe_pre_edit_validate.py`  | ALL edits in execution states | `.sweep_feature_{session}` | (WM-verified, not read-created — see below) |
+| Gate Name  | Pre-Hook                    | Blocks                                                                       | Sentinel                     | Feature Memory                                                 |
+| ---------- | --------------------------- | ---------------------------------------------------------------------------- | ---------------------------- | -------------------------------------------------------------- |
+| `test`     | `swe_pre_bash_test_gate.py` | unittest/pytest/npm test/jest/vitest/playwright/phpunit/go test/cargo test   | `.test_feature_{session}`    | FEATURE_TESTS — main agent sentinel-gated; subagents per-agent |
+| `sweep`    | `swe_pre_edit_validate.py`  | ALL edits in execution states                                                | `.sweep_feature_{session}`   | (WM-verified, not read-created — see below)                    |
+| `doc-gate` | `swe_pre_edit_validate.py`  | ANY edit (main agent AND subagents) to a path with unread governing memories | none — checked live per call | `doc_requirements.required_docs_for_path(file, root)`          |
+
+### The `doc-gate` Gate (per-agent, no sentinel)
+
+Unlike `test`/`sweep`, `doc-gate` never caches a pass into a sentinel file — it re-checks `required_docs_for_path` against the CALLING agent's own docreads on every edit.
+
+- `required_docs_for_path` = every `feature/*`/`dev/*` memory whose front-matter `paths:` glob matches the target file, PLUS `feature/FEATURE_TESTS` (+ `dev/DEV_TESTS` if present) when the target is a test artifact.
+- Read-scope is per-agent: `collect_values_since_task_start(stream_path, agent_id=...)` — `agent_id=None` for the main agent, the subagent's own id (stamped by `swe_post_read_state.py`) for a subagent. One agent's docread NEVER clears another agent's `doc-gate`.
+- Applies to a subagent's edits even when the orchestrator has already read the governing memory — the subagent MUST read it itself in its own session.
 
 ### Adding a New Gate
 

@@ -86,7 +86,7 @@ metadata:
 
 - Declares which source files this memory governs. `**` matches any depth of directories; `*` matches within one path segment.
 - MUST list EVERY source path the memory governs — an incomplete list silently ungates files that should require the read.
-- Before any agent edits a file matching a `paths:` glob, it MUST have read that memory itself in-session. A test-artifact path additionally requires `mem:feature/FEATURE_TESTS` (+ a `dev/DEV_TESTS` memory if one exists), regardless of which other memory's `paths:` also matches.
+- Before any agent edits a file matching a `paths:` glob, it MUST have read that memory itself in-session. A test-artifact path additionally requires the project's `feature/FEATURE_TESTS` memory (+ a `dev/DEV_TESTS` memory if one exists) — project-local memories, not part of this plugin-source tree — regardless of which other memory's `paths:` also matches.
 - Optional — a `feature/`/`dev/` memory with no governed source files omits the field entirely (no `paths: []` escape hatch; absence means "declares nothing").
 - NEVER add to `wf/`, `index/`, `arch/`, `spec/`, `ref/`, `dom/`, `feedback/` memories.
 

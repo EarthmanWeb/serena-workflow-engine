@@ -51,6 +51,7 @@ Agent({ description: "Task A", run_in_background: true, model: "sonnet",
 | Single foreground agent launched to clear the drift block                            | Launch background agents (`run_in_background: true`); foreground does not reset drift and is denied without a justification tag                                                                                                                                       |
 | Omitting `run_in_background`                                                         | Pass `run_in_background: true` explicitly on every Agent call                                                                                                                                                                                                         |
 | Backgrounding work via Bash then polling it with a blocking loop in the orchestrator | Delegate run + poll to one background subagent (haiku for status polling); it reports on completion                                                                                                                                                                   |
+| Subagent writes tests/edits without reading governing docs                           | `[doc-gate]` denies it — name the required memories in the prompt (`mem:feature/FEATURE_SUBAGENTS` Prompt Contract, item 3); orchestrator reads do NOT transfer to the subagent                                                                                       |
 
 ## Tooling
 
