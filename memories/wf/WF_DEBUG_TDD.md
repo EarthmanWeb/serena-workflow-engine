@@ -50,6 +50,10 @@ Before debugging, load:
 - NEGATIVE findings need a POSITIVE CONTROL. Before concluding "X is empty / missing / not registered", run one probe proving the method detects X when present (same query on a known-good target). Wrong option key, ACF-escaped slashes, and 404s on drafts have each produced false "it's missing" diagnoses. Probe unvalidated → conclusion unverified.
 - Test harnesses must drive the code through the PRODUCTION data path (e.g. stored post_content → `get_fields()` → template), never hand-built inputs injected past the real resolution layer — a green suite over a bypassed path proves nothing.
 
+## Subagent Scope-Gate Routing
+
+A subagent `[scope-gate]` failure report (test/edit/bash streak or budget trip) routes HERE. Debug via a NEW scoped debug agent (sonnet first; opus only after a failed sonnet attempt, tagged `[opus-justified: <reason>]`) — NEVER by `[scope-extend]`-ing the stuck agent into open-ended debugging. See `mem:feature/FEATURE_SUBAGENTS` "Scope Limits on Failure".
+
 ## Routing
 
 | Condition     | Next State   |

@@ -7,6 +7,7 @@ obligations:
   - Agent model gate appends a `[swe-steering-contract]` clause via `updatedInput` on every ALLOW, declaring orchestrator SendMessage a trusted amendment and hook workflow banners orchestrator-only.
   - `[doc-gate]` in `swe_pre_edit_validate.py` DENIES any edit — main agent AND subagents — until the CALLING agent itself has read every memory `doc_requirements.required_docs_for_path` names for the target file; a subagent is scoped to ITS OWN docreads only, never the orchestrator's.
   - `swe_pre_bash_test_gate.py` gates subagents per-agent on TEST docs for every detected test-runner command (unittest/pytest/npm test/jest/vitest/playwright/phpunit/go test/cargo test) — the prior blanket subagent exemption is REMOVED; only the main agent keeps sentinel (read-once) behavior.
+  - Init gate enforces `[scope-gate]` per spawned agent (test 2/edit 2/bash 3 failure streaks, tool-call budget); a trip restricts the agent to read-only tools until the orchestrator sends `[scope-extend]`.
 metadata:
   type: domain
 ---
@@ -27,6 +28,7 @@ Block ALL tools until WF_INIT chain complete. TWO-TIER circuit breaker, both cle
 - Allowed pre-init: `read_memory` (wf/* and init-chain), `write_memory`, `edit_memory`, `list_memories`, swe_wm tools, `ToolSearch`, Serena project-setup tools.
 - Blocked pre-init: `Bash`, `Grep`, `Glob`, `Edit`, `Write` (non-WM), `find_symbol`, `get_symbols_overview`, all other tools.
 - Sentinel on entry to WF_CLASSIFY unlocks all tools for the session.
+- Spawned agents: also enforces the `[scope-gate]` verdict from `hooks/swe_hooks/core/scope_guard.py` — a tripped agent (consecutive failure streak by kind: test 2, edit 2, bash 3; or tool-call budget exhausted) gets ONLY read-only tools (Read/Grep/Glob/Serena reads/memory reads/SendMessage); every spawned-agent tool call logs an `agent_call` event for streak/budget tracking.
 
 ### Sentinel Recovery (self-healing)
 
@@ -102,6 +104,13 @@ Rationale: the orchestrator already runs the premium model; delegation moves wor
 On ALLOW, the gate appends a `[swe-steering-contract]` clause to the Agent call's prompt via `updatedInput` (pure fn `with_steering_clause`) — declares that a follow-up SendMessage from the launching orchestrator is a trusted amendment (may narrow/expand/redirect scope, including read-only → implementation) and that hook workflow banners (ON STEP/CONTINUE/WF_*) surfaced during the run target the orchestrator, never the spawned agent. The same clause tells the subagent that `[doc-gate]` denials ARE addressed to IT (not the orchestrator): read each memory the denial names with `read_memory` before editing or running tests — the orchestrator's reads never count for the subagent. Applies to every passing call; never applied on a DENY.
 
 Pure functions `missing_model_reason`/`missing_bypass_marker_reason`/`opus_on_routine_reason`/`fable_without_justification_reason`/`foreground_without_justification_reason`/`with_steering_clause` are unit-tested.
+
+### Budget tag stamping + clause SCOPE rule
+
+- On ALLOW, the gate stamps a `[swe-budget: N]` tag onto the spawned agent's tool-call budget by model: haiku 25, sonnet 60, opus 120, fable 120. The orchestrator MAY set its own tag in the prompt to override the default.
+- The auto-appended steering clause carries a SCOPE rule: do only the stated task; on a failure the agent did not cause, or after 2 failed attempts at its own change, STOP and report (what failed, evidence, hypothesis, what was not tried); NEVER debug/refactor/expand scope unless the orchestrator says so via SendMessage.
+- `[scope-gate]` (`hooks/swe_hooks/core/scope_guard.py`) enforces this budget and per-kind failure streaks (test 2, edit 2, bash 3, each reset by a same-kind success) at `swe_pre_tool_init_gate.py` for every spawned-agent tool call. A trip restricts the agent to read-only tools (Read/Grep/Glob/Serena reads/memory reads/SendMessage); the denial message says STOP and report.
+- Orchestrator lifts a trip with SendMessage containing `[scope-extend]` or `[scope-extend: N]` (+N calls, default 30; resets all streaks) — logged by `swe_post_orchestrator_drift.py` as `scope_extend`.
 
 ## Spawned-agent exemptions vs per-agent gating
 
