@@ -91,6 +91,7 @@ Agent({ description: "Task A", run_in_background: true, model: "sonnet",  // hai
 - Launch ALL agents in ONE message; `isolation: "worktree"` when agents edit overlapping files.
 - Collect results from background task notifications, then chain the next stage's agents immediately — do not do the next stage's work yourself.
 - `swe_pre_agent_model_gate.py` enforces explicit `model` + bypass line; an orchestrator-drift nudge here flags self-performed file/test work that should have been delegated.
+- Any waiting/polling work (test runs, builds, CI, deploys, remote queues) launched here MUST go to ONE background subagent that runs the work AND polls it itself, reporting on completion — NEVER `Bash run_in_background` + a blocking poll loop in the orchestrator. See `mem:feature/FEATURE_SUBAGENTS`.
 
 ## Rules
 

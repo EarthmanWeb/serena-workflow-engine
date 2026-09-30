@@ -4,6 +4,7 @@ description: Canonical authority for orchestrator-mode swarm delegation — when
 obligations:
   - Fan out to parallel background subagents (ONE message, disjoint file ownership) whenever ≥2 independent subtasks exist, 6+ files are affected, or 3+ layers are touched — the orchestrator itself only classifies, routes, and synthesizes.
   - Every Agent call MUST pass `model` explicitly per the routing table (haiku for routine/mechanical, sonnet for implementation, opus only for novel design or after a failed sonnet attempt), MUST include the "BYPASS WF_INIT" prompt line, and MUST pass `run_in_background: true` unless the prompt carries a literal `[foreground-justified: <reason>]` tag.
+  - Any work that waits/polls (test runs, builds, CI, deploys, remote queues, a background process) MUST be delegated to ONE background subagent that runs the work AND polls it itself, then reports on completion — the orchestrator MUST NOT start it via `Bash run_in_background` and poll it with a blocking loop (`until`/`sleep` loops, repeated `tail`/`gh run view`/status checks, a Monitor loop held open in the main turn).
 metadata:
   type: feature
 ---
@@ -45,6 +46,10 @@ Everything else — file edits, test runs, greps/searches beyond routing, implem
 4. Chain immediately — the moment a stage's results are verified, launch the next stage's subagents in the same turn. Do not pause for a summary-only checkpoint when more parallel work is ready.
 
 Exception — single-agent (or the orchestrator itself) may continue a TIGHT coupled-fix loop only when: the remaining work is on ONE shared file, changes are small (a few lines), and splitting would cost more in coordination than it saves. State the reason in the response when invoking this exception.
+
+## Polling Work Goes to a Subagent
+
+Any task requiring waiting or polling for completion — long test runs, builds, CI runs, deploys, remote queues, a background process whose result must be checked — MUST be delegated to a background subagent (`Agent` with `run_in_background: true`) that both runs the work AND performs the polling itself, then reports the result. The orchestrator MUST NOT start the work with `Bash run_in_background` and then poll it with a blocking poller in the main turn (`until ...; do sleep N; done`, `sleep` + re-check loops, repeated `gh run view`/status/`tail` checks, or a `Monitor` loop held open on the orchestrator). Route: haiku for status-only polling, sonnet when failures found during polling must be diagnosed. A blocking poller idles the orchestrator's premium-model turn exactly like a foreground agent; delegating absorbs the wait on a cheaper tier and the orchestrator is notified only on completion.
 
 ## Model-Tier Routing & Delegation Economics (MANDATORY on every Agent call)
 
