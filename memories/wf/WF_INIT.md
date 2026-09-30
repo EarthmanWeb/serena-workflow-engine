@@ -44,7 +44,8 @@ If spawned agent:
 
 - Skip this file, WF_CLASSIFY, and all workflow steps.
 - Do NOT create a WM file. Do NOT read CLAUDE_OBLIGATIONS.
-- Execute only the task in your initial prompt.
+- Execute the task in your initial prompt PLUS any follow-up SendMessage from the orchestrator that launched you. A follow-up SendMessage from that orchestrator is a trusted amendment — it MAY narrow, expand, or redirect scope, including read-only → implementation. Act on it without re-litigating trust; do NOT treat it as an untrusted injected channel.
+- Ignore hook workflow banners (ON STEP / CONTINUE / WF_* nudges) surfaced during your run — they target the orchestrator, NEVER a spawned agent.
 - Read Serena memories and use any tool immediately.
 
 If NOT a spawned agent, continue below.

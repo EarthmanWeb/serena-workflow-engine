@@ -5,6 +5,7 @@ obligations:
   - Sentinels NEVER block (PostToolUse cannot deny) and always exit 0 — nudges only.
   - Orchestrator-drift count feeds the pre-edit gate's HARD BLOCK at 12 (`mem:dom/DOM_SWE_HOOKS_PRE_GATES`) — this hook itself never blocks.
   - Only a BACKGROUND Agent/Task call (`run_in_background: true`) or a Workflow call resets the drift counter; a foreground Agent/Task call counts as `task_work`.
+  - `read_state`/`edit_checkpoint`/`write_continue`/`todo_wm_sync`/`search_docs_hint`/`doc_claims` are exempt for spawned agents — no workflow directives (ON STEP/CONTINUE/checkpoint nudges) are injected into a subagent's tool stream; `read_state` still logs `docread` for a subagent but NEVER readAdvances the FSM on its behalf.
 metadata:
   type: domain
 ---
@@ -15,15 +16,17 @@ Hub: `mem:dom/DOM_SWE_HOOKS`.
 
 ## Post-Tool Hooks (`post/`)
 
-- `swe_post_read_state.py` (PostToolUse: read_memory/list_memories/search_memories_by_name/search_memories_by_front_matter): logs "ON STEP" for the resulting state — see readAdvance below. Appends a `docread` event WITH the memory name (resets the wide-search streak, refills the docs-first gate budget, feeds sweep verification). Memory searches get credit ONLY when they surface no unread names; new names → `docsearch` event + instruction to read them first. Reads surface their own `mem:`/`[[…]]` links: unread linked docs → `docpending` event + read-these instruction (wf/claude/spec/report/research/project/templates excluded).
-- `swe_post_edit_checkpoint.py` (PostToolUse: Edit/Write/Serena): edit counting, checkpoint at 10 edits (`CHECKPOINT_THRESHOLD`).
-- `swe_post_search_docs_hint.py` (PostToolUse: Grep/Glob/search_for_pattern): counts CONSECUTIVE wide searches; at 3 in a row (`SEARCH_HINT_THRESHOLD`) reminds to check memories/docs first. `docread`/`state`/`checkpoint` events reset the streak.
-- `swe_post_write_continue.py` (PostToolUse: write_memory): post-write continuation.
-- `swe_post_todo_wm_sync.py` (PostToolUse: TodoWrite): WM sync reminder on todo changes.
+Spawned-agent exemption: `read_state`, `edit_checkpoint`, `write_continue`, `todo_wm_sync`, `search_docs_hint`, and `doc_claims` are ALL exempt for spawned-agent tool calls — NEVER inject workflow directives (ON STEP/CONTINUE, init denial, checkpoint nudges) into a subagent's stream. A spawned agent's `read_memory`/`list_memories` calls still append a `docread` event (bookkeeping for the parent session's metrics) but NEVER trigger readAdvance for that agent — the FSM transition is orchestrator-only.
+
+- `swe_post_read_state.py` (PostToolUse: read_memory/list_memories/search_memories_by_name/search_memories_by_front_matter): logs "ON STEP" for the resulting state — see readAdvance below. Appends a `docread` event WITH the memory name (resets the wide-search streak, refills the docs-first gate budget, feeds sweep verification). Memory searches get credit ONLY when they surface no unread names; new names → `docsearch` event + instruction to read them first. Reads surface their own `mem:`/`[[…]]` links: unread linked docs → `docpending` event + read-these instruction (wf/claude/spec/report/research/project/templates excluded). Exempt for spawned agents: logs `docread` only, NEVER emits "ON STEP"/"CONTINUE" and NEVER readAdvances.
+- `swe_post_edit_checkpoint.py` (PostToolUse: Edit/Write/Serena): edit counting, checkpoint at 10 edits (`CHECKPOINT_THRESHOLD`). Exempt for spawned agents — no checkpoint nudge injected.
+- `swe_post_search_docs_hint.py` (PostToolUse: Grep/Glob/search_for_pattern): counts CONSECUTIVE wide searches; at 3 in a row (`SEARCH_HINT_THRESHOLD`) reminds to check memories/docs first. `docread`/`state`/`checkpoint` events reset the streak. Exempt for spawned agents.
+- `swe_post_write_continue.py` (PostToolUse: write_memory): post-write continuation. Exempt for spawned agents.
+- `swe_post_todo_wm_sync.py` (PostToolUse: TodoWrite): WM sync reminder on todo changes. Exempt for spawned agents.
 - `swe_post_memory_index.py` (PostToolUse: write_memory): enforce MEMORY.md index update.
 - `swe_post_memory_style.py` (PostToolUse: write_memory/edit_memory): enforce terse-imperative memory style (`mem:ref/REF_MEMORY_STYLE`). Nudges toward adding `obligations:` front-matter on a write/edit of a dom/ref/dev/feature memory missing it — advisory only, covers edits and existing memories the pre-gate's create/overwrite deny does not reach.
 - `swe_post_tool_failure.py` (PostToolUseFailure): flailing detection, failure logging.
-- `swe_post_doc_claims.py` (PostToolUse: Bash): C6 substitution detector — on a SUCCESSFUL Bash call whose command near-matches a `## Doc Claims Used` ledger claim (shared ≥4-char token stem, different value), emits "you substituted `<used>` for documented `<claim>` — correct the memory or record why the doc is right"; one emission per (claim,used) pair per session; stat()-cheap no-ledger fast path (`core/doc_claims.py`).
+- `swe_post_doc_claims.py` (PostToolUse: Bash): C6 substitution detector — on a SUCCESSFUL Bash call whose command near-matches a `## Doc Claims Used` ledger claim (shared ≥4-char token stem, different value), emits "you substituted `<used>` for documented `<claim>` — correct the memory or record why the doc is right"; one emission per (claim,used) pair per session; stat()-cheap no-ledger fast path (`core/doc_claims.py`). Exempt for spawned agents.
 - `swe_post_orchestrator_drift.py` (PostToolUse: Edit/Write/NotebookEdit/Bash/Serena edit tools/Agent/Task/Workflow): orchestrator-drift enforcement — see below.
 
 ### `swe_post_orchestrator_drift.py` detail
@@ -38,7 +41,7 @@ Hub: `mem:dom/DOM_SWE_HOOKS`.
 
 ## Read-advance, not read-and-stay
 
-`readAdvance` is enabled in `state-machine/states.json`: reading a `WF_*` memory ranked higher than the current state advances the FSM along a valid edge — `swe_post_read_state.py` performs this transition and then logs "ON STEP" for the new state. Backward/same-rank reads, reads into `WF_CLARIFY`, and reads of a `subflow` (`WF_INIT`, `WF_CLEANUP`, `WF_RESEARCH_LITE`, `WF_UPDATE_MEMORY`) never transition. Explicit `set_state` (the dedicated tool or the prompt-intent hook, `swe_user_prompt_workflow.py`) remains the only way to make a pivot, backward, or subflow move. See `mem:dom/DOM_SWE_STATE_MACHINE` "Transition Model (readAdvance)".
+`readAdvance` is enabled in `state-machine/states.json`: reading a `WF_*` memory ranked higher than the current state advances the FSM along a valid edge — `swe_post_read_state.py` performs this transition and then logs "ON STEP" for the new state. Backward/same-rank reads, reads into `WF_CLARIFY`, reads of a `subflow` (`WF_INIT`, `WF_CLEANUP`, `WF_RESEARCH_LITE`, `WF_UPDATE_MEMORY`), and ANY read by a spawned agent never transition. Explicit `set_state` (the dedicated tool or the prompt-intent hook, `swe_user_prompt_workflow.py`) remains the only way to make a pivot, backward, or subflow move. See `mem:dom/DOM_SWE_STATE_MACHINE` "Transition Model (readAdvance)".
 
 ## Sentinel Pattern (stream-counted nudges)
 

@@ -2,8 +2,9 @@
 name: DOM_SWE_HOOKS_PRE_GATES
 description: PreToolUse gatekeeper hooks — init gate (incl. two-tier circuit breaker + recovery), edit validation, memory index gate, bash test gate, docs-first search gate, question consent gate, agent model gate.
 obligations:
-  - Init gate blocks ALL tools until the WF_INIT chain completes; Tier-1/Tier-2 degraded modes never unlock Edit/Write/NotebookEdit/mutating Bash.
+  - Init gate blocks ALL tools until the WF_INIT chain completes; Tier-1/Tier-2 degraded modes never unlock Edit/Write/NotebookEdit/mutating Bash; exempt for spawned-agent tool calls.
   - Docs-first search gate DENIES gated calls once the `GATED_CALL_BUDGET` (15) is spent with no fresh `docread`; spawned agents are always exempt.
+  - Agent model gate appends a `[swe-steering-contract]` clause via `updatedInput` on every ALLOW, declaring orchestrator SendMessage a trusted amendment and hook workflow banners orchestrator-only.
 metadata:
   type: domain
 ---
@@ -84,4 +85,11 @@ Enforces orchestrator + swarm delegation with complexity-based model tiers. FIVE
 
 Rationale: the orchestrator already runs the premium model; delegation moves work OFF it. Check 5's rationale: a foreground delegation blocks the orchestrator on one call with no parallelism and does not reset the drift counter (`mem:dom/DOM_SWE_HOOKS_POST`).
 
-Pure functions `missing_model_reason`/`missing_bypass_marker_reason`/`opus_on_routine_reason`/`fable_without_justification_reason`/`foreground_without_justification_reason` are unit-tested.
+On ALLOW, the gate appends a `[swe-steering-contract]` clause to the Agent call's prompt via `updatedInput` (pure fn `with_steering_clause`) — declares that a follow-up SendMessage from the launching orchestrator is a trusted amendment (may narrow/expand/redirect scope, including read-only → implementation) and that hook workflow banners (ON STEP/CONTINUE/WF_*) surfaced during the run target the orchestrator, never the spawned agent. Applies to every passing call; never applied on a DENY.
+
+Pure functions `missing_model_reason`/`missing_bypass_marker_reason`/`opus_on_routine_reason`/`fable_without_justification_reason`/`foreground_without_justification_reason`/`with_steering_clause` are unit-tested.
+
+## Spawned-agent exemptions (init gate, bash test gate)
+
+- `swe_pre_tool_init_gate.py`: exempt for spawned-agent tool calls — a subagent bypasses the init chain entirely per its prompt marker, not per this gate; the bypass guard (marker detection) and Serena session metadata (`agent_id`/`agent_type`) still apply to identify the call as spawned.
+- `swe_pre_bash_test_gate.py`: exempt for spawned-agent Bash calls — same bypass-guard/metadata check.

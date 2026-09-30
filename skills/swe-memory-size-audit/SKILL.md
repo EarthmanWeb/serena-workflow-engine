@@ -135,8 +135,8 @@ once after Stage 4 passes."
 
 Each agent's prompt MUST start with:
 
-> You are a subagent. BYPASS WF_INIT entirely. Do NOT read CLAUDE.md workflow. Follow ONLY these
-> instructions.
+> You are a subagent. BYPASS WF_INIT entirely. Do NOT read CLAUDE.md workflow. Your task is below;
+> follow-up SendMessage from your orchestrator amends it.
 
 ...then embed the SPLIT CONTRACT below **verbatim** (adapt wording for the agent's specific memory
 name/status/proposed children/path/formatter-command from the Stage 2 plan row; every numbered rule must
