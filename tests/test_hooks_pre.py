@@ -2224,6 +2224,236 @@ class TestMemoryIndexGateDedupe(unittest.TestCase):
         self.assertIn('obligations', out['permissionDecisionReason'])
 
 
+# ---------------------------------------------------------------------------
+# swe_pre_memory_index_gate — FOURTH DUTY: site-data denial
+# ---------------------------------------------------------------------------
+class TestMemoryIndexGateSiteDataDetectors(unittest.TestCase):
+    """find_site_data_hits: each category denied, each placeholder allowed."""
+
+    # --- IPv4 ----------------------------------------------------------
+    def test_private_10_net_denied(self):
+        hits = memidx_mod.find_site_data_hits('redis at 10.20.30.40 port 6379')
+        self.assertEqual([c for c, _v in hits], ['IPv4 address'])
+
+    def test_private_172_16_net_denied(self):
+        hits = memidx_mod.find_site_data_hits('db host 172.16.5.1')
+        self.assertEqual([c for c, _v in hits], ['IPv4 address'])
+
+    def test_private_192_168_net_denied(self):
+        hits = memidx_mod.find_site_data_hits('router at 192.168.1.1')
+        self.assertEqual([c for c, _v in hits], ['IPv4 address'])
+
+    def test_loopback_allowed(self):
+        self.assertEqual(memidx_mod.find_site_data_hits('bind 127.0.0.1:8080'), [])
+
+    def test_unspecified_allowed(self):
+        self.assertEqual(memidx_mod.find_site_data_hits('listen 0.0.0.0'), [])
+
+    def test_rfc5737_testnet1_allowed(self):
+        self.assertEqual(memidx_mod.find_site_data_hits('192.0.2.10'), [])
+
+    def test_rfc5737_testnet2_allowed(self):
+        self.assertEqual(memidx_mod.find_site_data_hits('198.51.100.5'), [])
+
+    def test_rfc5737_testnet3_allowed(self):
+        self.assertEqual(memidx_mod.find_site_data_hits('203.0.113.7'), [])
+
+    def test_version_string_1_3_40_not_ipv4(self):
+        self.assertEqual(memidx_mod.find_site_data_hits('bump to v1.3.40'), [])
+
+    def test_version_string_2_1_0_not_ipv4(self):
+        self.assertEqual(memidx_mod.find_site_data_hits('release 2.1.0 shipped'), [])
+
+    def test_five_octet_string_not_ipv4(self):
+        self.assertEqual(memidx_mod.find_site_data_hits('id 1.2.3.4.5 logged'), [])
+
+    # --- email -----------------------------------------------------------
+    def test_real_email_denied(self):
+        hits = memidx_mod.find_site_data_hits('contact ops@realcompany.io')
+        self.assertIn('email address', [c for c, _v in hits])
+
+    def test_example_test_email_allowed(self):
+        self.assertEqual(memidx_mod.find_site_data_hits('user@example.test'), [])
+
+    def test_example_com_email_allowed(self):
+        self.assertEqual(memidx_mod.find_site_data_hits('a@example.com'), [])
+
+    def test_anthropic_noreply_allowed(self):
+        self.assertEqual(
+            memidx_mod.find_site_data_hits('Co-Authored-By: Claude <noreply@anthropic.com>'),
+            [])
+
+    # --- credentialed URL --------------------------------------------------
+    def test_credentialed_url_denied(self):
+        hits = memidx_mod.find_site_data_hits('https://user:pass@host.com/path')
+        self.assertIn('credentialed URL', [c for c, _v in hits])
+
+    def test_angle_bracket_placeholder_url_allowed(self):
+        self.assertEqual(
+            memidx_mod.find_site_data_hits('https://<token>@github.com/org/repo'), [])
+
+    def test_ftp_scheme_credential_denied(self):
+        hits = memidx_mod.find_site_data_hits('ftp://admin:hunter2@files.corp.io/x')
+        self.assertIn('credentialed URL', [c for c, _v in hits])
+
+    # --- SSH connect strings ------------------------------------------------
+    def test_ssh_prefixed_real_host_denied(self):
+        hits = memidx_mod.find_site_data_hits('ssh admin@prodhost.internal.example.io')
+        self.assertIn('SSH connect string', [c for c, _v in hits])
+
+    def test_colon_suffixed_real_host_denied(self):
+        hits = memidx_mod.find_site_data_hits('rsync deploy@build.corp.io:/var/www')
+        self.assertIn('SSH connect string', [c for c, _v in hits])
+
+    def test_git_github_placeholder_allowed(self):
+        self.assertEqual(
+            memidx_mod.find_site_data_hits('clone git@github.com:<org>/<repo>'), [])
+
+    def test_git_github_real_org_path_denied(self):
+        hits = memidx_mod.find_site_data_hits('clone git@github.com:realorg/realrepo')
+        self.assertIn('SSH connect string', [c for c, _v in hits])
+
+    # --- private key blocks --------------------------------------------------
+    def test_rsa_private_key_block_denied(self):
+        hits = memidx_mod.find_site_data_hits('-----BEGIN RSA PRIVATE KEY-----\nMII...')
+        self.assertIn('private key block', [c for c, _v in hits])
+
+    def test_openssh_private_key_block_denied(self):
+        hits = memidx_mod.find_site_data_hits('-----BEGIN OPENSSH PRIVATE KEY-----\nb3Bl...')
+        self.assertIn('private key block', [c for c, _v in hits])
+
+    # --- token prefixes ------------------------------------------------------
+    def test_github_pat_classic_denied(self):
+        hits = memidx_mod.find_site_data_hits('token ghp_' + 'a' * 24)
+        self.assertIn('GitHub PAT (classic)', [c for c, _v in hits])
+
+    def test_github_pat_fine_grained_denied(self):
+        hits = memidx_mod.find_site_data_hits('token github_pat_' + 'a' * 24)
+        self.assertIn('GitHub PAT (fine-grained)', [c for c, _v in hits])
+
+    def test_openai_style_key_denied(self):
+        hits = memidx_mod.find_site_data_hits('key sk-' + 'a' * 25)
+        self.assertIn('OpenAI-style secret key', [c for c, _v in hits])
+
+    def test_aws_access_key_denied(self):
+        hits = memidx_mod.find_site_data_hits('key AKIA' + 'A' * 16)
+        self.assertIn('AWS access key ID', [c for c, _v in hits])
+
+    def test_slack_token_denied(self):
+        hits = memidx_mod.find_site_data_hits('token xoxb-1234567890123')
+        self.assertIn('Slack token', [c for c, _v in hits])
+
+    # --- truncation ------------------------------------------------------
+    def test_truncate_caps_at_40_chars(self):
+        long_val = 'a' * 60
+        self.assertEqual(len(memidx_mod._truncate(long_val)), 41)  # 40 + ellipsis
+        self.assertTrue(memidx_mod._truncate(long_val).startswith('a' * 40))
+
+
+class TestMemoryIndexGateSiteDataVerdict(unittest.TestCase):
+    """site_data_denial: tool matching, field scanning, deny message shape."""
+
+    def test_write_memory_content_scanned(self):
+        msg = memidx_mod.site_data_denial(
+            'mcp__plugin_swe_serena__write_memory',
+            {'memory_name': 'dom/DOM_X', 'content': 'redis at 10.20.30.40'})
+        self.assertIsNotNone(msg)
+        self.assertTrue(msg.startswith('🛑 BLOCKED'))
+        self.assertIn('IPv4 address', msg)
+        self.assertIn('10.20.30.40', msg)
+        self.assertIn('mem:ref/REF_NO_SITE_DATA', msg)
+
+    def test_edit_memory_repl_scanned(self):
+        msg = memidx_mod.site_data_denial(
+            'mcp__plugin_swe_serena__edit_memory',
+            {'memory_name': 'dom/DOM_X', 'repl': 'db host 172.16.0.5'})
+        self.assertIsNotNone(msg)
+        self.assertIn('IPv4 address', msg)
+        self.assertIn('172.16.0.5', msg)
+
+    def test_non_memory_write_path_not_scanned(self):
+        self.assertIsNone(memidx_mod.site_data_denial(
+            'Write', {'file_path': '/proj/src/config.py', 'content': '10.20.30.40'}))
+
+    def test_memory_md_under_serena_write_scanned(self):
+        msg = memidx_mod.site_data_denial(
+            'Write',
+            {'file_path': '/proj/.serena/memory/dom/DOM_X.md',
+             'content': 'server at 10.20.30.40'})
+        self.assertIsNotNone(msg)
+        self.assertIn('IPv4 address', msg)
+
+    def test_memory_md_under_serena_edit_new_string_scanned(self):
+        msg = memidx_mod.site_data_denial(
+            'Edit',
+            {'file_path': '/proj/.serena/memory/dom/DOM_X.md',
+             'new_string': 'server at 10.20.30.40'})
+        self.assertIsNotNone(msg)
+        self.assertIn('IPv4 address', msg)
+
+    def test_no_hits_allows(self):
+        self.assertIsNone(memidx_mod.site_data_denial(
+            'mcp__plugin_swe_serena__write_memory',
+            {'memory_name': 'dom/DOM_X', 'content': 'redis caching strategy'}))
+
+    def test_placeholders_together_allow(self):
+        content = ('host.example, 192.0.2.10, user@example.test, <token>, '
+                   'v1.3.40, v2.1.0, 127.0.0.1')
+        self.assertIsNone(memidx_mod.site_data_denial(
+            'mcp__plugin_swe_serena__write_memory',
+            {'memory_name': 'dom/DOM_X', 'content': content}))
+
+    # --- positive control: realistic memory body catches a real private IP ---
+    def test_positive_control_realistic_memory_body_caught(self):
+        body = (
+            '---\nname: DOM_DEPLOY_TARGETS\n'
+            'description: deploy target inventory\n'
+            'metadata:\n  type: domain\nobligations:\n  - x\n---\n'
+            '# Deploy Targets\n\n'
+            'Staging DB runs on 10.4.12.19, reachable via '
+            'ssh deploy@staging-db.internal.corp:22. '
+            'Admin contact: ops@realcompany.io.\n'
+        )
+        msg = memidx_mod.site_data_denial(
+            'mcp__plugin_swe_serena__write_memory',
+            {'memory_name': 'dom/DOM_DEPLOY_TARGETS', 'content': body})
+        self.assertIsNotNone(msg)
+        self.assertIn('10.4.12.19', msg)
+
+    # --- main() end-to-end: site-data denial fires ahead of every other check
+    def _run_main(self, tool_name, tool_input):
+        import contextlib
+        import io
+        payload = {'tool_name': tool_name, 'tool_input': tool_input, 'cwd': '/tmp'}
+        orig = memidx_mod.read_stdin_safe
+        memidx_mod.read_stdin_safe = lambda **kw: payload
+        buf = io.StringIO()
+        try:
+            with contextlib.redirect_stdout(buf):
+                with self.assertRaises(SystemExit):
+                    memidx_mod.main()
+        finally:
+            memidx_mod.read_stdin_safe = orig
+        return json.loads(buf.getvalue())
+
+    def test_main_denies_site_data_in_new_memory_write(self):
+        result = self._run_main(
+            'mcp__plugin_swe_serena__write_memory',
+            {'memory_name': 'dom/DOM_NEW_AREA', 'content': 'host at 10.1.1.1'})
+        out = result['hookSpecificOutput']
+        self.assertEqual(out['permissionDecision'], 'deny')
+        self.assertIn('site-specific infrastructure data',
+                      out['permissionDecisionReason'])
+
+    def test_main_allows_clean_content(self):
+        result = self._run_main(
+            'mcp__plugin_swe_serena__write_memory',
+            {'memory_name': 'dom/DOM_NEW_AREA',
+             'content': ('---\nname: x\ndescription: y\nmetadata:\n  type: domain\n'
+                         'obligations:\n  - x\n---\nbody with no site data')})
+        self.assertEqual(result, {})
+
+
 class TestDocsGateMemoryGrepLegitimization(unittest.TestCase):
     """B2 — a gated Grep/Glob/Bash-grep INTO a memory tree is a docs consult:
     never denied, spends no budget, credited as an always-fresh 'docread'

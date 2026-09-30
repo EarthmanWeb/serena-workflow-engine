@@ -32,6 +32,19 @@ is denied when the content's front-matter carries no `obligations:` field.
 (partial edits) and non-rule-bearing prefixes are never denied by this check.
 The digest this field captures is what the two-tier sweep (wm_server
 _check_memory_sweep) plans obligations from without a full body read.
+
+FOURTH DUTY — site-data denial: a memory write carrying detectable
+site-specific infrastructure data (real IPv4 addresses, real email addresses,
+credentialed URLs, SSH connect strings to real hosts, private-key blocks, or
+cloud/API token prefixes) is HARD-DENIED, no override. This closes the leak
+where /swe-feature-onboard wrote a site's real infrastructure details into a
+project's committed memories. Applies to the same tool matches as the other
+duties: write_memory/edit_memory (both server prefixes, content/repl fields)
+and direct Edit/Write of a *.md under a /.serena/memory/ tree (new_string/
+content fields). A documentation-range placeholder (loopback, RFC 5737 test
+nets, example.com/.test/.invalid/.localhost/.local domains, angle-bracket
+`<token>` URL userinfo, `noreply@anthropic.com`, `git@github.com:<org>/<repo>`
+placeholders) never denies. See `mem:ref/REF_NO_SITE_DATA`.
 """
 
 import os
@@ -290,6 +303,189 @@ def obligations_denial_for_write(tool_name, tool_input):
     return None
 
 
+# ---------------------------------------------------------------------------
+# FOURTH DUTY — site-data denial
+# ---------------------------------------------------------------------------
+# IPv4: 4 dot-separated 0-255 octets, not adjacent to another ".digit" on
+# either side (rejects version strings like 1.2.3.4.5 or 10.20.30.40.50).
+_IPV4_RE = re.compile(
+    r"(?<!\d\.)(?<!\.\d)\b"
+    r"(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)"
+    r"(?:\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}"
+    r"\b(?!\.\d)"
+)
+
+# Documentation/placeholder IPv4 ranges — never denied.
+_IPV4_ALLOWED_RANGES = (
+    "127.",           # loopback 127.0.0.0/8
+    "0.0.0.0",        # unspecified
+    "192.0.2.",       # RFC 5737 TEST-NET-1
+    "198.51.100.",    # RFC 5737 TEST-NET-2
+    "203.0.113.",     # RFC 5737 TEST-NET-3
+)
+
+_EMAIL_RE = re.compile(
+    r"\b[A-Za-z0-9._%+-]+@([A-Za-z0-9.-]+\.[A-Za-z]{2,})\b"
+)
+
+# Placeholder email domains (suffix match on the domain part) — never denied.
+_EMAIL_ALLOWED_DOMAIN_SUFFIXES = (
+    "example.com", "example.org", "example.net", "example",
+    "test", "invalid", "localhost", "local",
+)
+_EMAIL_ALLOWED_EXACT = ("noreply@anthropic.com",)
+
+# scheme://user:pass@host credentialed URL. Angle-bracket placeholders like
+# https://<token>@host are excluded (userinfo must not start with '<').
+_URL_CREDENTIAL_RE = re.compile(
+    r"\b[A-Za-z][A-Za-z0-9+.-]*://(?!<)[^\s/:@<>]+:[^\s/@<>]+@[^\s/<>]+"
+)
+
+# SSH connect strings: "ssh user@host[:port]" (ssh-prefixed) or
+# "user@host:port"/"user@host:path" (colon-suffixed — distinguishes it from a
+# bare email address, which this pattern otherwise would also match).
+_SSH_CONNECT_RE = re.compile(
+    r"\bssh\s+[A-Za-z0-9._-]+@([A-Za-z0-9.-]+\.[A-Za-z]{2,})(?::\S+)?\b"
+    r"|"
+    r"\b[A-Za-z0-9._-]+@([A-Za-z0-9.-]+\.[A-Za-z]{2,}):\S+"
+)
+
+_PRIVATE_KEY_RE = re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----")
+
+_TOKEN_PREFIX_RES = (
+    ("GitHub PAT (classic)", re.compile(r"\bghp_[A-Za-z0-9]{20,}\b")),
+    ("GitHub PAT (fine-grained)", re.compile(r"\bgithub_pat_[A-Za-z0-9_]{20,}\b")),
+    ("OpenAI-style secret key", re.compile(r"\bsk-[A-Za-z0-9_-]{20,}\b")),
+    ("AWS access key ID", re.compile(r"\bAKIA[0-9A-Z]{16}\b")),
+    ("Slack token", re.compile(r"\bxox[baprs]-[A-Za-z0-9-]{10,}\b")),
+)
+
+def _is_placeholder_host(host):
+    """True when host (domain, no path/port) is a documentation placeholder."""
+    h = str(host or "").lower().rstrip(".")
+    return any(h == suf or h.endswith("." + suf) for suf in _EMAIL_ALLOWED_DOMAIN_SUFFIXES)
+
+
+def _find_ipv4_hits(text):
+    hits = []
+    for m in _IPV4_RE.finditer(text):
+        val = m.group(0)
+        if any(val.startswith(pfx) for pfx in _IPV4_ALLOWED_RANGES):
+            continue
+        hits.append(("IPv4 address", val))
+    return hits
+
+
+def _find_email_hits(text, credential_spans=()):
+    hits = []
+    for m in _EMAIL_RE.finditer(text):
+        val = m.group(0)
+        domain = m.group(1)
+        if val.lower() in _EMAIL_ALLOWED_EXACT:
+            continue
+        if _is_placeholder_host(domain):
+            continue
+        # Already reported as the userinfo of a credentialed URL — don't
+        # double-report the same span as a bare email too.
+        if any(start <= m.start() and m.end() <= end for start, end in credential_spans):
+            continue
+        # "git@github.com:<org>/<repo>" — placeholder org/repo path after a
+        # colon immediately following the matched host; the SSH detector's
+        # placeholder rule governs this shape, not the plain email rule.
+        tail = text[m.end():m.end() + 2]
+        if domain.lower().rstrip(".") == "github.com" and tail.startswith(":<"):
+            continue
+        hits.append(("email address", val))
+    return hits
+
+
+def _find_url_credential_hits(text):
+    return [(m.start(), m.end(), m.group(0)) for m in _URL_CREDENTIAL_RE.finditer(text)]
+
+
+def _find_ssh_hits(text):
+    hits = []
+    for m in _SSH_CONNECT_RE.finditer(text):
+        host = m.group(1) or m.group(2)
+        if _is_placeholder_host(host):
+            continue
+        if host.lower().rstrip(".") == "github.com" and "<" in m.group(0):
+            continue  # git@github.com:<org>/<repo> placeholder
+        hits.append(("SSH connect string", m.group(0)))
+    return hits
+
+
+def _find_private_key_hits(text):
+    return [("private key block", m.group(0)) for m in _PRIVATE_KEY_RE.finditer(text)]
+
+
+def _find_token_hits(text):
+    hits = []
+    for label, rx in _TOKEN_PREFIX_RES:
+        for m in rx.finditer(text):
+            hits.append((label, m.group(0)))
+    return hits
+
+
+def find_site_data_hits(text):
+    """Return a list of (category, matched_value) for every site-data hit in
+    text, across all detectors. Pure scan — no filesystem, no network."""
+    text = str(text or "")
+    hits = []
+    hits.extend(_find_private_key_hits(text))
+    hits.extend(_find_token_hits(text))
+    url_credential_spans = _find_url_credential_hits(text)
+    hits.extend(("credentialed URL", val) for _s, _e, val in url_credential_spans)
+    hits.extend(_find_ssh_hits(text))
+    hits.extend(_find_email_hits(
+        text, credential_spans=[(s, e) for s, e, _v in url_credential_spans]))
+    hits.extend(_find_ipv4_hits(text))
+    return hits
+
+
+def _truncate(value, limit=40):
+    value = str(value)
+    return value if len(value) <= limit else value[:limit] + "…"
+
+
+def site_data_denial(tool_name, tool_input):
+    """FOURTH DUTY verdict: the deny message, or None to allow.
+
+    Scans the same content-bearing field(s) the other duties scan:
+    write_memory/edit_memory (content/repl, both server prefixes) and direct
+    Edit/Write of a *.md under a /.serena/memory/ tree (new_string/content).
+    No override tag — site data is never an acceptable memory write.
+    """
+    tool_input = tool_input or {}
+    name = str(tool_name or "")
+    if name.endswith("write_memory") or name.endswith("edit_memory"):
+        blob = " ".join(str(tool_input.get(k, "")) for k in ("content", "repl"))
+    elif name.endswith("Edit") or name.endswith("Write"):
+        file_path = tool_input.get("file_path", "")
+        if not _is_memory_md_path_under_serena(file_path):
+            return None
+        blob = " ".join(str(tool_input.get(k, ""))
+                         for k in ("new_string", "content"))
+    else:
+        return None
+
+    hits = find_site_data_hits(blob)
+    if not hits:
+        return None
+
+    lines = "\n".join(
+        "  - {cat}: {val}".format(cat=cat, val=_truncate(val)) for cat, val in hits
+    )
+    return (
+        "🛑 BLOCKED: this write contains site-specific infrastructure data:\n"
+        "{lines}\n"
+        "Replace each with a placeholder (host.example, 192.0.2.10, "
+        "user@example.test, <token>) and re-issue the write. No override — "
+        "site data is never acceptable in a memory. See "
+        "`mem:ref/REF_NO_SITE_DATA`.".format(lines=lines)
+    )
+
+
 def targets_memory_index(tool_input):
     """True when the call writes the MEMORY.md index (by memory name or path)."""
     memory_name = str(tool_input.get("memory_name", ""))
@@ -320,6 +516,16 @@ def main():
         input_data = read_stdin_safe(timeout_seconds=2.0)
         tool_name = str(input_data.get("tool_name", ""))
         tool_input = input_data.get("tool_input", {}) or {}
+
+        # FOURTH DUTY — site-data denial: runs first, ahead of every other
+        # check, on ANY matched write (MEMORY.md-targeted or not). No
+        # override; a hit here always denies regardless of target.
+        site_data_denial_msg = site_data_denial(tool_name, tool_input)
+        if site_data_denial_msg:
+            output = HookOutput(event_name="PreToolUse")
+            output.block(site_data_denial_msg)
+            output.output_and_exit()
+            return
 
         if not targets_memory_index(tool_input):
             # Change Set H — obligations-digest enforcement: runs first, in
