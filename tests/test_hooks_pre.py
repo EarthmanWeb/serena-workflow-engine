@@ -998,8 +998,9 @@ class TestInitGateSpawnedAgentExemption(unittest.TestCase):
 class TestBashTestGateConstants(unittest.TestCase):
     def test_test_command_patterns_shape(self):
         self.assertIsInstance(bash_mod.TEST_COMMAND_PATTERNS, list)
-        self.assertTrue(len(bash_mod.TEST_COMMAND_PATTERNS) >= 1)
-        # the sole pattern gates playwright test execution via npx
+        # Broadened beyond Playwright: unittest/pytest, npm/npx test
+        # runners, phpunit, go test, cargo test.
+        self.assertTrue(len(bash_mod.TEST_COMMAND_PATTERNS) >= 7)
         self.assertIn(r'\bnpx\s+playwright\s+test\b',
                       bash_mod.TEST_COMMAND_PATTERNS)
 
@@ -1202,8 +1203,12 @@ class TestBashMissingCdAutoRepair(unittest.TestCase):
 
 
 class TestBashTestGateSpawnedAgentExemption(unittest.TestCase):
-    """Spawned agents (non-empty agent_id) are exempt from the FEATURE_TESTS
-    test gate — subagents are explicitly instructed to run scoped tests."""
+    """Stage 2: the blanket spawned-agent exemption from the test gate is
+    REMOVED. A spawned agent is now gated on its OWN docreads this task —
+    allowed iff it has itself read every existing TEST_DOC_NAMES memory,
+    denied (with a '[doc-gate]' message) otherwise. Reads credited to the
+    main agent (or to a different agent_id) never count for this agent
+    (per-agent isolation, positive control below)."""
 
     def setUp(self):
         reset_caches()
@@ -1211,11 +1216,34 @@ class TestBashTestGateSpawnedAgentExemption(unittest.TestCase):
         self.root = self.tmp.name
         self._orig_root = bash_mod.get_project_root
         bash_mod.get_project_root = lambda: self.root
+        from swe_hooks.core import session as core_session
+        self._orig_session_root = core_session.get_project_root
+        core_session.get_project_root = lambda: self.root
+        self.streams_dir = os.path.join(self.root, '.serena', 'streams')
+        os.makedirs(self.streams_dir, exist_ok=True)
+        self._orig_stream_path = bash_mod.get_stream_path
+        bash_mod.get_stream_path = (
+            lambda sid: os.path.join(self.streams_dir, f'{sid}.jsonl'))
 
     def tearDown(self):
         bash_mod.get_project_root = self._orig_root
+        from swe_hooks.core import session as core_session
+        core_session.get_project_root = self._orig_session_root
+        bash_mod.get_stream_path = self._orig_stream_path
         self.tmp.cleanup()
         reset_caches()
+
+    def _write_test_doc(self):
+        dev_dir = os.path.join(self.root, '.serena', 'memory', 'feature')
+        os.makedirs(dev_dir, exist_ok=True)
+        with open(os.path.join(dev_dir, 'FEATURE_TESTS.md'), 'w') as f:
+            f.write('# FEATURE_TESTS\n')
+
+    def _write_stream(self, session_id, events):
+        path = os.path.join(self.streams_dir, f'{session_id}.jsonl')
+        with open(path, 'w') as f:
+            for e in events:
+                f.write(json.dumps(e) + '\n')
 
     def _run_main(self, tool_input, **extra):
         import io
@@ -1245,9 +1273,80 @@ class TestBashTestGateSpawnedAgentExemption(unittest.TestCase):
         text = json.dumps(result)
         self.assertIn('TEST COMMAND BLOCKED', text)
 
-    def test_spawned_agent_playwright_without_sentinel_is_allowed(self):
+    def test_no_test_docs_in_project_spawned_agent_allowed(self):
+        # Project documents no test harness at all -> nothing to require.
         result = self._run_main(
             {'command': 'npx playwright test'}, agent_id='sub-123')
+        self.assertEqual(result, {})
+
+    def test_spawned_agent_without_own_docread_denied(self):
+        self._write_test_doc()
+        result = self._run_main(
+            {'command': 'npx playwright test'}, agent_id='sub-123')
+        text = json.dumps(result)
+        self.assertIn('[doc-gate]', text)
+        self.assertIn('feature/FEATURE_TESTS', text)
+
+    def test_main_agent_docread_does_not_credit_spawned_agent(self):
+        # Positive control: the main agent's own docread must not clear a
+        # different spawned agent's gate (per-agent isolation).
+        self._write_test_doc()
+        self._write_stream('deadbeef', [
+            {'type': 'docread', 'name': 'feature/FEATURE_TESTS'},
+        ])
+        result = self._run_main(
+            {'command': 'npx playwright test'}, agent_id='sub-123')
+        text = json.dumps(result)
+        self.assertIn('[doc-gate]', text)
+
+    def test_spawned_agent_with_own_docread_allowed(self):
+        self._write_test_doc()
+        self._write_stream('deadbeef', [
+            {'type': 'docread', 'name': 'feature/FEATURE_TESTS', 'agent': 'sub-123'},
+        ])
+        result = self._run_main(
+            {'command': 'npx playwright test'}, agent_id='sub-123')
+        self.assertEqual(result, {})
+
+    def test_unittest_command_detected(self):
+        result = self._run_main(
+            {'command': 'python3 -m unittest discover -s tests'})
+        self.assertIn('TEST COMMAND BLOCKED', json.dumps(result))
+
+    def test_pytest_command_detected(self):
+        result = self._run_main({'command': 'pytest tests/'})
+        self.assertIn('TEST COMMAND BLOCKED', json.dumps(result))
+
+    def test_npm_test_command_detected(self):
+        result = self._run_main({'command': 'npm test'})
+        self.assertIn('TEST COMMAND BLOCKED', json.dumps(result))
+
+    def test_npm_run_test_command_detected(self):
+        result = self._run_main({'command': 'npm run test'})
+        self.assertIn('TEST COMMAND BLOCKED', json.dumps(result))
+
+    def test_npx_jest_command_detected(self):
+        result = self._run_main({'command': 'npx jest'})
+        self.assertIn('TEST COMMAND BLOCKED', json.dumps(result))
+
+    def test_npx_vitest_command_detected(self):
+        result = self._run_main({'command': 'npx vitest run'})
+        self.assertIn('TEST COMMAND BLOCKED', json.dumps(result))
+
+    def test_phpunit_command_detected(self):
+        result = self._run_main({'command': 'vendor/bin/phpunit'})
+        self.assertIn('TEST COMMAND BLOCKED', json.dumps(result))
+
+    def test_go_test_command_detected(self):
+        result = self._run_main({'command': 'go test ./...'})
+        self.assertIn('TEST COMMAND BLOCKED', json.dumps(result))
+
+    def test_cargo_test_command_detected(self):
+        result = self._run_main({'command': 'cargo test'})
+        self.assertIn('TEST COMMAND BLOCKED', json.dumps(result))
+
+    def test_non_test_command_not_gated(self):
+        result = self._run_main({'command': 'ls -la'})
         self.assertEqual(result, {})
 
 

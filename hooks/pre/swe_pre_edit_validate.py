@@ -15,13 +15,28 @@ orchestrator must fan the remaining work out to parallel subagents
 subagent (an 'Agent'/'Task'/'Workflow' call — a 'delegation' stream event)
 resets the counter and unlocks edits immediately.
 
-Spawned agents (Agent/Task tool) are exempt from this block — resolved via
-core.session.is_spawned_agent FIRST in main(), before any other logic — they
-are expected to do direct work and must never hit it (this exemption does
-NOT weaken the bypass-write / raw-memory-write security guards, which apply
-to every caller). Missing WM file / missing stream / unmanaged session all
-fail OPEN for this specific check (no block), matching the sweep gate's
-fail-open posture — every existing check above is unaffected.
+Spawned agents (Agent/Task tool) are exempt from the state-gate, sweep-gate
+and drift-block logic above — resolved via core.session.is_spawned_agent
+FIRST in main(), before any other logic (this exemption does NOT weaken the
+bypass-write / raw-memory-write security guards, which apply to every
+caller). Missing WM file / missing stream / unmanaged session all fail OPEN
+for the sweep/drift checks (no block), matching the sweep gate's fail-open
+posture.
+
+Per-agent DOC REQUIREMENT gate (Stage 2 of per-subagent doc enforcement):
+applied to EVERY edit, main agent or spawned. Before writing to a file,
+core.doc_requirements.required_docs_for_path(target, project_root) is
+computed (FEATURE_*/DEV_* memories whose front-matter `paths:` glob matches,
+plus FEATURE_TESTS/DEV_TESTS for test artifacts) and diffed against the
+memories THIS caller has actually read this task
+(core.stream.collect_values_since_task_start with agent_id=
+core.session.get_agent_id(input) — None for the main agent, so it counts
+only main-agent docreads; a spawned agent's id, so it counts only that
+agent's own docreads, never the main agent's or a sibling subagent's). Any
+unread required memory DENIES the edit with a `[doc-gate]` message. For a
+spawned agent this is the ONLY check that applies — no sweep sentinel, no
+drift block, no workflow-state denial (subagents are instructed to bypass
+WF_INIT and do direct work).
 """
 
 import os
@@ -35,7 +50,8 @@ try:
     from swe_hooks.core.input import read_stdin_safe, get_input_field
     from swe_hooks.core.state_manager import StateManager
     from swe_hooks.core.session import (
-        extract_session_id, is_spawned_agent, find_working_memory_for_session,
+        extract_session_id, is_spawned_agent, get_agent_id,
+        find_working_memory_for_session,
     )
     from swe_hooks.core.config import get_project_root, resolve_setup_state
     from swe_hooks.core.stream import (
@@ -44,10 +60,13 @@ try:
         count_task_work_since_delegation, wm_has_single_agent_note,
         DRIFT_HARD_THRESHOLD,
     )
+    from swe_hooks.core.doc_requirements import (
+        is_test_target as _doc_is_test_target,
+        TEST_TARGET_RE, TEST_DOC_NAMES,
+        unread_required_docs,
+    )
 except ImportError as e:
     swe_hooks.bootstrap.import_error_exit(e, "PreToolUse")
-
-import re
 
 # States where edits are allowed
 # WF_VERIFY may edit: verification must fix violations in place.
@@ -60,37 +79,26 @@ WARN_STATES = {'WF_ARCH_REVIEW', 'WF_RESEARCH'}
 # not apply there.
 SWEEP_EXEMPT_STATES = {'WF_INITIAL_SETUP', 'WF_ONBOARD'}
 
-# Test-artifact paths: writing one requires the project's test-harness docs to
-# have been read THIS TASK (when the project documents a harness).
-TEST_TARGET_RE = re.compile(
-    r'(^|/)tests?/'
-    r'|(^|/)e2e/'
-    r'|(^|/)test_[^/]+\.py$'
-    r'|\.(test|spec)\.[jt]sx?$'
-    r'|\.spec\.ts$'
-    r'|\.feature$'
-    r'|Test\.php$'
-)
-
-# Test-harness memories checked for existence under .serena/memor(y|ies)/.
-TEST_DOC_NAMES = ('dev/DEV_TESTS', 'feature/FEATURE_TESTS')
-
 
 def _is_test_target(file_path: str) -> bool:
-    """True when the edit target is a test artifact."""
-    return bool(TEST_TARGET_RE.search(str(file_path or '').replace('\\', '/')))
+    """True when the edit target is a test artifact.
+
+    Delegates to core.doc_requirements.is_test_target — single source of
+    truth for TEST_TARGET_RE (re-exported above for any caller that still
+    references this module's TEST_TARGET_RE directly).
+    """
+    return _doc_is_test_target(file_path)
 
 
 def _required_test_docs(project_root: str) -> list:
-    """Test-harness memories the project actually documents (files exist)."""
-    required = []
-    for name in TEST_DOC_NAMES:
-        for mem_dir in ('memory', 'memories'):
-            if os.path.exists(os.path.join(
-                    project_root, '.serena', mem_dir, name + '.md')):
-                required.append(name)
-                break
-    return required
+    """Test-harness memories the project actually documents (files exist).
+
+    Delegates to core.doc_requirements.memory_exists (multi-root aware, via
+    memory_roots) instead of this module's own single-root
+    .serena/memor(y|ies)/ existence check.
+    """
+    from swe_hooks.core.doc_requirements import memory_exists
+    return [name for name in TEST_DOC_NAMES if memory_exists(name, project_root)]
 
 
 def _sweep_block_message() -> str:
@@ -154,6 +162,77 @@ def _sweep_gate_verdict(session_id, tool_input):
             if unread:
                 return _test_docs_block_message(unread)
     return None
+
+
+def _doc_gate_target(tool_input: dict) -> str:
+    """Extract the edit target path from a tool_input payload.
+
+    Reuses the same field-precedence as _sweep_gate_verdict: file_path
+    (Edit/Write/NotebookEdit) then relative_path (Serena symbolic edit
+    tools).
+    """
+    tool_input = tool_input or {}
+    return str(tool_input.get('file_path') or tool_input.get('relative_path') or '')
+
+
+def _doc_gate_message(target: str, unread: list) -> str:
+    """Build the '[doc-gate]' deny message listing each unread required memory
+    as a read_memory(...) call, the file it governs, and the retry
+    instruction."""
+    lines = [
+        f"[doc-gate] edit to {target} blocked: required documentation has "
+        "not been read this task.",
+    ]
+    for name in unread:
+        lines.append(
+            f'  read_memory("{name}") — governs {target}')
+    lines.append("Read each memory above, then retry this edit.")
+    return "\n".join(lines)
+
+
+def doc_gate_verdict(target: str, project_root: str, read_names) -> str:
+    """Deny message when `target` has unread required documentation, else ''.
+
+    Pure function: target is the file/relative path being edited,
+    project_root the resolved project root, read_names the set/iterable of
+    memory names already read (normalized or not — unread_required_docs
+    normalizes internally). Empty string means "allow". Never raises on a
+    target with no matching memories — required_docs_for_path returns [] and
+    this returns ''.
+    """
+    if not target:
+        return ''
+    unread = unread_required_docs(target, project_root, read_names)
+    if not unread:
+        return ''
+    return _doc_gate_message(target, unread)
+
+
+def _doc_gate_block(session_id, agent_id, cwd, tool_input):
+    """Resolve the doc-requirement gate for this edit, else None.
+
+    Applies to EVERY caller (main agent and every spawned agent), each
+    scoped to its OWN docreads this task via
+    collect_values_since_task_start(..., agent_id=agent_id) — agent_id=None
+    counts only main-agent events, a spawned agent's id counts only that
+    agent's own events. WM_* writes are harness-managed and exempt (matches
+    the sweep gate's exemption).
+    """
+    target = _doc_gate_target(tool_input)
+    if not target:
+        return None
+    if os.path.basename(target.replace('\\', '/')).startswith('WM_'):
+        return None
+    if not session_id:
+        return None
+    stream_path = get_stream_path(session_id)
+    try:
+        project_root = get_project_root()
+    except Exception:
+        project_root = cwd
+    read_names = collect_values_since_task_start(stream_path, agent_id=agent_id)
+    verdict = doc_gate_verdict(target, project_root, read_names)
+    return verdict or None
 
 
 DRIFT_MANDATE_TEXT = (
@@ -334,6 +413,22 @@ def main():
         # Extract session ID for session isolation
         transcript_path = get_input_field(input_data, 'transcript_path', default='')
         session_id = extract_session_id(transcript_path)
+        agent_id = get_agent_id(input_data)
+
+        # Spawned agents: apply ONLY the per-agent doc-requirement gate.
+        # No sweep sentinel, no drift block, no workflow-state denial —
+        # subagents are instructed to bypass WF_INIT and do direct work
+        # (mirrors the exemption already given to the drift block above).
+        if spawned_agent:
+            doc_verdict = _doc_gate_block(
+                session_id, agent_id, cwd, input_data.get('tool_input', {}))
+            if doc_verdict:
+                output = HookOutput(event_name="PreToolUse")
+                output.block(doc_verdict)
+                output.output_and_exit()
+                return
+            output_status("✓ Edit allowed (spawned agent)", event="PreToolUse")
+            return
 
         # Create state manager with session isolation
         state_mgr = StateManager(cwd, session_id=session_id)
@@ -350,6 +445,18 @@ def main():
                     output.block(verdict)
                     output.output_and_exit()
                     return
+
+            # Per-agent doc-requirement gate: applies to the main agent too,
+            # in addition to (not instead of) the sweep-gate's own test-docs
+            # check above. agent_id=None here, so collect_values_since_task_
+            # start counts only main-agent docreads.
+            doc_verdict = _doc_gate_block(
+                session_id, agent_id, cwd, input_data.get('tool_input', {}))
+            if doc_verdict:
+                output = HookOutput(event_name="PreToolUse")
+                output.block(doc_verdict)
+                output.output_and_exit()
+                return
 
             # Orchestrator-drift HARD enforcement: runs AFTER every check
             # above passes, never weakening them. Spawned agents are exempt
