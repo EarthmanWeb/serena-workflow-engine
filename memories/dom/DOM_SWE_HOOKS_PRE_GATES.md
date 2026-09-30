@@ -5,8 +5,9 @@ obligations:
   - Init gate blocks ALL tools until the WF_INIT chain completes; Tier-1/Tier-2 degraded modes never unlock Edit/Write/NotebookEdit/mutating Bash; exempt for spawned-agent tool calls.
   - Docs-first search gate DENIES gated calls once the `GATED_CALL_BUDGET` (15) is spent with no fresh `docread`; spawned agents are always exempt.
   - Agent model gate appends a `[swe-steering-contract]` clause via `updatedInput` on every ALLOW, declaring orchestrator SendMessage a trusted amendment and hook workflow banners orchestrator-only.
-  - `[doc-gate]` in `swe_pre_edit_validate.py` DENIES any edit — main agent AND subagents — until the CALLING agent itself has read every memory `doc_requirements.required_docs_for_path` names for the target file; a subagent is scoped to ITS OWN docreads only, never the orchestrator's.
-  - `swe_pre_bash_test_gate.py` gates subagents per-agent on TEST docs for every detected test-runner command (unittest/pytest/npm test/jest/vitest/playwright/phpunit/go test/cargo test) — the prior blanket subagent exemption is REMOVED; only the main agent keeps sentinel (read-once) behavior.
+  - `[doc-gate]` in `swe_pre_edit_validate.py` DENIES a MAIN-AGENT edit until it itself has read every memory `doc_requirements.required_docs_for_path` names for the target file — subagent enforcement is REMOVED from this gate; it moves to delegation time via `[sweep-gate]` in `swe_pre_agent_model_gate.py`.
+  - `swe_pre_bash_test_gate.py` gates ONLY the main agent (sentinel/read-once behavior) on TEST docs for every detected test-runner command (unittest/pytest/npm test/jest/vitest/playwright/phpunit/go test/cargo test) — the per-agent subagent gating is REMOVED; a subagent's required test docs are enforced at delegation time via `[sweep-gate]` instead.
+  - `swe_pre_agent_model_gate.py`'s SIXTH deny check `[sweep-gate]` DENIES an Agent/Task call unless the orchestrator-written prompt's "Required reading:" section names every memory `delegation_sweep.required_reading(prompt, wm_text, project_root, cap=8)` computes as required — `[sweep-exempt: <reason>]` skips it for trivial read-only tasks; on ALLOW the gate appends a `[swe-required-reading]` block with each required memory's `obligations:` inline.
   - Init gate enforces `[scope-gate]` per spawned agent (test 2/edit 2/bash 3 failure streaks, tool-call budget); a trip restricts the agent to read-only tools until the orchestrator sends `[scope-extend]`.
 metadata:
   type: domain
@@ -51,13 +52,12 @@ Recovery points, checked in order:
 - **HARD BLOCK** (delegation economics): denies further main-agent edits at ≥12 consecutive undelegated task-work calls (`DRIFT_HARD_THRESHOLD`, tracked by `swe_post_orchestrator_drift.py`, see `mem:dom/DOM_SWE_HOOKS_POST`). Cleared by a BACKGROUND Agent/Task delegation (`run_in_background: true`) or any Workflow call — a foreground Agent/Task call does NOT clear it — or by recording `single-agent: <reason>` in WM `## Workflow Context` (tight single-file coupled-fix exception only, per `mem:feature/FEATURE_SUBAGENTS`).
 - Drift-block exemption ONLY — exempt for spawned-agent tool calls on the HARD BLOCK check above; the block applies to the main orchestrator agent only, never to a subagent already doing delegated work.
 
-### `[doc-gate]` — per-agent doc-read enforcement (ALL edits, main agent AND subagents)
+### `[doc-gate]` — main-agent-only doc-read enforcement (edits)
 
 - `doc_requirements.required_docs_for_path(file_path, project_root)` maps the edit target to its governing memories: every `feature/*`/`dev/*` memory whose front-matter `paths:` glob matches the file, PLUS `feature/FEATURE_TESTS` (+ `dev/DEV_TESTS` if present) when the target is a test artifact.
-- DENY with `[doc-gate]` when ANY required memory is unread by the CALLING agent this task — checked via `collect_values_since_task_start(stream_path, agent_id=...)`.
-- Per-agent scoping is load-bearing: `agent_id=None` counts ONLY main-agent docreads; a subagent's `agent_id` (from `core.session.get_agent_id`, stamped by `swe_post_read_state.py` on every subagent docread event) counts ONLY that subagent's own reads. The orchestrator's reads NEVER satisfy a subagent's `[doc-gate]`, and one subagent's reads never satisfy a sibling's.
-- Subagents get ONLY this check — no sweep gate, no drift block, no workflow-state gate. `[doc-gate]` is the entire pre-edit surface a subagent faces.
-- Remedy: `read_memory` each named memory (the subagent itself, not the orchestrator), then retry the edit. `swe_pre_agent_model_gate.py`'s steering clause tells every spawned agent this directly (see agent gate section below).
+- DENY with `[doc-gate]` when ANY required memory is unread by the MAIN agent this task — checked via `collect_values_since_task_start(stream_path, agent_id=None)`.
+- Subagent enforcement is REMOVED from this gate — a subagent's edits are NEVER checked here. Its required reading is enforced once, at delegation time, by `[sweep-gate]` in `swe_pre_agent_model_gate.py` (see below) — the orchestrator's prompt must already name every required memory before the subagent is spawned.
+- Subagents face NO pre-edit doc gate — no sweep gate, no drift block, no workflow-state gate, no `[doc-gate]`. Its pre-edit surface is empty; its reading obligation is satisfied (or denied) once at spawn time.
 
 ## `swe_pre_memory_index_gate.py` — PreToolUse (Edit/Write/write_memory/edit_memory)
 
@@ -70,7 +70,7 @@ Validate test commands against WF_DEBUG_TDD.
 
 - Detected test runners: `unittest`, `pytest`, `npm test`, `jest`, `vitest`, `playwright`, `phpunit`, `go test`, `cargo test`.
 - Main agent: sentinel (read-once) behavior unchanged — a session-scoped `.test_feature_{session_id}` sentinel, created when `feature/FEATURE_TESTS` is read, clears the gate for the rest of the session.
-- Subagents: gated PER-AGENT on TEST docs — the blanket subagent exemption is REMOVED. A subagent running a detected test command must itself have read `feature/FEATURE_TESTS` (+ `dev/DEV_TESTS` if present) this task, checked via `collect_values_since_task_start(agent_id=<this subagent's id>)`. The orchestrator's own FEATURE_TESTS read does NOT clear a subagent's gate.
+- Subagents: EXEMPT from this gate — per-agent bash test gating is REMOVED. A subagent's TEST-doc reading requirement (`feature/FEATURE_TESTS` + `dev/DEV_TESTS` if present) is enforced once, at delegation time, by `[sweep-gate]` in `swe_pre_agent_model_gate.py`, not per Bash call.
 
 ## `swe_pre_search_docs_gate.py` — PreToolUse (Grep/Glob/search_for_pattern/Bash-inspection)
 
@@ -91,19 +91,34 @@ Deny questions while `auto_approve`/`blanket_consent` is set in WM (override tag
 
 ## `swe_pre_agent_model_gate.py` — PreToolUse (Agent/Task)
 
-Enforces orchestrator + swarm delegation with complexity-based model tiers. FIVE independent DENY checks:
+Enforces orchestrator + swarm delegation with complexity-based model tiers. SIX independent DENY checks:
 
 1. Missing `model` param — required for every subagent_type except fixed-model built-ins (`claude-code-guide`, `statusline-setup`).
 2. Prompt lacks the subagent bypass marker ("BYPASS WF_INIT" / "you are a subagent" / "swarm agent") — without it the spawned agent re-runs the init chain.
 3. `model: "opus"` on a routine-keyword prompt (tests/lint/grep/inventory/read-only audit) with no design/architecture keyword — override via literal `[opus-justified: <reason>]` tag in the prompt (`[premium-justified: <reason>]` accepted as an alias, same requirement).
 4. `model: "fable"` on ANY subagent call — fable is NEVER delegated by default, regardless of task shape — override via literal `[fable-justified: <reason>]` tag (`[premium-justified: <reason>]` alias also accepted).
 5. `run_in_background` missing or `false` on ANY Agent/Task call with no literal `[foreground-justified: <reason>]` tag in the prompt — background is the DEFAULT and REQUIRED value; no subagent_type exemption.
+6. `[sweep-gate]` — `missing_sweep_reason(prompt, required)` computes `required = delegation_sweep.required_reading(prompt, wm_text, project_root, cap=8)` against the orchestrator-written prompt, then DENIES unless every name in `required` appears in a "Required reading:" section (as `read_memory("<name>")` lines). `[sweep-exempt: <reason>]` in the prompt skips this check for trivial read-only tasks.
 
-Rationale: the orchestrator already runs the premium model; delegation moves work OFF it. Check 5's rationale: a foreground delegation blocks the orchestrator on one call with no parallelism and does not reset the drift counter (`mem:dom/DOM_SWE_HOOKS_POST`).
+Rationale: the orchestrator already runs the premium model; delegation moves work OFF it. Check 5's rationale: a foreground delegation blocks the orchestrator on one call with no parallelism and does not reset the drift counter (`mem:dom/DOM_SWE_HOOKS_POST`). Check 6's rationale: the subagent's own `[doc-gate]`/per-agent bash-test gating were REMOVED (see `swe_pre_edit_validate.py` and `swe_pre_bash_test_gate.py` sections above) — required reading is now enforced ONCE, at spawn time, instead of per tool call inside the subagent's own run.
+
+### `delegation_sweep.required_reading` — sources, cap, idempotence
+
+`hooks/swe_hooks/core/delegation_sweep.py` computes the sweep from THREE sources, capped at 8 memory names total:
+
+1. `FEATURE_*`/`DEV_*` memories whose front-matter `paths:` glob matches a file path named in the prompt.
+2. `feature/FEATURE_TESTS` + `dev/DEV_TESTS` (when present) for any prompt describing test work.
+3. The orchestrator WM's `**Memories loaded**`, `**Rules planned**`, and `## Compliance Checklist` `(mem:…)` citations — excluding `wf/*`, `claude/*`, `WM_*`, and `spec/`/`report/`/`research/`/`project/` names.
+
+On ALLOW, the gate appends a `[swe-required-reading]` block listing `read_memory("<name>")` per required memory PLUS that memory's front-matter `obligations:` inline — the subagent has the rules before it calls `read_memory` itself. Idempotent via a marker (never appended twice to the same prompt). Fails open: a `delegation_sweep` error never blocks the Agent call — treat `required_reading` as returning `[]` on internal failure, same as any other gate exception in this hook.
 
 On ALLOW, the gate appends a `[swe-steering-contract]` clause to the Agent call's prompt via `updatedInput` (pure fn `with_steering_clause`) — declares that a follow-up SendMessage from the launching orchestrator is a trusted amendment (may narrow/expand/redirect scope, including read-only → implementation) and that hook workflow banners (ON STEP/CONTINUE/WF_*) surfaced during the run target the orchestrator, never the spawned agent. The same clause tells the subagent that `[doc-gate]` denials ARE addressed to IT (not the orchestrator): read each memory the denial names with `read_memory` before editing or running tests — the orchestrator's reads never count for the subagent. Applies to every passing call; never applied on a DENY.
 
-Pure functions `missing_model_reason`/`missing_bypass_marker_reason`/`opus_on_routine_reason`/`fable_without_justification_reason`/`foreground_without_justification_reason`/`with_steering_clause` are unit-tested.
+Pure functions `missing_model_reason`/`missing_bypass_marker_reason`/`opus_on_routine_reason`/`fable_without_justification_reason`/`foreground_without_justification_reason`/`missing_sweep_reason`/`with_steering_clause` are unit-tested.
+
+### `doc_requirements.memory_roots` — plugin-source inclusion
+
+`memory_roots(project_root)` also includes the plugin's shipped `memories/` root (not only `.serena/memory-paths.conf` entries) — `delegation_sweep.required_reading`'s FEATURE__/DEV__ path-match and FEATURE_TESTS/DEV_TESTS lookups resolve against BOTH the plugin source tree and this repo's local dev memories. A required memory that exists only in `memories/` (plugin source, ships to every installed repo) is named correctly, never silently dropped for living outside `.serena/memory/` (this repo's local-only dev memories).
 
 ### Budget tag stamping + clause SCOPE rule
 
@@ -115,5 +130,6 @@ Pure functions `missing_model_reason`/`missing_bypass_marker_reason`/`opus_on_ro
 ## Spawned-agent exemptions vs per-agent gating
 
 - `swe_pre_tool_init_gate.py`: exempt for spawned-agent tool calls — a subagent bypasses the init chain entirely per its prompt marker, not per this gate; the bypass guard (marker detection) and Serena session metadata (`agent_id`/`agent_type`) still apply to identify the call as spawned.
-- `swe_pre_bash_test_gate.py`: NOT exempt for spawned-agent Bash calls running a detected test command — gated PER-AGENT on TEST docs (see section above). Non-test Bash calls from a subagent are unaffected by this gate.
-- `swe_pre_edit_validate.py`: NOT exempt for spawned-agent edits — `[doc-gate]` applies to every caller, scoped per-agent (see section above). Only the drift-block/sweep-gate checks are main-agent-only.
+- `swe_pre_bash_test_gate.py`: EXEMPT for spawned-agent Bash calls — per-agent TEST-doc gating is REMOVED; a subagent's TEST-doc requirement is enforced once, at delegation time, by `[sweep-gate]`.
+- `swe_pre_edit_validate.py`: EXEMPT for spawned-agent edits — `[doc-gate]` is now MAIN-AGENT-ONLY; a subagent's `doc_requirements` are enforced once, at delegation time, by `[sweep-gate]` (see `swe_pre_agent_model_gate.py` section above), not per edit inside the subagent's own run. The drift-block/sweep-sentinel checks in this gate remain main-agent-only as before.
+- `swe_pre_agent_model_gate.py`: applies ONLY to the orchestrator's Agent/Task call, never to a spawned agent's own tool calls — `[sweep-gate]` is where subagent doc/test-reading enforcement now lives, entirely at spawn time.

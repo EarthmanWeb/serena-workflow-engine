@@ -4,7 +4,8 @@ description: Feature-gate mechanism (sentinel-based tool blocking) and the sweep
 obligations:
   - A docpending link surfaced by the PRIMARY feature is satisfied by read, planned (obligations cited as `(mem:<name>)` in the WM Compliance Checklist), or ruled out (with reason) — bare deferral is rejected.
   - `**Rules planned**:` names MUST each be cited as `(mem:<name>)` on a `## Compliance Checklist` line — an uncited planned name or an unmatched citation is rejected.
-  - `doc-gate` DENIES any edit, by the main agent OR a subagent, until the CALLING agent has itself read every memory `doc_requirements.required_docs_for_path` names for the target file — scoped per-agent, never satisfied by another agent's reads.
+  - `doc-gate` DENIES a MAIN-AGENT edit until it itself has read every memory `doc_requirements.required_docs_for_path` names for the target file — subagent enforcement is REMOVED; a subagent's required reading is enforced once, at delegation time, by `[sweep-gate]` in `swe_pre_agent_model_gate.py`.
+  - `sweep-gate` DENIES an orchestrator Agent/Task call unless its prompt's "Required reading:" section names every memory `delegation_sweep.required_reading` computes — `[sweep-exempt: <reason>]` skips trivial read-only tasks; on ALLOW the gate appends a `[swe-required-reading]` block with each memory's obligations inline.
 metadata:
   type: domain
 ---
@@ -24,19 +25,29 @@ Feature gates block specific tools until the relevant FEATURE_* memory is read. 
 
 ### Registered Gates
 
-| Gate Name  | Pre-Hook                    | Blocks                                                                       | Sentinel                     | Feature Memory                                                 |
-| ---------- | --------------------------- | ---------------------------------------------------------------------------- | ---------------------------- | -------------------------------------------------------------- |
-| `test`     | `swe_pre_bash_test_gate.py` | unittest/pytest/npm test/jest/vitest/playwright/phpunit/go test/cargo test   | `.test_feature_{session}`    | FEATURE_TESTS — main agent sentinel-gated; subagents per-agent |
-| `sweep`    | `swe_pre_edit_validate.py`  | ALL edits in execution states                                                | `.sweep_feature_{session}`   | (WM-verified, not read-created — see below)                    |
-| `doc-gate` | `swe_pre_edit_validate.py`  | ANY edit (main agent AND subagents) to a path with unread governing memories | none — checked live per call | `doc_requirements.required_docs_for_path(file, root)`          |
+| Gate Name    | Pre-Hook                      | Blocks                                                                     | Sentinel                     | Feature Memory                                                                 |
+| ------------ | ----------------------------- | -------------------------------------------------------------------------- | ---------------------------- | ------------------------------------------------------------------------------ |
+| `test`       | `swe_pre_bash_test_gate.py`   | unittest/pytest/npm test/jest/vitest/playwright/phpunit/go test/cargo test | `.test_feature_{session}`    | FEATURE_TESTS — main agent sentinel-gated; subagents EXEMPT (see `sweep-gate`) |
+| `sweep`      | `swe_pre_edit_validate.py`    | ALL edits in execution states                                              | `.sweep_feature_{session}`   | (WM-verified, not read-created — see below)                                    |
+| `doc-gate`   | `swe_pre_edit_validate.py`    | a MAIN-AGENT edit to a path with unread governing memories                 | none — checked live per call | `doc_requirements.required_docs_for_path(file, root)`                          |
+| `sweep-gate` | `swe_pre_agent_model_gate.py` | an orchestrator Agent/Task call whose prompt omits required reading        | none — checked live per call | `delegation_sweep.required_reading(prompt, wm_text, root, cap=8)`              |
 
-### The `doc-gate` Gate (per-agent, no sentinel)
+### The `doc-gate` Gate (main-agent-only, no sentinel)
 
-Unlike `test`/`sweep`, `doc-gate` never caches a pass into a sentinel file — it re-checks `required_docs_for_path` against the CALLING agent's own docreads on every edit.
+Unlike `test`/`sweep`, `doc-gate` never caches a pass into a sentinel file — it re-checks `required_docs_for_path` against the MAIN agent's own docreads on every edit.
 
 - `required_docs_for_path` = every `feature/*`/`dev/*` memory whose front-matter `paths:` glob matches the target file, PLUS `feature/FEATURE_TESTS` (+ `dev/DEV_TESTS` if present) when the target is a test artifact.
-- Read-scope is per-agent: `collect_values_since_task_start(stream_path, agent_id=...)` — `agent_id=None` for the main agent, the subagent's own id (stamped by `swe_post_read_state.py`) for a subagent. One agent's docread NEVER clears another agent's `doc-gate`.
-- Applies to a subagent's edits even when the orchestrator has already read the governing memory — the subagent MUST read it itself in its own session.
+- Scope: `collect_values_since_task_start(stream_path, agent_id=None)` — main agent only. Subagent enforcement is REMOVED from this gate.
+- A subagent's `doc_requirements` are enforced ONCE, at delegation time, by `[sweep-gate]` in `swe_pre_agent_model_gate.py` — not per edit inside the subagent's own run. See `mem:dom/DOM_SWE_HOOKS_PRE_GATES` agent-gate section.
+
+### The `sweep-gate` Gate (delegation-time, no sentinel)
+
+Checked live on every orchestrator Agent/Task call, before the subagent is spawned — never re-checked inside the subagent's own run.
+
+- `delegation_sweep.required_reading(prompt, wm_text, project_root, cap=8)` computes the required memory set from: (1) `FEATURE_*`/`DEV_*` memories whose `paths:` glob matches a file path named in the prompt, (2) `feature/FEATURE_TESTS` + `dev/DEV_TESTS` for prompts describing test work, (3) the orchestrator WM's `**Memories loaded**`/`**Rules planned**`/Compliance Checklist `(mem:…)` names (`wf/`, `claude/`, `WM_`, `spec/`/`report/`/`research/`/`project/` excluded) — capped at 8 total names.
+- DENY unless every required name appears in the prompt's "Required reading:" section as `read_memory("<name>")`. `[sweep-exempt: <reason>]` in the prompt skips the check for trivial read-only tasks.
+- On ALLOW, appends a `[swe-required-reading]` block: `read_memory("<name>")` per required memory PLUS that memory's front-matter `obligations:` inline — idempotent via a marker, fails open on internal error.
+- Consequence for the orchestrator: record the task's sweep in WM (`Memories loaded`/Compliance Checklist) BEFORE delegating — the gate reads WM to compute source (3) above; an unrecorded sweep is invisible to it.
 
 ### Adding a New Gate
 
