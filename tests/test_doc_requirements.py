@@ -31,10 +31,24 @@ class DocRequirementsTestCase(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.project_root = self.tmp.name
         doc_requirements._INDEX_CACHE.clear()
+        # Isolate from the real dev-checkout memories/ dir: _hookutil.py sets
+        # CLAUDE_PLUGIN_ROOT to this repo's root (so `import swe_hooks...`
+        # resolves), which would otherwise make _shipped_memories_root()
+        # resolve to THIS repo's real memories/ and leak its shipped
+        # FEATURE_*/DEV_* memories into tests that don't expect them. Point
+        # it at an empty temp dir unless a test explicitly overrides it
+        # (see ShippedMemoriesRootTests).
+        self._plugin_root_env_backup = os.environ.get("CLAUDE_PLUGIN_ROOT")
+        self._empty_plugin_root = tempfile.mkdtemp()
+        os.environ["CLAUDE_PLUGIN_ROOT"] = self._empty_plugin_root
 
     def tearDown(self):
         doc_requirements._INDEX_CACHE.clear()
         self.tmp.cleanup()
+        if self._plugin_root_env_backup is None:
+            os.environ.pop("CLAUDE_PLUGIN_ROOT", None)
+        else:
+            os.environ["CLAUDE_PLUGIN_ROOT"] = self._plugin_root_env_backup
 
 
 class MemoryRootsTests(DocRequirementsTestCase):
@@ -74,6 +88,97 @@ class MemoryRootsTests(DocRequirementsTestCase):
         self.assertNotEqual(
             os.path.realpath(path),
             os.path.realpath(os.path.join(other_cwd, ".serena", "memory")))
+
+
+class ShippedMemoriesRootTests(DocRequirementsTestCase):
+    # Base setUp() already points CLAUDE_PLUGIN_ROOT at an isolated empty
+    # temp dir; each test below overrides it further to exercise a specific
+    # shipped-root resolution path. tearDown() (inherited) restores it.
+
+    def test_shipped_root_from_claude_plugin_root_env(self):
+        plugin_dir = tempfile.mkdtemp()
+        os.makedirs(os.path.join(plugin_dir, "memories"), exist_ok=True)
+        os.environ["CLAUDE_PLUGIN_ROOT"] = plugin_dir
+        roots = doc_requirements.memory_roots(self.project_root)
+        root_dirs = [os.path.realpath(p) for _, p in roots]
+        self.assertIn(os.path.realpath(os.path.join(plugin_dir, "memories")), root_dirs)
+
+    def test_shipped_root_is_last_lowest_precedence(self):
+        plugin_dir = tempfile.mkdtemp()
+        os.makedirs(os.path.join(plugin_dir, "memories"), exist_ok=True)
+        os.environ["CLAUDE_PLUGIN_ROOT"] = plugin_dir
+        roots = doc_requirements.memory_roots(self.project_root)
+        self.assertEqual(
+            os.path.realpath(roots[-1][1]),
+            os.path.realpath(os.path.join(plugin_dir, "memories")))
+        self.assertIsNone(roots[-1][0])  # unaliased
+
+    def test_shipped_root_deduped_when_equal_to_conf_root(self):
+        os.environ["CLAUDE_PLUGIN_ROOT"] = self.project_root
+        os.makedirs(os.path.join(self.project_root, "memories"), exist_ok=True)
+        conf_path = os.path.join(self.project_root, ".serena", "memory-paths.conf")
+        _write(conf_path, os.path.join(self.project_root, "memories") + "\n")
+        roots = doc_requirements.memory_roots(self.project_root)
+        dirs = [os.path.realpath(p) for _, p in roots]
+        self.assertEqual(len(dirs), len(set(dirs)))
+
+    def test_shipped_root_missing_dir_not_added(self):
+        os.environ["CLAUDE_PLUGIN_ROOT"] = os.path.join(self.project_root, "nonexistent")
+        roots = doc_requirements.memory_roots(self.project_root)
+        root_dirs = [os.path.realpath(p) for _, p in roots]
+        self.assertNotIn(
+            os.path.realpath(os.path.join(self.project_root, "nonexistent", "memories")),
+            root_dirs)
+
+    def test_shipped_memory_makes_feature_visible_to_path_matching(self):
+        plugin_dir = tempfile.mkdtemp()
+        _write(os.path.join(plugin_dir, "memories", "feature", "FEATURE_SWE.md"),
+               '---\nname: SWE\npaths:\n  - "hooks/**/*.py"\n---\nbody')
+        os.environ["CLAUDE_PLUGIN_ROOT"] = plugin_dir
+        required = doc_requirements.required_docs_for_path(
+            "hooks/pre/swe_pre_agent_model_gate.py", self.project_root)
+        self.assertIn("feature/FEATURE_SWE", required)
+
+
+class ReadObligationsTests(DocRequirementsTestCase):
+    def test_block_list_obligations(self):
+        _write(os.path.join(self.project_root, ".serena", "memory", "feature",
+                             "FEATURE_X.md"),
+               "---\nname: X\nobligations:\n  - Do the thing\n  - Do another thing\n---\nbody")
+        self.assertEqual(
+            doc_requirements.read_obligations("feature/FEATURE_X", self.project_root),
+            ["Do the thing", "Do another thing"])
+
+    def test_inline_list_obligations(self):
+        _write(os.path.join(self.project_root, ".serena", "memory", "feature",
+                             "FEATURE_Y.md"),
+               '---\nobligations: ["Rule A", "Rule B"]\n---\nbody')
+        self.assertEqual(
+            doc_requirements.read_obligations("feature/FEATURE_Y", self.project_root),
+            ["Rule A", "Rule B"])
+
+    def test_empty_obligations_list(self):
+        _write(os.path.join(self.project_root, ".serena", "memory", "feature",
+                             "FEATURE_Z.md"),
+               "---\nobligations: []\n---\nbody")
+        self.assertEqual(
+            doc_requirements.read_obligations("feature/FEATURE_Z", self.project_root), [])
+
+    def test_no_obligations_field_returns_empty(self):
+        _write(os.path.join(self.project_root, ".serena", "memory", "feature",
+                             "FEATURE_NOOB.md"), "---\nname: X\n---\nbody")
+        self.assertEqual(
+            doc_requirements.read_obligations("feature/FEATURE_NOOB", self.project_root), [])
+
+    def test_missing_memory_returns_empty(self):
+        self.assertEqual(
+            doc_requirements.read_obligations("feature/NOPE", self.project_root), [])
+
+    def test_no_frontmatter_returns_empty(self):
+        _write(os.path.join(self.project_root, ".serena", "memory", "feature",
+                             "FEATURE_NOFM.md"), "# no front matter")
+        self.assertEqual(
+            doc_requirements.read_obligations("feature/FEATURE_NOFM", self.project_root), [])
 
 
 class MemoryExistsTests(DocRequirementsTestCase):

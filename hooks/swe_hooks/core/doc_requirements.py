@@ -47,6 +47,26 @@ def is_test_target(file_path: str) -> bool:
     return bool(TEST_TARGET_RE.search(str(file_path or '').replace('\\', '/')))
 
 
+def _shipped_memories_root() -> str:
+    """The plugin's shipped `memories/` directory — read-only, ships with the
+    plugin (see FEATURE_SWE "Source Location"): `<repo>/memories/`.
+
+    Resolution order:
+      1. `CLAUDE_PLUGIN_ROOT` env var (set by the harness for an installed
+         plugin, and by tests/_hookutil.py for a dev checkout) — join
+         'memories'.
+      2. This module's own location: hooks/swe_hooks/core/doc_requirements.py
+         -> `<hooks>/../memories` (i.e. `<repo>/memories` in this source
+         checkout, since `<hooks>` = `hooks/`).
+    Neither branch checks existence — callers (memory_roots) filter that.
+    """
+    plugin_root = os.environ.get('CLAUDE_PLUGIN_ROOT', '').strip()
+    if plugin_root:
+        return os.path.normpath(os.path.join(plugin_root, 'memories'))
+    hooks_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    return os.path.normpath(os.path.join(hooks_dir, '..', 'memories'))
+
+
 def memory_roots(project_root: str) -> list:
     """Memory root directories for `project_root`.
 
@@ -63,6 +83,14 @@ def memory_roots(project_root: str) -> list:
     An aliased root (`alias=path` in the conf) is returned as-is; callers
     that need the alias prefix for memory names use it alongside the
     directory (see _build_index).
+
+    ALSO always appends the plugin's shipped `memories/` root (see
+    _shipped_memories_root), UNALIASED, at LOWEST precedence (last in the
+    list) — the shipped FEATURE_*/DEV_* memories (e.g. feature/FEATURE_SWE)
+    carry `paths:` front-matter too and must be visible to path matching,
+    not just the conf-configured project roots. De-duplicated when it
+    normalizes to the same directory as a conf root (own-repo dev checkout,
+    where memory-paths.conf may already point at `memories/`).
     """
     conf_path = os.path.join(project_root, '.serena', 'memory-paths.conf')
     roots = []
@@ -86,6 +114,11 @@ def memory_roots(project_root: str) -> list:
             roots.append((alias, os.path.normpath(path)))
     if not roots:
         roots = [(None, os.path.join(project_root, '.serena', 'memory'))]
+
+    shipped = _shipped_memories_root()
+    existing_dirs = {os.path.normpath(p) for _, p in roots}
+    if os.path.isdir(shipped) and os.path.normpath(shipped) not in existing_dirs:
+        roots.append((None, os.path.normpath(shipped)))
     return roots
 
 
@@ -356,6 +389,46 @@ def required_docs_for_path(file_path: str, project_root: str) -> list:
                 required.add(name)
 
     return sorted(required)
+
+
+def _read_memory_text(name: str, project_root: str):
+    """Raw file content for memory `name` (see memory_exists' name grammar),
+    or None when it does not exist / cannot be read."""
+    roots = memory_roots(project_root)
+    for alias, root_dir in roots:
+        rel = name
+        if alias:
+            prefix = f'{alias}/'
+            if not name.startswith(prefix):
+                continue
+            rel = name[len(prefix):]
+        candidate = os.path.join(root_dir, rel + '.md')
+        if os.path.isfile(candidate):
+            try:
+                with open(candidate, 'r', encoding='utf-8') as f:
+                    return f.read()
+            except OSError:
+                return None
+    return None
+
+
+def read_obligations(name: str, project_root: str) -> list:
+    """The memory's front-matter `obligations:` list items, or [] when the
+    memory is missing, has no front-matter, or declares `obligations: []`.
+
+    Reuses parse_paths_frontmatter's block/inline-list grammar (via
+    _extract_key_list) rather than re-implementing YAML-lite parsing —
+    single source of truth for the front-matter list shapes this module
+    understands.
+    """
+    text = _read_memory_text(name, project_root)
+    if not text:
+        return []
+    m = _FRONTMATTER_RE.match(text)
+    if not m:
+        return []
+    fm_lines = m.group(1).splitlines()
+    return _extract_key_list(fm_lines, 'obligations', top_level=True)
 
 
 def unread_required_docs(file_path: str, project_root: str, read_names) -> list:

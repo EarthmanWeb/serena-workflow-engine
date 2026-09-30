@@ -264,6 +264,55 @@ class TestForegroundWithoutJustificationReason(unittest.TestCase):
 
 
 # ──────────────────────────────────────────────────────────────────
+# pre/swe_pre_agent_model_gate — missing_sweep_reason
+# ──────────────────────────────────────────────────────────────────
+
+class TestMissingSweepReason(unittest.TestCase):
+    def test_no_required_names_allows(self):
+        reason = agent_gate.missing_sweep_reason("Do X.", [])
+        self.assertEqual(reason, "")
+
+    def test_none_required_allows(self):
+        reason = agent_gate.missing_sweep_reason("Do X.", None)
+        self.assertEqual(reason, "")
+
+    def test_all_present_allows(self):
+        prompt = 'Required reading: read_memory("feature/FEATURE_TESTS")'
+        reason = agent_gate.missing_sweep_reason(prompt, ["feature/FEATURE_TESTS"])
+        self.assertEqual(reason, "")
+
+    def test_bare_name_without_prefix_also_matches(self):
+        prompt = "Required reading: FEATURE_TESTS"
+        reason = agent_gate.missing_sweep_reason(prompt, ["feature/FEATURE_TESTS"])
+        self.assertEqual(reason, "")
+
+    def test_one_missing_denies_and_lists_it(self):
+        reason = agent_gate.missing_sweep_reason(
+            "Implement X.", ["feature/FEATURE_TESTS", "dom/DOM_X"])
+        self.assertIn("[sweep-gate]", reason)
+        self.assertIn('read_memory("feature/FEATURE_TESTS")', reason)
+        self.assertIn('read_memory("dom/DOM_X")', reason)
+
+    def test_partial_match_still_lists_only_missing(self):
+        prompt = 'read_memory("feature/FEATURE_TESTS")'
+        reason = agent_gate.missing_sweep_reason(
+            prompt, ["feature/FEATURE_TESTS", "dom/DOM_X"])
+        self.assertIn("[sweep-gate]", reason)
+        self.assertNotIn('read_memory("feature/FEATURE_TESTS")', reason)
+        self.assertIn('read_memory("dom/DOM_X")', reason)
+
+    def test_sweep_exempt_with_reason_allows(self):
+        reason = agent_gate.missing_sweep_reason(
+            "Implement X. [sweep-exempt: trivial lookup]", ["feature/FEATURE_TESTS"])
+        self.assertEqual(reason, "")
+
+    def test_sweep_exempt_empty_reason_still_denies(self):
+        reason = agent_gate.missing_sweep_reason(
+            "Implement X. [sweep-exempt:]", ["feature/FEATURE_TESTS"])
+        self.assertTrue(reason)
+
+
+# ──────────────────────────────────────────────────────────────────
 # pre/swe_pre_agent_model_gate — with_steering_clause
 # ──────────────────────────────────────────────────────────────────
 
@@ -273,10 +322,10 @@ class TestWithSteeringClause(unittest.TestCase):
         self.assertIn(agent_gate.STEERING_CLAUSE_MARKER, result["prompt"])
         self.assertTrue(result["prompt"].startswith("Do X."))
 
-    def test_clause_addresses_doc_gate_denials_to_subagent(self):
+    def test_clause_points_to_required_reading_block(self):
         result = agent_gate.with_steering_clause({"prompt": "Do X."})
-        self.assertIn("[doc-gate]", result["prompt"])
-        self.assertIn("feature/FEATURE_TESTS", result["prompt"])
+        self.assertIn("[swe-required-reading]", result["prompt"])
+        self.assertIn("required reading", result["prompt"].lower())
 
     def test_clause_contains_scope_limits_and_scope_gate(self):
         result = agent_gate.with_steering_clause({"prompt": "Do X."})
@@ -513,6 +562,54 @@ class TestAgentModelGateMain(unittest.TestCase):
         self.assertIn(
             agent_gate.STEERING_CLAUSE_MARKER,
             hook_out.get("updatedInput", {}).get("prompt", ""))
+
+    def test_prompt_naming_test_file_without_sweep_denied(self):
+        result = self._run_main({
+            "tool_name": "Agent",
+            "tool_input": {
+                "subagent_type": "general-purpose",
+                "model": "sonnet",
+                "prompt": "You are a subagent. BYPASS WF_INIT. Fix "
+                          "tests/test_scope_guard.py.",
+                "run_in_background": True,
+            },
+        })
+        hook_out = result.get("hookSpecificOutput", {})
+        self.assertEqual(hook_out.get("permissionDecision"), "deny")
+        self.assertIn("[sweep-gate]", hook_out.get("permissionDecisionReason", ""))
+
+    def test_prompt_naming_test_file_with_sweep_allows_and_injects_block(self):
+        result = self._run_main({
+            "tool_name": "Agent",
+            "tool_input": {
+                "subagent_type": "general-purpose",
+                "model": "sonnet",
+                "prompt": "You are a subagent. BYPASS WF_INIT. Fix "
+                          "tests/test_scope_guard.py. Required reading: "
+                          'read_memory("feature/FEATURE_TESTS")',
+                "run_in_background": True,
+            },
+        })
+        hook_out = result.get("hookSpecificOutput", {})
+        self.assertEqual(hook_out.get("permissionDecision"), "allow")
+        updated_prompt = hook_out.get("updatedInput", {}).get("prompt", "")
+        self.assertIn("[swe-required-reading]", updated_prompt)
+        self.assertIn('read_memory("feature/FEATURE_TESTS")', updated_prompt)
+
+    def test_sweep_exempt_tag_skips_sweep_gate(self):
+        result = self._run_main({
+            "tool_name": "Agent",
+            "tool_input": {
+                "subagent_type": "general-purpose",
+                "model": "haiku",
+                "prompt": "You are a subagent. BYPASS WF_INIT. Fix "
+                          "tests/test_scope_guard.py. "
+                          "[sweep-exempt: trivial read-only lookup]",
+                "run_in_background": True,
+            },
+        })
+        hook_out = result.get("hookSpecificOutput", {})
+        self.assertEqual(hook_out.get("permissionDecision"), "allow")
 
 
 # ──────────────────────────────────────────────────────────────────
