@@ -114,6 +114,20 @@ COMPOSITION_DARK = {
 
 TOOL_TOP_N = 8
 
+# Net-result composite weights (see net_result() below). acceptance leads
+# because the real-world sr-only A/B showed a thorough, working fix is
+# worth paying a token premium for -- net result must lead, token cost is
+# secondary; doc = house-convention compliance; retention = nothing broken
+# by the pivot.
+NET_RESULT_WEIGHTS = {"acceptance": 0.5, "doc": 0.3, "retention": 0.2}
+
+# cost_vs_benefit_verdict: token premium considered pure overhead (vs. a
+# purchase) only when net result is equal within this many points.
+NET_RESULT_EPSILON = 0.5
+# Token-premium budget at equal net result (SPEC_HARNESS_EFFICIENCY_TUNING
+# item 5): above this, an equal-quality harness run is judged not worth it.
+TOKEN_PREMIUM_OVERHEAD_PCT = 20.0
+
 # --------------------------------------------------------------------------
 # Pure math helpers (tested directly).
 # --------------------------------------------------------------------------
@@ -265,6 +279,29 @@ def _tool_calls(r):
     if "total_tool_calls" in m:
         return m.get("total_tool_calls")
     return m.get("tool_calls")
+
+
+def _wm_update_calls(r):
+    """Sum of tool_calls_by_name entries whose tool name contains
+    'swe_wm_update' (covers swe_wm_update / swe_wm_update_section /
+    swe_wm_update_status, however the MCP server namespaces them).
+    Pure."""
+    by_name = g(r, "metrics", "tool_calls_by_name", default={}) or {}
+    return sum(v for k, v in by_name.items() if "swe_wm_update" in k and isinstance(v, (int, float)))
+
+
+def _process_overhead_events(r):
+    """One run's process-overhead event count: memory reads + WM-update
+    tool calls + stop-hook blocks + hook denials -- the overhead
+    SPEC_HARNESS_EFFICIENCY_TUNING's tuning targets (attachments,
+    duplicate reads, WM updates, stop-gate regens), as distinct from
+    fix-scope token/turn spend. Pure."""
+    return (
+        (g(r, "metrics", "memory_file_reads") or 0)
+        + _wm_update_calls(r)
+        + (g(r, "metrics", "stop_hook_blocks") or 0)
+        + (g(r, "metrics", "hook_denials") or 0)
+    )
 
 
 METRIC_DOT_SPECS = [
@@ -785,12 +822,19 @@ def overall_review_rows(rows, agg, stamp_dir=None):
     {"arms_present": [...], "n_per_arm": {arm: n}, "has_pivot": bool,
      "cells": {arm: {
         "t1_spec": (x/y str, pct|None), "t1_doc": (...), "pv_spec": (...),
-        "pv_doc": (...), "all_doc": (...), "t1_retention": (...),
+        "pv_doc": (...), "all_doc": (...), "acceptance": (...
+        combined hidden-test pass x/y across both phases -- or the row's
+        own top-level acceptance for a single-phase row -- the whole
+        benchmark total, not just its spec/doc sub-categories),
+        "t1_retention": (...),
         "read_all_memories_pct": float|None,
         "gates": {"t1_init": bool|None, "t1_sweep": bool|None,
                   "pv_resweep": bool|None},
         "total_tokens": float|None, "turns": float|None, "wall_s": float|None,
         "tool_calls": float|None, "memory_reads": float|None,
+        "process_overhead_events": float|None (memory reads + WM-update
+            tool calls + stop-hook blocks + hook denials -- see
+            _process_overhead_events),
         "vs_no_harness": {"tokens_pct": float|None, "turns_pct": float|None,
                            "wall_pct": float|None},
      }}}
@@ -820,11 +864,19 @@ def overall_review_rows(rows, agg, stamp_dir=None):
 
         t1_spec_p = t1_spec_t = t1_doc_p = t1_doc_t = 0
         pv_spec_p = pv_spec_t = pv_doc_p = pv_doc_t = 0
+        acc_p = acc_t = 0
         ret_p = ret_t = 0
         any_phase = False
         for r in arm_rows:
             phases = r.get("phases")
             if not isinstance(phases, dict) or "task1" not in phases or "pivot" not in phases:
+                # Single-phase row (e.g. a non-pivot task, or an arm run
+                # with no pivot phase): fall back to the row's own
+                # top-level acceptance dict for the combined hidden-test
+                # count, since there is no b1/b2 to sum.
+                acc = r.get("acceptance") or {}
+                acc_p += acc.get("passed") or 0
+                acc_t += acc.get("total") or 0
                 continue
             any_phase = True
             b1 = (phases.get("task1") or {}).get("benchmark") or {}
@@ -838,6 +890,14 @@ def overall_review_rows(rows, agg, stamp_dir=None):
             pv_spec_t += (b2.get("spec") or {}).get("total") or 0
             pv_doc_p += (b2.get("doc") or {}).get("passed") or 0
             pv_doc_t += (b2.get("doc") or {}).get("total") or 0
+            # Combined hidden-test pass count (acceptance.passed/total,
+            # i.e. the WHOLE benchmark dict -- spec+doc+other -- not just
+            # the doc/spec sub-categories above) across both phases. This
+            # is the "acceptance" component net_result() reads: was the
+            # fix thorough and working, independent of house-convention
+            # (doc-rule) compliance.
+            acc_p += (b1.get("passed") or 0) + (b2.get("passed") or 0)
+            acc_t += (b1.get("total") or 0) + (b2.get("total") or 0)
             ret_p += ret.get("passed") or 0
             ret_t += ret.get("total") or 0
 
@@ -867,6 +927,7 @@ def overall_review_rows(rows, agg, stamp_dir=None):
         wall_s = sum(r.get("wall_s") or 0 for r in arm_rows) or None
         tool_calls = sum(_tool_calls(r) or 0 for r in arm_rows) or None
         memory_reads = sum(g(r, "metrics", "memory_file_reads") or 0 for r in arm_rows) or None
+        process_overhead_events = sum(_process_overhead_events(r) for r in arm_rows) or None
 
         cells[arm] = {
             "n": n,
@@ -875,6 +936,7 @@ def overall_review_rows(rows, agg, stamp_dir=None):
             "pv_spec": _xy(pv_spec_p, pv_spec_t),
             "pv_doc": _xy(pv_doc_p, pv_doc_t),
             "all_doc": _xy(t1_doc_p + pv_doc_p, t1_doc_t + pv_doc_t),
+            "acceptance": _xy(acc_p, acc_t),
             "t1_retention": _xy(ret_p, ret_t),
             "has_pivot_rows": any_phase,
             "read_all_memories_pct": read_all_pct,
@@ -884,6 +946,7 @@ def overall_review_rows(rows, agg, stamp_dir=None):
             "wall_s": wall_s,
             "tool_calls": tool_calls,
             "memory_reads": memory_reads,
+            "process_overhead_events": process_overhead_events,
         }
 
     control_arm = "control" if "control" in present else None
@@ -1019,43 +1082,155 @@ def _cost_vs_benefit_line_text(line):
     return f'{line["label"]}: {cost_str} vs no harness → {t1_bit}, {pv_bit}.'
 
 
-def cost_vs_benefit_verdict(review):
-    """Answer "Is using a harness worth the extra turns and tokens?"
-    plainly, from the data, with the n=1 caveat. Pure.
+def net_result(cell):
+    """Composite quality score (0-100) for one overall_review_rows() cell,
+    per NET_RESULT_WEIGHTS. Pure.
 
-    A harness arm "wins" the cost-vs-benefit question only if it beats
-    control on BOTH task-1 and pivot doc-rule pct while costing no more
-    than control (strict, symmetric with strict_best_arm's no-ties rule).
-    Otherwise the answer is "no" (cost paid without matching gain) unless
-    every harness arm ties or is unmeasured, in which case it's
-    "inconclusive"."""
+    Components (each a pct 0-100, from the x/y tuples overall_review_rows
+    already computes):
+      - acceptance (weight 0.5): combined hidden-test pass % across
+        phases (cell["acceptance"]) -- was the fix thorough and working.
+        This leads the composite, per the real-world sr-only A/B
+        precedent (SPEC_HARNESS_EFFICIENCY_TUNING): the harnessed run's
+        extra tokens were worth it there because the fix was more
+        thorough, not because it was cheaper.
+      - doc (weight 0.3): combined doc-rule pass % (cell["all_doc"]) --
+        house conventions applied.
+      - retention (weight 0.2): task-1 retention % after pivot
+        (cell["t1_retention"]) -- nothing broken by later work.
+
+    A missing component (None pct -- e.g. no pivot phase, so no
+    retention was measured) drops out and the remaining weights
+    renormalize to sum to 1.0. Returns None only when EVERY component is
+    missing (nothing to score)."""
+    parts = {
+        "acceptance": cell.get("acceptance", (None, None))[1],
+        "doc": cell.get("all_doc", (None, None))[1],
+        "retention": cell.get("t1_retention", (None, None))[1],
+    }
+    present = {k: v for k, v in parts.items() if v is not None}
+    if not present:
+        return None
+    weight_sum = sum(NET_RESULT_WEIGHTS[k] for k in present)
+    if weight_sum <= 0:
+        return None
+    return sum(NET_RESULT_WEIGHTS[k] * v for k, v in present.items()) / weight_sum
+
+
+def cost_vs_benefit_verdict(review):
+    """Answer "Is using a harness worth the extra turns and tokens?" —
+    net-result-first, not doc-rule-percentage-and-cost-first. Pure.
+
+    Net result (net_result(), a single composite quality score per arm:
+    0.5 acceptance + 0.3 doc + 0.2 retention, renormalized over whatever
+    components are present) leads; token cost is secondary and only
+    counts against a harness arm when quality is EQUAL (within
+    NET_RESULT_EPSILON points). This mirrors the real-world sr-only
+    precedent in SPEC_HARNESS_EFFICIENCY_TUNING: the harnessed run there
+    cost more tokens but produced the more thorough, correct fix, and
+    that was judged worth it on net result, not penalized for cost.
+
+    Per harness arm vs control:
+      - net-result delta > +epsilon -> WORTH IT: tokens bought a
+        strictly better outcome (reported as tokens-per-net-result-point).
+      - |delta| <= epsilon (equal net result) -> the "overhead rule":
+        token premium <= TOKEN_PREMIUM_OVERHEAD_PCT is worth it (equal
+        outcome within the overhead budget); above it, not worth it --
+        a premium at equal quality is pure overhead, which is exactly
+        what SPEC_HARNESS_EFFICIENCY_TUNING's tuning targets.
+      - net-result delta < -epsilon -> NOT worth it, regardless of cost:
+        a worse outcome is never bought back by being cheaper.
+
+    The overall answer line reports the BEST harness arm's outcome (the
+    one an operator would actually pick), not merely "any arm" as before.
+    Per-arm detail lines (cost_vs_benefit_lines()) are unchanged and are
+    still returned under "lines" for the full breakdown. n=1/arm caveat
+    always appended."""
     lines = cost_vs_benefit_lines(review)
     if not lines:
         return {"question": "Is using a harness worth the extra turns and tokens?",
                 "answer": "No control arm to compare against.", "lines": []}
 
-    any_win = any(
-        (l["t1_doc_cmp"] in ("HIGHER", "EQUAL") and l["pv_doc_cmp"] in ("HIGHER", "EQUAL")
-         and (l["t1_doc_cmp"] == "HIGHER" or l["pv_doc_cmp"] == "HIGHER"))
-        for l in lines
-    )
-    pv_gain_bits = [
-        f'{l["label"]}’s only gain was {l["pv_doc_xy"]} pivot doc tests vs {l["pv_doc_ctrl_xy"]} for no harness'
-        for l in lines if l["pv_doc_cmp"] == "HIGHER" and l["t1_doc_cmp"] != "HIGHER"
-    ]
+    cells = review["cells"]
+    control_arm = review["control_arm"]
+    ctrl_cell = cells.get(control_arm) if control_arm else None
+    ctrl_net = net_result(ctrl_cell) if ctrl_cell else None
 
-    if any_win:
-        answer = "On this run, yes for at least one arm — it matched or beat no-harness documented-rule compliance without costing more."
+    verdicts = []  # per-arm: {"arm", "label", "verdict", "sentence", "net_delta", "tokens_pct"}
+    for line in lines:
+        arm = line["arm"]
+        c = cells[arm]
+        arm_net = net_result(c)
+        tokens_pct = (c.get("vs_no_harness") or {}).get("tokens_pct")
+
+        if arm_net is None or ctrl_net is None:
+            verdicts.append({
+                "arm": arm, "label": line["label"], "verdict": "unmeasured",
+                "net_delta": None, "tokens_pct": tokens_pct,
+                "sentence": f'{line["label"]}: net result not measured (missing acceptance/doc/retention data).',
+            })
+            continue
+
+        delta = arm_net - ctrl_net
+        acc_xy = c["acceptance"][0]
+        ctrl_acc_xy = ctrl_cell["acceptance"][0]
+        doc_xy = c["all_doc"][0]
+        ctrl_doc_xy = ctrl_cell["all_doc"][0]
+        ret_xy = c["t1_retention"][0]
+        ctrl_ret_xy = ctrl_cell["t1_retention"][0]
+        detail = f"acceptance {acc_xy} vs {ctrl_acc_xy}, doc {doc_xy} vs {ctrl_doc_xy}, retention {ret_xy} vs {ctrl_ret_xy}"
+        tok_bits = f"+{tokens_pct:.0f}% tokens" if tokens_pct is not None and tokens_pct >= 0 else (
+            f"{tokens_pct:.0f}% tokens" if tokens_pct is not None else "token cost not recorded")
+
+        if delta > NET_RESULT_EPSILON:
+            per_point = f' at {tok_bits} → ~{(tokens_pct / delta):.0f} tokens per point' if tokens_pct is not None and delta else ""
+            sentence = (
+                f'yes on net result — {line["label"]} +{delta:.1f} net-result pts ({detail}){per_point}. '
+                f'Tokens buying a strictly better net result are a purchase, not waste (real-world precedent: '
+                f'the harnessed sr-only fix was more thorough and worth its premium).'
+            )
+            verdicts.append({"arm": arm, "label": line["label"], "verdict": "worth it",
+                              "net_delta": delta, "tokens_pct": tokens_pct, "sentence": sentence})
+        elif delta < -NET_RESULT_EPSILON:
+            sentence = (
+                f'not worth it — {line["label"]} {delta:.1f} net-result pts worse than control ({detail}), '
+                f'regardless of cost.'
+            )
+            verdicts.append({"arm": arm, "label": line["label"], "verdict": "not worth it",
+                              "net_delta": delta, "tokens_pct": tokens_pct, "sentence": sentence})
+        else:
+            # Equal net result (within epsilon): the overhead rule --
+            # token premium only counts against the harness here.
+            if tokens_pct is not None and tokens_pct <= TOKEN_PREMIUM_OVERHEAD_PCT:
+                sentence = (
+                    f'worth it — {line["label"]} matches control on net result ({detail}) at {tok_bits}, '
+                    f'within the {TOKEN_PREMIUM_OVERHEAD_PCT:.0f}% overhead budget.'
+                )
+                verdicts.append({"arm": arm, "label": line["label"], "verdict": "worth it",
+                                  "net_delta": delta, "tokens_pct": tokens_pct, "sentence": sentence})
+            else:
+                sentence = (
+                    f'not worth it — {line["label"]} matches control on net result ({detail}) but costs {tok_bits}, '
+                    f'over the {TOKEN_PREMIUM_OVERHEAD_PCT:.0f}% overhead budget: a premium at equal quality is pure overhead.'
+                )
+                verdicts.append({"arm": arm, "label": line["label"], "verdict": "not worth it",
+                                  "net_delta": delta, "tokens_pct": tokens_pct, "sentence": sentence})
+
+    # Overall answer = the BEST harness arm's outcome (highest net_delta
+    # among measured arms; an operator picks the best arm, not "any").
+    measured = [v for v in verdicts if v["net_delta"] is not None]
+    if not measured:
+        answer = "On this run, net result could not be measured for any harness arm (missing acceptance/doc/retention data)."
     else:
-        answer = "On this run, no — the harness cost more tokens/turns and did not improve documented-rule compliance over no harness."
-        if pv_gain_bits:
-            answer += " " + "; ".join(pv_gain_bits) + "."
+        best = max(measured, key=lambda v: v["net_delta"])
+        answer = best["sentence"]
     answer += " n=1 per arm — directional, not statistically powered."
 
     return {
         "question": "Is using a harness worth the extra turns and tokens?",
         "answer": answer,
         "lines": lines,
+        "verdicts": verdicts,
     }
 
 
@@ -2582,10 +2757,14 @@ def _overall_cell_html(xy, pct, is_best):
 
 
 def overall_review_table_html(review):
-    """Full Overall review comparison table: Correctness / Process / Code /
-    Efficiency row groups, one column per arm. "best" is tagged only on
-    strict per-row winners (see strict_best_arm -- never on ties or
-    all-zero rows)."""
+    """Full Overall review comparison table: Net result / Correctness /
+    Process / Code / Efficiency row groups, one column per arm. "best" is
+    tagged only on strict per-row winners (see strict_best_arm -- never on
+    ties or all-zero rows).
+
+    Net result is the FIRST group (net_result-first framing: see
+    cost_vs_benefit_verdict) -- its score and the acceptance (hidden-test)
+    row lead the table, ahead of Correctness's doc-rule convention rows."""
     present = review["arms_present"]
     cells = review["cells"]
     control_arm = review["control_arm"]
@@ -2605,10 +2784,33 @@ def overall_review_table_html(review):
     def _group_header(label):
         return f'<tr class="overall-group-row"><th colspan="{len(present) + 1}">{esc(label)}</th></tr>'
 
+    def _group_note(text):
+        return f'<tr class="overall-note-row"><td colspan="{len(present) + 1}" class="overall-note">{esc(text)}</td></tr>'
+
     body = ['<thead><tr><th scope="col" class="overall-corner"></th>' + "".join(head_cells) + "</tr></thead><tbody>"]
 
+    body.append(_group_header("Net result"))
+    body.append(_group_note(
+        "composite quality score (0.5 acceptance + 0.3 doc + 0.2 retention, renormalized over what's measured) -- "
+        "leads the review; token cost is scored against this, not against doc-rule % alone"
+    ))
+    net_vals = {a: net_result(cells[a]) for a in present}
+    net_best = strict_best_arm(net_vals, higher_is_better=True)
+    net_cells = "".join(
+        f'<td class="overall-cell"><div class="{"overall-value best" if a == net_best else "overall-value"}">'
+        f'{f"{net_vals[a]:.1f}" if net_vals.get(a) is not None else "—"}'
+        f'{" <span class=\"best-tag\">best</span>" if a == net_best else ""}</div></td>'
+        for a in present
+    )
+    body.append(f'<tr><th scope="row" class="overall-row-label">Net result score</th>{net_cells}</tr>')
+
+    acc_vals = {a: cells[a]["acceptance"][1] for a in present}
+    acc_best = strict_best_arm(acc_vals, higher_is_better=True)
+    acc_cells = "".join(_overall_cell_html(cells[a]["acceptance"][0], cells[a]["acceptance"][1], a == acc_best) for a in present)
+    body.append(f'<tr><th scope="row" class="overall-row-label">Acceptance (hidden tests)</th>{acc_cells}</tr>')
+
     body.append(_group_header("Correctness"))
-    body.append('<tr class="overall-note-row"><td colspan="' + str(len(present) + 1) + '" class="overall-note">strict convention-compliance tests; a failed rule means the documented convention was not applied, not broken code (spec tests all passed everywhere)</td></tr>')
+    body.append(_group_note("strict convention-compliance tests; a failed rule means the documented convention was not applied, not broken code (spec tests all passed everywhere)"))
     for key, label, higher in _OVERALL_ROW_DEFS:
         vals = {a: cells[a][key][1] for a in present}
         best = strict_best_arm(vals, higher_is_better=higher)
@@ -2640,7 +2842,7 @@ def overall_review_table_html(review):
         body.append(f'<tr><th scope="row" class="overall-row-label">{esc(gate_label)}</th>{row_cells}</tr>')
 
     body.append(_group_header("Code"))
-    body.append('<tr class="overall-note-row"><td colspan="' + str(len(present) + 1) + '" class="overall-note">size/shape proxies, not quality judgments</td></tr>')
+    body.append(_group_note("size/shape proxies, not quality judgments"))
     code = review.get("code_cells") or {}
     for key, label, higher in (
         ("loc_added", "LOC added", None), ("files_added", "Files added", None),
@@ -2674,7 +2876,12 @@ def overall_review_table_html(review):
         ("total_tokens", "Tokens (M)", "M"), ("turns", "Turns", "num"),
         ("wall_s", "Wall time", "wall"), ("tool_calls", "Tool calls", "num"),
         ("memory_reads", "Memory reads", "num"),
+        ("process_overhead_events", "Process overhead events", "num"),
     ):
+        if key == "process_overhead_events":
+            body.append(_group_note(
+                "overhead the tuning targets; the <=20% premium goal applies to THIS, not to fix-scope spend"
+            ))
         vals = {a: cells[a].get(key) for a in present}
         best = strict_best_arm(vals, higher_is_better=False)
         row_cells = []

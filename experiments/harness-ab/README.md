@@ -411,9 +411,8 @@ after that happens.
 ## Report
 
 `report.py` renders one self-contained HTML file comparing all runs of an
-experiment: a header with a plain-language verdict (prioritizing doc-rule
-pass rate and gate conformance over raw acceptance success rate — see
-`compute_verdict`), a KPI row per arm, and these chart sections:
+experiment: an Overall review block (net-result-first verdict, described
+below), a KPI row per arm, and these chart sections:
 
 - per-metric dot/strip plots (turns, tokens, wall time, tool calls, memory
   consultations)
@@ -431,6 +430,51 @@ pass rate and gate conformance over raw acceptance success rate — see
   % per run
 - harness friction + stream events, tool mix
 - a sortable per-run table, and a method/caveats section
+
+### Verdict logic: net-result-first (`cost_vs_benefit_verdict`)
+
+The Overall review's "Is using a harness worth the extra turns and tokens?"
+verdict is **net-result-first**: a harness arm's overall quality must lead
+the comparison; token cost is secondary and only counts against a harness
+arm when quality is equal. This mirrors the real-world sr-only A/B in
+`SPEC_HARNESS_EFFICIENCY_TUNING`, where the harnessed run cost more tokens
+but produced the more thorough, correct fix — and was judged worth its
+premium on that basis, not penalized for costing more.
+
+`net_result(cell)` computes one composite quality score (0-100) per arm:
+
+| Component | Weight | What it measures |
+|---|---|---|
+| Acceptance (hidden-test pass %) | 0.5 | Was the fix thorough and working — leads the score, per the sr-only precedent |
+| Doc-rule pass % (`all_doc`) | 0.3 | House conventions applied |
+| Task-1 retention after pivot | 0.2 | Nothing broken by later work |
+
+A missing component (e.g. no pivot phase, so no retention was measured)
+drops out and the remaining weights renormalize to sum to 1.0.
+
+`cost_vs_benefit_verdict` then compares each harness arm's net result to
+control's (`NET_RESULT_EPSILON` = 0.5 pts):
+
+- **Net result strictly better** (delta > epsilon) → **worth it**: tokens
+  bought a strictly better outcome, reported as tokens spent per
+  net-result point. A token premium here is a purchase, not waste.
+- **Net result equal** (within epsilon) → the **overhead rule**: token
+  premium ≤ 20% is worth it (equal outcome within the overhead budget);
+  above 20% is not worth it — a premium at equal quality is pure overhead,
+  which is exactly what `SPEC_HARNESS_EFFICIENCY_TUNING`'s tuning targets.
+- **Net result strictly worse** (delta < -epsilon) → **not worth it**,
+  regardless of cost — a worse outcome is never bought back by being
+  cheaper.
+
+The overall answer line reports the **best** harness arm's outcome (the
+one an operator would actually pick), with per-arm detail lines
+(`cost_vs_benefit_lines`) underneath for the full breakdown. The Overall
+review table's first group, "Net result," surfaces the composite score and
+the acceptance (hidden-test) row ahead of the Correctness (doc-rule) group,
+so the table reads in the same priority order as the verdict. The
+Efficiency group's "Process overhead events" row (memory reads + WM-update
+tool calls + stop-hook blocks + hook denials) is what the ≤20% overhead
+budget is actually measured against — not fix-scope token/turn spend.
 
 Stdlib only — no build step, no external JS. It imports `analyze.py`'s
 `aggregate()` by path (read-only) for per-arm summary stats and adds the

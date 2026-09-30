@@ -58,6 +58,170 @@ class TestStrictBestArm(unittest.TestCase):
 
 
 # --------------------------------------------------------------------------
+# net_result(): composite quality score, 0.5 acceptance + 0.3 doc + 0.2
+# retention, renormalized over whatever components are present.
+# --------------------------------------------------------------------------
+
+class TestNetResult(unittest.TestCase):
+    def test_weighted_average_all_components_present(self):
+        cell = {"acceptance": ("x", 80.0), "all_doc": ("x", 60.0), "t1_retention": ("x", 100.0)}
+        # 0.5*80 + 0.3*60 + 0.2*100 = 40 + 18 + 20 = 78
+        self.assertAlmostEqual(report.net_result(cell), 78.0)
+
+    def test_missing_retention_renormalizes(self):
+        # No pivot -> no retention measured (None). Remaining weights
+        # (0.5 acceptance, 0.3 doc) renormalize to sum to 1.0.
+        cell = {"acceptance": ("x", 80.0), "all_doc": ("x", 60.0), "t1_retention": ("x", None)}
+        expected = (0.5 * 80.0 + 0.3 * 60.0) / 0.8
+        self.assertAlmostEqual(report.net_result(cell), expected)
+
+    def test_all_missing_returns_none(self):
+        cell = {"acceptance": ("x", None), "all_doc": ("x", None), "t1_retention": ("x", None)}
+        self.assertIsNone(report.net_result(cell))
+
+    def test_missing_key_treated_as_missing_component(self):
+        # A cell that never had the key at all (e.g. an older fixture)
+        # behaves the same as one with an explicit None.
+        cell = {"all_doc": ("x", 60.0)}
+        expected = 60.0  # doc is the only present component -> full weight
+        self.assertAlmostEqual(report.net_result(cell), expected)
+
+
+# --------------------------------------------------------------------------
+# cost_vs_benefit_verdict(): net-result-first verdict logic (operator
+# decision: net result leads, token cost is secondary, only PROCESS
+# OVERHEAD counts against the harness at equal quality).
+# --------------------------------------------------------------------------
+
+def _quality_row(arm, trial, total, passed, doc_p, doc_t, ret_p, ret_t, tokens):
+    """Single-phase-benchmark-shaped two-phase row (all counted in task1,
+    pivot carries only retention) for exercising net_result() /
+    cost_vs_benefit_verdict() against chosen acceptance/doc/retention
+    values directly, without pulling in the unrelated t1/pivot split
+    tested elsewhere. Mirrors _synthetic_two_phase_row's shape."""
+    return {
+        "run_id": f"{arm}-t{trial}", "arm": arm, "trial": trial,
+        "metrics": {"total_tokens": tokens, "assistant_turns_incl_subagents": 10,
+                    "num_turns": 10, "total_tool_calls": 5, "memory_file_reads": 0},
+        "wall_s": 100.0,
+        "acceptance": {"total": total, "passed": passed, "ok": passed == total},
+        "regression": {"total": 1, "passed": 1, "ok": True},
+        "gates": {},
+        "phases": {
+            "task1": {
+                "metrics": {"total_tokens": tokens},
+                "benchmark": {"total": total, "passed": passed,
+                              "spec": {"passed": passed, "total": total},
+                              "doc": {"passed": doc_p, "total": doc_t}, "doc_rules": {}},
+                "gates": {},
+            },
+            "pivot": {
+                "metrics": {"total_tokens": 0},
+                "benchmark": {"total": 0, "passed": 0, "spec": {"passed": 0, "total": 0},
+                              "doc": {"passed": 0, "total": 0}, "doc_rules": {}},
+                "task1_retention": {"passed": ret_p, "total": ret_t, "regressions": []},
+                "gates": {},
+            },
+        },
+    }
+
+
+def _review_for(control_row, harness_row):
+    rows = [control_row, harness_row]
+    agg = report.get_analyze().aggregate(rows)
+    return report.overall_review_rows(rows, agg)
+
+
+class TestCostVsBenefitVerdictNetResultFirst(unittest.TestCase):
+    def test_better_net_result_is_worth_it_with_tokens_per_point(self):
+        # v2 LedgerLite-shaped case: harness beats control on acceptance
+        # (39/55 vs 37/55) AND pivot-style doc rules, retention unchanged
+        # -> strictly better net result at a token premium. Must read
+        # "worth it" and carry a tokens-per-point figure, not be penalized
+        # for costing more (the case the operator decision targets).
+        control = _quality_row("control", 0, total=55, passed=37, doc_p=26, doc_t=54, ret_p=10, ret_t=10, tokens=12_000_000)
+        harness = _quality_row("v5", 0, total=55, passed=39, doc_p=28, doc_t=54, ret_p=10, ret_t=10, tokens=25_000_000)
+        review = _review_for(control, harness)
+        cv = report.cost_vs_benefit_verdict(review)
+        self.assertIn("yes on net result", cv["answer"])
+        self.assertIn("v5", cv["answer"])
+        self.assertIn("tokens per point", cv["answer"])
+        by_arm = {v["arm"]: v for v in cv["verdicts"]}
+        self.assertEqual(by_arm["v5"]["verdict"], "worth it")
+        self.assertGreater(by_arm["v5"]["net_delta"], 0)
+
+    def test_equal_net_result_plus_30pct_tokens_not_worth_it(self):
+        control = _quality_row("control", 0, total=50, passed=40, doc_p=30, doc_t=50, ret_p=10, ret_t=10, tokens=10_000_000)
+        harness = _quality_row("v5", 0, total=50, passed=40, doc_p=30, doc_t=50, ret_p=10, ret_t=10, tokens=13_000_000)
+        review = _review_for(control, harness)
+        cv = report.cost_vs_benefit_verdict(review)
+        self.assertIn("not worth it", cv["answer"])
+        self.assertIn("overhead", cv["answer"].lower())
+        by_arm = {v["arm"]: v for v in cv["verdicts"]}
+        self.assertEqual(by_arm["v5"]["verdict"], "not worth it")
+        self.assertAlmostEqual(by_arm["v5"]["net_delta"], 0.0, delta=report.NET_RESULT_EPSILON)
+
+    def test_equal_net_result_plus_10pct_tokens_worth_it(self):
+        control = _quality_row("control", 0, total=50, passed=40, doc_p=30, doc_t=50, ret_p=10, ret_t=10, tokens=10_000_000)
+        harness = _quality_row("v5", 0, total=50, passed=40, doc_p=30, doc_t=50, ret_p=10, ret_t=10, tokens=11_000_000)
+        review = _review_for(control, harness)
+        cv = report.cost_vs_benefit_verdict(review)
+        self.assertIn("worth it", cv["answer"])
+        self.assertNotIn("not worth it", cv["answer"])
+        by_arm = {v["arm"]: v for v in cv["verdicts"]}
+        self.assertEqual(by_arm["v5"]["verdict"], "worth it")
+
+    def test_worse_net_result_not_worth_it_regardless_of_cost(self):
+        # Harness costs LESS but delivers a strictly worse outcome --
+        # must still read "not worth it": a worse net result is never
+        # bought back by being cheaper.
+        control = _quality_row("control", 0, total=50, passed=45, doc_p=40, doc_t=50, ret_p=10, ret_t=10, tokens=10_000_000)
+        harness = _quality_row("v5", 0, total=50, passed=30, doc_p=20, doc_t=50, ret_p=8, ret_t=10, tokens=8_000_000)
+        review = _review_for(control, harness)
+        cv = report.cost_vs_benefit_verdict(review)
+        self.assertIn("not worth it", cv["answer"])
+        self.assertIn("regardless of cost", cv["answer"])
+        by_arm = {v["arm"]: v for v in cv["verdicts"]}
+        self.assertEqual(by_arm["v5"]["verdict"], "not worth it")
+        self.assertLess(by_arm["v5"]["net_delta"], 0)
+
+    def test_best_harness_arm_reported_when_multiple_present(self):
+        # With two harness arms both beating control on net result, the
+        # overall answer line reports the BEST one's outcome (highest
+        # net-result delta: v5 +8.0 vs baseline +1.6), not merely "any" win.
+        control = _quality_row("control", 0, total=50, passed=40, doc_p=30, doc_t=50, ret_p=10, ret_t=10, tokens=10_000_000)
+        weaker = _quality_row("baseline", 0, total=50, passed=41, doc_p=31, doc_t=50, ret_p=10, ret_t=10, tokens=15_000_000)
+        stronger = _quality_row("v5", 0, total=50, passed=45, doc_p=35, doc_t=50, ret_p=10, ret_t=10, tokens=15_000_000)
+        # sanity: weaker alone is still "worth it" (better net result)
+        review_weaker_only = _review_for(control, weaker)
+        self.assertIn("yes on net result", report.cost_vs_benefit_verdict(review_weaker_only)["answer"])
+        # combined three-arm review: v5 (bigger delta) should lead the answer, not baseline
+        rows = [control, weaker, stronger]
+        agg = report.get_analyze().aggregate(rows)
+        review3 = report.overall_review_rows(rows, agg)
+        cv = report.cost_vs_benefit_verdict(review3)
+        self.assertIn("v5", cv["answer"])
+        self.assertNotIn("baseline +", cv["answer"])
+
+
+class TestOverallTableNetResultGroup(unittest.TestCase):
+    def test_net_result_group_and_process_overhead_row_render(self):
+        control = _quality_row("control", 0, total=55, passed=37, doc_p=26, doc_t=54, ret_p=10, ret_t=10, tokens=12_000_000)
+        harness = _quality_row("v5", 0, total=55, passed=39, doc_p=28, doc_t=54, ret_p=10, ret_t=10, tokens=25_000_000)
+        review = _review_for(control, harness)
+        review["code_cells"] = {}
+        html = report.overall_review_table_html(review)
+        # New "Net result" group leads, ahead of "Correctness".
+        self.assertIn("Net result", html)
+        self.assertIn("Net result score", html)
+        self.assertIn("Acceptance (hidden tests)", html)
+        self.assertLess(html.index("Net result"), html.index("Correctness"))
+        # New Efficiency row + its overhead-framing note.
+        self.assertIn("Process overhead events", html)
+        self.assertIn("overhead the tuning targets", html)
+
+
+# --------------------------------------------------------------------------
 # Overall review / cost-vs-benefit against the real interim numbers named
 # in the task spec (control task1 doc 47/58, baseline 33/58, v5 33/58;
 # pivot doc 16/16/18 of 34).
@@ -100,11 +264,20 @@ class TestOverallReviewRealData(unittest.TestCase):
         vals = {a: self.review["cells"][a]["pv_doc"][1] for a in self.review["arms_present"]}
         self.assertEqual(report.strict_best_arm(vals, higher_is_better=True), "v5")
 
-    def test_cost_vs_benefit_verdict_says_no(self):
+    def test_cost_vs_benefit_verdict_is_net_result_first(self):
+        # Real interim data: control is strict-best on both doc-rule
+        # metrics and (per the addendum's real-world precedent) has no
+        # acceptance edge for either harness arm to offset with -- net
+        # result should not favor a harness arm here, so the best-arm
+        # verdict reads "not worth it" (never the old
+        # doc-rule-and-cost-must-both-win "yes"/"no" phrasing).
         cv = report.cost_vs_benefit_verdict(self.review)
         self.assertIn("Is using a harness worth", cv["question"])
-        self.assertIn("no", cv["answer"].lower())
         self.assertIn("n=1", cv["answer"])
+        self.assertIn("net result", cv["answer"].lower())
+        self.assertIn("verdicts", cv)
+        for v in cv["verdicts"]:
+            self.assertIn(v["verdict"], ("worth it", "not worth it", "unmeasured"))
 
     def test_cost_vs_benefit_lines_have_expected_ratios(self):
         lines = report.cost_vs_benefit_lines(self.review)
