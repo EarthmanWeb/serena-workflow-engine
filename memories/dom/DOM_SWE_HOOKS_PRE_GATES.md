@@ -43,7 +43,7 @@ Recovery points, checked in order:
 
 - Block edits in planning states (WF_VERIFY is edit-allowed); in execution states DENY until the per-task sweep sentinel exists (WF_CLASSIFY 4d/4e verified).
 - Test-artifact edits additionally require `dev/DEV_TESTS` + `feature/FEATURE_TESTS` docreads when those memories exist.
-- **HARD BLOCK** (delegation economics): denies further main-agent edits at ≥12 consecutive undelegated task-work calls (`DRIFT_HARD_THRESHOLD`, tracked by `swe_post_orchestrator_drift.py`, see `mem:dom/DOM_SWE_HOOKS_POST`). Cleared by any Agent/Task delegation (resets the counter) or by recording `single-agent: <reason>` in WM `## Workflow Context` (tight single-file coupled-fix exception only, per `mem:feature/FEATURE_SUBAGENTS`).
+- **HARD BLOCK** (delegation economics): denies further main-agent edits at ≥12 consecutive undelegated task-work calls (`DRIFT_HARD_THRESHOLD`, tracked by `swe_post_orchestrator_drift.py`, see `mem:dom/DOM_SWE_HOOKS_POST`). Cleared by a BACKGROUND Agent/Task delegation (`run_in_background: true`) or any Workflow call — a foreground Agent/Task call does NOT clear it — or by recording `single-agent: <reason>` in WM `## Workflow Context` (tight single-file coupled-fix exception only, per `mem:feature/FEATURE_SUBAGENTS`).
 - Exempt for spawned-agent tool calls — the block applies to the main orchestrator agent only, never to a subagent already doing delegated work.
 
 ## `swe_pre_memory_index_gate.py` — PreToolUse (Edit/Write/write_memory/edit_memory)
@@ -66,7 +66,7 @@ Validate test commands against WF_DEBUG_TDD.
 - Spawned agents are NEVER gated: the gate exempts them BEFORE any sentinel/budget check.
   - PRIMARY signal: `core.session.is_spawned_agent(input)` — a non-empty `agent_id`/`agent_type` in the hook payload (Claude Code stamps these ONLY on subagent tool calls; `session_id` is the SAME parent id for main + subagent, so it cannot discriminate).
   - FALLBACK: `core.session.is_subagent_transcript(transcript_path)` — the `<session>/subagents/agent-*.jsonl` shape, used when the payload carries the subagent's own path. Insufficient alone: the hook usually receives the PARENT transcript path for a subagent call, so `is_subagent_transcript` missed it and the subagent got gated on the parent's spent budget — hence the agent_id-first check.
-- Undocumented area (no reasonable feature memories from both searches): deny message routes to a FOREGROUND Agent running `/swe-feature-onboard` (new area) or `/swe-feature-update` (stale docs) — no `run_in_background`, WAIT for completion, then read the memories it wrote to clear the gate. Manual grepping is NOT the remedy.
+- Undocumented area (no reasonable feature memories from both searches): deny message routes to a FOREGROUND Agent running `/swe-feature-onboard` (new area) or `/swe-feature-update` (stale docs) — `run_in_background: false` plus the literal `[foreground-justified: docs gate requires onboarding before search]` tag in the prompt, WAIT for completion, then read the memories it wrote to clear the gate. Manual grepping is NOT the remedy.
 
 ## `swe_pre_question_consent_gate.py` — PreToolUse (AskUserQuestion)
 
@@ -74,13 +74,14 @@ Deny questions while `auto_approve`/`blanket_consent` is set in WM (override tag
 
 ## `swe_pre_agent_model_gate.py` — PreToolUse (Agent/Task)
 
-Enforces orchestrator + swarm delegation with complexity-based model tiers. FOUR independent DENY checks:
+Enforces orchestrator + swarm delegation with complexity-based model tiers. FIVE independent DENY checks:
 
 1. Missing `model` param — required for every subagent_type except fixed-model built-ins (`claude-code-guide`, `statusline-setup`).
 2. Prompt lacks the subagent bypass marker ("BYPASS WF_INIT" / "you are a subagent" / "swarm agent") — without it the spawned agent re-runs the init chain.
 3. `model: "opus"` on a routine-keyword prompt (tests/lint/grep/inventory/read-only audit) with no design/architecture keyword — override via literal `[opus-justified: <reason>]` tag in the prompt (`[premium-justified: <reason>]` accepted as an alias, same requirement).
 4. `model: "fable"` on ANY subagent call — fable is NEVER delegated by default, regardless of task shape — override via literal `[fable-justified: <reason>]` tag (`[premium-justified: <reason>]` alias also accepted).
+5. `run_in_background` missing or `false` on ANY Agent/Task call with no literal `[foreground-justified: <reason>]` tag in the prompt — background is the DEFAULT and REQUIRED value; no subagent_type exemption.
 
-Rationale: the orchestrator already runs the premium model; delegation moves work OFF it.
+Rationale: the orchestrator already runs the premium model; delegation moves work OFF it. Check 5's rationale: a foreground delegation blocks the orchestrator on one call with no parallelism and does not reset the drift counter (`mem:dom/DOM_SWE_HOOKS_POST`).
 
-Pure functions `missing_model_reason`/`missing_bypass_marker_reason`/`opus_on_routine_reason`/`fable_without_justification_reason` are unit-tested.
+Pure functions `missing_model_reason`/`missing_bypass_marker_reason`/`opus_on_routine_reason`/`fable_without_justification_reason`/`foreground_without_justification_reason` are unit-tested.

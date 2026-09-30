@@ -1,6 +1,6 @@
 ---
 name: Subagents Reference — Types, Modes, Quick Start, Anti-Patterns
-description: Conditional reference material for orchestrator-mode delegation — subagent type table, foreground/background choice, a launch example, and the anti-pattern table. Open from FEATURE_SUBAGENTS when launching or auditing a subagent call.
+description: Conditional reference material for orchestrator-mode delegation — subagent type table, background-by-default rule with the foreground-justification exception, a launch example, and the anti-pattern table. Open from FEATURE_SUBAGENTS when launching or auditing a subagent call.
 obligations: []
 metadata:
   type: domain
@@ -18,8 +18,11 @@ metadata:
 
 ## Background vs Foreground
 
-- Foreground (default): results needed before the next step; permission prompts visible.
-- Background (`run_in_background: true`): fire-and-forget; auto-denies permission prompts; notification on completion. Add `isolation: "worktree"` for file isolation when needed.
+- Pass `run_in_background: true` on EVERY Agent/Task call. This is the DEFAULT and the REQUIRED value — never omit it.
+- Foreground (`run_in_background: false`) ONLY when the orchestrator has nothing else to do until the result returns (e.g. docs-gate onboarding) AND the prompt carries a literal `[foreground-justified: <reason>]` tag. No subagent_type exemption — `Explore`/`Plan`/`general-purpose` all require the tag to run foreground.
+- `swe_pre_agent_model_gate.py` DENIES any Agent/Task call missing `run_in_background: true` that also lacks the `[foreground-justified: <reason>]` tag — see `mem:dom/DOM_SWE_HOOKS_PRE_GATES` check 5.
+- Foreground calls do NOT reset the orchestrator-drift counter; only background delegations (or a Workflow call) do — see `mem:dom/DOM_SWE_HOOKS_POST`.
+- Add `isolation: "worktree"` for file isolation when needed, independent of background/foreground.
 
 ## Quick Start — Subagents (DEFAULT)
 
@@ -45,6 +48,8 @@ Agent({ description: "Task A", run_in_background: true, model: "sonnet",
 | Trusting a haiku "0 findings" without a positive control    | Re-verify with sonnet or a validated probe before acting on a negative                                                                                                                                                  |
 | Coordinator doing file reads itself                         | Delegate file work to subagents (separate context windows)                                                                                                                                                              |
 | Changing a running background agent's scope via SendMessage | Put EVERY requirement in the initial prompt; background agents reject mid-task SendMessage scope changes as unverified injections. To change scope: stop the agent (TaskStop) and launch a new one with the full brief. |
+| Single foreground agent launched to clear the drift block   | Launch background agents (`run_in_background: true`); foreground does not reset drift and is denied without a justification tag                                                                                         |
+| Omitting `run_in_background`                                | Pass `run_in_background: true` explicitly on every Agent call                                                                                                                                                           |
 
 ## Tooling
 

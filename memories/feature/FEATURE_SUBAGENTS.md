@@ -3,7 +3,7 @@ name: FEATURE_SUBAGENTS
 description: Canonical authority for orchestrator-mode swarm delegation — when the main agent MUST fan out to parallel subagents instead of doing task work itself, model-tier routing, and the stage loop. Parallel work via Claude Code's native subagents (Agent/Task tool) and workflows.
 obligations:
   - Fan out to parallel background subagents (ONE message, disjoint file ownership) whenever ≥2 independent subtasks exist, 6+ files are affected, or 3+ layers are touched — the orchestrator itself only classifies, routes, and synthesizes.
-  - Every Agent call MUST pass `model` explicitly per the routing table (haiku for routine/mechanical, sonnet for implementation, opus only for novel design or after a failed sonnet attempt) and MUST include the "BYPASS WF_INIT" prompt line.
+  - Every Agent call MUST pass `model` explicitly per the routing table (haiku for routine/mechanical, sonnet for implementation, opus only for novel design or after a failed sonnet attempt), MUST include the "BYPASS WF_INIT" prompt line, and MUST pass `run_in_background: true` unless the prompt carries a literal `[foreground-justified: <reason>]` tag.
 metadata:
   type: feature
 ---
@@ -48,7 +48,7 @@ Exception — single-agent (or the orchestrator itself) may continue a TIGHT cou
 
 ## Model-Tier Routing & Delegation Economics (MANDATORY on every Agent call)
 
-Parallel execution + routing work to the cheapest sufficient model is THE token-reduction mechanism for this harness — enforced by hooks, not left to judgment. Every `Agent` call MUST pass `model` EXPLICITLY. NEVER omit `model` / rely on inherited default.
+Parallel execution + routing work to the cheapest sufficient model is THE token-reduction mechanism for this harness — enforced by hooks, not left to judgment. Every `Agent` call MUST pass `model` EXPLICITLY. NEVER omit `model` / rely on inherited default. Every `Agent` call MUST also pass `run_in_background: true` explicitly — foreground (`run_in_background: false`) requires a literal `[foreground-justified: <reason>]` tag in the prompt; no subagent_type exemption.
 
 | Model  | Use for                                                                                                             |
 | ------ | ------------------------------------------------------------------------------------------------------------------- |
@@ -62,14 +62,14 @@ Parallel execution + routing work to the cheapest sufficient model is THE token-
 - `fable` tag `[fable-justified: <reason>]` (or `[premium-justified: <reason>]`) REQUIRED on every `fable`-model call, no exception for "routine" vs "novel".
 - ALL independent tracks launch in ONE message, never sequential single-track calls for independent work.
 - Verification economy: ONE full-suite run per verified stage, by ONE haiku agent, at stage END. Implementation agents run ONLY `py_compile` + tests scoped to owned files. NEVER re-run an already-green suite "to double-check".
-- `swe_pre_agent_model_gate.py` enforces this: Agent calls without `model` + bypass line denied; routine-task `opus` requests denied; `fable` without justification tag denied.
+- `swe_pre_agent_model_gate.py` enforces this: Agent calls without `model` + bypass line denied; routine-task `opus` requests denied; `fable` without justification tag denied; Agent/Task calls without `run_in_background: true` and without a `[foreground-justified: <reason>]` tag denied.
 
 ## Drift Enforcement
 
-The main agent NEVER burns premium-model tokens on routine tool loops. `swe_post_orchestrator_drift.py` counts consecutive main-agent task-work calls since the last delegation:
+The main agent NEVER burns premium-model tokens on routine tool loops. `swe_post_orchestrator_drift.py` counts consecutive main-agent task-work calls since the last delegation. Only BACKGROUND delegations reset the counter — `Agent`/`Task` with `run_in_background: true`, or any `Workflow` call. A FOREGROUND `Agent`/`Task` call does NOT reset the counter; it counts as `task_work`, same as an Edit/Write/Bash call.
 
-- At 6 consecutive calls (`DRIFT_THRESHOLD`) — advisory nudge to split remaining work into parallel subagents.
-- At 12 consecutive calls (`DRIFT_HARD_THRESHOLD`) — `swe_pre_edit_validate.py` DENIES further main-agent edits until either a subagent is launched (any delegation resets the counter) or `single-agent: <reason>` is recorded in WM `## Workflow Context` — the tight single-file coupled-fix exception (Stage Loop, above) ONLY, not a routine bypass.
+- At 6 consecutive calls (`DRIFT_THRESHOLD`) — advisory nudge to split remaining work into parallel background subagents.
+- At 12 consecutive calls (`DRIFT_HARD_THRESHOLD`) — `swe_pre_edit_validate.py` DENIES further main-agent edits until either a BACKGROUND subagent is launched (or a Workflow call is made — this resets the counter) or `single-agent: <reason>` is recorded in WM `## Workflow Context` — the tight single-file coupled-fix exception (Stage Loop, above) ONLY, not a routine bypass.
 
 ## Cheap-Output Verification Rule
 
@@ -84,6 +84,7 @@ Every subagent prompt MUST include, in this order:
 2. Disjoint file ownership: name the exact files/paths owned, and `"you own X; do NOT edit Y"` for adjacent tracks' files.
 3. Checkpoint commit instruction: commit own coherent unit of work at logical checkpoints; retry on `index.lock` contention; NEVER push.
 4. Report format: files changed, key findings/decisions, blockers — so the orchestrator synthesizes without re-reading every diff.
+5. `run_in_background: true` on the Agent call itself (not inside the prompt) — omit ONLY with a literal `[foreground-justified: <reason>]` tag in the prompt.
 
 ## Related Memories
 

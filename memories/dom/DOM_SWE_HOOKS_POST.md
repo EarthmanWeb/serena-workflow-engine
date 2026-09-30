@@ -4,6 +4,7 @@ description: PostToolUse observer/learner hooks (read-state, edit checkpoint, se
 obligations:
   - Sentinels NEVER block (PostToolUse cannot deny) and always exit 0 — nudges only.
   - Orchestrator-drift count feeds the pre-edit gate's HARD BLOCK at 12 (`mem:dom/DOM_SWE_HOOKS_PRE_GATES`) — this hook itself never blocks.
+  - Only a BACKGROUND Agent/Task call (`run_in_background: true`) or a Workflow call resets the drift counter; a foreground Agent/Task call counts as `task_work`.
 metadata:
   type: domain
 ---
@@ -27,9 +28,10 @@ Hub: `mem:dom/DOM_SWE_HOOKS`.
 
 ### `swe_post_orchestrator_drift.py` detail
 
-- Counts consecutive main-agent task-work calls since the last Agent/Workflow delegation (`task_work` events, reset by a `delegation` event this same hook appends on Agent/Task/Workflow calls).
-- At `DRIFT_THRESHOLD` (6): advisory "split remaining work into parallel subagents" (see `mem:feature/FEATURE_SUBAGENTS`).
-- At `DRIFT_HARD_THRESHOLD` (12): MANDATE, not a suggestion — the count feeds `swe_pre_edit_validate.py`, which DENIES further main-agent edits until a delegation resets the counter or `single-agent: <reason>` is recorded in WM `## Workflow Context` (tight single-file coupled-fix exception only).
+- Counts consecutive main-agent task-work calls since the last BACKGROUND delegation (`task_work` events, reset ONLY by a `delegation` event this same hook appends on Agent/Task calls with `run_in_background: true`, or on any Workflow call).
+- A FOREGROUND Agent/Task call (`run_in_background: false` or omitted, even with a valid `[foreground-justified: <reason>]` tag) does NOT append a `delegation` event — it counts as `task_work`, same as an Edit/Write/Bash call.
+- At `DRIFT_THRESHOLD` (6): advisory "split remaining work into parallel background subagents" (see `mem:feature/FEATURE_SUBAGENTS`).
+- At `DRIFT_HARD_THRESHOLD` (12): MANDATE, not a suggestion — the count feeds `swe_pre_edit_validate.py`, which DENIES further main-agent edits until a BACKGROUND delegation (or Workflow call) resets the counter or `single-agent: <reason>` is recorded in WM `## Workflow Context` (tight single-file coupled-fix exception only).
 - This hook itself never blocks (PostToolUse); enforcement happens on the NEXT edit attempt via the pre-edit gate.
 - Exempt for spawned-agent tool calls (subagents are expected to do direct work, not delegate further).
 - Exempt for verification Bash (`git diff`/`status`/`log`/`show`/`add`/`commit`, test runners, `py_compile`, `jq`, validate scripts) and `Read` — checking work, not doing it, does not count toward drift.
