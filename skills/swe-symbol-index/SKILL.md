@@ -166,11 +166,12 @@ mcp__plugin_swe_serena__get_symbols_overview({
 ### If exists — Replace it:
 
 ```javascript
-mcp__plugin_swe_serena__edit_memory("FEATURE_[KEY]", {
-  needle: "## Related Docs\\n\\n\\|.*?(?=\\n## |\\Z)",
-  repl: "<new Related Docs section>",
-  mode: "regex"
-})
+mcp__plugin_swe_serena__edit_memory(
+  memory_name="feature/FEATURE_[KEY]",
+  needle="## Related Docs\\n\\n\\|.*?(?=\\n## |\\Z)",
+  repl="<new Related Docs section>",
+  mode="regex"
+)
 ```
 
 ### If does not exist — Insert it:
@@ -178,11 +179,12 @@ mcp__plugin_swe_serena__edit_memory("FEATURE_[KEY]", {
 Find the insertion point: after `## Feature Overview` section's content (after the metadata table that follows it), before the next `##` heading.
 
 ```javascript
-mcp__plugin_swe_serena__edit_memory("FEATURE_[KEY]", {
-  needle: "<end of Feature Overview section content>",
-  repl: "<end of Feature Overview section content>\n\n## Related Docs\n\n<table content>",
-  mode: "literal"
-})
+mcp__plugin_swe_serena__edit_memory(
+  memory_name="feature/FEATURE_[KEY]",
+  needle="<end of Feature Overview section content>",
+  repl="<end of Feature Overview section content>\n\n## Related Docs\n\n<table content>",
+  mode="literal"
+)
 ```
 
 **Use `edit_memory` with literal mode** when possible for precision. Use regex mode only when the exact text is uncertain.

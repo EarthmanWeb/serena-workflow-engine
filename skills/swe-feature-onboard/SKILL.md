@@ -110,7 +110,7 @@ AskUserQuestion({
 **Validation:**
 
 - Key: UPPERCASE, underscores allowed, 2-20 chars
-- Path: Must exist in project
+- Path: `ls -la [path]` must succeed (exit 0) — see Troubleshooting "Path doesn't exist" if it fails
 
 ---
 
@@ -146,13 +146,17 @@ AskUserQuestion({
 })
 ```
 
-**Auto-detection:** Scan root path for:
+**Auto-detection:**
+
+```bash
+find [PATH] -maxdepth 1 \( -name package.json -o -name composer.json -o -name Cargo.toml -o -name go.mod -o -name style.css \) -print
+```
 
 - `package.json` → Node/TypeScript
 - `composer.json` → PHP
 - `Cargo.toml` → Rust
 - `go.mod` → Go
-- `style.css` with `Theme Name:` → WordPress theme
+- `style.css` present → `grep -l "Theme Name:" [PATH]/style.css` → WordPress theme if it matches
 
 ---
 
@@ -322,13 +326,15 @@ If user selects "No, needs changes", gather corrections manually.
 
 ### Create via Serena:
 
+`<content>` MUST include the `obligations:` front-matter field (1-2 imperative lines, or `obligations: []` for a conscious none) per `mem:ref/REF_MEMORY_STYLE` "Obligations Field" — `swe_pre_memory_index_gate.py` denies the write without it.
+
 ```javascript
 mcp__plugin_swe_serena__write_memory("FEATURE_[KEY]", "<content>")
 ```
 
 ### Additional memories (full mode only):
 
-If domains detected:
+If domains detected (same `obligations:` requirement applies — dom/ is a rule-bearing prefix):
 
 ```javascript
 mcp__plugin_swe_serena__write_memory("dom/DOM_[KEY]_[DOMAIN]", "<content>")

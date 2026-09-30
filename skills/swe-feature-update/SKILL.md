@@ -106,12 +106,12 @@ mcp__plugin_swe_serena__get_symbols_overview({ relative_path: "[root_path]" })
 
 ### 3.3 Pattern Detection
 
-Use Serena tools to detect:
+Use the Stage 3.1/3.2 output (`list_dir`, `get_symbols_overview`) plus targeted lookups:
 
-- Entry points (main files, index files)
-- Configuration files
-- Test files
-- Template files
+- Entry points (main/index files): filenames matching `index.*`, `main.*`, or the entry point named in the feature memory's Key Files table.
+- Configuration files: `mcp__plugin_swe_serena__search_for_pattern(substring_pattern="^\\[.*\\]|^{", relative_path="[root_path]")` or check the directory listing from 3.1 for known config filenames (`*.config.*`, `*.conf`, `*.yml`, `*.yaml`, `*.json`).
+- Test files: filenames under the test root documented in `feature/FEATURE_TESTS`.
+- Template files: filenames matching the framework's template convention (e.g. `*.tpl`, `*.blade.php`, `*.twig`) from the 3.1 directory listing.
 
 ---
 
@@ -153,6 +153,8 @@ This ensures changes are preserved in the portable plugin and propagated correct
 
 ### 5.1 Update FEATURE_[KEY]
 
+`<updated content>` MUST carry the `obligations:` front-matter field (1-2 imperative lines, or `obligations: []`) per `mem:ref/REF_MEMORY_STYLE` "Obligations Field" — `swe_pre_memory_index_gate.py` denies a full-rewrite write without it; carry forward the existing field's value if present.
+
 ```javascript
 mcp__plugin_swe_serena__write_memory("FEATURE_[KEY]", "<updated content>")
 ```
@@ -172,11 +174,11 @@ mcp__plugin_swe_serena__write_memory("FEATURE_[KEY]", "<updated content>")
 
 ### 5.2 Update Related Memories (if needed)
 
-Check and update as needed:
+For each memory below, `mcp__plugin_swe_serena__read_memory("<name>")`, compare against the Stage 4 change list (judgment), and `mcp__plugin_swe_serena__write_memory` / `edit_memory` only if Stage 4 found a significant change affecting that memory:
 
-- `ARCH_[KEY]` - Architecture documentation
-- `INDEX_[KEY]_*` - File/symbol indexes
-- `DOM_[KEY]_*` - Domain documentation
+- `arch/ARCH_[KEY]` - Architecture documentation
+- `index/INDEX_[KEY]_*` - File/symbol indexes
+- `dom/DOM_[KEY]_*` - Domain documentation (rule-bearing: a full `write_memory` rewrite here MUST carry `obligations:` per `mem:ref/REF_MEMORY_STYLE`)
 
 **Only update if significant changes detected.**
 

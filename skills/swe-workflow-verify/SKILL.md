@@ -37,10 +37,10 @@ Verify implementation completeness and quality.
 
 ## Actions
 
-1. **Run tests** - Execute relevant test commands
-2. **Check requirements** - Compare implementation to documented requirements
-3. **Verify standards** - Check against CLAUDE_OBLIGATIONS and REF_DEV_STANDARDS
-4. **Lint/format check** - Run linters if configured
+1. **Run tests**: use the test command(s) documented in `mcp__plugin_swe_serena__read_memory("feature/FEATURE_TESTS")`, run in full (not a single test).
+2. **Check requirements**: `mcp__plugin_swe_serena__read_memory("feature/FEATURE_[KEY]")` (and the task's SPEC_* memory if one exists) — compare each requirement/coverage-map row to the implementation.
+3. **Verify standards**: `mcp__plugin_swe_serena__read_memory("claude/CLAUDE_OBLIGATIONS")` and the relevant `dev/DEV_*` memory (`mcp__plugin_swe_serena__list_memories(topic="dev")` to find it) — check the diff against each.
+4. **Lint/format check**: the lint/format command documented in `feature/FEATURE_DEV_STANDARDS`, if one is configured there; skip only if that memory documents none.
 
 ## Verification Checklist
 

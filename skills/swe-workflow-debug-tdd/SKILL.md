@@ -44,11 +44,11 @@ Test-driven debugging workflow for rapid iteration.
 
 ## Actions
 
-1. **Run failing test** - Confirm reproduction
-2. **Read error output** - Understand failure
-3. **Trace to source** - Find root cause
-4. **Implement fix** - Minimal change
-5. **Re-run test** - Verify fix
+1. **Run failing test**: use the test command documented in `mcp__plugin_swe_serena__read_memory("feature/FEATURE_TESTS")`, scoped to the failing test only.
+2. **Read error output**: inspect the command's stdout/stderr from step 1 (exact failure, line number, actual vs expected).
+3. **Trace to source**: `mcp__plugin_swe_serena__find_symbol(name_path_pattern="<symbol>")` / `mcp__plugin_swe_serena__search_for_pattern(substring_pattern="<pattern>")` from the stack trace/error location.
+4. **Implement fix**: `Edit` the minimal change at the traced location.
+5. **Re-run test**: repeat step 1's exact command. Still failing after 2 consecutive attempts → STOP and report per CLAUDE_OBLIGATIONS Skill Failure Threshold; do not try a different fix approach without re-diagnosing.
 
 ## Skill Return Format
 

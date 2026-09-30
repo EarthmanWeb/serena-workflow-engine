@@ -95,8 +95,14 @@ marker — do NOT infer sites from folder names or slugs).
 
 Each discovered site is keyed by its **folder name** (basename).
 
-Use `Glob` / `Bash` (`ls -d ../*/.devcontainer` etc.) to enumerate. List the
-discovered sites back to the user before writing anything.
+Enumerate with `find` (shell-proof — never aborts when no match exists, unlike a bare glob):
+
+```bash
+find .. -mindepth 2 -maxdepth 2 -name .devcontainer -type d 2>/dev/null   # siblings
+find .  -mindepth 2 -maxdepth 2 -name .devcontainer -type d 2>/dev/null   # subfolders (fallback)
+```
+
+Exit 0 with no output = no sites found at that level. List the discovered sites back to the user before writing anything.
 
 ---
 

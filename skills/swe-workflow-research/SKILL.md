@@ -37,10 +37,10 @@ Explore and analyze codebase without making any changes.
 
 ## Actions
 
-1. **Explore codebase** using Serena symbolic tools
-2. **Search for patterns** using grep/glob
-3. **Read relevant files** to understand implementation
-4. **Document findings** in Skill Return section
+1. **Explore codebase structure**: `mcp__plugin_swe_serena__get_symbols_overview(relative_path="<dir>")`, `mcp__plugin_swe_serena__find_symbol(name_path_pattern="<name>")`.
+2. **Search for patterns**: `mcp__plugin_swe_serena__search_for_pattern(substring_pattern="<pattern>", relative_path="<scope>")`, or `Grep`/`Glob` when Serena symbolic search doesn't apply (e.g. non-code files).
+3. **Read relevant files**: `Read(file_path="<path>")` for files identified above.
+4. **Document findings**: fill the Skill Return section below (no separate write step).
 
 ## Restrictions
 

@@ -87,6 +87,8 @@ Rewrite the FULL memory to the standard via the Serena memory MCP tools (raw `Ed
 mcp__plugin_swe_serena__write_memory(memory_name="<name>", content="<rewritten>")
 ```
 
+For a memory under `dom/`, `ref/`, `dev/`, or `feature/`, `<rewritten>` MUST carry the `obligations:` front-matter field (1-2 imperative lines, or `obligations: []`) per `mem:ref/REF_MEMORY_STYLE` "Obligations Field" — carry forward the existing field's value; `swe_pre_memory_index_gate.py` denies the write without it.
+
 **MANDATORY preservation — ZERO rule loss.** The rewrite changes language density and framing ONLY. Every one of these MUST survive verbatim in meaning:
 
 - Every behavioral rule and prohibition.

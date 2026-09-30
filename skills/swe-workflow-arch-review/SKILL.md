@@ -37,10 +37,10 @@ Review proposed changes against architecture standards.
 
 ## Actions
 
-1. **Read ARCH_INDEX** - Understand current architecture
-2. **Read FEATURE** memories_* - Get feature context
-3. **Check patterns** - Verify against established patterns
-4. **Validate approach** - Ensure implementation plan is sound
+1. **Read ARCH_INDEX**: `mcp__plugin_swe_serena__read_memory("arch/ARCH_INDEX")`.
+2. **Read feature context**: `mcp__plugin_swe_serena__read_memory("feature/FEATURE_[KEY]")` for each affected feature.
+3. **Check patterns**: `mcp__plugin_swe_serena__search_for_pattern(substring_pattern="<pattern>", relative_path="<scope>")` against the proposed change's target files, comparing against the patterns documented in the memories read above.
+4. **Validate approach** (judgment, output only): assess the implementation plan against Review Criteria below; record pass/fail per criterion in the Skill Return.
 
 ## Review Criteria
 

@@ -154,6 +154,8 @@ The bootstrap script (`swe-bootstrap.py`) auto-detects project name, primary lan
 4. **FEATURE_TESTS.md** — Test configuration with detected framework and commands
 5. **FEATURE_DEV_STANDARDS.md** — Development standards index with primary language
 
+Both are `feature/`-prefixed (rule-bearing): the rendered template MUST carry the `obligations:` front-matter field (1-2 imperative lines, or `obligations: []`) per `mem:ref/REF_MEMORY_STYLE` "Obligations Field" — `swe_pre_memory_index_gate.py` denies the write without it. If the template file lacks it, add it before rendering.
+
 **Additionally, create these non-template memories:**
 
 1. **INDEX_FEATURES** - Empty feature registry
@@ -193,7 +195,13 @@ The bootstrap script (`swe-bootstrap.py`) auto-detects project name, primary lan
 (Run /swe-feature-onboard to populate)
 ```
 
-**After creation, verify templates were filled out** — check that `{{project_name}}` and `{{primary_language}}` are no longer raw placeholders in the generated files. If they are, the bootstrap detection failed and they should be filled manually.
+**After creation, verify templates were filled out:**
+
+```bash
+grep -rl '{{project_name}}\|{{primary_language}}' .serena/memory/ 2>/dev/null
+```
+
+Exit 1 (no output) = clean, all placeholders substituted. Any file listed = bootstrap detection failed for that file; fill the placeholder manually.
 
 ### Stage 4: First Feature Prompt
 
