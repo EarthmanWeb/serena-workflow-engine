@@ -10,13 +10,22 @@ metadata:
 
 # DOM_SWE_STATE_MACHINE — State Transition Logic
 
-## Transition Model (readAdvance)
+## Transition Model (readAdvance + readBackward)
 
 - `readAdvance` (top-level flag in `states.json`) is ENABLED: reading a `WF_*` memory whose per-state `rank` is HIGHER than the current state's `rank` advances the FSM along a valid `transitionMatrix` edge.
-- Backward reads (lower or equal `rank`) and any read into `WF_CLARIFY` NEVER transition — `WF_CLARIFY` is a gate the model enters deliberately, not by read-advance.
+- `readBackward` (per-state allowlist in `states.json`) permits a LOWER-rank read to also transition: a read into a state listed in `readBackward[current]` advances the FSM. Entries: `WF_RESEARCH→[WF_CLASSIFY]`, `WF_ARCH_REVIEW→[WF_CLASSIFY]`, `WF_EXECUTE→[WF_CLASSIFY]`, `WF_CHECKPOINT→[WF_CLASSIFY]`, `WF_DEBUG_TDD→[WF_CLASSIFY]`, `WF_VERIFY→[WF_EXECUTE, WF_CLASSIFY]`, `WF_CONTINUE→[WF_CLASSIFY]`. `WF_DONE` has no `readBackward` entries — the prompt hook owns post-completion re-entry.
+- Any backward or same-rank read NOT listed in `readBackward[current]` NEVER transitions. `WF_CLARIFY` is NEVER a read-advance/read-backward target — it is a gate the model enters deliberately. Subflow reads NEVER transition.
+- `validate-graph.py` enforces `readBackward ⊆ declared transitions` — every `readBackward` target must also be a real edge from that state.
 - `subflows` are documented procedures, NOT FSM states: `WF_INIT`, `WF_CLEANUP`, `WF_RESEARCH_LITE`, `WF_UPDATE_MEMORY`. Reading one never advances the FSM and `set_state` must never target one.
 - Pivot edges exist from every active state → `WF_CLASSIFY`, plus `SessionStart` → `WF_CONTINUE` and `WF_CLASSIFY` → `WF_ONBOARD`.
 - `loopCaps` bound repeated back-and-forth: `WF_EXECUTE` ↔ `WF_CHECKPOINT` (20), `WF_ARCH_REVIEW` self-loop (3), `WF_VERIFY` → `WF_EXECUTE` (3), `WF_CLASSIFY` → `WF_CLARIFY` (3). Exceeding a cap refuses the transition with an escape message; A→B→A→B oscillation warns without refusing.
+- Second-or-later "inspecting — no transition" read of the SAME `WF_*` memory (no `readAdvance`/`readBackward` edge applies) emits a LOOP GUARD message naming the exact fallback: `mcp__plugin_swe_swe-wm__swe_wm_transition(session_id, target_state, reason)` (MCP) or `python3 "${CLAUDE_PLUGIN_ROOT}/hooks/swe_hooks/tools/set_state.py" <session_id> <STATE>` (CLI).
+
+## Explicit Transition Tools
+
+- `mcp__plugin_swe_swe-wm__swe_wm_transition(session_id, target_state, reason, force=false)` — the ONLY MCP way to change Current State. Validates against `states.json` (matrix, subflows rejected, `WF_CLARIFY` return rules, loop caps unless `force=true`), writes `.serena/swe-state/<id>.state` + WM Transitions line + a stream state event, returns the new state.
+- CLI: `python3 "${CLAUDE_PLUGIN_ROOT}/hooks/swe_hooks/tools/set_state.py" <session_id> <STATE> [--force]` — shares the same core (`state_manager.perform_transition`) as the MCP tool. JSON output; exit 1 on failure. Session id = the 8-char id printed in every hook message (`WM[<id>]` / `session="<id>"`, also the WM filename `WM_<id>.md`). `${CLAUDE_PLUGIN_ROOT}` is set by the plugin system; in this dev repo the plugin root is the repo root.
+- `--force`/`force=true` skips matrix-edge/loop-cap validation ONLY — subflow targets are rejected even with `--force`.
 
 ## State Set (v5)
 

@@ -108,3 +108,5 @@ When a fix exceeds the scope of a minor correction, re-classify rather than sile
 | All clean, tests pass, zero pending doc claims, WM updated             | `WF_DONE`                                                                            |
 
 Update WM via `/swe-wm-update` before transitioning.
+
+Backward routes (`→ WF_EXECUTE`, `→ WF_CLASSIFY`) advance via the read itself — both are declared `readBackward` entries for `WF_VERIFY`. If the hook reports "inspecting — no transition" (loop guard), call `mcp__plugin_swe_swe-wm__swe_wm_transition(session_id="<id>", target_state="<STATE>", reason="<why>")` as the explicit fallback.

@@ -45,7 +45,7 @@ Main: `state-machine/states.json` · Config: `.claude-plugin/plugin.json` · Hoo
 
 ## MCP Server: swe-wm (`hooks/swe_hooks/mcp/`)
 
-Stdlib-only stdio MCP server for WM updates; registered as `swe-wm`, started via `scripts/start-wm-mcp.sh`. Tools: `swe_wm_read` · `swe_wm_update` (CANONICAL — batched) · `swe_wm_update_section`/`swe_wm_update_status` (legacy). Protected: `Workflow Context`, `Transitions`. Session resolution: explicit param > `SWE_SESSION_ID` > `CLAUDE_SESSION_ID[:8]` > ERROR — NEVER most-recent-WM guessing.
+Stdlib-only stdio MCP server for WM updates; registered as `swe-wm`, started via `scripts/start-wm-mcp.sh`. Tools: `swe_wm_read` · `swe_wm_update` (CANONICAL — batched) · `swe_wm_update_section`/`swe_wm_update_status` (legacy) · `swe_wm_transition(session_id, target_state, reason, force=false)` — the ONLY MCP way to change Current State; validates against `states.json` (matrix, subflows rejected, loop caps unless `force=true`), shares `state_manager.perform_transition` with the `set_state.py` CLI. Protected: `Workflow Context`, `Transitions`. Session resolution: explicit param > `SWE_SESSION_ID` > `CLAUDE_SESSION_ID[:8]` > ERROR — NEVER most-recent-WM guessing.
 
 ## Hooks (20 scripts)
 

@@ -85,4 +85,7 @@ DIAGNOSIS VERIFICATION:
 | Research complete, no changes needed  | `WF_DONE`     |
 
 - Route to `WF_CLASSIFY` to classify the task and load feature context when the user wants to implement based on findings.
+- A change request mid-research ("implement", "do it", "do everything", "fix", "add"...) emits a `needs_implementation` directive from the prompt hook — take it by reading `wf/WF_CLASSIFY` (`WF_RESEARCH → WF_CLASSIFY` is a declared `readBackward` entry, so the read itself transitions).
+- If the hook instead reports "inspecting — no transition" on that read (loop guard fired), call `mcp__plugin_swe_swe-wm__swe_wm_transition(session_id="<id>", target_state="WF_CLASSIFY", reason="needs_implementation")` — the explicit fallback.
+- Complete with no changes needed → `WF_DONE`: read `wf/WF_DONE` (forward read-advance) or call `swe_wm_transition` with `reason="research_complete"`.
 - Run `/swe-wm-update` to update WM before transitioning.

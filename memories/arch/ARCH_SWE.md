@@ -16,12 +16,15 @@ The workflow system is a finite state machine over Serena memories. Each `WF_*` 
 - Output the step-report line immediately on entering a state: `> **On step WF_[NAME]**`.
 - WM (Working Memory) provides session continuity across turns and enables `WF_CONTINUE` to resume work.
 
-### Read-Advance (v5)
+### Read-Advance / Read-Backward (v5)
 
-- `readAdvance` in `state-machine/states.json` is enabled: reading a `WF_*` memory whose per-state `rank` is HIGHER than the current state's rank advances the FSM along a valid `transitionMatrix` edge. Backward reads, same-rank reads, and reads into `WF_CLARIFY` NEVER transition.
-- `subflows` (`WF_INIT`, `WF_CLEANUP`, `WF_RESEARCH_LITE`, `WF_UPDATE_MEMORY`) are documented procedures, NOT FSM states — never `set_state` to them.
+- `readAdvance` in `state-machine/states.json` is enabled: reading a `WF_*` memory whose per-state `rank` is HIGHER than the current state's rank advances the FSM along a valid `transitionMatrix` edge.
+- `readBackward` (per-state allowlist in `states.json`) permits a declared LOWER-rank read to also transition — e.g. `WF_RESEARCH→[WF_CLASSIFY]`, `WF_VERIFY→[WF_EXECUTE, WF_CLASSIFY]`. `validate-graph.py` enforces `readBackward ⊆ declared transitions`. Full allowlist: `mem:dom/DOM_SWE_STATE_MACHINE`.
+- Any other backward/same-rank read, and reads into `WF_CLARIFY`, NEVER transition.
+- `subflows` (`WF_INIT`, `WF_CLEANUP`, `WF_RESEARCH_LITE`, `WF_UPDATE_MEMORY`) are documented procedures, NOT FSM states — never `set_state` to them, even with `--force`.
 - Pivot edges exist from every active state → `WF_CLASSIFY`; `SessionStart` → `WF_CONTINUE`; `WF_CLASSIFY` → `WF_ONBOARD`.
 - `loopCaps` bound repeated transitions (e.g. `WF_EXECUTE` ↔ `WF_CHECKPOINT` capped at 20, `WF_ARCH_REVIEW` self-loop capped at 3, `WF_VERIFY` → `WF_EXECUTE` capped at 3, `WF_CLASSIFY` → `WF_CLARIFY` capped at 3). Exceeding a cap refuses the transition with an escape message; A→B→A→B oscillation warns. See `mem:dom/DOM_SWE_STATE_MACHINE`.
+- Explicit transition tools share one core (`state_manager.perform_transition`): MCP `mcp__plugin_swe_swe-wm__swe_wm_transition(session_id, target_state, reason, force=false)`, or CLI `python3 "${CLAUDE_PLUGIN_ROOT}/hooks/swe_hooks/tools/set_state.py" <session_id> <STATE> [--force]`. `--force` skips matrix/loop-cap validation only.
 
 ## Routing Layers
 

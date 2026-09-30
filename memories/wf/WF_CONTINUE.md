@@ -53,4 +53,6 @@ Read WM for: what was in progress, blockers noted, next step.
 2. Read that WF_* memory now.
 3. Report the new step to user.
 
+`WF_CONTINUE → WF_CLASSIFY` (no previous state) is a declared `readBackward` entry — the read advances directly. If the hook reports "inspecting — no transition" (loop guard), call `mcp__plugin_swe_swe-wm__swe_wm_transition(session_id="<id>", target_state="WF_CLASSIFY", reason="no_previous_state")` as the explicit fallback.
+
 Update WM via `/swe-wm-update --from WF_CONTINUE` before transitioning.

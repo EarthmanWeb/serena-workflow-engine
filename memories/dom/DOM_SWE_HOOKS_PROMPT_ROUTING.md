@@ -21,8 +21,9 @@ Hub: `mem:dom/DOM_SWE_HOOKS`.
 - **new_task**: detected by UNAMBIGUOUS openers only — "new task", "switch to", "let's work on", "help me build", "i need you to" (`NEW_TASK_PATTERNS`). Bare imperative verb at start ("fix", "add", "create" — `BARE_VERB_TASK_PATTERNS`) is new_task ONLY when NO task is in flight (state ∈ WF_CLASSIFY/WF_INIT/UNINITIALIZED/WF_DONE/None). Action: transition to WF_CLASSIFY (the one verified-pivot path).
 - **possible_pivot**: detected by a bare imperative verb at start WHILE in an active task state. Action: stay in current state; inject `pivot_analysis_note` — model judges pivot vs. feedback from full context, self-runs `/swe-goto WF_CLASSIFY` only on a genuine pivot.
 - **unknown**: no pattern match. Action: active state → stay + `pivot_analysis_note`; WF_CLASSIFY/WF_INIT → emit classify instruction.
+- **needs_implementation** (WF_RESEARCH only): a change request ("implement", "do it", "do everything", "fix", "add"...) while `current_state == WF_RESEARCH`. Action: emit a `needs_implementation` directive → `WF_CLASSIFY`, instead of the generic "ambiguous, stay" unknown/possible_pivot handling. Take it by reading `wf/WF_CLASSIFY` (declared `readBackward[WF_RESEARCH]` entry — the read itself transitions); on loop-guard "inspecting — no transition", call `mcp__plugin_swe_swe-wm__swe_wm_transition(session_id, target_state="WF_CLASSIFY", reason="needs_implementation")`.
 
-`analyze_prompt(prompt, current_state)` is STATE-AWARE — the same bare-verb prompt is `new_task` before work starts but `possible_pivot` mid-task.
+`analyze_prompt(prompt, current_state)` is STATE-AWARE — the same bare-verb prompt is `new_task` before work starts but `possible_pivot` mid-task; in `WF_RESEARCH` a change-request opener is `needs_implementation`, not `possible_pivot`.
 
 ⛔ **The deterministic hook does NOT force-decide ambiguous pivots in an active state.** Unknown- and `possible_pivot`-intent prompts in an active state STAY in the current state — the hook emits `pivot_analysis_note` and the MODEL judges pivot-vs-feedback from full conversation context (which a regex cannot), self-transitioning with `/swe-goto WF_CLASSIFY` only on a genuine brand-new task or complete pivot. Ordinary mid-task feedback ("that didn't work", "fix the spacing too", "no, do it differently") therefore keeps working in place. Only two paths auto-`transition_to('WF_CLASSIFY')` from an active state: an unambiguous `new_task` opener, and (post-completion) same-session re-entry from WF_DONE. `NEW_TASK_CUE_RE` ("instead", "now", "new task", "switch to", …) is a HINT surfaced in `pivot_analysis_note`, NEVER the decider. Default is STAY. Rationale: `WF_EXECUTE → WF_CLASSIFY` is not a valid transition-matrix edge, so an active-state re-classification is a forced bypass — reserve it for verified pivots.
 
@@ -42,6 +43,7 @@ Hub: `mem:dom/DOM_SWE_HOOKS`.
 - WF_CLASSIFY + continuation → emit MANDATORY instruction to read WF_CLASSIFY.
 - Active state + continuation → emit brief "Continue with workflow".
 - Active state + unknown/possible_pivot → STAY; emit `pivot_analysis_note` (model decides pivot vs. feedback, self-transitions only on a true pivot).
+- WF_RESEARCH + change-request opener → emit `needs_implementation` directive → read `wf/WF_CLASSIFY` (`readBackward` entry advances the read) or call `mcp__plugin_swe_swe-wm__swe_wm_transition(session_id, target_state="WF_CLASSIFY", reason="needs_implementation")` — NEVER the bare `/swe-goto WF_CLASSIFY` advice.
 - new_task (unambiguous opener) → transition to WF_CLASSIFY regardless of current state.
 - First transition into WF_CLASSIFY with no WM → create WM + sentinel here.
 - Valid WM but missing sentinel → recreate sentinel before routing (prevents init-gate deadlock).
