@@ -273,6 +273,11 @@ class TestWithSteeringClause(unittest.TestCase):
         self.assertIn(agent_gate.STEERING_CLAUSE_MARKER, result["prompt"])
         self.assertTrue(result["prompt"].startswith("Do X."))
 
+    def test_clause_addresses_doc_gate_denials_to_subagent(self):
+        result = agent_gate.with_steering_clause({"prompt": "Do X."})
+        self.assertIn("[doc-gate]", result["prompt"])
+        self.assertIn("feature/FEATURE_TESTS", result["prompt"])
+
     def test_idempotent_when_marker_already_present(self):
         once = agent_gate.with_steering_clause({"prompt": "Do X."})
         twice = agent_gate.with_steering_clause(once)
