@@ -264,6 +264,56 @@ class TestForegroundWithoutJustificationReason(unittest.TestCase):
 
 
 # ──────────────────────────────────────────────────────────────────
+# pre/swe_pre_agent_model_gate — with_steering_clause
+# ──────────────────────────────────────────────────────────────────
+
+class TestWithSteeringClause(unittest.TestCase):
+    def test_appends_marker_and_clause(self):
+        result = agent_gate.with_steering_clause({"prompt": "Do X."})
+        self.assertIn(agent_gate.STEERING_CLAUSE_MARKER, result["prompt"])
+        self.assertTrue(result["prompt"].startswith("Do X."))
+
+    def test_idempotent_when_marker_already_present(self):
+        once = agent_gate.with_steering_clause({"prompt": "Do X."})
+        twice = agent_gate.with_steering_clause(once)
+        self.assertEqual(once["prompt"], twice["prompt"])
+        self.assertEqual(
+            once["prompt"].count(agent_gate.STEERING_CLAUSE_MARKER), 1)
+
+    def test_preserves_other_keys(self):
+        result = agent_gate.with_steering_clause({
+            "prompt": "Do X.",
+            "model": "sonnet",
+            "run_in_background": True,
+            "subagent_type": "general-purpose",
+        })
+        self.assertEqual(result["model"], "sonnet")
+        self.assertEqual(result["run_in_background"], True)
+        self.assertEqual(result["subagent_type"], "general-purpose")
+
+    def test_does_not_mutate_input(self):
+        original = {"prompt": "Do X."}
+        result = agent_gate.with_steering_clause(original)
+        self.assertEqual(original["prompt"], "Do X.")
+        self.assertNotEqual(result["prompt"], original["prompt"])
+
+    def test_non_string_prompt_passthrough(self):
+        original = {"prompt": None, "model": "sonnet"}
+        result = agent_gate.with_steering_clause(original)
+        self.assertEqual(result, original)
+        self.assertIsNot(result, original)
+
+    def test_missing_prompt_passthrough(self):
+        original = {"model": "sonnet"}
+        result = agent_gate.with_steering_clause(original)
+        self.assertEqual(result, original)
+
+    def test_non_dict_input_passthrough(self):
+        self.assertEqual(agent_gate.with_steering_clause("not-a-dict"), "not-a-dict")
+        self.assertIsNone(agent_gate.with_steering_clause(None))
+
+
+# ──────────────────────────────────────────────────────────────────
 # pre/swe_pre_agent_model_gate — main() end-to-end via stdin
 # ──────────────────────────────────────────────────────────────────
 
@@ -305,7 +355,11 @@ class TestAgentModelGateMain(unittest.TestCase):
                 "run_in_background": True,
             },
         })
-        self.assertEqual(result, {})
+        hook_out = result.get("hookSpecificOutput", {})
+        self.assertEqual(hook_out.get("permissionDecision"), "allow")
+        updated_prompt = hook_out.get("updatedInput", {}).get("prompt", "")
+        self.assertIn(agent_gate.STEERING_CLAUSE_MARKER, updated_prompt)
+        self.assertIn("Implement X.", updated_prompt)
 
     def test_task_tool_alias_also_gated(self):
         result = self._run_main({
@@ -338,7 +392,11 @@ class TestAgentModelGateMain(unittest.TestCase):
                 "run_in_background": True,
             },
         })
-        self.assertEqual(result, {})
+        hook_out = result.get("hookSpecificOutput", {})
+        self.assertEqual(hook_out.get("permissionDecision"), "allow")
+        self.assertIn(
+            agent_gate.STEERING_CLAUSE_MARKER,
+            hook_out.get("updatedInput", {}).get("prompt", ""))
 
     def test_foreground_call_denied_without_justification(self):
         result = self._run_main({
@@ -365,7 +423,11 @@ class TestAgentModelGateMain(unittest.TestCase):
                 "run_in_background": False,
             },
         })
-        self.assertEqual(result, {})
+        hook_out = result.get("hookSpecificOutput", {})
+        self.assertEqual(hook_out.get("permissionDecision"), "allow")
+        self.assertIn(
+            agent_gate.STEERING_CLAUSE_MARKER,
+            hook_out.get("updatedInput", {}).get("prompt", ""))
 
 
 # ──────────────────────────────────────────────────────────────────
