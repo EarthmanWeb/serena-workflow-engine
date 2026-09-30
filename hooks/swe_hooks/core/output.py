@@ -34,8 +34,8 @@ from typing import Optional, Dict, Any
 # one-line reminder instead of a duplicate block.
 WF_INIT_GUIDANCE = """STOP. Your next action MUST be a tool call. Not text. A tool call.
 
-If the tool is deferred, load its schema first (e.g. via ToolSearch when
-available), then call mcp__plugin_swe_serena__read_memory(...):
+If it fails with "No such tool available", Serena is still connecting —
+re-issue the SAME call once (tools register by the next turn):
 
   mcp__plugin_swe_serena__read_memory(memory_name="wf/WF_INIT")
 

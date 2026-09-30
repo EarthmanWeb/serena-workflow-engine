@@ -70,8 +70,9 @@ Any tool call that searches code, edits files, or does task work before the init
 
 The FIRST tool call of any session MUST be `mcp__plugin_swe_serena__read_memory(memory_name="wf/WF_INIT")` — ALWAYS the fully-qualified name, NEVER bare `read_memory`.
 
-- Serena MCP tools may be DEFERRED (schema not loaded). A bare call — or any call before its schema is fetched — fails with "No such tool available".
-- Load the schema first: `ToolSearch("select:mcp__plugin_swe_serena__read_memory,mcp__plugin_swe_serena__list_memories")`, then read.
+- Serena MCP connects asynchronously at session start (~2–8 s). A call issued before it connects fails with "No such tool available: mcp__plugin_swe_serena__read_memory" — the tool is absent from that turn's tool list. ToolSearch does NOT fix this.
+- On that error: re-issue the SAME fully-qualified call once — the Serena tools register by the next turn. Do NOT switch tools, explain, or skip init.
+- A BARE name (`read_memory`) also fails with "No such tool available" — always use the fully-qualified name.
 - If your first tool call is anything else (Bash, Read, Grep, Agent, another MCP tool), you have already violated this. Do NOT explain the skip — run the init chain.
 - The PreToolUse gate is the backstop, but it can be misconfigured or absent in a given project; enforcement is YOUR obligation regardless of whether a hook stops you.
 

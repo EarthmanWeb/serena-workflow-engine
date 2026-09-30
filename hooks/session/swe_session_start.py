@@ -686,8 +686,8 @@ Current State: WF_INIT
 
 ═══════════════════════════════════════════════════════════════════════════════
 STEP 1: Read WF_INIT workflow instructions
-   If the tool is deferred, load its schema first (e.g. via ToolSearch when
-   available), then call mcp__plugin_swe_serena__read_memory(...):
+   If it fails with "No such tool available", Serena is still connecting —
+   re-issue the SAME call once (tools register by the next turn):
    → mcp__plugin_swe_serena__read_memory(memory_name="wf/WF_INIT")
    ALWAYS use the fully-qualified name mcp__plugin_swe_serena__read_memory —
    NEVER the bare read_memory.
