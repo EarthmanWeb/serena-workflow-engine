@@ -248,6 +248,45 @@ class TestDriftHookMainScopeEvents(unittest.TestCase):
         self.assertEqual(len(spawn_events), 1)
         self.assertEqual(spawn_events[0]["budget"], 500)
 
+    def test_main_agent_spawn_expect_red_prompt_logs_flag(self):
+        session_id = "99990000"
+        transcript = f"/x/{session_id}-0000-0000-0000-000000000000.jsonl"
+        payload = {
+            "tool_name": "Agent",
+            "tool_input": {
+                "model": "sonnet",
+                "prompt": "Write a failing test first. [swe-expect-red]",
+                "run_in_background": True,
+            },
+            "tool_response": {"agent_id": "worker-red"},
+            "transcript_path": transcript,
+        }
+        self._run_main(payload)
+        events = _read_events(stream.get_stream_path(session_id))
+        spawn_events = [e for e in events if e.get("type") == "agent_spawn"]
+        self.assertEqual(len(spawn_events), 1)
+        self.assertEqual(spawn_events[0]["agent"], "worker-red")
+        self.assertTrue(spawn_events[0].get("expect_red"))
+
+    def test_main_agent_spawn_without_expect_red_omits_flag(self):
+        session_id = "99991111"
+        transcript = f"/x/{session_id}-0000-0000-0000-000000000000.jsonl"
+        payload = {
+            "tool_name": "Agent",
+            "tool_input": {
+                "model": "sonnet",
+                "prompt": "Implement the checkout flow.",
+                "run_in_background": True,
+            },
+            "tool_response": {"agent_id": "worker-plain"},
+            "transcript_path": transcript,
+        }
+        self._run_main(payload)
+        events = _read_events(stream.get_stream_path(session_id))
+        spawn_events = [e for e in events if e.get("type") == "agent_spawn"]
+        self.assertEqual(len(spawn_events), 1)
+        self.assertNotIn("expect_red", spawn_events[0])
+
     def test_main_agent_spawn_no_id_extractable_logs_nothing(self):
         session_id = "55556666"
         transcript = f"/x/{session_id}-0000-0000-0000-000000000000.jsonl"

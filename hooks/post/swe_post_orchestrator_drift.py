@@ -52,7 +52,12 @@ guard events get appended, alongside its drift-counting duty.
     `agent_spawn` with a resolved budget — a `[swe-budget: N]` tag in the
     spawning prompt (scope_guard.parse_budget_tag) overrides the model-
     family default (scope_guard.budget_for_model). No id extractable -> no
-    event (the scope guard then uses DEFAULT_BUDGET for that agent).
+    event (the scope guard then uses DEFAULT_BUDGET for that agent). When
+    the spawning prompt signals expected failing test runs (scope_guard.
+    expects_red_runs — a literal `[swe-expect-red]` tag or fail-proofing/
+    red-green phrasing), the event also carries `expect_red: true`, which
+    scope_guard.scope_state/scope_verdict use to widen the 'test' failure-
+    streak limit for that agent only.
   - Main-agent SendMessage call: a `[scope-extend]` tag in the message
     (scope_guard.parse_scope_extend) logs `scope_extend` against the
     message's `to` agent. SendMessage is neither task work nor a delegation
@@ -80,6 +85,7 @@ try:
     )
     from swe_hooks.core.scope_guard import (
         classify_kind, budget_for_model, parse_budget_tag, parse_scope_extend,
+        is_test_command, expects_red_runs,
     )
 except ImportError as e:
     swe_hooks.bootstrap.import_error_exit(e)
@@ -106,7 +112,7 @@ FOREGROUND_CAPABLE_TOOL_NAMES = {'Agent', 'Task'}
 
 # Bash commands whose PRIMARY (first pipeline-group) stage is verification —
 # checking state or running tests/compiles — rather than doing task work.
-BASH_GROUP_SPLIT_RE = re.compile(r'(?:;|&&|\|\||&|\n)+')
+BASH_GROUP_SPLIT_RE = re.compile(r'(?:;|&&|\|\||\n|(?<!\d>)&(?!\d))+')
 BASH_PIPE_SPLIT_RE = re.compile(r'\|(?!\|)')
 BASH_ENV_ASSIGN_RE = re.compile(
     r'^(?:[A-Za-z_][A-Za-z0-9_]*=(?:"[^"]*"|\'[^\']*\'|\S*)\s+)*')
@@ -122,14 +128,52 @@ BASH_VERIFICATION_FIRST_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Read-only inspection commands (grep/cat/ls/etc) — checking state, same as
+# the test-runner/validate patterns above, but these never execute code or
+# mutate anything. Matched against the PRIMARY stage the same way.
+BASH_INSPECTION_FIRST_RE = re.compile(
+    r'^(?:'
+    r'grep\b|rg\b|cat\b|head\b|tail\b|ls\b|wc\b|find\b'
+    r'|sed\s+-n\b|awk\b|git\s+grep\b|file\b|stat\b|diff\b'
+    r')',
+    re.IGNORECASE,
+)
+
+# A command group containing any of these disqualifies the WHOLE call from
+# verification exemption, even if the primary stage looks like inspection or
+# a test runner — these are mutation/side-effect signals: output redirection
+# (except stderr-to-null/stderr-to-stdout), in-place sed, find's -exec/
+# -execdir/-delete, tee, xargs.
+BASH_DISQUALIFIER_RE = re.compile(
+    r'(?:^|\s)>>?(?!\s*/dev/null\b)(?!&1\b)'  # > or >> (not 2>/dev/null, 2>&1)
+    r'|\bsed\s+-i\b'
+    r'|-exec\b|-execdir\b|-delete\b'
+    r'|\btee\b|\bxargs\b',
+)
+
 
 def bash_is_verification(command: str) -> bool:
     """True when EVERY command group in `command` is a verification/inspection
-    call (see BASH_VERIFICATION_FIRST_RE) — the whole Bash call is checking
-    state, not doing task work. A mixed group (e.g. `edit-ish-thing && git
-    status`) still counts as task work: any non-verification group disqualifies
-    the whole call from exemption."""
+    call — the whole Bash call is checking state, not doing task work.
+
+    A command group counts as verification when its primary (first pipeline)
+    stage matches a known test-runner/build-check pattern
+    (BASH_VERIFICATION_FIRST_RE), scope_guard's own test-command detector
+    (is_test_command — playwright/jest/vitest/phpunit/go test/cargo test, the
+    SAME classification scope_guard.classify_kind uses for its 'test' kind),
+    OR a read-only inspection command (BASH_INSPECTION_FIRST_RE: grep, rg,
+    cat, head, tail, ls, wc, find, sed -n, awk, git grep, file, stat, diff).
+
+    A mixed group (e.g. `edit-ish-thing && git status`) still counts as task
+    work: any non-verification group disqualifies the whole call. The call is
+    ALSO disqualified outright (regardless of primary-stage match) when it
+    contains output redirection, `sed -i`, `find -exec`/`-execdir`/`-delete`,
+    `tee`, or `xargs` — these mutate state even when dressed up as a filter
+    pipeline (e.g. `grep -l TODO *.py | xargs sed -i ...`).
+    """
     if not command:
+        return False
+    if BASH_DISQUALIFIER_RE.search(command):
         return False
     groups = [g for g in BASH_GROUP_SPLIT_RE.split(command) if g.strip()]
     if not groups:
@@ -137,8 +181,11 @@ def bash_is_verification(command: str) -> bool:
     for group in groups:
         first_stage = BASH_PIPE_SPLIT_RE.split(group, 1)[0].strip()
         first_stage = BASH_ENV_ASSIGN_RE.sub('', first_stage)
-        if not BASH_VERIFICATION_FIRST_RE.match(first_stage):
-            return False
+        if (BASH_VERIFICATION_FIRST_RE.match(first_stage)
+                or is_test_command(first_stage)
+                or BASH_INSPECTION_FIRST_RE.match(first_stage)):
+            continue
+        return False
     return True
 
 
@@ -291,9 +338,15 @@ def main():
             spawned_id = extract_spawned_agent_id(tool_response)
             if spawned_id:
                 budget = resolve_spawn_budget(tool_input)
-                append_event(stream_path, 'agent_spawn',
-                             agent=spawned_id, model=tool_input.get('model', ''),
-                             budget=budget, s=session_id)
+                spawn_fields = {
+                    'agent': spawned_id,
+                    'model': tool_input.get('model', ''),
+                    'budget': budget,
+                    's': session_id,
+                }
+                if expects_red_runs((tool_input or {}).get('prompt', '')):
+                    spawn_fields['expect_red'] = True
+                append_event(stream_path, 'agent_spawn', **spawn_fields)
 
         foreground_delegation = False
         if tool_name in DELEGATION_TOOL_NAMES:

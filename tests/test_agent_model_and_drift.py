@@ -1060,6 +1060,110 @@ class TestBashIsVerification(unittest.TestCase):
     def test_git_push_is_not_verification(self):
         self.assertFalse(drift_hook.bash_is_verification("git push origin main"))
 
+    # --- inspection commands (grep/rg/cat/head/tail/ls/wc/find/sed -n/awk/
+    #     git grep/file/stat/diff) exempt ---
+    def test_grep_is_verification(self):
+        self.assertTrue(drift_hook.bash_is_verification("grep -rn TODO src/"))
+
+    def test_rg_is_verification(self):
+        self.assertTrue(drift_hook.bash_is_verification("rg 'foo' ."))
+
+    def test_cat_is_verification(self):
+        self.assertTrue(drift_hook.bash_is_verification("cat README.md"))
+
+    def test_head_tail_is_verification(self):
+        self.assertTrue(drift_hook.bash_is_verification("head -n 20 file.txt"))
+        self.assertTrue(drift_hook.bash_is_verification("tail -f log.txt | grep err"))
+
+    def test_ls_is_verification(self):
+        self.assertTrue(drift_hook.bash_is_verification("ls -la tests/"))
+
+    def test_wc_is_verification(self):
+        self.assertTrue(drift_hook.bash_is_verification("wc -l file.py"))
+
+    def test_find_without_exec_is_verification(self):
+        self.assertTrue(drift_hook.bash_is_verification(
+            "find . -name '*.py' -not -path './node_modules/*'"))
+
+    def test_sed_n_is_verification(self):
+        self.assertTrue(drift_hook.bash_is_verification("sed -n '1,20p' file.txt"))
+
+    def test_awk_without_redirect_is_verification(self):
+        self.assertTrue(drift_hook.bash_is_verification("awk '{print $1}' file.txt"))
+
+    def test_git_grep_is_verification(self):
+        self.assertTrue(drift_hook.bash_is_verification("git grep -n 'TODO'"))
+
+    def test_file_stat_diff_are_verification(self):
+        self.assertTrue(drift_hook.bash_is_verification("file foo.bin"))
+        self.assertTrue(drift_hook.bash_is_verification("stat foo.bin"))
+        self.assertTrue(drift_hook.bash_is_verification("diff a.txt b.txt"))
+
+    # --- disqualifiers: redirection, sed -i, find -exec/-execdir/-delete,
+    #     tee, xargs override ANY primary-stage match ---
+    def test_output_redirect_disqualifies_inspection(self):
+        self.assertFalse(drift_hook.bash_is_verification("cat file.txt > out.txt"))
+
+    def test_append_redirect_disqualifies(self):
+        self.assertFalse(drift_hook.bash_is_verification("grep foo file >> out.log"))
+
+    def test_stderr_to_devnull_does_not_disqualify(self):
+        self.assertTrue(drift_hook.bash_is_verification("grep foo file 2>/dev/null"))
+
+    def test_stderr_to_stdout_does_not_disqualify(self):
+        self.assertTrue(drift_hook.bash_is_verification("grep foo file 2>&1"))
+
+    def test_sed_i_disqualifies(self):
+        self.assertFalse(drift_hook.bash_is_verification("sed -i 's/a/b/' file.txt"))
+
+    def test_find_exec_disqualifies(self):
+        self.assertFalse(drift_hook.bash_is_verification(
+            "find . -name '*.pyc' -exec rm {} +"))
+
+    def test_find_execdir_disqualifies(self):
+        self.assertFalse(drift_hook.bash_is_verification(
+            "find . -name '*.pyc' -execdir rm {} \\;"))
+
+    def test_find_delete_disqualifies(self):
+        self.assertFalse(drift_hook.bash_is_verification(
+            "find . -name '*.tmp' -delete"))
+
+    def test_tee_disqualifies(self):
+        self.assertFalse(drift_hook.bash_is_verification("cat file | tee out.txt"))
+
+    def test_xargs_disqualifies(self):
+        self.assertFalse(drift_hook.bash_is_verification(
+            "grep -l TODO *.py | xargs sed -i 's/TODO/DONE/'"))
+
+    # --- test runners beyond unittest/pytest/npm test (via scope_guard.
+    #     is_test_command reuse): playwright, jest, vitest, phpunit, go test,
+    #     cargo test ---
+    def test_playwright_is_verification(self):
+        self.assertTrue(drift_hook.bash_is_verification("npx playwright test"))
+
+    def test_jest_is_verification(self):
+        self.assertTrue(drift_hook.bash_is_verification("npx jest"))
+
+    def test_vitest_is_verification(self):
+        self.assertTrue(drift_hook.bash_is_verification("npx vitest run"))
+
+    def test_phpunit_is_verification(self):
+        self.assertTrue(drift_hook.bash_is_verification("vendor/bin/phpunit tests/"))
+
+    def test_go_test_is_verification(self):
+        self.assertTrue(drift_hook.bash_is_verification("go test ./..."))
+
+    def test_cargo_test_is_verification(self):
+        self.assertTrue(drift_hook.bash_is_verification("cargo test"))
+
+    def test_chained_inspection_and_test_runner_all_verification(self):
+        self.assertTrue(drift_hook.bash_is_verification(
+            "grep -rn TODO src/ && npx playwright test"))
+
+    def test_mixed_inspection_and_mutation_not_verification(self):
+        self.assertFalse(drift_hook.bash_is_verification(
+            "grep -rn TODO src/ && rm -rf build"))
+
 
 class TestIsBackgroundDelegation(unittest.TestCase):
     def test_workflow_always_true(self):

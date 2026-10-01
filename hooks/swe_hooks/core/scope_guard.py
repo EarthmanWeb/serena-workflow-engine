@@ -145,13 +145,59 @@ TEST_COMMAND_PATTERNS = [
 ]
 
 
-def _is_test_command(command: str) -> bool:
-    """True when `command` matches one of TEST_COMMAND_PATTERNS."""
+def is_test_command(command: str) -> bool:
+    """True when `command` matches one of TEST_COMMAND_PATTERNS.
+
+    Public name — this is the single source of truth for test-runner command
+    classification, reused by hooks/post/swe_post_orchestrator_drift.py
+    (bash_is_verification) as well as this module's own classify_kind.
+    """
     command = command or ''
     for pattern in TEST_COMMAND_PATTERNS:
         if re.search(pattern, command, re.IGNORECASE):
             return True
     return False
+
+
+# Backward-compat alias — kept because other modules may still import the
+# underscored name.
+_is_test_command = is_test_command
+
+
+# ---------------------------------------------------------------------------
+# Expected-red-run detection
+# ---------------------------------------------------------------------------
+# Fail-proofing a test (writing a test first, confirming it fails for the
+# right reason, THEN implementing) is intentional TDD practice, not scope
+# drift. A subagent explicitly told to produce red runs should not trip the
+# 'test' failure streak at the same threshold as an agent whose tests are
+# failing because its own change is broken.
+EXPECT_RED_TAG_RE = re.compile(r'\[swe-expect-red\]', re.IGNORECASE)
+
+EXPECT_RED_PHRASE_RE = re.compile(
+    r'fail[- ]proof'
+    r'|flip\s+(?:the\s+)?assertion'
+    r'|expected[- ]red'
+    r'|red[- ]green'
+    r'|prove\s+(?:the\s+)?test\s+fails'
+    r'|intentionally\s+failing',
+    re.IGNORECASE,
+)
+
+# Extra 'test' streak headroom granted when expects_red_runs() was true at
+# spawn time — a fail-proofing agent is expected to see red runs on purpose.
+EXPECT_RED_TEST_BONUS = 2
+
+
+def expects_red_runs(prompt: str) -> bool:
+    """True when `prompt` signals the agent is expected to produce
+    intentionally-failing ("red") test runs as part of its task — a literal
+    `[swe-expect-red]` tag, or any of the fail-proofing/red-green phrases in
+    EXPECT_RED_PHRASE_RE. Case-insensitive. Empty/None prompt -> False.
+    """
+    if not prompt:
+        return False
+    return bool(EXPECT_RED_TAG_RE.search(prompt) or EXPECT_RED_PHRASE_RE.search(prompt))
 
 
 # ---------------------------------------------------------------------------
@@ -262,22 +308,28 @@ def scope_state(events: list, agent_id: str) -> dict:
     """Fold `events` (already filtered to `agent_id`, in stream order) into
     the agent's current scope state:
 
-        {budget: int, calls: int, streaks: {kind: int}, extended: int}
+        {budget: int, calls: int, streaks: {kind: int}, extended: int,
+         expect_red: bool}
 
-    budget   = the latest agent_spawn's `budget` for this agent (else
-               DEFAULT_BUDGET) + the sum of every scope_extend's budget_add.
-    calls    = count of agent_call events.
-    streaks  = per-kind consecutive-failure count: an agent_fail for `kind`
-               increments streaks[kind]; an agent_ok for the SAME kind resets
-               it to 0. A scope_extend resets EVERY kind's streak to 0
-               (the orchestrator lifting the trip clears all outstanding
-               failure history, not just the kind that tripped it).
-    extended = total budget added by scope_extend events (informational).
+    budget     = the latest agent_spawn's `budget` for this agent (else
+                 DEFAULT_BUDGET) + the sum of every scope_extend's budget_add.
+    calls      = count of agent_call events.
+    streaks    = per-kind consecutive-failure count: an agent_fail for `kind`
+                 increments streaks[kind]; an agent_ok for the SAME kind
+                 resets it to 0. A scope_extend resets EVERY kind's streak to
+                 0 (the orchestrator lifting the trip clears all outstanding
+                 failure history, not just the kind that tripped it).
+    extended   = total budget added by scope_extend events (informational).
+    expect_red = the latest agent_spawn's `expect_red` flag for this agent
+                 (else False) — true when the spawning prompt signalled
+                 intentional fail-proofing (see expects_red_runs). Consulted
+                 by scope_verdict to widen the 'test' streak limit only.
     """
     spawn_budget = DEFAULT_BUDGET
     extended = 0
     calls = 0
     streaks = {}
+    expect_red = False
 
     for event in events or []:
         if event.get('agent') != agent_id:
@@ -287,6 +339,7 @@ def scope_state(events: list, agent_id: str) -> dict:
             b = event.get('budget')
             if isinstance(b, (int, float)):
                 spawn_budget = int(b)
+            expect_red = bool(event.get('expect_red'))
         elif etype == 'agent_call':
             calls += 1
         elif etype == 'agent_ok':
@@ -308,6 +361,7 @@ def scope_state(events: list, agent_id: str) -> dict:
         'calls': calls,
         'streaks': streaks,
         'extended': extended,
+        'expect_red': expect_red,
     }
 
 
@@ -317,8 +371,9 @@ def _budget_exhausted_message(calls: int, budget: int) -> str:
         "STOP. Do not keep debugging. Report to the orchestrator now: what "
         "failed, exact evidence (commands + output), your hypothesis, and "
         "what you did NOT try. Only read-only tools remain available. The "
-        "orchestrator can lift this with a SendMessage containing "
-        "[scope-extend]."
+        "orchestrator can relaunch with [swe-budget: N] for a bigger budget "
+        "next time, or lift this trip now with a SendMessage containing "
+        "[scope-extend: N]."
     )
 
 
@@ -342,6 +397,11 @@ def scope_verdict(state: dict, tool_name: str) -> str:
     be able to investigate, report, and stop. Otherwise: budget exhaustion
     (calls >= budget) denies first; a per-kind failure streak at or past
     FAIL_STREAK_LIMIT denies next. Empty state / unknown tool never denies.
+
+    expect_red (state['expect_red']) widens ONLY the 'test' kind's limit by
+    EXPECT_RED_TEST_BONUS — an agent spawned to deliberately prove a test
+    fails (fail-proofing / red-green TDD) is expected to see red runs; the
+    'edit' and 'bash' limits are unaffected.
     """
     if tool_name in READ_ONLY_TOOLS:
         return ''
@@ -351,9 +411,13 @@ def scope_verdict(state: dict, tool_name: str) -> str:
     if calls >= budget:
         return _budget_exhausted_message(calls, budget)
 
+    expect_red = bool(state.get('expect_red'))
     streaks = state.get('streaks') or {}
     for kind, limit in FAIL_STREAK_LIMIT.items():
-        if streaks.get(kind, 0) >= limit:
+        effective_limit = limit
+        if kind == 'test' and expect_red:
+            effective_limit = limit + EXPECT_RED_TEST_BONUS
+        if streaks.get(kind, 0) >= effective_limit:
             return _fail_streak_message(kind, streaks[kind])
 
     return ''

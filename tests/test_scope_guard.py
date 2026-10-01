@@ -245,6 +245,84 @@ class TestLoadAgentEvents(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
+# is_test_command (public name) / _is_test_command (alias)
+# ---------------------------------------------------------------------------
+class TestIsTestCommandPublic(unittest.TestCase):
+    def test_public_name_matches_playwright(self):
+        self.assertTrue(scope_guard.is_test_command("npx playwright test"))
+
+    def test_public_name_matches_phpunit(self):
+        self.assertTrue(scope_guard.is_test_command("vendor/bin/phpunit tests/"))
+
+    def test_public_name_matches_jest_vitest(self):
+        self.assertTrue(scope_guard.is_test_command("npx jest"))
+        self.assertTrue(scope_guard.is_test_command("npx vitest run"))
+
+    def test_public_name_matches_go_cargo_test(self):
+        self.assertTrue(scope_guard.is_test_command("go test ./..."))
+        self.assertTrue(scope_guard.is_test_command("cargo test"))
+
+    def test_public_name_ignores_non_test(self):
+        self.assertFalse(scope_guard.is_test_command("ls -la"))
+        self.assertFalse(scope_guard.is_test_command("npm run build"))
+
+    def test_underscored_alias_still_works(self):
+        self.assertTrue(scope_guard._is_test_command("pytest tests/"))
+        self.assertIs(scope_guard._is_test_command, scope_guard.is_test_command)
+
+
+# ---------------------------------------------------------------------------
+# expects_red_runs
+# ---------------------------------------------------------------------------
+class TestExpectsRedRuns(unittest.TestCase):
+    def test_literal_tag_true(self):
+        self.assertTrue(scope_guard.expects_red_runs(
+            "Write the test first. [swe-expect-red]"))
+
+    def test_fail_proof_phrase_true(self):
+        self.assertTrue(scope_guard.expects_red_runs(
+            "Fail-proof this test before implementing."))
+        self.assertTrue(scope_guard.expects_red_runs(
+            "Fail proof the assertion."))
+
+    def test_flip_assertion_phrase_true(self):
+        self.assertTrue(scope_guard.expects_red_runs(
+            "Flip the assertion to confirm it currently fails."))
+        self.assertTrue(scope_guard.expects_red_runs("Flip assertion first."))
+
+    def test_expected_red_phrase_true(self):
+        self.assertTrue(scope_guard.expects_red_runs(
+            "Run it once — expected-red, then implement the fix."))
+        self.assertTrue(scope_guard.expects_red_runs("expected red run"))
+
+    def test_red_green_phrase_true(self):
+        self.assertTrue(scope_guard.expects_red_runs(
+            "Follow red-green TDD for this feature."))
+        self.assertTrue(scope_guard.expects_red_runs("red green cycle"))
+
+    def test_prove_test_fails_phrase_true(self):
+        self.assertTrue(scope_guard.expects_red_runs(
+            "Prove the test fails before touching the implementation."))
+        self.assertTrue(scope_guard.expects_red_runs("Prove test fails first."))
+
+    def test_intentionally_failing_phrase_true(self):
+        self.assertTrue(scope_guard.expects_red_runs(
+            "This run is intentionally failing — that's expected."))
+
+    def test_case_insensitive(self):
+        self.assertTrue(scope_guard.expects_red_runs("RED-GREEN workflow"))
+        self.assertTrue(scope_guard.expects_red_runs("[SWE-EXPECT-RED]"))
+
+    def test_ordinary_prompt_false(self):
+        self.assertFalse(scope_guard.expects_red_runs(
+            "Implement the new checkout flow and run the tests."))
+
+    def test_empty_or_none_false(self):
+        self.assertFalse(scope_guard.expects_red_runs(""))
+        self.assertFalse(scope_guard.expects_red_runs(None))
+
+
+# ---------------------------------------------------------------------------
 # scope_state
 # ---------------------------------------------------------------------------
 class TestScopeState(unittest.TestCase):
@@ -254,6 +332,26 @@ class TestScopeState(unittest.TestCase):
         self.assertEqual(state['calls'], 0)
         self.assertEqual(state['streaks'], {})
         self.assertEqual(state['extended'], 0)
+        self.assertEqual(state['expect_red'], False)
+
+    def test_expect_red_true_from_spawn_event(self):
+        events = [{'type': 'agent_spawn', 'agent': 'a1', 'budget': 60,
+                   'expect_red': True}]
+        state = scope_guard.scope_state(events, 'a1')
+        self.assertTrue(state['expect_red'])
+
+    def test_expect_red_defaults_false_when_absent(self):
+        events = [{'type': 'agent_spawn', 'agent': 'a1', 'budget': 60}]
+        state = scope_guard.scope_state(events, 'a1')
+        self.assertFalse(state['expect_red'])
+
+    def test_latest_spawn_expect_red_wins(self):
+        events = [
+            {'type': 'agent_spawn', 'agent': 'a1', 'budget': 60, 'expect_red': True},
+            {'type': 'agent_spawn', 'agent': 'a1', 'budget': 60},
+        ]
+        state = scope_guard.scope_state(events, 'a1')
+        self.assertFalse(state['expect_red'])
 
     def test_spawn_budget_used(self):
         events = [{'type': 'agent_spawn', 'agent': 'a1', 'model': 'haiku', 'budget': 25}]
@@ -408,6 +506,39 @@ class TestScopeVerdict(unittest.TestCase):
         self.assertIn('STOP', verdict)
         self.assertIn('orchestrator', verdict)
         self.assertIn('scope-extend', verdict)
+
+    def test_budget_exhausted_message_mentions_relaunch_and_extend(self):
+        state = {'budget': 10, 'calls': 10, 'streaks': {}, 'extended': 0}
+        verdict = scope_guard.scope_verdict(state, 'Bash')
+        self.assertIn('swe-budget', verdict)
+        self.assertIn('scope-extend', verdict)
+
+    def test_expect_red_raises_test_limit_only(self):
+        # Limit is 2 + EXPECT_RED_TEST_BONUS(2) = 4 for 'test' under expect_red.
+        state = {'budget': 60, 'calls': 5,
+                 'streaks': {'test': 3}, 'extended': 0, 'expect_red': True}
+        self.assertEqual(scope_guard.scope_verdict(state, 'Bash'), '')
+        state['streaks']['test'] = 4
+        self.assertIn('[scope-gate]', scope_guard.scope_verdict(state, 'Bash'))
+
+    def test_expect_red_false_uses_normal_test_limit(self):
+        state = {'budget': 60, 'calls': 5,
+                 'streaks': {'test': 2}, 'extended': 0, 'expect_red': False}
+        self.assertIn('[scope-gate]', scope_guard.scope_verdict(state, 'Bash'))
+
+    def test_expect_red_does_not_raise_edit_limit(self):
+        state = {'budget': 60, 'calls': 5,
+                 'streaks': {'edit': 2}, 'extended': 0, 'expect_red': True}
+        self.assertIn('[scope-gate]', scope_guard.scope_verdict(state, 'Edit'))
+
+    def test_expect_red_does_not_raise_bash_limit(self):
+        state = {'budget': 60, 'calls': 5,
+                 'streaks': {'bash': 3}, 'extended': 0, 'expect_red': True}
+        self.assertIn('[scope-gate]', scope_guard.scope_verdict(state, 'Bash'))
+
+    def test_expect_red_missing_key_treated_as_false(self):
+        state = {'budget': 60, 'calls': 5, 'streaks': {'test': 2}, 'extended': 0}
+        self.assertIn('[scope-gate]', scope_guard.scope_verdict(state, 'Bash'))
 
 
 # ---------------------------------------------------------------------------
