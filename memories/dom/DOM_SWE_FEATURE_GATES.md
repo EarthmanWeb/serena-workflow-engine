@@ -56,6 +56,8 @@ Checked live on every orchestrator Agent/Task call, before the subagent is spawn
 3. Register in `hooks/hooks.json`.
 4. Add a directive to the FEATURE_* memory documenting the gate.
 
+Placement: the Serena MCP server is OUR fork (`../em-serena`, `EarthmanWeb/serena` — see `mem:feature/FEATURE_SWE` Dependencies). A check on Serena tools MAY live in a PreToolUse hook here OR in the fork's tool code. NEVER rule out the fork as "third-party". Weigh: hooks see the session stream (docreads) and gate Edit/Write/Bash too; fork code sees only Serena tool calls.
+
 ## The `sweep` Gate (per-task, WM-verified)
 
 Unlike read-created gates, the sweep sentinel is created ONLY by the WM server: an `Affected Features` write whose `**Memories loaded**:` list is verified against the SESSION's actual named `docread` events (`_check_memory_sweep` in `wm_server.py`).

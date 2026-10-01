@@ -73,6 +73,13 @@ Always: WF_ARCH_REVIEW. Never: WF_DEBUG_TDD, WF_CHECKPOINT, WF_VERIFY, WF_DONE, 
 
 Serena MCP (memory), swe-wm MCP (WM updates), jq, bash, python3.
 
+### Serena MCP = OUR fork (em-serena)
+
+- NEVER call Serena "third-party" or "upstream-only". We own it: repo `EarthmanWeb/serena`, local checkout `../em-serena` (sibling of this repo), branch `swe`.
+- `scripts/start-serena.sh` runs `git+https://github.com/EarthmanWeb/serena@<sha of ref swe>` (override: `SWE_SERENA_REF`, `SWE_SERENA_NO_REFRESH=1`) — NEVER upstream `oraios/serena`.
+- Treat Serena tool behavior (edit tools, memory tools, aliases) as changeable in our fork when weighing where to place a check or feature. Verify against `../em-serena/src/` before asserting what Serena can or cannot do.
+- Deploy a Serena change: push `../em-serena` branch `swe`; the next `start-serena.sh` launch re-resolves the SHA.
+
 ## Runtime Files
 
 `.serena/swe-setup-complete.json` (setup flag) · `.serena/swe-bypass.json` (legacy disable) · `.serena/swe-state/<session>.state` (authoritative state) · `.serena/streams/<session>.jsonl` (event log) · `.serena/streams/.init_<session>` (init sentinel) · `.serena/streams/.sweep_feature_<session>` (sweep sentinel, `mem:dom/DOM_SWE_FEATURE_GATES`) · `.serena/memories/WM_<session>.md` (per-session WM).
