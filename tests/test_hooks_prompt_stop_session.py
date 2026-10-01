@@ -504,6 +504,100 @@ class TestExtractLastAssistantText(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
+# stop/swe_stop_continue_working — main() early-exit allow-stop guards
+# ---------------------------------------------------------------------------
+class TestContinueWorkingEarlyAllowGuards(unittest.TestCase):
+    """stop_hook_active / user_spoke_mid_turn / ends_with_question must allow
+    the stop BEFORE any of the INCOMPLETE_STATES blocking logic fires."""
+
+    mod = import_hook("stop/swe_stop_continue_working")
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.transcript_path = os.path.join(self.tmp.name, "session.jsonl")
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def _write_transcript(self, entries):
+        with open(self.transcript_path, 'w', encoding='utf-8') as f:
+            for entry in entries:
+                f.write(json.dumps(entry) + "\n")
+
+    def _run_main(self, payload_extra, state="WF_EXECUTE", mid_turn=False):
+        from unittest import mock
+        import io
+        import sys
+        from contextlib import redirect_stdout
+
+        payload = {
+            "transcript_path": self.transcript_path,
+            "cwd": self.tmp.name,
+            "stop_reason": "end_turn",
+        }
+        payload.update(payload_extra)
+
+        class _StubState:
+            def __init__(self, *a, **kw):
+                pass
+
+            def get_current_state(self):
+                return state
+
+        buf = io.StringIO()
+        with mock.patch.object(self.mod, "read_stdin_safe", return_value=payload), \
+             mock.patch.object(self.mod, "StateManager", _StubState), \
+             mock.patch.object(self.mod, "user_spoke_mid_turn", return_value=mid_turn), \
+             mock.patch.object(self.mod, "_persist_state_on_stop", return_value=None), \
+             redirect_stdout(buf):
+            try:
+                self.mod.main()
+            except SystemExit:
+                pass
+        return buf.getvalue()
+
+    def test_stop_hook_active_allows_stop_even_in_incomplete_state(self):
+        # Without the guard, WF_EXECUTE + a "shall I continue?" reply blocks.
+        self._write_transcript([
+            {"type": "assistant",
+             "message": {"content": [{"type": "text", "text": "Shall I continue?"}]}},
+        ])
+        out = self._run_main({"stop_hook_active": True}, state="WF_EXECUTE")
+        self.assertEqual(out.strip(), "{}")
+
+    def test_mid_turn_allows_stop_even_in_incomplete_state(self):
+        self._write_transcript([
+            {"type": "assistant",
+             "message": {"content": [{"type": "text", "text": "Shall I continue?"}]}},
+        ])
+        out = self._run_main({"stop_hook_active": False}, state="WF_EXECUTE", mid_turn=True)
+        self.assertEqual(out.strip(), "{}")
+
+    def test_question_ending_allows_stop_even_in_incomplete_state(self):
+        self._write_transcript([
+            {"type": "assistant",
+             "message": {"content": [
+                 {"type": "text", "text": "Which migration should run first?"}]}},
+        ])
+        out = self._run_main({"stop_hook_active": False}, state="WF_EXECUTE", mid_turn=False)
+        self.assertEqual(out.strip(), "{}")
+
+    def test_no_guard_triggered_still_blocks_confirmation_pattern(self):
+        # Control: with none of the three guards true, the pre-existing
+        # confirmation-pattern block still fires for WF_EXECUTE. Must NOT end
+        # in a question mark (ends_with_question guard) and must NOT match
+        # GENUINE_INPUT_PATTERNS (e.g. "proceed", "delete") or the stop is
+        # correctly allowed through by pre-existing logic, not this guard.
+        self._write_transcript([
+            {"type": "assistant",
+             "message": {"content": [
+                 {"type": "text", "text": "Waiting for your response before I continue."}]}},
+        ])
+        out = self._run_main({"stop_hook_active": False}, state="WF_EXECUTE", mid_turn=False)
+        self.assertIn('"decision": "block"', out)
+
+
+# ---------------------------------------------------------------------------
 # session/swe_session_end
 # ---------------------------------------------------------------------------
 class TestCleanupSentinels(unittest.TestCase):

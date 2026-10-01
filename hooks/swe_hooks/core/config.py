@@ -776,15 +776,26 @@ def resolve_setup_state(project_root: str) -> Dict[str, Any]:
 #   CLAUDE_PLUGIN_OPTION_RESPONSE_FORMAT_ENABLED       ("false" to opt out)
 #   CLAUDE_PLUGIN_OPTION_RESPONSE_FORMAT_TERSE_LIMIT    (int, default 40)
 #   CLAUDE_PLUGIN_OPTION_RESPONSE_FORMAT_DETAIL_LIMIT   (int, default 600)
+#   CLAUDE_PLUGIN_OPTION_RESPONSE_FORMAT_MODE           ("advise"|"block",
+#                                                        default "advise")
 #
-# Defaults (env unset): enabled, terse_limit=40, detail_limit=600.
+# Defaults (env unset): enabled, terse_limit=40, detail_limit=600, mode=advise.
+#
+# mode="advise": an overage NEVER emits decision:block — it still marks the
+# per-session sentinel (so the next prompt's reminder surfaces the budget)
+# and logs the offender, but the Stop event is allowed through silently.
+# mode="block": the original behavior — emits decision:block (at most once
+# per user turn; a second overage in the same turn WARNs instead).
 # =============================================================================
 
 RESPONSE_FORMAT_DEFAULTS = {
     "enabled": True,
     "terse_limit": 40,
     "detail_limit": 600,
+    "mode": "advise",
 }
+
+_RESPONSE_FORMAT_MODES = {"advise", "block"}
 
 _ENV_TRUE = {"1", "true", "yes", "on"}
 _ENV_FALSE = {"0", "false", "no", "off"}
@@ -819,8 +830,14 @@ def get_response_format_config() -> Dict[str, Any]:
     exported by Claude Code to the hook subprocess. Unset or malformed env falls
     back to RESPONSE_FORMAT_DEFAULTS — a broken config must never crash a hook.
 
-    Returns dict: {enabled: bool, terse_limit: int, detail_limit: int}.
+    Returns dict: {enabled: bool, terse_limit: int, detail_limit: int, mode: str}.
+    `mode` is "advise" (default) or "block"; any other/malformed value falls
+    back to the default "advise".
     """
+    raw_mode = os.environ.get("CLAUDE_PLUGIN_OPTION_RESPONSE_FORMAT_MODE")
+    mode = raw_mode.strip().lower() if raw_mode else None
+    if mode not in _RESPONSE_FORMAT_MODES:
+        mode = RESPONSE_FORMAT_DEFAULTS["mode"]
     return {
         "enabled": _env_bool(
             "CLAUDE_PLUGIN_OPTION_RESPONSE_FORMAT_ENABLED",
@@ -831,6 +848,7 @@ def get_response_format_config() -> Dict[str, Any]:
         "detail_limit": _env_int(
             "CLAUDE_PLUGIN_OPTION_RESPONSE_FORMAT_DETAIL_LIMIT",
             RESPONSE_FORMAT_DEFAULTS["detail_limit"]),
+        "mode": mode,
     }
 
 

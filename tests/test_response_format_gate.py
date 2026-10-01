@@ -444,6 +444,7 @@ class TestResponseFormatConfig(unittest.TestCase):
         "CLAUDE_PLUGIN_OPTION_RESPONSE_FORMAT_ENABLED",
         "CLAUDE_PLUGIN_OPTION_RESPONSE_FORMAT_TERSE_LIMIT",
         "CLAUDE_PLUGIN_OPTION_RESPONSE_FORMAT_DETAIL_LIMIT",
+        "CLAUDE_PLUGIN_OPTION_RESPONSE_FORMAT_MODE",
     )
 
     def setUp(self):
@@ -462,7 +463,26 @@ class TestResponseFormatConfig(unittest.TestCase):
 
     def test_defaults_when_env_unset(self):
         cfg = self.config.get_response_format_config()
-        self.assertEqual(cfg, {"enabled": True, "terse_limit": 40, "detail_limit": 600})
+        self.assertEqual(
+            cfg,
+            {"enabled": True, "terse_limit": 40, "detail_limit": 600, "mode": "advise"},
+        )
+
+    def test_mode_block_via_env(self):
+        os.environ["CLAUDE_PLUGIN_OPTION_RESPONSE_FORMAT_MODE"] = "block"
+        self.assertEqual(self.config.get_response_format_config()["mode"], "block")
+
+    def test_mode_advise_via_env(self):
+        os.environ["CLAUDE_PLUGIN_OPTION_RESPONSE_FORMAT_MODE"] = "advise"
+        self.assertEqual(self.config.get_response_format_config()["mode"], "advise")
+
+    def test_mode_case_insensitive(self):
+        os.environ["CLAUDE_PLUGIN_OPTION_RESPONSE_FORMAT_MODE"] = "BLOCK"
+        self.assertEqual(self.config.get_response_format_config()["mode"], "block")
+
+    def test_mode_invalid_falls_back_to_default(self):
+        os.environ["CLAUDE_PLUGIN_OPTION_RESPONSE_FORMAT_MODE"] = "nonsense"
+        self.assertEqual(self.config.get_response_format_config()["mode"], "advise")
 
     def test_disabled_via_env(self):
         os.environ["CLAUDE_PLUGIN_OPTION_RESPONSE_FORMAT_ENABLED"] = "false"
@@ -530,7 +550,13 @@ class _MainHarness(unittest.TestCase):
             for rec in lines:
                 f.write(json.dumps(rec) + "\n")
 
-    def _run_main(self, stop_hook_active=False, state="WF_EXECUTE"):
+    # Tests in this harness validate BLOCK-mode mechanics (one-block-per-turn,
+    # stop_hook_active, WF_DONE) explicitly — mode defaults to "block" here so
+    # existing behavior is covered even though the gate's own default is now
+    # "advise". Advise-mode behavior has its own harness below.
+    MODE = "block"
+
+    def _run_main(self, stop_hook_active=False, state="WF_EXECUTE", mode=None):
         payload = {
             "transcript_path": self.transcript_path,
             "stop_hook_active": stop_hook_active,
@@ -543,9 +569,11 @@ class _MainHarness(unittest.TestCase):
              mock.patch.object(gate, "get_response_format_config",
                                 return_value={"enabled": True,
                                                "terse_limit": self.TERSE_LIMIT,
-                                               "detail_limit": 600}), \
+                                               "detail_limit": 600,
+                                               "mode": mode or self.MODE}), \
              mock.patch.object(gate, "get_stream_dir", return_value=self.streams), \
              mock.patch.object(gate, "StateManager", _stub_state_manager(state)), \
+             mock.patch.object(gate, "user_spoke_mid_turn", return_value=False), \
              redirect_stdout(buf):
             try:
                 gate.main()
@@ -633,6 +661,148 @@ class TestMainOneBlockPerTurn(_MainHarness):
         self._write_transcript(self.ESSAY)
         out = self._run_main()
         self.assertIn('"decision": "block"', out)
+
+
+class TestMainAdviseMode(_MainHarness):
+    """mode='advise': an overage NEVER emits decision:block, but still marks
+    the sentinel (for the next-prompt reminder) and logs the offender."""
+
+    MODE = "advise"
+    ESSAY = " ".join(["word"] * 60)
+
+    def test_overage_does_not_block(self):
+        self._write_transcript(self.ESSAY)
+        out = self._run_main()
+        self.assertEqual(out.strip(), "")
+        self.assertNotIn("block", out)
+
+    def test_overage_still_marks_sentinel(self):
+        self._write_transcript(self.ESSAY)
+        self._run_main()
+        rec = self._read_sentinel()
+        self.assertEqual(rec["fp"], gate.turn_fingerprint("fix it"))
+
+    def test_overage_still_logs_offender(self):
+        self._write_transcript(self.ESSAY)
+        self._run_main()
+        log_path = os.path.join(self.streams, "response-format-offenders.log")
+        self.assertTrue(os.path.exists(log_path))
+
+    def test_terse_reply_no_sentinel(self):
+        self._write_transcript("Fixed.")
+        self._run_main()
+        self.assertFalse(os.path.exists(self._sentinel()))
+
+    def test_banned_pattern_does_not_block_in_advise_mode(self):
+        self._write_transcript("## Summary\nAll done and verified.")
+        out = self._run_main()
+        self.assertEqual(out.strip(), "")
+
+
+class TestMainBlockModeExplicit(_MainHarness):
+    """mode='block' (explicit) reproduces the pre-advise-mode behavior."""
+
+    MODE = "block"
+
+    def test_overage_blocks(self):
+        self._write_transcript(" ".join(["word"] * 60))
+        out = self._run_main()
+        self.assertIn('"decision": "block"', out)
+
+
+class TestMainMidTurnSkip(_MainHarness):
+    """The gate must skip silently (no block, no advise marking) when the
+    user already typed a follow-up before this Stop event fired."""
+
+    MODE = "block"
+    ESSAY = " ".join(["word"] * 60)
+
+    def _run_main_mid_turn(self, mid_turn):
+        payload = {
+            "transcript_path": self.transcript_path,
+            "stop_hook_active": False,
+        }
+        buf = io.StringIO()
+        with mock.patch.object(sys, "stdin", io.StringIO(json.dumps(payload))), \
+             mock.patch.object(gate, "get_project_root", return_value=self.tmp.name), \
+             mock.patch.object(gate, "resolve_setup_state",
+                                return_value={"bypassed": False, "initialized": True}), \
+             mock.patch.object(gate, "get_response_format_config",
+                                return_value={"enabled": True,
+                                               "terse_limit": self.TERSE_LIMIT,
+                                               "detail_limit": 600,
+                                               "mode": self.MODE}), \
+             mock.patch.object(gate, "get_stream_dir", return_value=self.streams), \
+             mock.patch.object(gate, "StateManager", _stub_state_manager("WF_EXECUTE")), \
+             mock.patch.object(gate, "user_spoke_mid_turn", return_value=mid_turn), \
+             redirect_stdout(buf):
+            try:
+                gate.main()
+            except SystemExit:
+                pass
+        return buf.getvalue()
+
+    def test_mid_turn_skips_even_on_violation(self):
+        self._write_transcript(self.ESSAY)
+        out = self._run_main_mid_turn(True)
+        self.assertEqual(out.strip(), "")
+        self.assertFalse(os.path.exists(self._sentinel()))
+
+    def test_no_mid_turn_still_blocks(self):
+        self._write_transcript(self.ESSAY)
+        out = self._run_main_mid_turn(False)
+        self.assertIn('"decision": "block"', out)
+
+
+# ---------------------------------------------------------------------------
+# read_transcript — queued_command as a turn boundary for word counting
+# ---------------------------------------------------------------------------
+class TestReadTranscriptQueuedCommandBoundary(unittest.TestCase):
+    def _write(self, records):
+        tmp = tempfile.NamedTemporaryFile(
+            mode="w", suffix=".jsonl", delete=False, encoding="utf-8")
+        for rec in records:
+            tmp.write(json.dumps(rec) + "\n")
+        tmp.close()
+        self.addCleanup(os.unlink, tmp.name)
+        return tmp.name
+
+    def _user(self, text):
+        return {"type": "user", "message": {"content": text}}
+
+    def _assistant(self, text):
+        return {"type": "assistant", "message": {"content": text}}
+
+    def _queued(self, text, human_turn=True):
+        return {
+            "type": "attachment",
+            "attachment": {
+                "type": "queued_command",
+                "prompt": [{"type": "text", "text": text}],
+                "commandMode": "prompt",
+                "humanTurn": human_turn,
+            },
+        }
+
+    def test_prose_before_mid_turn_message_not_counted(self):
+        path = self._write([
+            self._user("fix the bug"),
+            self._assistant(" ".join(["word"] * 100)),  # prose before mid-turn msg
+            self._queued("now also do X"),
+            self._assistant("Done with X."),
+        ])
+        last_user_text, assistant_since_user = gate.read_transcript(path)
+        self.assertEqual(last_user_text, "now also do X")
+        self.assertEqual(assistant_since_user, ["Done with X."])
+
+    def test_no_queued_command_behaves_as_before(self):
+        path = self._write([
+            self._user("fix the bug"),
+            self._assistant("Fixed."),
+        ])
+        last_user_text, assistant_since_user = gate.read_transcript(path)
+        self.assertEqual(last_user_text, "fix the bug")
+        self.assertEqual(assistant_since_user, ["Fixed."])
 
 
 if __name__ == "__main__":

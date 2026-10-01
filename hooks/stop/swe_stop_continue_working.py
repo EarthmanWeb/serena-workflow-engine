@@ -31,6 +31,7 @@ try:
     from swe_hooks.core.stream import get_stream_path, append_event
     from swe_hooks.core.session import extract_session_id
     from swe_hooks.core.config import read_state_file, write_state_file
+    from swe_hooks.core.turn_signals import ends_with_question, user_spoke_mid_turn
 except ImportError as e:
     swe_hooks.bootstrap.import_error_exit(e, "Stop")
 
@@ -192,6 +193,7 @@ def main():
         input_data = read_stdin_safe(timeout_seconds=2.0)
         stop_reason = get_input_field(input_data, 'stop_reason', default='unknown')
         transcript_path = get_input_field(input_data, 'transcript_path', default='')
+        stop_hook_active = bool(get_input_field(input_data, 'stop_hook_active', default=False))
         cwd = get_input_field(input_data, 'cwd', default=os.getcwd())
 
         # --- Resolve workflow state ---
@@ -201,6 +203,25 @@ def main():
             current_state = state_mgr.get_current_state()
         except Exception:
             current_state = ''
+
+        # --- Allow the stop BEFORE any blocking logic below fires ---
+        #   - stop_hook_active: this IS the retry our own prior block
+        #     produced; forcing another block risks an infinite ping-pong.
+        #   - user_spoke_mid_turn: the user already typed a follow-up before
+        #     this Stop event — forcing a continue produces a turn the user
+        #     will not even see before their own next message lands.
+        #   - last assistant text ends with a question: it needs an answer
+        #     before anything else can happen; blocking here would just
+        #     re-ask the same question via a forced continue.
+        if stop_hook_active or user_spoke_mid_turn(transcript_path):
+            _persist_state_on_stop(session_id, current_state)
+            output_empty()
+            return
+        last_assistant_text = extract_last_assistant_text(transcript_path)
+        if ends_with_question(last_assistant_text):
+            _persist_state_on_stop(session_id, current_state)
+            output_empty()
+            return
 
         # WF_DONE or uninitialized — always allow stop
         if current_state in ALLOW_STOP_STATES:

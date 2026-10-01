@@ -54,6 +54,13 @@ try:
     from swe_hooks.core.output import output_status
     from swe_hooks.core.state_manager import StateManager
     from swe_hooks.core.stream import get_stream_dir
+    from swe_hooks.core.turn_signals import (
+        ends_with_question,
+        is_genuine_user,
+        queued_command_prompt_text,
+        text_of,
+        user_spoke_mid_turn,
+    )
 except ImportError as e:
     swe_hooks.bootstrap.import_error_exit(e, "Stop")
 
@@ -117,36 +124,9 @@ BANNED_PATTERNS = [
 # ---------------------------------------------------------------------------
 # Pure helpers (unit-tested directly)
 # ---------------------------------------------------------------------------
-def text_of(content):
-    """Extract plain text from a message content field (str or block list)."""
-    if isinstance(content, str):
-        return content
-    out = []
-    if isinstance(content, list):
-        for block in content:
-            if isinstance(block, dict) and block.get("type") == "text":
-                out.append(block.get("text", ""))
-    return "\n".join(out)
-
-
-def is_genuine_user(rec):
-    """True for a real user message (not tool_result plumbing, not meta)."""
-    if rec.get("type") != "user":
-        return False
-    msg = rec.get("message") or {}
-    content = msg.get("content")
-    if isinstance(content, list):
-        # tool_result-only entries are plumbing, not the user speaking
-        if all(isinstance(b, dict) and b.get("type") == "tool_result" for b in content):
-            return False
-    text = text_of(content)
-    if not text.strip():
-        return False
-    # command / hook / system-reminder wrappers are not the user speaking
-    if text.lstrip().startswith(("<local-command", "<command-", "<system-reminder", "[SYSTEM NOTIFICATION")):
-        return False
-    return True
-
+# text_of / is_genuine_user MOVED to swe_hooks.core.turn_signals (imported
+# above) — re-exported here (module attribute) so existing callers/tests
+# using `gate.text_of` / `gate.is_genuine_user` keep working unchanged.
 
 # A line that is essentially a file reference / path listing — an absolute
 # or relative filesystem path, optionally with a leading bullet/number marker
@@ -177,17 +157,8 @@ def prose_words(text):
     return full + half // 2
 
 
-def ends_with_question(text):
-    """True when the reply's final non-blank paragraph ends with a question
-    mark — such a reply is asking the user something and must not be forced
-    into a rewrite by the length/format budget."""
-    stripped = (text or "").rstrip()
-    if not stripped:
-        return False
-    # Ignore trailing closing punctuation/quotes/markdown emphasis after '?'.
-    tail = stripped.rstrip("`*_\"')]} \n\t")
-    return tail.endswith("?")
-
+# ends_with_question MOVED to swe_hooks.core.turn_signals (imported above);
+# re-exported as a module attribute for existing callers/tests (gate.ends_with_question).
 
 _WORD_RE = re.compile(r"[a-z0-9]+")
 DUP_SIMILARITY_THRESHOLD = 0.6
@@ -399,7 +370,14 @@ def log_offender(session, reason, user_text, reply, word_count):
 
 
 def read_transcript(transcript_path):
-    """Return (last_user_text, [assistant texts since last genuine user])."""
+    """Return (last_user_text, [assistant texts since last genuine user]).
+
+    A queued_command human attachment is ALSO treated as a turn boundary:
+    it means the user typed a follow-up mid-turn, so prose the assistant
+    wrote BEFORE that message must not be counted toward the CURRENT turn's
+    word budget — only what the assistant says after the user's new message
+    is "this turn"'s reply.
+    """
     last_user_text = ""
     assistant_since_user = []
     with open(transcript_path, encoding="utf-8") as f:
@@ -414,7 +392,13 @@ def read_transcript(transcript_path):
             if is_genuine_user(rec):
                 last_user_text = text_of((rec.get("message") or {}).get("content"))
                 assistant_since_user = []
-            elif rec.get("type") == "assistant":
+                continue
+            queued_text = queued_command_prompt_text(rec)
+            if queued_text is not None:
+                last_user_text = queued_text
+                assistant_since_user = []
+                continue
+            if rec.get("type") == "assistant":
                 t = text_of((rec.get("message") or {}).get("content"))
                 if t.strip():
                     assistant_since_user.append(t)
@@ -458,6 +442,12 @@ def main():
     if StateManager(project_root, session_id=session).get_current_state() == "WF_DONE":
         sys.exit(0)
 
+    # The user already typed a follow-up before this Stop event — forcing a
+    # block/rewrite here produces a wasted turn the user will not even see
+    # before their own next message lands. Skip silently.
+    if user_spoke_mid_turn(transcript_path):
+        sys.exit(0)
+
     try:
         last_user_text, assistant_since_user = read_transcript(transcript_path)
     except OSError:
@@ -469,7 +459,18 @@ def main():
     )
 
     if reason:
+        mode = cfg.get("mode", "advise")
         fp = turn_fingerprint(last_user_text)
+
+        if mode == "advise":
+            # NEVER emit decision:block in advise mode — still record the
+            # overage (mark_blocked) so swe_prompt_format_reminder.py
+            # surfaces the budget on the NEXT prompt, and log it for tuning.
+            # No stdout beyond the empty-allow default: exit silently.
+            mark_blocked(session, fp, 1)
+            log_offender(session, reason.split(" — ")[0], last_user_text, scanned, words)
+            sys.exit(0)
+
         prior = read_block_record(session)
         if prior and prior.get("fp") == fp:
             # This user turn already consumed its one block — WARN attachment
