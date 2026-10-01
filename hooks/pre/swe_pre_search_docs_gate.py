@@ -29,13 +29,21 @@ file you already located, CLAUDE.md, a config) is not untargeted surfing — it
 is the normal way to do the work. Only wide searches and Bash recon count
 against the budget.
 
-Memory-tree greps ARE docs consults (B2): a gated Grep/Glob/Bash-grep whose
-target path sits inside a memory tree (.serena/memory/, .serena/memories/, or
-a memories/ dir) searches the documentation itself — the exact behavior this
-gate exists to route the agent toward. Such a call is NEVER denied, spends no
-budget, and is credited as a 'docread' (name='memory-grep', always-fresh) that
-REFILLS the budget like read_memory. Detected via tool_input path/pattern
-fields and Bash command text.
+Memory-tree greps (B2): a gated Grep/Glob/Bash-grep whose target sits inside
+the PLUGIN-SOURCE `memories/` tree (mem:dom/DOM_MEMORY_TREES — the plain-file
+tree shipped with the plugin, edited with ordinary Read/Write/Edit, NOT a
+Serena memory store) is a docs consult — reading the documentation itself.
+Such a call is NEVER denied, spends no budget, and is credited as a 'docread'
+(name='memory-grep', always-fresh) that REFILLS the budget like read_memory.
+
+A target inside a Serena memory STORE (.serena/memory/ or .serena/memories/)
+is NOT credited here — raw filesystem access to those is a gate violation in
+its own right (hooks/pre/swe_pre_memory_fs_gate.py DENIES it outright, before
+this gate even runs), so rewarding it with docread credit would be reinforcing
+the exact anti-pattern that gate exists to stop. When
+memory_fs.tool_memory_access() is true for this call, this gate allows it
+WITHOUT recording any event (no budget spend, no docread credit) — the
+memory-fs gate's deny is the actual response to that call.
 
 Clearing the gate is deliberately cheap and BUDGETED: ONE docs consult
 (read_memory / list_memories / search_memories_by_name /
@@ -91,6 +99,15 @@ try:
         append_event, events_since_task_start, collect_values_since_task_start,
         normalize_memory_name,
     )
+    from swe_hooks.core import memory_fs
+    # Shared Bash command-splitting regexes — DEFINED in memory_fs (single
+    # source of truth) and re-exported here so this module's own namespace
+    # still carries these names (BASH_GROUP_SPLIT_RE / BASH_PIPE_SPLIT_RE /
+    # BASH_ENV_ASSIGN_RE), for any existing reference/test that looks them up
+    # on this module.
+    from swe_hooks.core.memory_fs import (
+        BASH_GROUP_SPLIT_RE, BASH_PIPE_SPLIT_RE, BASH_ENV_ASSIGN_RE,
+    )
 except ImportError as e:
     swe_hooks.bootstrap.import_error_exit(e, "PreToolUse")
 
@@ -128,10 +145,10 @@ SWEEP_BONUS = 40
 #     `grep … /tmp/test-pp.log` after a test run does NOT gate. Absolute paths
 #     that are NOT transient (a repo checkout under /Users, /x, …) still gate.
 # Mutation, build, and test commands are deliberately absent: they do work.
-BASH_GROUP_SPLIT_RE = re.compile(r'(?:;|&&|\|\||&|\n)+')
-BASH_PIPE_SPLIT_RE = re.compile(r'\|(?!\|)')
-BASH_ENV_ASSIGN_RE = re.compile(
-    r'^(?:[A-Za-z_][A-Za-z0-9_]*=(?:"[^"]*"|\'[^\']*\'|\S*)\s+)*')
+# BASH_GROUP_SPLIT_RE / BASH_PIPE_SPLIT_RE / BASH_ENV_ASSIGN_RE are imported
+# from swe_hooks.core.memory_fs above (single source of truth, shared with
+# the memory-fs gate's Bash classifier) and re-exported into this module's
+# namespace by that import.
 BASH_INSPECT_FIRST_RE = re.compile(
     r'^(?:'
     r'(?:cat|head|tail|less|more|grep|rg|find|ls|tree|awk|sed)\b'
@@ -228,15 +245,22 @@ def bash_is_inspection(command: str) -> bool:
     return False
 
 
-# B2 — memory-tree consult detection. A target inside .serena/memory/,
-# .serena/memories/, or any memories/ dir is documentation, not code. The
-# bare word 'memories' only counts when it is a PATH SEGMENT (followed by
-# '/' or ending the value) — grepping source for the word "memories" is
-# still code surfing. MULTILINE so '$' also matches line ends inside a
-# multi-line Bash command.
+# B2 — memory-tree consult detection, PLUGIN-SOURCE `memories/` ONLY. A
+# target inside any `memories/` dir (the plugin-source tree,
+# mem:dom/DOM_MEMORY_TREES — plain files, not a Serena store) is
+# documentation, not code; the bare word 'memories' only counts when it is a
+# PATH SEGMENT (followed by '/' or ending the value) — grepping source for
+# the word "memories" is still code surfing. MULTILINE so '$' also matches
+# line ends inside a multi-line Bash command.
+#
+# Deliberately NOT matched here: `.serena/memor(y|ies)` (a Serena memory
+# STORE). Raw filesystem access to a memory store is a gate violation in its
+# own right — hooks/pre/swe_pre_memory_fs_gate.py DENIES it outright — so it
+# must NOT also earn docread credit here; that credit is handled via
+# memory_fs.tool_memory_access() in main() below, which allows the call
+# without recording ANY event (no budget spend, no docread credit).
 MEMORY_TREE_RE = re.compile(
-    r'\.serena/memor(?:y|ies)(?:/|$)'
-    r'|(?:^|[/\s"\'=(])memories(?:/|$)',
+    r'(?:^|[/\s"\'=(])(?<!\.serena/)memories(?:/|$)',
     re.MULTILINE,
 )
 
@@ -431,6 +455,19 @@ def main():
         tool_name = get_input_field(input_data, 'tool_name', default='')
         tool_input = input_data.get('tool_input', {})
         if not is_gated_call(tool_name, tool_input):
+            output_empty()
+            return
+
+        cwd = get_input_field(input_data, 'cwd', default=os.getcwd())
+
+        # B2 — a call that reaches into a Serena memory STORE
+        # (.serena/memory(ies)/) is NEVER credited as a docread here: raw FS
+        # access to a memory store is itself a gate violation — DENIED
+        # outright by hooks/pre/swe_pre_memory_fs_gate.py — so this gate must
+        # not reward it with budget refill. Allow it through with NO event
+        # recorded (no budget spend, no docread credit); the memory-fs gate
+        # is the one that actually answers this call.
+        if memory_fs.tool_memory_access(tool_name, tool_input, cwd):
             output_empty()
             return
 

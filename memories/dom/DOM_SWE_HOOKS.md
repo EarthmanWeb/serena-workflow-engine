@@ -36,6 +36,7 @@ hooks/
 │   │   ├── state_manager.py      # State machine logic
 │   │   ├── stream.py             # Append-only JSONL event log
 │   │   ├── orphan_reaper.py      # Kills orphaned VS-Code-extension Claude sessions (ppid==1)
+│   │   ├── memory_fs.py          # Memory-store path/Bash classifier (symlink-aware)
 │   │   └── wm_validator.py       # Working Memory validation
 │   ├── mcp/
 │   │   └── wm_server.py          # swe-wm MCP server
@@ -45,7 +46,7 @@ hooks/
 └── hooks.json
 ```
 
-## Hook Inventory (20 scripts) — condensed
+## Hook Inventory (21 scripts) — condensed
 
 ### Session (`session/`)
 
@@ -63,7 +64,7 @@ hooks/
 
 ### Pre-Tool (`pre/`) — gatekeepers
 
-7 hooks: init gate (two-tier circuit breaker), edit validate, memory index gate, bash test gate, docs-first search gate, question consent gate, agent model gate. Full detail: `mem:dom/DOM_SWE_HOOKS_PRE_GATES`.
+8 hooks: init gate (two-tier circuit breaker), memory-fs gate, edit validate, memory index gate, bash test gate, docs-first search gate, question consent gate, agent model gate. Full detail: `mem:dom/DOM_SWE_HOOKS_PRE_GATES`.
 
 ### Post-Tool (`post/`) — observers/learners
 
@@ -75,15 +76,15 @@ hooks/
 
 ## Routing Table
 
-| When                                                                                                                                                               | Read                                   |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------- |
-| Debugging/editing a PreToolUse gate (init gate, edit validate, memory index gate, bash test gate, docs-first search gate, question consent gate, agent model gate) | `mem:dom/DOM_SWE_HOOKS_PRE_GATES`      |
-| Debugging/editing a PostToolUse observer                                                                                                                           | `mem:dom/DOM_SWE_HOOKS_POST`           |
-| Debugging/editing the sentinel nudge mechanism (checkpoint/search-hint/drift thresholds)                                                                           | `mem:dom/DOM_SWE_HOOKS_SENTINELS`      |
-| Debugging/editing prompt-intent classification, pivot detection, session-reset, or task-boundary/sweep stamping                                                    | `mem:dom/DOM_SWE_HOOKS_PROMPT_ROUTING` |
-| Debugging/editing a Stop hook (continue-working, terse-response-format gate)                                                                                       | `mem:dom/DOM_SWE_HOOKS_STOP`           |
-| Writing/reading hook output JSON, using HookOutput/StateManager/Session/WM-Validator/Orphan-Reaper, verifying hook loading, or running the diagnostic checklist    | `mem:dom/DOM_SWE_HOOKS_CORE_MODULES`   |
-| Understanding `readAdvance` state transitions                                                                                                                      | `mem:dom/DOM_SWE_STATE_MACHINE`        |
+| When                                                                                                                                                                               | Read                                   |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| Debugging/editing a PreToolUse gate (init gate, memory-fs gate, edit validate, memory index gate, bash test gate, docs-first search gate, question consent gate, agent model gate) | `mem:dom/DOM_SWE_HOOKS_PRE_GATES`      |
+| Debugging/editing a PostToolUse observer                                                                                                                                           | `mem:dom/DOM_SWE_HOOKS_POST`           |
+| Debugging/editing the sentinel nudge mechanism (checkpoint/search-hint/drift thresholds)                                                                                           | `mem:dom/DOM_SWE_HOOKS_SENTINELS`      |
+| Debugging/editing prompt-intent classification, pivot detection, session-reset, or task-boundary/sweep stamping                                                                    | `mem:dom/DOM_SWE_HOOKS_PROMPT_ROUTING` |
+| Debugging/editing a Stop hook (continue-working, terse-response-format gate)                                                                                                       | `mem:dom/DOM_SWE_HOOKS_STOP`           |
+| Writing/reading hook output JSON, using HookOutput/StateManager/Session/WM-Validator/Orphan-Reaper, verifying hook loading, or running the diagnostic checklist                    | `mem:dom/DOM_SWE_HOOKS_CORE_MODULES`   |
+| Understanding `readAdvance` state transitions                                                                                                                                      | `mem:dom/DOM_SWE_STATE_MACHINE`        |
 
 ## Instruction File Strategy
 

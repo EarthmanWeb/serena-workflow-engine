@@ -62,6 +62,7 @@ try:
         TEST_TARGET_RE, TEST_DOC_NAMES,
         unread_required_docs,
     )
+    from swe_hooks.core import memory_fs
 except ImportError as e:
     swe_hooks.bootstrap.import_error_exit(e, "PreToolUse")
 
@@ -314,15 +315,19 @@ def _is_raw_memory_write(input_data):
     via Serena's write_memory/edit_memory tools (which keep frontmatter,
     indexing hooks, and sync behavior intact) — never via raw Edit/Write.
     Exception: session Working Memory (WM_*.md), which the harness/daemon
-    writes with the Write tool by design.
+    writes with the Write tool by design (memory_fs.is_memory_store_path
+    carries the same WM_* carve-out).
+
+    Delegates to memory_fs.is_memory_store_path, which ALSO matches the
+    auto-memory symlink target (~/.claude/projects/<encoded>/memory ->
+    <project>/.serena/memory) via os.path.realpath — a raw Edit/Write
+    through that symlink is caught too, not just the direct .serena/ path.
     """
     if input_data.get('tool_name', '') not in ('Edit', 'Write'):
         return False
     file_path = str((input_data.get('tool_input') or {}).get('file_path', ''))
-    norm = file_path.replace('\\', '/')
-    if '/.serena/memory/' not in norm and '/.serena/memories/' not in norm:
-        return False
-    return not os.path.basename(norm).startswith('WM_')
+    cwd = input_data.get('cwd') or os.getcwd()
+    return memory_fs.is_memory_store_path(file_path, cwd)
 
 
 def _block_message(current):

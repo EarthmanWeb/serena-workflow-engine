@@ -2455,27 +2455,44 @@ class TestMemoryIndexGateSiteDataVerdict(unittest.TestCase):
 
 
 class TestDocsGateMemoryGrepLegitimization(unittest.TestCase):
-    """B2 — a gated Grep/Glob/Bash-grep INTO a memory tree is a docs consult:
-    never denied, spends no budget, credited as an always-fresh 'docread'
-    (name='memory-grep') that refills the budget like read_memory."""
+    """B2 — a gated Grep/Glob/Bash-grep into the PLUGIN-SOURCE `memories/`
+    tree is a docs consult: never denied, spends no budget, credited as an
+    always-fresh 'docread' (name='memory-grep') that refills the budget like
+    read_memory.
+
+    A target inside a Serena memory STORE (.serena/memory(ies)/) is NO LONGER
+    credited here — raw FS access to a memory store is itself denied outright
+    by hooks/pre/swe_pre_memory_fs_gate.py, so this gate now allows such a
+    call through with NO event recorded at all (no budget spend, no docread
+    credit) via memory_fs.tool_memory_access(), checked before any session/
+    budget logic in main()."""
 
     MAIN_PATH = ("/Users/x/.claude/projects/-Users-x-proj/"
                  "94aee7ae-ebde-442b-a66c-2cac8ccdd262.jsonl")
 
-    # --- detection ---------------------------------------------------------
+    # --- detection (is_memory_tree_consult: PLUGIN-SOURCE memories/ only) --
     def test_memory_tree_targets_detected(self):
         for tool, tool_input in (
-                ('Grep', {'path': '/proj/.serena/memories', 'pattern': 'redis'}),
-                ('Grep', {'path': '.serena/memory/dom', 'pattern': 'cache'}),
-                ('Glob', {'pattern': '.serena/memory/**/*.md'}),
                 ('Glob', {'pattern': 'memories/**/*.md'}),
-                ('mcp__plugin_swe_serena__search_for_pattern',
-                 {'relative_path': '.serena/memories/', 'substring_pattern': 'x'}),
-                ('Bash', {'command': 'grep -rn "redis" .serena/memories/'}),
                 ('Bash', {'command':
                           'grep -n foo /x/plugin/memories/wf/WF_INIT.md'}),
         ):
             self.assertTrue(
+                search_docs_mod.is_memory_tree_consult(tool, tool_input),
+                (tool, tool_input))
+
+    def test_serena_memory_store_targets_no_longer_detected_by_is_memory_tree_consult(self):
+        # .serena/memory(ies)/ is a Serena STORE now, not a tree-consult
+        # credit — the memory-fs gate owns it instead.
+        for tool, tool_input in (
+                ('Grep', {'path': '/proj/.serena/memories', 'pattern': 'redis'}),
+                ('Grep', {'path': '.serena/memory/dom', 'pattern': 'cache'}),
+                ('Glob', {'pattern': '.serena/memory/**/*.md'}),
+                ('mcp__plugin_swe_serena__search_for_pattern',
+                 {'relative_path': '.serena/memories/', 'substring_pattern': 'x'}),
+                ('Bash', {'command': 'grep -rn "redis" .serena/memories/'}),
+        ):
+            self.assertFalse(
                 search_docs_mod.is_memory_tree_consult(tool, tool_input),
                 (tool, tool_input))
 
@@ -2508,7 +2525,7 @@ class TestDocsGateMemoryGrepLegitimization(unittest.TestCase):
         self.assertTrue(search_docs_mod.docs_budget_allows(stream))
 
     # --- main() end-to-end -------------------------------------------------
-    def _run_main(self, tool_name, tool_input, events):
+    def _run_main(self, tool_name, tool_input, events, cwd='/proj'):
         import contextlib
         import io
         tmp = tempfile.TemporaryDirectory()
@@ -2520,7 +2537,7 @@ class TestDocsGateMemoryGrepLegitimization(unittest.TestCase):
             for e in events:
                 f.write(json.dumps(e) + '\n')
         payload = {'tool_name': tool_name, 'tool_input': tool_input,
-                   'transcript_path': self.MAIN_PATH}
+                   'transcript_path': self.MAIN_PATH, 'cwd': cwd}
         orig = (search_docs_mod.read_stdin_safe,
                 search_docs_mod.get_sentinel_path,
                 search_docs_mod.get_stream_path)
@@ -2538,12 +2555,12 @@ class TestDocsGateMemoryGrepLegitimization(unittest.TestCase):
              search_docs_mod.get_stream_path) = orig
         return json.loads(buf.getvalue()), stream
 
-    def test_main_allows_memory_grep_with_budget_spent_and_refills(self):
-        # No docread in the stream: a plain gated call would deny — the
-        # memory-tree grep is allowed anyway AND credits a docread that
-        # refills the budget for subsequent source reads.
+    def test_main_allows_plugin_source_memory_grep_and_credits_docread(self):
+        # No docread in the stream: a plain gated call would deny — a grep
+        # into the PLUGIN-SOURCE memories/ tree is allowed anyway AND credits
+        # a docread that refills the budget for subsequent source reads.
         result, stream = self._run_main(
-            'Grep', {'path': '/proj/.serena/memories', 'pattern': 'redis'},
+            'Bash', {'command': 'grep -n foo /x/plugin/memories/wf/WF_INIT.md'},
             events=[{'type': 'prompt'}])
         self.assertEqual(result, {})
         with open(stream) as f:
@@ -2559,9 +2576,11 @@ class TestDocsGateMemoryGrepLegitimization(unittest.TestCase):
         self.assertEqual(
             result['hookSpecificOutput']['permissionDecision'], 'deny')
 
-    def test_memory_grep_spends_no_budget(self):
-        # With budget available, a memory-tree Bash grep must not append a
-        # 'gated' (budget-spending) event.
+    def test_serena_memory_store_grep_allowed_with_no_event_and_no_credit(self):
+        # A Serena-STORE target (.serena/memories/) is allowed through with
+        # NO event recorded at all — no budget spend ('gated') AND no docread
+        # credit ('memory-grep'). The memory-fs gate is what actually answers
+        # this call; this gate must not reward the anti-pattern.
         result, stream = self._run_main(
             'Bash', {'command': 'grep -rn "redis" .serena/memories/'},
             events=[{'type': 'docread', 'name': 'feature/x'}])
@@ -2569,4 +2588,14 @@ class TestDocsGateMemoryGrepLegitimization(unittest.TestCase):
         with open(stream) as f:
             lines = f.read()
         self.assertNotIn('"gated"', lines)
-        self.assertIn('"memory-grep"', lines)
+        self.assertNotIn('"memory-grep"', lines)
+
+    def test_serena_memory_store_grep_allowed_even_with_budget_spent(self):
+        # Even with the budget fully spent (which would deny a plain Grep),
+        # a Serena-STORE target is allowed — the memory_fs short-circuit in
+        # main() runs BEFORE any budget check.
+        events = [{'type': 'gated'}] * search_docs_mod.GATED_CALL_BUDGET
+        result, _stream = self._run_main(
+            'Grep', {'path': '.serena/memory', 'pattern': 'redis'},
+            events=events)
+        self.assertEqual(result, {})

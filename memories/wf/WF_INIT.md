@@ -15,6 +15,9 @@ Consult memories before grepping the filesystem.
 - `search_memories_by_name(query)` — find a memory by a keyword in its name (fuzzy fallback).
 - `search_memories_by_front_matter(query)` — find a memory by what it is about (front-matter description/type).
 - `read_memory(name)` — read a memory whose name you have.
+- Body/content search: `search_for_pattern(substring_pattern="<terms>", relative_path=".serena/memory")` — searches memory BODIES, not just name/front-matter.
+
+NEVER Bash/Grep/Glob/Read on memory files (`.serena/memory/`, `.serena/memories/`, the auto-memory symlink) — `swe_pre_memory_fs_gate.py` denies it. Use the Serena memory tools above.
 
 Every `write_memory` MUST start with the standard front-matter block, then the body:
 
