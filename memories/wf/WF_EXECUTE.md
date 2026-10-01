@@ -56,6 +56,8 @@ read_memory("dev/DEV_JAVASCRIPT")             # If touching JS
 
 Do NOT write code until relevant memories are loaded.
 
+- `[doc-gate]` enforces DEV_* reads per file type before an Edit/Write/Bash-write is allowed: every `feature/*`/`dev/*` memory whose `paths:` glob matches the target, else an extension-based fallback (`dev/DEV_<LANG>` + `feature/FEATURE_DEV_STANDARDS`). Reads are session-scoped. Read the governing memories up front — do not wait for a denial.
+
 ## Multi-Layer Implementation
 
 1. Read architecture docs (`arch/ARCH_SWE`, `dom/DOM_*`); understand data flow from `arch/ARCH_SWE`.

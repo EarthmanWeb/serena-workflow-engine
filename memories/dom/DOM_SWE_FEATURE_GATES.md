@@ -4,7 +4,8 @@ description: Feature-gate mechanism (sentinel-based tool blocking) and the sweep
 obligations:
   - A docpending link surfaced by the PRIMARY feature is satisfied by read, planned (obligations cited as `(mem:<name>)` in the WM Compliance Checklist), or ruled out (with reason) — bare deferral is rejected.
   - `**Rules planned**:` names MUST each be cited as `(mem:<name>)` on a `## Compliance Checklist` line — an uncited planned name or an unmatched citation is rejected.
-  - `doc-gate` DENIES a MAIN-AGENT edit until it itself has read every memory `doc_requirements.required_docs_for_path` names for the target file — subagent enforcement is REMOVED; a subagent's required reading is enforced once, at delegation time, by `[sweep-gate]` in `swe_pre_agent_model_gate.py`.
+  - `doc-gate` DENIES a MAIN-AGENT edit until it itself has read every memory `doc_requirements.required_docs_for_path` names for the target file, reads scoped to the WHOLE SESSION not per-task — subagent enforcement is REMOVED; a subagent's required reading is enforced once, at delegation time, by `[sweep-gate]` in `swe_pre_agent_model_gate.py`.
+  - `doc-gate` also fires on a Bash command's in-project write targets (same checks as an Edit to each target).
   - `sweep-gate` DENIES an orchestrator Agent/Task call unless its prompt's "Required reading:" section names every memory `delegation_sweep.required_reading` computes — `[sweep-exempt: <reason>]` skips trivial read-only tasks; on ALLOW the gate appends a `[swe-required-reading]` block with each memory's obligations inline.
 metadata:
   type: domain
@@ -36,9 +37,10 @@ Feature gates block specific tools until the relevant FEATURE_* memory is read. 
 
 Unlike `test`/`sweep`, `doc-gate` never caches a pass into a sentinel file — it re-checks `required_docs_for_path` against the MAIN agent's own docreads on every edit.
 
-- `required_docs_for_path` = every `feature/*`/`dev/*` memory whose front-matter `paths:` glob matches the target file, PLUS `feature/FEATURE_TESTS` (+ `dev/DEV_TESTS` if present) when the target is a test artifact.
-- Scope: `collect_values_since_task_start(stream_path, agent_id=None)` — main agent only. Subagent enforcement is REMOVED from this gate.
+- `required_docs_for_path` = every `feature/*`/`dev/*` memory whose front-matter `paths:` glob matches the target file, PLUS `feature/FEATURE_TESTS` (+ `dev/DEV_TESTS` if present) when the target is a test artifact. No `paths:`-matched `dev/*` name → extension-based fallback (`dev/DEV_<LANG>` + `feature/FEATURE_DEV_STANDARDS`), `mem:dom/DOM_SWE_HOOKS_PRE_GATES` doc-gate section.
+- Scope: `collect_values_session(stream_path, agent_id=None)` — main agent only, WHOLE SESSION (not per-task): a memory read earlier in the session satisfies a later task's edit. Subagent enforcement is REMOVED from this gate.
 - A subagent's `doc_requirements` are enforced ONCE, at delegation time, by `[sweep-gate]` in `swe_pre_agent_model_gate.py` — not per edit inside the subagent's own run. See `mem:dom/DOM_SWE_HOOKS_PRE_GATES` agent-gate section.
+- A Bash command's in-project write targets (`memory_fs.bash_write_targets`) get this same check, one per target, as if each were an Edit — see `mem:dom/DOM_SWE_HOOKS_PRE_GATES`.
 
 ### The `sweep-gate` Gate (delegation-time, no sentinel)
 

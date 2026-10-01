@@ -92,6 +92,10 @@ Serena MCP (memory), swe-wm MCP (WM updates), jq, bash, python3.
 
 A docpending link surfaced by the PRIMARY feature is satisfied by read, planned (`(mem:<name>)` cited in WM Compliance Checklist), or ruled out (with reason); bare deferral is rejected. Mechanism: `mem:dom/DOM_SWE_FEATURE_GATES`.
 
+## Hooks — Doc-Gate Fallback
+
+`[doc-gate]` (`swe_pre_edit_validate.py`) falls back to extension-matched `dev/DEV_<LANG>` + `feature/FEATURE_DEV_STANDARDS` when a project's dev-standards memories carry no `paths:` front-matter for the edited file — `mem:dom/DOM_SWE_HOOKS_PRE_GATES`. Give every `feature/*`/`dev/*` memory a `paths:` glob matching its governed files — precise `paths:` matching beats the extension fallback (the fallback cannot distinguish sibling languages sharing an extension, e.g. `.blade.php` vs plain `.php`).
+
 ## Related Memories
 
 `ARCH_SWE` (architecture docs) · `REF_SWE_DEVELOPMENT` (dev standards) · `ref/REF_DEV_STANDARDS_ONBOARD` (parallel-agent discovery for an EXISTING codebase's dev standards, vs `swe-scaffold-project` which templates `FEATURE_DEV_STANDARDS` for a new empty project).
