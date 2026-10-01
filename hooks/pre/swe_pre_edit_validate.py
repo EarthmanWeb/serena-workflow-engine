@@ -38,6 +38,19 @@ main-agent path. (The sweep gate's own task-scoped test-docs check, and
 every other sweep/drift check in this hook, are UNCHANGED — only the
 doc-gate's read set widened to session scope.)
 
+TARGET-PATH EXTRACTION: every target-path extraction in this hook
+(sweep-gate, doc-gate) goes through the single helper `_extract_target_path`
+— precedence file_path, then notebook_path, then relative_path. hooks.json's
+matcher covers Edit/Write/NotebookEdit/MultiEdit and the Serena symbolic
+edit tools (create_text_file/replace_lines/delete_lines/insert_at_line/
+replace_in_files/replace_symbol_body/replace_content/
+insert_before_symbol/insert_after_symbol); Claude Code's NotebookEdit sends
+its target under `notebook_path`, NOT `file_path` — a prior version of this
+hook read only file_path/relative_path, so a NotebookEdit target silently
+resolved to '' and every gate below (sweep, doc) skipped it. Never
+re-derive this precedence list ad hoc at a new call site — call
+`_extract_target_path`.
+
 BASH WRITES are treated as edits: core.memory_fs.bash_write_targets(command)
 extracts the paths a Bash command writes; each target resolved against the
 hook's cwd and kept only when inside the project root (excluding
@@ -143,6 +156,33 @@ def _test_docs_block_message(unread: list) -> str:
     )
 
 
+def _extract_target_path(tool_input: dict) -> str:
+    """Extract the edit target path from a tool_input payload.
+
+    SINGLE SOURCE OF TRUTH for target-path precedence in this hook — every
+    other extraction site (sweep gate, doc gate) calls this instead of
+    re-deriving its own precedence list.
+
+    Field precedence: file_path (Edit/Write/MultiEdit) then notebook_path
+    (Claude Code's NotebookEdit sends the path under this key, NOT
+    file_path — commit 91f3c70 added NotebookEdit to this hook's matcher
+    without widening target extraction, so NotebookEdit targets silently
+    resolved to '' and skipped every gate below) then relative_path (Serena
+    symbolic edit tools: replace_symbol_body, replace_content,
+    insert_before_symbol, insert_after_symbol, create_text_file,
+    replace_lines, delete_lines, insert_at_line, replace_in_files —
+    relative_path may be a directory or empty for replace_in_files, handled
+    by the doc-gate skip in _doc_gate_block).
+    """
+    tool_input = tool_input or {}
+    return str(
+        tool_input.get('file_path')
+        or tool_input.get('notebook_path')
+        or tool_input.get('relative_path')
+        or ''
+    )
+
+
 def _sweep_gate_verdict(session_id, tool_input):
     """Deny message when the per-task sweep is unverified, else None.
 
@@ -152,9 +192,7 @@ def _sweep_gate_verdict(session_id, tool_input):
     """
     if not session_id:
         return None
-    tool_input = tool_input or {}
-    target = str(tool_input.get('file_path')
-                 or tool_input.get('relative_path') or '')
+    target = _extract_target_path(tool_input)
     if os.path.basename(target.replace('\\', '/')).startswith('WM_'):
         return None
 
@@ -181,15 +219,11 @@ def _sweep_gate_verdict(session_id, tool_input):
 def _doc_gate_target(tool_input: dict) -> str:
     """Extract the edit target path from a tool_input payload.
 
-    Field precedence: file_path (Edit/Write/NotebookEdit/MultiEdit) then
-    relative_path (Serena symbolic edit tools: replace_symbol_body,
-    replace_content, insert_before_symbol, insert_after_symbol,
-    create_text_file, replace_lines, delete_lines, insert_at_line,
-    replace_in_files — relative_path may be a directory or empty for
-    replace_in_files, handled by the doc-gate skip in _doc_gate_block).
+    Delegates to _extract_target_path — single source of truth for target
+    extraction in this hook (file_path, then notebook_path, then
+    relative_path).
     """
-    tool_input = tool_input or {}
-    return str(tool_input.get('file_path') or tool_input.get('relative_path') or '')
+    return _extract_target_path(tool_input)
 
 
 def _doc_gate_message(target: str, unread: list) -> str:
