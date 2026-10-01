@@ -344,6 +344,98 @@ class TestMissingSweepReason(unittest.TestCase):
 
 
 # ──────────────────────────────────────────────────────────────────
+# pre/swe_pre_agent_model_gate — with_missing_required_reading
+# (auto-inject, not deny — 2026-09 decision)
+# ──────────────────────────────────────────────────────────────────
+
+class TestWithMissingRequiredReading(unittest.TestCase):
+    def test_no_missing_returns_prompt_unchanged(self):
+        prompt = "Implement X."
+        self.assertEqual(
+            agent_gate.with_missing_required_reading(prompt, []), prompt)
+        self.assertEqual(
+            agent_gate.with_missing_required_reading(prompt, None), prompt)
+
+    def test_injects_required_reading_section_when_absent(self):
+        result = agent_gate.with_missing_required_reading(
+            "Implement X.", ["feature/FEATURE_TESTS", "dom/DOM_X"])
+        self.assertIn("Required reading:", result)
+        self.assertIn('read_memory("feature/FEATURE_TESTS")', result)
+        self.assertIn('read_memory("dom/DOM_X")', result)
+        self.assertTrue(result.startswith("Implement X."))
+
+    def test_appends_block_when_required_reading_section_already_present(self):
+        prompt = (
+            'Implement X.\n\nRequired reading: '
+            'read_memory("feature/FEATURE_A")')
+        result = agent_gate.with_missing_required_reading(
+            prompt, ["dom/DOM_X"])
+        self.assertIn('read_memory("feature/FEATURE_A")', result)
+        self.assertIn('read_memory("dom/DOM_X")', result)
+
+    def test_name_already_present_not_duplicated(self):
+        prompt = 'Fix it. Required reading: read_memory("feature/FEATURE_TESTS")'
+        result = agent_gate.with_missing_required_reading(
+            prompt, ["feature/FEATURE_TESTS"])
+        self.assertEqual(result, prompt)
+
+    def test_bare_name_tail_counts_as_present(self):
+        prompt = "Required reading: FEATURE_TESTS"
+        result = agent_gate.with_missing_required_reading(
+            prompt, ["feature/FEATURE_TESTS"])
+        self.assertEqual(result, prompt)
+
+    def test_idempotent_on_repeated_calls_with_same_missing_set(self):
+        once = agent_gate.with_missing_required_reading(
+            "Implement X.", ["feature/FEATURE_TESTS", "dom/DOM_X"])
+        twice = agent_gate.with_missing_required_reading(
+            once, ["feature/FEATURE_TESTS", "dom/DOM_X"])
+        self.assertEqual(once, twice)
+        self.assertEqual(
+            twice.count('read_memory("feature/FEATURE_TESTS")'), 1)
+        self.assertEqual(twice.count('read_memory("dom/DOM_X")'), 1)
+
+    def test_empty_prompt_still_gets_section(self):
+        result = agent_gate.with_missing_required_reading(
+            "", ["feature/FEATURE_TESTS"])
+        self.assertIn('read_memory("feature/FEATURE_TESTS")', result)
+
+    def test_none_prompt_treated_as_empty(self):
+        result = agent_gate.with_missing_required_reading(
+            None, ["feature/FEATURE_TESTS"])
+        self.assertIn('read_memory("feature/FEATURE_TESTS")', result)
+
+
+# ──────────────────────────────────────────────────────────────────
+# pre/swe_pre_agent_model_gate — _missing_sweep_names
+# ──────────────────────────────────────────────────────────────────
+
+class TestMissingSweepNames(unittest.TestCase):
+    def test_empty_required_returns_empty(self):
+        self.assertEqual(agent_gate._missing_sweep_names("Do X.", []), [])
+        self.assertEqual(agent_gate._missing_sweep_names("Do X.", None), [])
+
+    def test_all_present_returns_empty(self):
+        prompt = 'Required reading: read_memory("feature/FEATURE_TESTS")'
+        self.assertEqual(
+            agent_gate._missing_sweep_names(prompt, ["feature/FEATURE_TESTS"]),
+            [])
+
+    def test_missing_name_returned(self):
+        self.assertEqual(
+            agent_gate._missing_sweep_names(
+                "Implement X.", ["feature/FEATURE_TESTS", "dom/DOM_X"]),
+            ["feature/FEATURE_TESTS", "dom/DOM_X"])
+
+    def test_sweep_exempt_suppresses_all(self):
+        self.assertEqual(
+            agent_gate._missing_sweep_names(
+                "Implement X. [sweep-exempt: trivial]",
+                ["feature/FEATURE_TESTS"]),
+            [])
+
+
+# ──────────────────────────────────────────────────────────────────
 # pre/swe_pre_agent_model_gate — with_steering_clause
 # ──────────────────────────────────────────────────────────────────
 
@@ -594,7 +686,9 @@ class TestAgentModelGateMain(unittest.TestCase):
             agent_gate.STEERING_CLAUSE_MARKER,
             hook_out.get("updatedInput", {}).get("prompt", ""))
 
-    def test_prompt_naming_test_file_without_sweep_denied(self):
+    def test_prompt_naming_test_file_without_sweep_auto_injects_and_allows(self):
+        # A missing sweep allows the call: the gate adds the "Required
+        # reading:" section itself.
         result = self._run_main({
             "tool_name": "Agent",
             "tool_input": {
@@ -606,8 +700,12 @@ class TestAgentModelGateMain(unittest.TestCase):
             },
         })
         hook_out = result.get("hookSpecificOutput", {})
-        self.assertEqual(hook_out.get("permissionDecision"), "deny")
+        self.assertEqual(hook_out.get("permissionDecision"), "allow")
         self.assertIn("[sweep-gate]", hook_out.get("permissionDecisionReason", ""))
+        updated_prompt = hook_out.get("updatedInput", {}).get("prompt", "")
+        self.assertIn("Required reading:", updated_prompt)
+        self.assertIn('read_memory("feature/FEATURE_TESTS")', updated_prompt)
+        self.assertIn("[swe-required-reading]", updated_prompt)
 
     def test_prompt_naming_test_file_with_sweep_allows_and_injects_block(self):
         result = self._run_main({

@@ -1,6 +1,6 @@
 {
   "name": "swe",
-  "version": "1.3.45",
+  "version": "1.3.46",
   "description": "State-machine workflow engine with Serena memory persistence, hook-driven event architecture, and native subagent parallelization",
   "author": {
     "name": "EarthmanWeb",
@@ -34,6 +34,12 @@
       "title": "Detail Word Limit",
       "default": 600,
       "description": "Max prose words when detail was explicitly requested via a leading 'DETAIL:' token."
+    },
+    "response_format_mode": {
+      "type": "string",
+      "title": "Response Format Mode",
+      "default": "advise",
+      "description": "'advise' (default): an overage never blocks the stop, only surfaces a reminder on the next prompt. 'block': force a rewrite via decision:block (at most once per user turn)."
     }
   },
   "mcpServers": {

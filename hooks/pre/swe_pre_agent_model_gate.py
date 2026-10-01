@@ -6,7 +6,7 @@ a spawned agent must (1) name an explicit model, (2) carry the subagent bypass
 marker in its prompt so it does not re-run the init chain, and (3) not
 over-provision opus for routine mechanical work.
 
-Six independent DENY checks, each with its own message:
+FIVE independent DENY checks, each with its own message:
 
 1. Missing `model` — every Agent/Task call must pick a tier explicitly
    (haiku/sonnet/opus). Skipped only for a `subagent_type` that is a built-in,
@@ -42,22 +42,26 @@ Six independent DENY checks, each with its own message:
    `[foreground-justified: <reason>]` for the rare case where the
    orchestrator genuinely has nothing else to do until the result returns.
    No `subagent_type` is exempt.
-6. Missing doc sweep ([sweep-gate]) — the orchestrator must ASSIGN the
-   subagent its doc sweep at delegation time, not merely ask it to
-   read_memory on its own initiative. required_reading() computes the set of
-   memories this task's prompt/WM implies (paths touched, test work, the
-   orchestrator's own loaded/planned memories); if ANY of those names is
-   missing from the prompt text the orchestrator wrote, the call is denied
-   (missing_sweep_reason) until the orchestrator adds a "Required reading:"
-   section naming them, or tags the prompt `[sweep-exempt: <reason>]` for a
-   genuinely trivial read-only task.
 
-When all six deny checks below pass, the call is ALLOWED but its input is
-rewritten (via permissionDecision="allow" + updatedInput): a
+Doc sweep ([sweep-gate]) is not a deny check: when required_reading() finds
+names missing from the orchestrator's prompt, the gate AUTO-INJECTS them into
+the prompt's "Required reading:" section — see with_missing_required_reading()
+— and ALLOWS the call; no relaunch round-trip. `[sweep-exempt: <reason>]`
+still skips the required_reading() computation entirely for a genuinely
+trivial read-only task. missing_sweep_reason remains the pure "what is
+missing" helper (used by with_missing_required_reading and by tests), just
+never wired to a deny in main().
+
+When all five deny checks below pass, the call is ALLOWED but its input is
+rewritten (via permissionDecision="allow" + updatedInput): any names
+required_reading() finds missing from the prompt's "Required reading:"
+section are auto-injected there (with_missing_required_reading), then a
 `[swe-required-reading]` block is appended (read_memory(...) lines + each
 memory's obligations digest, from delegation_sweep.required_reading_block)
 when required_reading() found anything, followed by the standard
-trust/steering clause (see STEERING_CLAUSE) and a `[swe-budget: N]` tag.
+trust/steering clause (see STEERING_CLAUSE) and a `[swe-budget: N]` tag. The
+allow's `permissionDecisionReason` names which memories (if any) were
+auto-added, so the orchestrator learns for next time.
 
 Model-tiering goal: this project's harness must HEAVILY enforce cutting token
 usage via parallel + cheaper subagents. Premium models (opus, fable) are never
@@ -323,6 +327,22 @@ def _name_in_prompt(name: str, prompt: str) -> bool:
     return bool(tail) and tail in prompt
 
 
+def _missing_sweep_names(prompt: str, required) -> list:
+    """Names in `required` not yet present in `prompt`'s own text, or `[]`
+    when `required` is empty or the prompt carries `[sweep-exempt: <reason>]`.
+
+    Shared by missing_sweep_reason (message-building) and
+    with_missing_required_reading (auto-injection) so both compute the
+    missing set identically.
+    """
+    required = [n for n in (required or []) if n]
+    if not required:
+        return []
+    if SWEEP_EXEMPT_RE.search(prompt or ''):
+        return []
+    return [n for n in required if not _name_in_prompt(n, prompt)]
+
+
 def missing_sweep_reason(prompt: str, required) -> str:
     """Non-empty reason string when the orchestrator's prompt does not
     already name every memory `required` implies (see
@@ -330,20 +350,18 @@ def missing_sweep_reason(prompt: str, required) -> str:
 
     The check runs against the RAW orchestrator-written prompt — before any
     clause/budget/[swe-required-reading] rewrite this hook itself applies —
-    so it only passes when the orchestrator explicitly assigned the sweep
-    (e.g. a "Required reading:" section naming the memories), not merely
-    because this hook is about to inject them anyway.
+    so it only flags names the orchestrator did not already assign (e.g. in
+    a "Required reading:" section).
 
     `[sweep-exempt: <reason>]` (non-empty reason) in the prompt skips the
     check entirely — the escape hatch for a genuinely trivial read-only task
     with no doc obligations.
+
+    Not wired to a deny in main() — [sweep-gate] auto-injects the missing
+    names instead of denying (see with_missing_required_reading). This
+    function remains available as the pure "what would be missing" check.
     """
-    required = [n for n in (required or []) if n]
-    if not required:
-        return ''
-    if SWEEP_EXEMPT_RE.search(prompt or ''):
-        return ''
-    missing = [n for n in required if not _name_in_prompt(n, prompt)]
+    missing = _missing_sweep_names(prompt, required)
     if not missing:
         return ''
     lines = "\n".join(f'  read_memory("{n}")' for n in missing)
@@ -353,6 +371,40 @@ def missing_sweep_reason(prompt: str, required) -> str:
         f"{lines}\n\n"
         "Or add [sweep-exempt: <reason>] for a trivial read-only task."
     )
+
+
+REQUIRED_READING_SECTION_MARKER = 'Required reading:'
+
+
+def with_missing_required_reading(prompt: str, missing) -> str:
+    """Return `prompt` with every name in `missing` added under a 'Required
+    reading:' section, as `read_memory("<name>")` lines.
+
+    - `missing` empty/falsy -> `prompt` returned unchanged.
+    - No 'Required reading:' section present -> a new one is appended,
+      headed 'Required reading:' followed by one `read_memory("<name>")`
+      line per name.
+    - A 'Required reading:' section already present -> a second block with
+      just the missing lines is appended right after the prompt (kept
+      simple: no attempt to merge into the existing section's text).
+    - Idempotent per name: a name already appearing anywhere in `prompt`
+      (checked the same way missing_sweep_reason/_name_in_prompt does) is
+      never re-added, so calling this twice with the same `missing` set
+      does not duplicate lines.
+    """
+    missing = [n for n in (missing or []) if n]
+    if not missing:
+        return prompt or ''
+    prompt = prompt or ''
+    # Idempotence guard: drop any name that is already present (covers a
+    # name added by a prior pass of this same function, or one the
+    # orchestrator already wrote elsewhere in the prompt).
+    missing = [n for n in missing if not _name_in_prompt(n, prompt)]
+    if not missing:
+        return prompt
+    lines = "\n".join(f'  read_memory("{n}")' for n in missing)
+    block = f"\n\n{REQUIRED_READING_SECTION_MARKER}\n{lines}"
+    return prompt + block
 
 
 def with_budget_tag(tool_input: dict) -> dict:
@@ -502,13 +554,24 @@ def main():
         except Exception:
             required = []
 
-        reason = missing_sweep_reason(prompt, required)
-        if reason:
-            output_block(reason)
-            return
+        missing = _missing_sweep_names(prompt, required)
+        allow_context = None
+        working_input = tool_input
+        if missing:
+            working_prompt = with_missing_required_reading(prompt, missing)
+            working_input = dict(tool_input)
+            working_input['prompt'] = working_prompt
+            names = ", ".join(missing)
+            allow_context = (
+                f"\U0001f4cb [sweep-gate] auto-added required reading: {names}"
+            )
 
-        updated = with_required_reading(tool_input, required, project_root)
-        output_allow_with_input(with_steering_clause(updated))
+        updated = with_required_reading(working_input, required, project_root)
+        final_input = with_steering_clause(updated)
+        if allow_context:
+            output_allow_with_input(final_input, context=allow_context)
+        else:
+            output_allow_with_input(final_input)
 
     except Exception as e:
         output = {"hookSpecificOutput": {"hookEventName": "PreToolUse",
