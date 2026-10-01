@@ -54,7 +54,7 @@
         ]
       },
       {
-        "matcher": "Edit|Write|mcp__plugin_swe_serena__replace_symbol_body|mcp__plugin_swe_serena__replace_content|mcp__plugin_swe_serena__insert_before_symbol|mcp__plugin_swe_serena__insert_after_symbol|mcp__serena__replace_symbol_body|mcp__serena__replace_content|mcp__serena__insert_before_symbol|mcp__serena__insert_after_symbol",
+        "matcher": "Edit|Write|NotebookEdit|MultiEdit|Bash|mcp__plugin_swe_serena__replace_symbol_body|mcp__plugin_swe_serena__replace_content|mcp__plugin_swe_serena__insert_before_symbol|mcp__plugin_swe_serena__insert_after_symbol|mcp__plugin_swe_serena__create_text_file|mcp__plugin_swe_serena__replace_lines|mcp__plugin_swe_serena__delete_lines|mcp__plugin_swe_serena__insert_at_line|mcp__plugin_swe_serena__replace_in_files|mcp__serena__replace_symbol_body|mcp__serena__replace_content|mcp__serena__insert_before_symbol|mcp__serena__insert_after_symbol|mcp__serena__create_text_file|mcp__serena__replace_lines|mcp__serena__delete_lines|mcp__serena__insert_at_line|mcp__serena__replace_in_files",
         "hooks": [
           {
             "type": "command",

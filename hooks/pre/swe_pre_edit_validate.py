@@ -29,11 +29,26 @@ Per-agent DOC REQUIREMENT gate: applied to the MAIN AGENT ONLY. Before
 writing to a file, core.doc_requirements.required_docs_for_path(target,
 project_root) is computed (FEATURE_*/DEV_* memories whose front-matter
 `paths:` glob matches, plus FEATURE_TESTS/DEV_TESTS for test artifacts) and
-diffed against the memories the main agent has actually read this task
-(core.stream.collect_values_since_task_start with agent_id=None, so it
-counts only main-agent docreads). Any unread required memory DENIES the
-edit with a `[doc-gate]` message. `doc_gate_verdict` is kept as a pure,
-directly-testable function for this main-agent path.
+diffed against the memories the main agent has actually read THIS SESSION
+(core.stream.collect_values_session with agent_id=None, so it counts only
+main-agent docreads, across the WHOLE session — not just the current task).
+Any unread required memory DENIES the edit with a `[doc-gate]` message.
+`doc_gate_verdict` is kept as a pure, directly-testable function for this
+main-agent path. (The sweep gate's own task-scoped test-docs check, and
+every other sweep/drift check in this hook, are UNCHANGED — only the
+doc-gate's read set widened to session scope.)
+
+BASH WRITES are treated as edits: core.memory_fs.bash_write_targets(command)
+extracts the paths a Bash command writes; each target resolved against the
+hook's cwd and kept only when inside the project root (excluding
+.serena/** and .git/**, already covered by swe_pre_memory_fs_gate.py). A
+Bash call with no in-project write target returns {} immediately (this hook
+now runs on every Bash call, so the no-op path stays silent and fast). A
+Bash call WITH an in-project write target runs the exact same
+planning-state/sweep-sentinel/drift-block/doc-gate checks as an Edit to each
+target, with the same main-agent/spawned-agent exemptions; a `replace_in_files`
+target that is a directory or empty skips the doc-gate (state/sweep/drift
+still apply) since there is no single file to compute required docs for.
 """
 
 import os
@@ -53,7 +68,8 @@ try:
     from swe_hooks.core.config import get_project_root, resolve_setup_state
     from swe_hooks.core.stream import (
         get_stream_path, get_feature_sentinel_path,
-        collect_values_since_task_start, normalize_memory_name,
+        collect_values_since_task_start, collect_values_session,
+        normalize_memory_name,
         count_task_work_since_delegation, wm_has_single_agent_note,
         DRIFT_HARD_THRESHOLD,
     )
@@ -165,9 +181,12 @@ def _sweep_gate_verdict(session_id, tool_input):
 def _doc_gate_target(tool_input: dict) -> str:
     """Extract the edit target path from a tool_input payload.
 
-    Reuses the same field-precedence as _sweep_gate_verdict: file_path
-    (Edit/Write/NotebookEdit) then relative_path (Serena symbolic edit
-    tools).
+    Field precedence: file_path (Edit/Write/NotebookEdit/MultiEdit) then
+    relative_path (Serena symbolic edit tools: replace_symbol_body,
+    replace_content, insert_before_symbol, insert_after_symbol,
+    create_text_file, replace_lines, delete_lines, insert_at_line,
+    replace_in_files — relative_path may be a directory or empty for
+    replace_in_files, handled by the doc-gate skip in _doc_gate_block).
     """
     tool_input = tool_input or {}
     return str(tool_input.get('file_path') or tool_input.get('relative_path') or '')
@@ -209,12 +228,18 @@ def doc_gate_verdict(target: str, project_root: str, read_names) -> str:
 def _doc_gate_block(session_id, agent_id, cwd, tool_input):
     """Resolve the doc-requirement gate for this edit, else None.
 
-    Applies to EVERY caller (main agent and every spawned agent), each
-    scoped to its OWN docreads this task via
-    collect_values_since_task_start(..., agent_id=agent_id) — agent_id=None
-    counts only main-agent events, a spawned agent's id counts only that
-    agent's own events. WM_* writes are harness-managed and exempt (matches
-    the sweep gate's exemption).
+    Called on the MAIN AGENT path only (callers pass agent_id=None here —
+    spawned-agent edits never reach this function, see main()). Reads are
+    scoped to the WHOLE SESSION via collect_values_session (operator
+    decision: dev-standards reads count per session, not per task) — a
+    memory read earlier in the session satisfies the doc-gate for a later
+    task's edit to a file it governs. WM_* writes are harness-managed and
+    exempt (matches the sweep gate's exemption).
+
+    A target that resolves to a directory or is empty (replace_in_files with
+    a directory/empty relative_path) skips the doc-gate entirely — there is
+    no single file to compute required docs for; state/sweep/drift checks
+    in main() still apply independently of this function.
     """
     target = _doc_gate_target(tool_input)
     if not target:
@@ -223,12 +248,15 @@ def _doc_gate_block(session_id, agent_id, cwd, tool_input):
         return None
     if not session_id:
         return None
-    stream_path = get_stream_path(session_id)
     try:
         project_root = get_project_root()
     except Exception:
         project_root = cwd
-    read_names = collect_values_since_task_start(stream_path, agent_id=agent_id)
+    abs_target = target if os.path.isabs(target) else os.path.join(cwd or project_root, target)
+    if os.path.isdir(abs_target):
+        return None
+    stream_path = get_stream_path(session_id)
+    read_names = collect_values_session(stream_path, agent_id=agent_id)
     verdict = doc_gate_verdict(target, project_root, read_names)
     return verdict or None
 
@@ -357,6 +385,107 @@ def _block_message(current):
     )
 
 
+def _in_project_bash_targets(command: str, cwd: str, project_root: str) -> list:
+    """Bash write targets (memory_fs.bash_write_targets) resolved against
+    `cwd`, filtered to those INSIDE `project_root`, excluding
+    <root>/.serena/** and <root>/.git/** (memory stores are already handled
+    by swe_pre_memory_fs_gate.py — this hook must not duplicate that gate).
+    A target outside the project root (/tmp, scratchpad, ~) is dropped
+    silently — it is not this hook's concern. Returns resolved absolute
+    paths, de-duplicated, in order of first appearance.
+    """
+    raw_targets = memory_fs.bash_write_targets(command)
+    if not raw_targets:
+        return []
+    root = os.path.abspath(project_root)
+    serena_prefix = os.path.join(root, '.serena') + os.sep
+    git_prefix = os.path.join(root, '.git') + os.sep
+    resolved = []
+    seen = set()
+    for target in raw_targets:
+        expanded = os.path.expanduser(target)
+        abs_target = expanded if os.path.isabs(expanded) else os.path.join(cwd or root, expanded)
+        abs_target = os.path.normpath(abs_target)
+        if not (abs_target == root or abs_target.startswith(root + os.sep)):
+            continue
+        if abs_target.startswith(serena_prefix) or abs_target == root + '/.serena':
+            continue
+        if abs_target.startswith(git_prefix) or abs_target == root + '/.git':
+            continue
+        if abs_target not in seen:
+            seen.add(abs_target)
+            resolved.append(abs_target)
+    return resolved
+
+
+def _run_edit_checks_for_target(session_id, agent_id, cwd, target, current,
+                                 spawned_agent):
+    """Run the SAME checks, in the SAME order, as main()'s EDIT_ALLOWED
+    branch applies to a direct Edit/Write/Serena call — but against a
+    single TARGET path instead of the tool_input payload. Shared by both
+    the direct-edit path (main()) and the Bash-write path
+    (_bash_write_gate_verdict) so neither duplicates the other's gate
+    semantics.
+
+    Order: sweep-sentinel + test-docs (skipped entirely in
+    SWEEP_EXEMPT_STATES) -> doc-gate -> drift hard block (spawned agents
+    exempt). Returns a deny message string, or None to allow.
+    """
+    pseudo_input = {'file_path': target}
+
+    if current not in SWEEP_EXEMPT_STATES:
+        verdict = _sweep_gate_verdict(session_id, pseudo_input)
+        if verdict:
+            return verdict
+
+    doc_verdict = _doc_gate_block(session_id, agent_id, cwd, pseudo_input)
+    if doc_verdict:
+        return doc_verdict
+
+    if not spawned_agent:
+        drift_verdict = _drift_block_verdict(session_id, cwd)
+        if drift_verdict:
+            return drift_verdict
+
+    return None
+
+
+def _bash_write_gate_verdict(session_id, agent_id, cwd, current, spawned_agent,
+                              command, project_root):
+    """Resolve the full Bash-write-as-edit gate for a Bash tool_input, else
+    None (allow — includes the no-op "nothing writes into the project"
+    case, which must stay silent and fast since this hook now runs on every
+    Bash call).
+
+    Mirrors main()'s Edit/Write handling exactly: planning-state block
+    (_block_message / WARN_STATES pass-through), then per in-project write
+    target (in order) the SAME sweep/doc-gate/drift checks an Edit to that
+    file would get (_run_edit_checks_for_target) — the FIRST target whose
+    checks deny wins (an "edit" to any one of several targets in the same
+    Bash call is enough to block the whole call, matching how a single Edit
+    call targets exactly one file). Same main-agent/spawned-agent exemptions
+    as every other check in this hook.
+    """
+    targets = _in_project_bash_targets(command, cwd, project_root)
+    if not targets:
+        return None
+
+    if current not in EDIT_ALLOWED:
+        if current in WARN_STATES:
+            return None  # warn-but-allow states: no block for Bash either
+        return _block_message(current)
+
+    for target in targets:
+        verdict = _run_edit_checks_for_target(
+            session_id, agent_id, cwd, target, current, spawned_agent)
+        if verdict:
+            return (
+                f"🛑 Bash write to {target} is treated as an edit.\n\n"
+                + verdict
+            )
+    return None
+
+
 def main():
     try:
         input_data = read_stdin_safe(timeout_seconds=2.0)
@@ -430,6 +559,30 @@ def main():
         # Create state manager with session isolation
         state_mgr = StateManager(cwd, session_id=session_id)
         current = state_mgr.get_current_state()
+
+        tool_name = get_input_field(input_data, 'tool_name', default='')
+        if tool_name == 'Bash':
+            # BASH WRITES are treated as edits (see module docstring). Fast
+            # path: no in-project write target -> {} immediately, since this
+            # hook now runs on EVERY Bash call and must stay silent/cheap for
+            # the overwhelming majority (non-writing) of them.
+            command = str((input_data.get('tool_input') or {}).get('command', ''))
+            try:
+                bash_project_root = get_project_root()
+            except Exception:
+                bash_project_root = cwd
+            bash_verdict = _bash_write_gate_verdict(
+                session_id, agent_id, cwd, current, spawned_agent,
+                command, bash_project_root)
+            if bash_verdict:
+                output = HookOutput(event_name="PreToolUse")
+                output.block(bash_verdict)
+                output.output_and_exit()
+                return
+            # No in-project write target, or every check passed: silent allow.
+            print(json.dumps({}), file=sys.stdout)
+            sys.exit(0)
+            return
 
         # Allow edits in execution states — but only once the per-task
         # Feature Knowledge Sweep is verified (sweep sentinel exists).

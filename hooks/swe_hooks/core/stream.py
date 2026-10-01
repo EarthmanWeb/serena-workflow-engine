@@ -195,6 +195,58 @@ def collect_values_since_task_start(stream_path: str, count_type: str = 'docread
     return values
 
 
+def collect_values_session(stream_path: str, count_type: str = 'docread',
+                            value_key: str = 'name',
+                            agent_id: Optional[str] = None) -> set:
+    """Collect normalized value_key values from count_type events across the
+    WHOLE session stream file — no task-boundary window, unlike
+    collect_values_since_task_start.
+
+    Used by the edit doc-gate (swe_pre_edit_validate.py), per operator
+    decision: dev-standards/doc reads count PER SESSION, not per task — a
+    memory read earlier in the session (an earlier task, a prior prompt)
+    still satisfies the doc-gate for a later task's edit, so the same
+    FEATURE_*/DEV_* memory is never demanded twice in one session.
+
+    agent_id has the SAME partitioning semantics as
+    collect_values_since_task_start: None (default) counts only events with
+    no 'agent' field (main-agent events); a given id counts only that
+    agent's own events. Full-file scan — per-session streams are small (same
+    cost profile as events_since_task_start).
+    """
+    if not os.path.exists(stream_path):
+        return set()
+    try:
+        with open(stream_path, 'r') as f:
+            lines = f.readlines()
+    except IOError:
+        return set()
+
+    values = set()
+    for line in lines:
+        try:
+            event = json.loads(line.strip())
+        except (json.JSONDecodeError, ValueError):
+            continue
+        if event.get('type') != count_type:
+            continue
+        event_agent = event.get('agent')
+        if agent_id is None:
+            if event_agent:
+                continue
+        elif event_agent != agent_id:
+            continue
+        value = event.get(value_key)
+        items = value if isinstance(value, list) else [value]
+        for v in items:
+            if not v:
+                continue
+            name = normalize_memory_name(str(v))
+            if is_valid_memory_name(name):
+                values.add(name)
+    return values
+
+
 def collect_docpending_sources(stream_path: str, since_sweep: bool = False) -> dict:
     """Map each docpending link surfaced this task → the set of source memories
     (`src`) that surfaced it.
