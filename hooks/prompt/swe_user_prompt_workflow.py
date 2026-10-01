@@ -293,6 +293,126 @@ COMMAND_MARKER_RE = re.compile(r'<command-name>\s*(/?[^<\s]+)', re.IGNORECASE)
 SLASH_COMMAND_RE = re.compile(r'^/[a-zA-Z0-9][\w:-]*')
 
 
+# IDE/system-injected context blocks that can precede the user's actual
+# message in `prompt` — <ide_opened_file>, <ide_selection>,
+# <system-reminder> (seen wrapping the "okay, now one other thing: ..."
+# turn in session 08a0488f, which defeated the ^-anchored continuation
+# patterns and fell through to "Ambiguous intent" instead). Stripped BEFORE
+# analyze_prompt() and every intent regex so a leading injected block never
+# shifts what would otherwise match at the true start of the message.
+# Deliberately does NOT touch <command-name> — slash-command detection reads
+# the RAW prompt (detect_slash_command), since that marker IS the signal.
+_INJECTED_CONTEXT_BLOCK_RE = re.compile(
+    r'<(ide_opened_file|ide_selection|system-reminder)\b[^>]*>.*?</\1>',
+    re.IGNORECASE | re.DOTALL,
+)
+
+
+def strip_injected_context(prompt: str) -> str:
+    """Remove IDE/system-injected context blocks from `prompt` and strip
+    surrounding whitespace, so pattern matching sees the user's actual
+    message starting at position 0.
+
+    Removes <ide_opened_file>...</ide_opened_file>, <ide_selection>...
+    </ide_selection>, and <system-reminder>...</system-reminder> blocks
+    (non-greedy, DOTALL so a multi-line block is matched as one unit).
+    Leaves <command-name> markers untouched — callers that need slash-command
+    detection use the raw prompt instead.
+    """
+    if not prompt:
+        return prompt
+    cleaned = _INJECTED_CONTEXT_BLOCK_RE.sub('', prompt)
+    return cleaned.strip()
+
+
+# --- Direct-instruction fast path -------------------------------------------
+# A literal, targeted edit instruction mid-task ("hide this in all cases in
+# the admin. #getwid-layout-insert-button") should NOT be routed through the
+# ambiguous-intent / pivot-analysis path, which nudges the model toward
+# re-searching or re-confirming something it was just told outright. Pattern
+# + state only — see DOM_SWE_HOOKS_PROMPT_ROUTING: NEVER use message length
+# as a heuristic.
+
+_EDIT_VERB_RE = re.compile(
+    r'\b(hide|show|remove|delete|add|rename|change|set|replace|move|'
+    r'disable|enable|comment out|uncomment|bump|swap)\b',
+    re.IGNORECASE,
+)
+
+# A literal target token: a CSS id/class selector as a standalone token (not
+# a sentence-ending period, not a file extension mid-word), a backticked code
+# span, a single/double-quoted string, a file path with an extension, or a
+# hex color.
+_CSS_SELECTOR_TARGET_RE = re.compile(r'(?<![\w.])[#.][A-Za-z][\w-]*\b')
+_BACKTICK_TARGET_RE = re.compile(r'`[^`]+`')
+_QUOTED_TARGET_RE = re.compile(r'"[^"\n]+"|(?<!\w)\'[^\'\n]+\'(?!\w)')
+_FILE_PATH_TARGET_RE = re.compile(
+    r'\b[\w./-]+\.(?:php|js|jsx|ts|tsx|css|scss|sass|less|html|py|rb|go|json|'
+    r'yml|yaml|md|txt|twig|vue)\b',
+    re.IGNORECASE,
+)
+_HEX_COLOR_TARGET_RE = re.compile(r'#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})\b')
+
+_DIRECT_MODE_PHRASE_RE = re.compile(
+    r'just (?:fucking )?do it|stop searching|don\'?t search|no searching|'
+    r'why are you searching',
+    re.IGNORECASE,
+)
+
+
+def _has_literal_target(prompt_clean: str) -> bool:
+    """True when `prompt_clean` contains a literal, named target: a CSS
+    selector token, a backticked span, a quoted string, a file path with an
+    extension, or a hex color."""
+    return bool(
+        _CSS_SELECTOR_TARGET_RE.search(prompt_clean)
+        or _BACKTICK_TARGET_RE.search(prompt_clean)
+        or _QUOTED_TARGET_RE.search(prompt_clean)
+        or _FILE_PATH_TARGET_RE.search(prompt_clean)
+        or _HEX_COLOR_TARGET_RE.search(prompt_clean)
+    )
+
+
+def is_direct_instruction(prompt_clean: str) -> bool:
+    """True when `prompt_clean` (already run through strip_injected_context)
+    names a literal edit target directly, or uses an explicit direct-mode
+    phrase.
+
+    Two ways to qualify:
+      (a) an edit verb (hide/show/remove/delete/add/rename/change/set/
+          replace/move/disable/enable/comment out/uncomment/bump/swap) AND a
+          literal target token (see _has_literal_target) both appear.
+      (b) an explicit direct-mode phrase ("just do it", "stop searching",
+          "why are you searching", ...).
+
+    Pattern + state only — NEVER a message-length heuristic (see
+    DOM_SWE_HOOKS_PROMPT_ROUTING).
+    """
+    if not prompt_clean:
+        return False
+    if _DIRECT_MODE_PHRASE_RE.search(prompt_clean):
+        return True
+    return bool(_EDIT_VERB_RE.search(prompt_clean) and _has_literal_target(prompt_clean))
+
+
+# States in which a direct instruction gets the fast-path note instead of the
+# ambiguous-intent pivot analysis. WF_RESEARCH is deliberately excluded here —
+# it keeps its own research_exit_directive handling.
+DIRECT_INSTRUCTION_STATES = ('WF_EXECUTE', 'WF_CHECKPOINT', 'WF_VERIFY', 'WF_DEBUG_TDD')
+
+
+def direct_instruction_note(current_state: str, wm_file: str, stream_info: str) -> str:
+    """Context for a direct, literally-targeted instruction mid-task: stay in
+    place, apply it immediately, no searching/confirming/delegating."""
+    return f"""⚡ DIRECT INSTRUCTION — STAY in {current_state}. The user named the target
+literally. Apply it now: pick the destination from this session's work or the
+one obvious file, read ONLY that file, edit, report. Do NOT search for where
+the target originates, do NOT confirm it exists, do NOT delegate. Ask ONE
+question only if two destinations are equally plausible.
+Working Memory: {wm_file or 'None'}{stream_info}
+"""
+
+
 # A background-task/agent-completion notification, not genuine user input.
 # These land in the transcript as a "user" turn (the harness's delivery
 # mechanism) but carry no task intent to classify — routing them through
@@ -392,7 +512,17 @@ def main():
         if not prompt or not prompt.strip():
             sys.exit(0)
 
-        prompt_lower = prompt.lower().strip()
+        # Strip IDE/system-injected context blocks (<ide_opened_file>,
+        # <ide_selection>, <system-reminder>) BEFORE any intent regex —
+        # otherwise a leading injected block defeats the ^-anchored patterns
+        # (see strip_injected_context docstring / session 08a0488f). The RAW
+        # `prompt` is kept for anything that needs the original text verbatim
+        # (slash-command <command-name> marker detection, background-
+        # notification detection, deploy-intent note — none of these are
+        # ^-anchored against the true message start the way intent patterns
+        # are, and slash commands must see the marker untouched).
+        prompt_clean = strip_injected_context(prompt)
+        prompt_lower = prompt_clean.lower().strip()
 
         # Check setup
         setup = load_setup_complete(cwd)
@@ -567,7 +697,7 @@ NO classification, NO WF_INIT chain, NO WF_CLASSIFY. Fast-tracked to WF_EXECUTE.
         state_mgr = StateManager(cwd, session_id=session_id)
         
         # Analyze prompt intent
-        prompt_intent = analyze_prompt(prompt, current_state)
+        prompt_intent = analyze_prompt(prompt_clean, current_state)
         
         # Handle WF_INIT state - always direct to WF_INIT workflow.
         # E2: the full blocking block goes through emit_once — when the
@@ -616,7 +746,7 @@ NO classification, NO WF_INIT chain, NO WF_CLASSIFY. Fast-tracked to WF_EXECUTE.
                         get_stream_path(session_id), current_state, session_id)
                 current_state = 'WF_CLASSIFY'
                 # Analyze the prompt to understand intent (don't force new_task)
-                prompt_intent = analyze_prompt(prompt, current_state)
+                prompt_intent = analyze_prompt(prompt_clean, current_state)
                 if prompt_intent == 'unknown':
                     prompt_intent = 'same_session_new_task'  # Special case
             else:
@@ -629,6 +759,34 @@ NO classification, NO WF_INIT chain, NO WF_CLASSIFY. Fast-tracked to WF_EXECUTE.
                     wm_file = create_wm_and_sentinel(cwd, session_id)
                 prompt_intent = 'new_task'
         
+        # ═══ DIRECT INSTRUCTION FAST PATH ═══
+        # A literally-targeted edit instruction mid-task ("hide #foo in the
+        # admin") must STAY in place and be applied immediately — not routed
+        # through pivot_analysis_note, which nudges the model to re-search or
+        # re-confirm something it was just told outright. Only applies in an
+        # active execution-family state, only when the prompt hook did NOT
+        # already decide 'new_task' (a genuine pivot still re-classifies),
+        # and WF_RESEARCH is excluded — it keeps research_exit_directive.
+        if (current_state in DIRECT_INSTRUCTION_STATES
+                and prompt_intent != 'new_task'
+                and is_direct_instruction(prompt_clean)):
+            stream_info = ""
+            if session_id:
+                stream_path = get_stream_path(session_id)
+                append_event(stream_path, 'direct_instruction', s=session_id)
+                event_count = get_event_count(stream_path)
+                if event_count > 0:
+                    stream_info = f"\nStream Events: {event_count}"
+            context = direct_instruction_note(current_state, wm_file, stream_info)
+            output = {
+                "hookSpecificOutput": {
+                    "hookEventName": "UserPromptSubmit",
+                    "additionalContext": deploy_note_for(prompt) + context
+                }
+            }
+            print(json.dumps(output))
+            sys.exit(0)
+
         # Build context based on prompt intent and state
         if prompt_intent == 'continuation':
             # User is continuing - stay in current state, provide brief reminder

@@ -23,6 +23,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from _hookutil import import_hook, import_core, reset_caches  # noqa: E402
 
 stream = import_core("swe_hooks.core.stream")
+session_mod = import_core("swe_hooks.core.session")
 agent_gate = import_hook("pre/swe_pre_agent_model_gate")
 drift_hook = import_hook("post/swe_post_orchestrator_drift")
 
@@ -785,6 +786,38 @@ class TestCountTaskWorkSinceDelegation(unittest.TestCase):
         self.assertEqual(stream.count_task_work_since_delegation(missing), 0)
 
 
+class TestHasEventSinceLast(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.stream_path = os.path.join(self.tmp.name, "s1.jsonl")
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_true_when_event_after_marker(self):
+        _write_stream(self.stream_path, [
+            {"type": "prompt"},
+            {"type": "direct_instruction"},
+        ])
+        self.assertTrue(
+            stream.has_event_since_last(self.stream_path, 'direct_instruction',
+                                        marker_type='prompt'))
+
+    def test_false_when_event_before_marker(self):
+        _write_stream(self.stream_path, [
+            {"type": "direct_instruction"},
+            {"type": "prompt"},
+        ])
+        self.assertFalse(
+            stream.has_event_since_last(self.stream_path, 'direct_instruction',
+                                        marker_type='prompt'))
+
+    def test_false_when_no_stream_file(self):
+        missing = os.path.join(self.tmp.name, "missing.jsonl")
+        self.assertFalse(
+            stream.has_event_since_last(missing, 'direct_instruction'))
+
+
 # ──────────────────────────────────────────────────────────────────
 # post/swe_post_orchestrator_drift — main() end-to-end via stdin
 # ──────────────────────────────────────────────────────────────────
@@ -985,6 +1018,74 @@ class TestOrchestratorDriftMain(unittest.TestCase):
             })
         ctx = result.get("hookSpecificOutput", {}).get("additionalContext", "")
         self.assertNotIn("Orchestrator drift", ctx)
+
+    def test_advisory_suppressed_with_direct_instruction_since_last_prompt(self):
+        # A direct_instruction event since the last 'prompt' marker means
+        # THIS turn was a literally-targeted instruction — the advisory
+        # (count 6-11) must stay quiet, even though drift_count itself is
+        # still at/above DRIFT_THRESHOLD.
+        session_id = "d1157001"
+        stream_path = stream.get_stream_path(
+            session_mod.extract_session_id(self._transcript(session_id)))
+        stream.append_event(stream_path, 'prompt', s=session_id)
+        stream.append_event(stream_path, 'direct_instruction', s=session_id)
+        for _ in range(drift_hook.DRIFT_THRESHOLD - 1):
+            self._run_main({
+                "tool_name": "Edit",
+                "transcript_path": self._transcript(session_id),
+                "tool_input": {},
+            })
+        result = self._run_main({
+            "tool_name": "Bash",
+            "transcript_path": self._transcript(session_id),
+            "tool_input": {},
+        })
+        ctx = result.get("hookSpecificOutput", {}).get("additionalContext", "")
+        self.assertNotIn("Orchestrator drift", ctx)
+
+    def test_advisory_still_emitted_without_direct_instruction_event(self):
+        # Sanity counterpart: no direct_instruction event at all -> advisory
+        # fires as usual at DRIFT_THRESHOLD.
+        session_id = "d1157002"
+        stream_path = stream.get_stream_path(
+            session_mod.extract_session_id(self._transcript(session_id)))
+        stream.append_event(stream_path, 'prompt', s=session_id)
+        for _ in range(drift_hook.DRIFT_THRESHOLD - 1):
+            self._run_main({
+                "tool_name": "Edit",
+                "transcript_path": self._transcript(session_id),
+                "tool_input": {},
+            })
+        result = self._run_main({
+            "tool_name": "Bash",
+            "transcript_path": self._transcript(session_id),
+            "tool_input": {},
+        })
+        ctx = result.get("hookSpecificOutput", {}).get("additionalContext", "")
+        self.assertIn("Orchestrator drift", ctx)
+
+    def test_hard_threshold_still_fires_with_direct_instruction_event(self):
+        # HARD threshold (deny + mandate) is UNCONDITIONAL — a direct
+        # instruction event never suppresses it, only the softer advisory.
+        session_id = "d1157003"
+        stream_path = stream.get_stream_path(
+            session_mod.extract_session_id(self._transcript(session_id)))
+        stream.append_event(stream_path, 'prompt', s=session_id)
+        stream.append_event(stream_path, 'direct_instruction', s=session_id)
+        for _ in range(drift_hook.DRIFT_HARD_THRESHOLD - 1):
+            self._run_main({
+                "tool_name": "Edit",
+                "transcript_path": self._transcript(session_id),
+                "tool_input": {},
+            })
+        result = self._run_main({
+            "tool_name": "Bash",
+            "transcript_path": self._transcript(session_id),
+            "tool_input": {},
+        })
+        ctx = result.get("hookSpecificOutput", {}).get("additionalContext", "")
+        self.assertIn(str(drift_hook.DRIFT_HARD_THRESHOLD), ctx)
+        self.assertIn("STOP doing the work yourself", ctx)
 
     def test_mixed_verification_and_edit_still_counts(self):
         # Must-fire: verification Bash calls interleaved with real edits still

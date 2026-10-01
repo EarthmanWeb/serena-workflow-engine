@@ -328,14 +328,16 @@ class TestPromptLowerRegression(unittest.TestCase):
 
     main() reads stdin, so we cannot easily invoke it. Instead we assert the
     fix is present in the source of main(): it now assigns
-    `prompt_lower = prompt.lower()` (the real line is `.lower().strip()`,
-    which contains this substring).
+    `prompt_lower = prompt_clean.lower()` (the real line is `.lower().strip()`,
+    which contains this substring) — derived from the IDE-tag-stripped
+    prompt_clean (strip_injected_context), not the raw prompt, so a leading
+    <ide_opened_file>/<system-reminder> block never shifts pattern matching.
     """
     mod = import_hook("prompt/swe_user_prompt_workflow")
 
     def test_main_defines_prompt_lower(self):
         src = inspect.getsource(self.mod.main)
-        self.assertIn("prompt_lower = prompt.lower()", src)
+        self.assertIn("prompt_lower = prompt_clean.lower()", src)
 
     def test_main_uses_prompt_lower(self):
         # Sanity: the variable is actually referenced after being defined.
@@ -921,6 +923,190 @@ class TestMarketplaceSelfUpdateDirtyClone(unittest.TestCase):
         updated, old, new = self.mod._self_update_marketplace(self.plugin_root)
         self.assertFalse(updated)
         self.assertEqual((old, new), ('1.0.1', '1.0.1'))
+
+
+class TestStripInjectedContext(unittest.TestCase):
+    """strip_injected_context() — removes IDE/system-injected blocks so the
+    true start of the user's message lines up with ^-anchored patterns."""
+    mod = import_hook("prompt/swe_user_prompt_workflow")
+
+    def test_removes_ide_opened_file_block(self):
+        raw = "<ide_opened_file>path: foo.php\ncontent: ...</ide_opened_file>\nokay, now hide #x"
+        self.assertEqual(self.mod.strip_injected_context(raw), "okay, now hide #x")
+
+    def test_removes_ide_selection_block(self):
+        raw = "<ide_selection>some selected text\nmultiple lines</ide_selection>\nokay, continue"
+        self.assertEqual(self.mod.strip_injected_context(raw), "okay, continue")
+
+    def test_removes_system_reminder_block(self):
+        raw = "<system-reminder>internal note\nmore internal</system-reminder>\nokay, do that"
+        self.assertEqual(self.mod.strip_injected_context(raw), "okay, do that")
+
+    def test_removes_multiple_blocks(self):
+        raw = ("<ide_opened_file>a</ide_opened_file>"
+               "<system-reminder>b</system-reminder>\nokay, go ahead")
+        self.assertEqual(self.mod.strip_injected_context(raw), "okay, go ahead")
+
+    def test_leaves_command_name_marker_untouched(self):
+        raw = "<command-name>/swe-status</command-name> extra args"
+        self.assertEqual(self.mod.strip_injected_context(raw), raw)
+
+    def test_empty_and_none_safe(self):
+        self.assertEqual(self.mod.strip_injected_context(""), "")
+
+    def test_session_regression_okay_now_one_other_thing(self):
+        # session 08a0488f: an <ide_opened_file> block preceding "okay, now
+        # one other thing: ..." defeated the ^-anchored continuation pattern
+        # and fell through to "unknown" instead of matching 'continuation'.
+        raw = ("<ide_opened_file>path: admin-styles.php\ncontent: .foo{}\n"
+               "</ide_opened_file>\nokay, now one other thing: hide this in "
+               "all cases in the admin. #getwid-layout-insert-button")
+        cleaned = self.mod.strip_injected_context(raw)
+        self.assertEqual(
+            self.mod.analyze_prompt(cleaned, "WF_EXECUTE"), "continuation")
+
+
+class TestIsDirectInstruction(unittest.TestCase):
+    """is_direct_instruction() — edit verb + literal target, or an explicit
+    direct-mode phrase. Pattern + state only, never message length."""
+    mod = import_hook("prompt/swe_user_prompt_workflow")
+
+    def test_getwid_css_id_example(self):
+        prompt = ("okay, now one other thing: hide this in all cases in the "
+                  "admin. #getwid-layout-insert-button")
+        self.assertTrue(self.mod.is_direct_instruction(prompt))
+
+    def test_contractions_are_not_a_quoted_target(self):
+        self.assertFalse(
+            self.mod.is_direct_instruction("don't add it, it's fine as is"))
+
+    def test_single_quoted_target(self):
+        self.assertTrue(
+            self.mod.is_direct_instruction("change the label to 'Save draft'"))
+
+    def test_remove_backtick_target(self):
+        self.assertTrue(
+            self.mod.is_direct_instruction("remove `.foo` from bar.scss"))
+
+    def test_set_hex_color_target(self):
+        self.assertTrue(
+            self.mod.is_direct_instruction("set the color to #fff"))
+
+    def test_direct_mode_phrase_just_fucking_do_it(self):
+        prompt = "no, seriously, just fucking do it. Why are you searching for it?"
+        self.assertTrue(self.mod.is_direct_instruction(prompt))
+
+    def test_direct_mode_phrase_stop_searching(self):
+        self.assertTrue(self.mod.is_direct_instruction("stop searching, just fix it"))
+
+    def test_quoted_string_target(self):
+        self.assertTrue(
+            self.mod.is_direct_instruction('replace "Add to cart" with "Buy now"'))
+
+    def test_file_path_target(self):
+        self.assertTrue(
+            self.mod.is_direct_instruction("add a border to src/x.scss"))
+
+    def test_negative_question_about_broken_header(self):
+        self.assertFalse(
+            self.mod.is_direct_instruction("why is the header broken?"))
+
+    def test_negative_add_a_border_sentence_period_no_target(self):
+        # "add a border." — edit verb present, but the trailing period is a
+        # sentence-ender, not a CSS selector/target token.
+        self.assertFalse(self.mod.is_direct_instruction("add a border."))
+
+    def test_negative_question_what_does_admin_bar_do(self):
+        self.assertFalse(
+            self.mod.is_direct_instruction("what does admin-bar do"))
+
+    def test_empty_prompt_is_false(self):
+        self.assertFalse(self.mod.is_direct_instruction(""))
+
+
+class TestDirectInstructionNote(unittest.TestCase):
+    """direct_instruction_note() content + main()-level routing."""
+    mod = import_hook("prompt/swe_user_prompt_workflow")
+
+    def test_note_mentions_state_and_forbids_searching(self):
+        note = self.mod.direct_instruction_note("WF_EXECUTE", "WM_abc", "")
+        self.assertIn("DIRECT INSTRUCTION", note)
+        self.assertIn("WF_EXECUTE", note)
+        self.assertIn("Do NOT search", note)
+        self.assertIn("Do NOT", note)
+        self.assertIn("delegate", note)
+
+
+class TestMainDirectInstructionFastPath(unittest.TestCase):
+    """main() end-to-end: a direct instruction in an active execution state
+    stays in place (no transition) and gets the direct-instruction note
+    instead of pivot_analysis_note; WF_RESEARCH keeps its own handling."""
+    mod = import_hook("prompt/swe_user_prompt_workflow")
+
+    def setUp(self):
+        from _hookutil import reset_caches
+        self._reset_caches = reset_caches
+        self._reset_caches()
+        self.tmp = tempfile.TemporaryDirectory()
+        self.cwd = self.tmp.name
+        os.makedirs(os.path.join(self.cwd, '.git'), exist_ok=True)
+        os.makedirs(os.path.join(self.cwd, '.serena'), exist_ok=True)
+        with open(os.path.join(self.cwd, '.serena', 'swe-setup-complete.json'), 'w') as f:
+            json.dump({'complete': True}, f)
+        self._orig_env = os.environ.get('CLAUDE_PROJECT_DIR')
+        os.environ['CLAUDE_PROJECT_DIR'] = self.cwd
+
+    def tearDown(self):
+        if self._orig_env is None:
+            os.environ.pop('CLAUDE_PROJECT_DIR', None)
+        else:
+            os.environ['CLAUDE_PROJECT_DIR'] = self._orig_env
+        self.tmp.cleanup()
+        self._reset_caches()
+
+    def _write_state_file(self, session_id, state='WF_EXECUTE'):
+        d = os.path.join(self.cwd, '.serena', 'swe-state')
+        os.makedirs(d, exist_ok=True)
+        with open(os.path.join(d, f'{session_id}.state'), 'w') as f:
+            json.dump({'current_state': state, 'session_id': session_id}, f)
+
+    def _run_main(self, prompt, session_id):
+        import io
+        from unittest import mock
+        transcript = f'/x/{session_id}-0000-0000-0000-000000000000.jsonl'
+        payload = {"prompt": prompt, "cwd": self.cwd, "transcript_path": transcript}
+        buf = io.StringIO()
+        with mock.patch.object(sys, "stdin", io.StringIO(json.dumps(payload))), \
+             mock.patch.object(os, 'getcwd', return_value=self.cwd), \
+             mock.patch("sys.stdout", buf):
+            try:
+                self.mod.main()
+            except SystemExit:
+                pass
+        return buf.getvalue()
+
+    def test_direct_instruction_in_wf_execute_stays_and_gets_note(self):
+        session_id = 'dd000001'
+        self._write_state_file(session_id, 'WF_EXECUTE')
+        out = self._run_main(
+            "okay, now one other thing: hide this in all cases in the admin. "
+            "#getwid-layout-insert-button",
+            session_id,
+        )
+        result = json.loads(out)
+        ctx = result.get('hookSpecificOutput', {}).get('additionalContext', '')
+        self.assertIn("DIRECT INSTRUCTION", ctx)
+        self.assertNotIn("Ambiguous intent", ctx)
+
+    def test_direct_instruction_in_wf_research_keeps_research_handling(self):
+        # WF_RESEARCH is excluded from the direct-instruction fast path — it
+        # keeps its own needs_implementation / research_exit_directive logic.
+        session_id = 'dd000002'
+        self._write_state_file(session_id, 'WF_RESEARCH')
+        out = self._run_main("hide #foo-bar in the admin", session_id)
+        result = json.loads(out)
+        ctx = result.get('hookSpecificOutput', {}).get('additionalContext', '')
+        self.assertNotIn("DIRECT INSTRUCTION", ctx)
 
 
 if __name__ == "__main__":

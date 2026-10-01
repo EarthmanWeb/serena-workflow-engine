@@ -81,7 +81,7 @@ try:
     )
     from swe_hooks.core.stream import (
         get_stream_path, append_event, count_task_work_since_delegation,
-        DRIFT_HARD_THRESHOLD,
+        has_event_since_last, DRIFT_HARD_THRESHOLD,
     )
     from swe_hooks.core.scope_guard import (
         classify_kind, budget_for_model, parse_budget_tag, parse_scope_extend,
@@ -383,6 +383,17 @@ def main():
             return
 
         if drift_count >= DRIFT_THRESHOLD:
+            # A direct, literally-targeted instruction this turn (the prompt
+            # hook's fast path, swe_user_prompt_workflow.is_direct_instruction)
+            # is not orchestrator drift — the user named the target, so
+            # applying it directly IS the correct behavior, not a sign the
+            # model should have delegated. Suppress the advisory ONLY below
+            # the hard threshold; HARD-threshold behavior (deny + mandate)
+            # stays unconditional regardless of a direct instruction.
+            if has_event_since_last(stream_path, 'direct_instruction', marker_type='prompt'):
+                output_status(f"\U0001f6e0️ task-work #{drift_count} since last delegation "
+                              "(direct instruction this turn — advisory suppressed)")
+                return
             output = HookOutput(event_name="PostToolUse")
             message = (
                 f"Orchestrator drift: {drift_count} direct task-work calls without "

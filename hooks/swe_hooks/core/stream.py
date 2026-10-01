@@ -798,6 +798,22 @@ def count_all_events_since_last(stream_path: str, marker_type: str = 'continuati
         return 0
 
 
+def has_event_since_last(stream_path: str, event_type: str,
+                          marker_type: str = 'prompt') -> bool:
+    """True when at least one `event_type` event has been appended since the
+    most recent `marker_type` event (default marker: 'prompt', the per-turn
+    boundary stamped at the top of swe_user_prompt_workflow.py's main()).
+
+    Thin wrapper over count_events_since_last (count_type=event_type,
+    marker_types=(marker_type,)) — DRY with the existing tail-read scanner
+    rather than a second implementation. Used by the drift-advisory
+    suppression: a 'direct_instruction' event since the last 'prompt' means
+    THIS turn was a direct instruction, so the advisory should stay quiet.
+    """
+    return count_events_since_last(
+        stream_path, marker_types=(marker_type,), count_type=event_type) > 0
+
+
 def get_last_continuation(stream_path: str) -> str:
     """Return the `state` value of the most recent 'continuation' event, or
     '' if none exists yet. Used to suppress a repeated "CONTINUE (STATE): …"
