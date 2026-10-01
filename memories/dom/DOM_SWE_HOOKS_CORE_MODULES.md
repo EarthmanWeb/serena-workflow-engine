@@ -137,6 +137,7 @@ jq '.hooks | keys' .claude/plugins/serena-workflow-engine/hooks/hooks.json
 
 ## New Modules & Scripts
 
+- `hooks/swe_hooks/core/turn_signals.py` — pure helpers shared by the two Stop hooks (`swe_stop_continue_working.py`, `swe_stop_response_format.py`): `text_of`/`is_genuine_user`/`ends_with_question` (canonical implementations, re-exported as module attributes from `swe_stop_response_format.py` for compat) plus `queued_command_prompt_text(rec)` and `user_spoke_mid_turn(transcript_path)` — detects a mid-turn human queued_command attachment or queue-operation enqueue after the last genuine user prompt, so neither Stop hook forces an extra turn once the user already typed a follow-up. See `mem:dom/DOM_SWE_HOOKS_STOP`.
 - `hooks/swe_hooks/core/loop_guard.py` — implements `loopCaps` enforcement (refuse-with-escape-message on cap exceeded, warn on A→B→A→B oscillation) for `readAdvance` transitions. See `mem:dom/DOM_SWE_STATE_MACHINE`.
 - `scripts/validate-graph.py` — validates `state-machine/states.json` (transitions, `transitionMatrix` edges, `rank` ordering, `loopCaps`, `subflows`).
 - `skills/swe-memory-size-audit/scripts/validate-memory-graph.py` — validates the memory link graph (dangling/orphan refs, per-file word counts, CAPS hard-stop counts). Run as `python3 skills/swe-memory-size-audit/scripts/validate-memory-graph.py --extra-root memories` (conf roots + plugin source tree in ONE run — never validate trees separately). See `mem:feature/FEATURE_SWE` for usage.
