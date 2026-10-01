@@ -5,12 +5,29 @@ dev/*.md files whose YAML front-matter `paths:` (or `metadata.paths:`) glob
 list matches the file — plus the project's test-harness memories
 (feature/FEATURE_TESTS, dev/DEV_TESTS) when the target is a test artifact.
 
+Two additional behaviors on top of the pure paths:-glob index:
+
+1. Extension-based dev-standards FALLBACK (`fallback_dev_docs` /
+   `EXTENSION_LANGUAGE_FALLBACK`): when NO paths:-matched memory for a file
+   is a `dev/*` name (i.e. the project's dev-standards memories either don't
+   exist or have no `paths:` front-matter covering this file), and the
+   file's suffix is a known language extension, the fallback adds every
+   `dev/DEV_<LANGUAGE>` memory (in priority order for that extension) that
+   actually exists, plus `feature/FEATURE_DEV_STANDARDS` if it exists. This
+   prevents the edit doc-gate from silently never firing for a dev-standards
+   memory that forgot (or never had) a `paths:` block.
+2. The plugin-SHIPPED `memories/` root's `paths:` globs (e.g. FEATURE_SWE's
+   `hooks/**`) are scoped to the plugin SOURCE repo only (see `_build_index`)
+   — they must not demand FEATURE_SWE in an unrelated project that merely
+   happens to have a `hooks/` directory.
+
 Stage 2 wires this into a gate; this module is the pure, testable API only.
 Stdlib only, no PyYAML dependency — front-matter is parsed by hand (see
 parse_paths_frontmatter).
 """
 
 import fnmatch
+import json
 import os
 import re
 
@@ -40,6 +57,37 @@ _SCANNED_TOPICS = ('feature', 'dev')
 
 # Per-process cache of the scanned (name, globs) index, keyed by project_root.
 _INDEX_CACHE = {}
+
+# Extension -> ordered candidate dev/DEV_<KEY> language keys, longest suffix
+# matched first (see EXTENSION_LANGUAGE_FALLBACK lookup order in
+# fallback_dev_docs). Order within a tuple is priority (most to least
+# specific language first) — every candidate that memory_exists is added,
+# not just the first match.
+EXTENSION_LANGUAGE_FALLBACK = (
+    ('.blade.php', ('BLADEONE', 'BLADE', 'PHP')),
+    ('.php', ('PHP',)),
+    ('.jsx', ('JAVASCRIPT', 'JS')),
+    ('.mjs', ('JAVASCRIPT', 'JS')),
+    ('.cjs', ('JAVASCRIPT', 'JS')),
+    ('.js', ('JAVASCRIPT', 'JS')),
+    ('.tsx', ('TYPESCRIPT', 'JAVASCRIPT')),
+    ('.ts', ('TYPESCRIPT', 'JAVASCRIPT')),
+    ('.scss', ('SCSS', 'SASS', 'CSS')),
+    ('.sass', ('SCSS', 'SASS', 'CSS')),
+    ('.css', ('CSS', 'SCSS')),
+    ('.py', ('PYTHON',)),
+    ('.rb', ('RUBY',)),
+    ('.go', ('GO',)),
+    ('.rs', ('RUST',)),
+    ('.java', ('JAVA',)),
+    ('.sh', ('BASH', 'SHELL')),
+    ('.bash', ('BASH', 'SHELL')),
+    ('.twig', ('TWIG',)),
+    ('.vue', ('VUE', 'JAVASCRIPT')),
+)
+# Sorted longest-suffix-first so '.blade.php' is checked before '.php'.
+_EXTENSION_LANGUAGE_FALLBACK_SORTED = tuple(
+    sorted(EXTENSION_LANGUAGE_FALLBACK, key=lambda pair: -len(pair[0])))
 
 
 def is_test_target(file_path: str) -> bool:
@@ -320,14 +368,64 @@ def _glob_matches(glob_pat: str, rel_path: str) -> bool:
         return fnmatch.fnmatch(rel_path, glob_pat)
 
 
+def _plugin_json_name(plugin_json_path: str):
+    """The `name` field of a `.claude-plugin/plugin.json` file, or None when
+    the file is missing / unreadable / malformed."""
+    try:
+        with open(plugin_json_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+    except (IOError, OSError, ValueError):
+        return None
+    name = data.get('name') if isinstance(data, dict) else None
+    return name if isinstance(name, str) and name else None
+
+
+def _is_plugin_source_repo(project_root: str, shipped_root: str) -> bool:
+    """True when `project_root` IS the SWE plugin's own source checkout —
+    i.e. the repo whose `.claude-plugin/plugin.json` `name` matches the
+    shipped-memories plugin's own `.claude-plugin/plugin.json` `name`
+    (sibling of `shipped_root`, the directory `_shipped_memories_root()`
+    returned).
+
+    Used to scope the plugin-SHIPPED `memories/` root's `paths:` globs
+    (e.g. FEATURE_SWE's `hooks/**`) to the plugin source repo only — an
+    unrelated project that happens to have a `hooks/` directory must NOT be
+    told it needs FEATURE_SWE for editing it.
+    """
+    project_plugin_json = os.path.join(project_root, '.claude-plugin', 'plugin.json')
+    shipped_plugin_json = os.path.join(
+        os.path.dirname(os.path.normpath(shipped_root)), '.claude-plugin', 'plugin.json')
+    if not os.path.isfile(project_plugin_json) or not os.path.isfile(shipped_plugin_json):
+        return False
+    project_name = _plugin_json_name(project_plugin_json)
+    shipped_name = _plugin_json_name(shipped_plugin_json)
+    return bool(project_name) and project_name == shipped_name
+
+
 def _build_index(project_root: str):
     """Scan feature/*.md and dev/*.md under every memory root; return a list
-    of (memory_name, globs) tuples. Cached per project_root."""
+    of (memory_name, globs) tuples. Cached per project_root.
+
+    The plugin's SHIPPED `memories/` root (see `_shipped_memories_root`) is
+    SKIPPED entirely unless `project_root` IS the plugin source repo itself
+    (see `_is_plugin_source_repo`) — its `paths:` globs (e.g. FEATURE_SWE's
+    `hooks/**`, `skills/swe-*/**`) describe the plugin's OWN source tree and
+    must not leak into an unrelated project that merely has a same-named
+    directory (e.g. any project with a `hooks/` dir). This skip applies ONLY
+    to the paths:-glob index built here; `memory_roots()` and
+    `memory_exists()` keep resolving shipped memories by name for every
+    project.
+    """
     if project_root in _INDEX_CACHE:
         return _INDEX_CACHE[project_root]
 
+    shipped_root = os.path.normpath(_shipped_memories_root())
+    scope_shipped = _is_plugin_source_repo(project_root, shipped_root)
+
     index = []
     for alias, root_dir in memory_roots(project_root):
+        if (not scope_shipped) and os.path.normpath(root_dir) == shipped_root:
+            continue
         for topic in _SCANNED_TOPICS:
             topic_dir = os.path.join(root_dir, topic)
             if not os.path.isdir(topic_dir):
@@ -356,6 +454,35 @@ def _build_index(project_root: str):
     return index
 
 
+def fallback_dev_docs(rel_path: str, project_root: str) -> list:
+    """Extension-based dev-standards fallback for `rel_path` (relative to
+    `project_root`, '/'-separated).
+
+    Looks up `rel_path`'s suffix in `EXTENSION_LANGUAGE_FALLBACK` (longest
+    suffix matched first, e.g. '.blade.php' before '.php') and returns every
+    `dev/DEV_<KEY>` among that extension's candidate language keys that
+    `memory_exists`, PLUS `feature/FEATURE_DEV_STANDARDS` when it exists.
+    Returns [] when the extension is unknown or none of the candidate
+    memories exist.
+
+    This is a STANDALONE lookup — callers decide WHEN to apply it (see
+    `required_docs_for_path`'s "no paths:-matched dev/* name" condition).
+    """
+    rel_path = str(rel_path or '').replace('\\', '/').lower()
+    for suffix, candidates in _EXTENSION_LANGUAGE_FALLBACK_SORTED:
+        if not rel_path.endswith(suffix):
+            continue
+        found = []
+        for key in candidates:
+            name = f'dev/DEV_{key}'
+            if memory_exists(name, project_root):
+                found.append(name)
+        if found and memory_exists('feature/FEATURE_DEV_STANDARDS', project_root):
+            found.append('feature/FEATURE_DEV_STANDARDS')
+        return found
+    return []
+
+
 def required_docs_for_path(file_path: str, project_root: str) -> list:
     """Memories required for editing `file_path`, sorted and de-duplicated.
 
@@ -365,6 +492,13 @@ def required_docs_for_path(file_path: str, project_root: str) -> list:
     artifact (is_test_target), 'feature/FEATURE_TESTS' and 'dev/DEV_TESTS'
     are added too, filtered by memory_exists (never demand a doc the project
     does not have).
+
+    When the paths:-matched set contains NO `dev/*` name (no dev-standards
+    memory's `paths:` front-matter covers this file — including the case
+    where no dev-standards memories exist at all, or they exist with no
+    `paths:` block), `fallback_dev_docs` is consulted and its names are
+    added too — this is what makes editing e.g. a `.php` file demand
+    `dev/DEV_PHP` even when that memory carries no `paths:` glob of its own.
     """
     project_root = os.path.abspath(project_root)
     abs_path = file_path
@@ -382,6 +516,10 @@ def required_docs_for_path(file_path: str, project_root: str) -> list:
             if _glob_matches(g, rel_path):
                 required.add(name)
                 break
+
+    has_dev_match = any(n == 'dev' or n.startswith('dev/') or '/dev/' in n for n in required)
+    if not has_dev_match:
+        required.update(fallback_dev_docs(rel_path, project_root))
 
     if is_test_target(rel_path):
         for name in TEST_DOC_NAMES:

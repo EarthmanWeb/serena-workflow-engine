@@ -131,10 +131,17 @@ class ShippedMemoriesRootTests(DocRequirementsTestCase):
             root_dirs)
 
     def test_shipped_memory_makes_feature_visible_to_path_matching(self):
+        # Shipped-root globs apply when project_root IS the plugin source
+        # repo (same .claude-plugin/plugin.json `name` as the shipped
+        # plugin's own) — see ShippedRootPluginScopingTests for the
+        # excluded (non-plugin-repo) case.
         plugin_dir = tempfile.mkdtemp()
         _write(os.path.join(plugin_dir, "memories", "feature", "FEATURE_SWE.md"),
                '---\nname: SWE\npaths:\n  - "hooks/**/*.py"\n---\nbody')
+        _write(os.path.join(plugin_dir, ".claude-plugin", "plugin.json"), '{"name": "swe"}')
         os.environ["CLAUDE_PLUGIN_ROOT"] = plugin_dir
+        _write(os.path.join(self.project_root, ".claude-plugin", "plugin.json"),
+               '{"name": "swe"}')
         required = doc_requirements.required_docs_for_path(
             "hooks/pre/swe_pre_agent_model_gate.py", self.project_root)
         self.assertIn("feature/FEATURE_SWE", required)
@@ -400,6 +407,161 @@ class UnreadRequiredDocsTests(DocRequirementsTestCase):
         unread = doc_requirements.unread_required_docs(
             "tests/test_foo.py", self.project_root, None)
         self.assertEqual(unread, ["feature/FEATURE_TESTS"])
+
+
+class FallbackDevDocsTests(DocRequirementsTestCase):
+    def test_php_fallback_fires_when_dev_php_exists(self):
+        _write(os.path.join(self.project_root, ".serena", "memory", "dev",
+                             "DEV_PHP.md"), "# php standards")
+        result = doc_requirements.fallback_dev_docs("src/App.php", self.project_root)
+        self.assertEqual(result, ["dev/DEV_PHP"])
+
+    def test_unknown_extension_returns_nothing(self):
+        result = doc_requirements.fallback_dev_docs("src/main.xyz", self.project_root)
+        self.assertEqual(result, [])
+
+    def test_known_extension_no_memories_present_returns_nothing(self):
+        result = doc_requirements.fallback_dev_docs("src/App.php", self.project_root)
+        self.assertEqual(result, [])
+
+    def test_blade_php_picks_bladeone_and_php_when_both_exist(self):
+        _write(os.path.join(self.project_root, ".serena", "memory", "dev",
+                             "DEV_BLADEONE.md"), "# bladeone")
+        _write(os.path.join(self.project_root, ".serena", "memory", "dev",
+                             "DEV_PHP.md"), "# php")
+        result = doc_requirements.fallback_dev_docs("views/home.blade.php", self.project_root)
+        self.assertEqual(result, ["dev/DEV_BLADEONE", "dev/DEV_PHP"])
+
+    def test_blade_php_only_php_exists_falls_through_candidates(self):
+        _write(os.path.join(self.project_root, ".serena", "memory", "dev",
+                             "DEV_PHP.md"), "# php")
+        result = doc_requirements.fallback_dev_docs("views/home.blade.php", self.project_root)
+        self.assertEqual(result, ["dev/DEV_PHP"])
+
+    def test_feature_dev_standards_added_only_when_it_exists(self):
+        _write(os.path.join(self.project_root, ".serena", "memory", "dev",
+                             "DEV_PYTHON.md"), "# python")
+        result_without = doc_requirements.fallback_dev_docs("src/main.py", self.project_root)
+        self.assertEqual(result_without, ["dev/DEV_PYTHON"])
+
+        _write(os.path.join(self.project_root, ".serena", "memory", "feature",
+                             "FEATURE_DEV_STANDARDS.md"), "# standards")
+        result_with = doc_requirements.fallback_dev_docs("src/main.py", self.project_root)
+        self.assertEqual(result_with, ["dev/DEV_PYTHON", "feature/FEATURE_DEV_STANDARDS"])
+
+    def test_feature_dev_standards_not_added_when_no_dev_candidate_exists(self):
+        _write(os.path.join(self.project_root, ".serena", "memory", "feature",
+                             "FEATURE_DEV_STANDARDS.md"), "# standards")
+        result = doc_requirements.fallback_dev_docs("src/main.py", self.project_root)
+        self.assertEqual(result, [])
+
+    def test_js_variants_use_javascript_candidates(self):
+        _write(os.path.join(self.project_root, ".serena", "memory", "dev",
+                             "DEV_JAVASCRIPT.md"), "# js")
+        for fname in ("a.js", "a.jsx", "a.mjs", "a.cjs"):
+            result = doc_requirements.fallback_dev_docs(fname, self.project_root)
+            self.assertEqual(result, ["dev/DEV_JAVASCRIPT"], fname)
+
+
+class RequiredDocsForPathFallbackTests(DocRequirementsTestCase):
+    def test_fallback_fires_when_no_paths_matched_dev_memory(self):
+        # DEV_PHP has NO paths: front-matter -> would never be required
+        # without the extension fallback.
+        _write(os.path.join(self.project_root, ".serena", "memory", "dev",
+                             "DEV_PHP.md"), "# php standards, no paths: block")
+        required = doc_requirements.required_docs_for_path(
+            "src/App.php", self.project_root)
+        self.assertIn("dev/DEV_PHP", required)
+
+    def test_fallback_does_not_fire_when_paths_matched_dev_already_present(self):
+        _write(os.path.join(self.project_root, ".serena", "memory", "dev",
+                             "DEV_PHP.md"),
+               '---\npaths:\n  - "src/*.php"\n---\n# php standards')
+        # A second dev memory exists for the SAME extension via the
+        # fallback map but must NOT be added, since a paths:-matched dev/*
+        # memory already covers this file.
+        _write(os.path.join(self.project_root, ".serena", "memory", "dev",
+                             "DEV_OTHERPHP.md"), "# irrelevant, never a fallback candidate")
+        required = doc_requirements.required_docs_for_path(
+            "src/App.php", self.project_root)
+        self.assertEqual(required, ["dev/DEV_PHP"])
+
+    def test_blade_php_end_to_end_picks_bladeone_and_php(self):
+        _write(os.path.join(self.project_root, ".serena", "memory", "dev",
+                             "DEV_BLADEONE.md"), "# bladeone")
+        _write(os.path.join(self.project_root, ".serena", "memory", "dev",
+                             "DEV_PHP.md"), "# php")
+        required = doc_requirements.required_docs_for_path(
+            "views/home.blade.php", self.project_root)
+        self.assertIn("dev/DEV_BLADEONE", required)
+        self.assertIn("dev/DEV_PHP", required)
+
+    def test_feature_dev_standards_added_only_when_exists_end_to_end(self):
+        _write(os.path.join(self.project_root, ".serena", "memory", "dev",
+                             "DEV_PYTHON.md"), "# python")
+        required_without = doc_requirements.required_docs_for_path(
+            "src/mod.py", self.project_root)
+        self.assertNotIn("feature/FEATURE_DEV_STANDARDS", required_without)
+
+        doc_requirements._INDEX_CACHE.clear()
+        _write(os.path.join(self.project_root, ".serena", "memory", "feature",
+                             "FEATURE_DEV_STANDARDS.md"), "# standards")
+        required_with = doc_requirements.required_docs_for_path(
+            "src/mod.py", self.project_root)
+        self.assertIn("feature/FEATURE_DEV_STANDARDS", required_with)
+
+    def test_unknown_extension_adds_nothing(self):
+        required = doc_requirements.required_docs_for_path(
+            "src/mod.xyz", self.project_root)
+        self.assertEqual(required, [])
+
+
+class ShippedRootPluginScopingTests(DocRequirementsTestCase):
+    def _write_shipped_feature_swe(self, plugin_dir):
+        _write(os.path.join(plugin_dir, "memories", "feature", "FEATURE_SWE.md"),
+               '---\nname: SWE\npaths:\n  - "hooks/**/*.py"\n---\nbody')
+
+    def _write_plugin_json(self, repo_dir, name):
+        _write(os.path.join(repo_dir, ".claude-plugin", "plugin.json"),
+               f'{{"name": "{name}"}}')
+
+    def test_shipped_globs_ignored_in_non_plugin_project(self):
+        plugin_dir = tempfile.mkdtemp()
+        self._write_shipped_feature_swe(plugin_dir)
+        self._write_plugin_json(plugin_dir, "swe")
+        os.environ["CLAUDE_PLUGIN_ROOT"] = plugin_dir
+
+        # self.project_root is an unrelated project with NO plugin.json —
+        # must NOT be told it needs FEATURE_SWE for a hooks/ file.
+        required = doc_requirements.required_docs_for_path(
+            "hooks/anything.py", self.project_root)
+        self.assertNotIn("feature/FEATURE_SWE", required)
+
+    def test_shipped_globs_honored_when_project_is_the_plugin_repo(self):
+        plugin_dir = tempfile.mkdtemp()
+        self._write_shipped_feature_swe(plugin_dir)
+        self._write_plugin_json(plugin_dir, "swe")
+        os.environ["CLAUDE_PLUGIN_ROOT"] = plugin_dir
+
+        # project_root IS the plugin source repo: same plugin.json name.
+        self._write_plugin_json(self.project_root, "swe")
+        doc_requirements._INDEX_CACHE.clear()
+        required = doc_requirements.required_docs_for_path(
+            "hooks/anything.py", self.project_root)
+        self.assertIn("feature/FEATURE_SWE", required)
+
+    def test_mismatched_plugin_name_does_not_scope_in(self):
+        plugin_dir = tempfile.mkdtemp()
+        self._write_shipped_feature_swe(plugin_dir)
+        self._write_plugin_json(plugin_dir, "swe")
+        os.environ["CLAUDE_PLUGIN_ROOT"] = plugin_dir
+
+        # project_root has A plugin.json, but a DIFFERENT name.
+        self._write_plugin_json(self.project_root, "some-other-plugin")
+        doc_requirements._INDEX_CACHE.clear()
+        required = doc_requirements.required_docs_for_path(
+            "hooks/anything.py", self.project_root)
+        self.assertNotIn("feature/FEATURE_SWE", required)
 
 
 class IsTestTargetTests(unittest.TestCase):
