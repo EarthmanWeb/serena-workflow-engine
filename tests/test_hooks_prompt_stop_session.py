@@ -507,8 +507,12 @@ class TestExtractLastAssistantText(unittest.TestCase):
 # stop/swe_stop_continue_working — main() early-exit allow-stop guards
 # ---------------------------------------------------------------------------
 class TestContinueWorkingEarlyAllowGuards(unittest.TestCase):
-    """stop_hook_active / user_spoke_mid_turn / ends_with_question must allow
-    the stop BEFORE any of the INCOMPLETE_STATES blocking logic fires."""
+    """stop_hook_active / user_spoke_mid_turn allow the stop BEFORE any of the
+    INCOMPLETE_STATES blocking logic fires. In ANY workflow state (including
+    WF_DONE/WF_VERIFY), an unresolved item (question / indirect ask / pending
+    heading) found anywhere in the final reply blocks the stop instead,
+    unless blanket consent is active (in which case the block reason tells
+    Claude to resolve each item itself)."""
 
     mod = import_hook("stop/swe_stop_continue_working")
 
@@ -524,7 +528,8 @@ class TestContinueWorkingEarlyAllowGuards(unittest.TestCase):
             for entry in entries:
                 f.write(json.dumps(entry) + "\n")
 
-    def _run_main(self, payload_extra, state="WF_EXECUTE", mid_turn=False):
+    def _run_main(self, payload_extra, state="WF_EXECUTE", mid_turn=False,
+                  blanket_consent=False):
         from unittest import mock
         import io
         import sys
@@ -548,6 +553,7 @@ class TestContinueWorkingEarlyAllowGuards(unittest.TestCase):
         with mock.patch.object(self.mod, "read_stdin_safe", return_value=payload), \
              mock.patch.object(self.mod, "StateManager", _StubState), \
              mock.patch.object(self.mod, "user_spoke_mid_turn", return_value=mid_turn), \
+             mock.patch.object(self.mod, "wm_has_blanket_consent", return_value=blanket_consent), \
              mock.patch.object(self.mod, "_persist_state_on_stop", return_value=None), \
              redirect_stdout(buf):
             try:
@@ -573,21 +579,24 @@ class TestContinueWorkingEarlyAllowGuards(unittest.TestCase):
         out = self._run_main({"stop_hook_active": False}, state="WF_EXECUTE", mid_turn=True)
         self.assertEqual(out.strip(), "{}")
 
-    def test_question_ending_allows_stop_even_in_incomplete_state(self):
+    def test_question_ending_now_blocks_instead_of_allowing(self):
+        # The unresolved-items gate now blocks ANY final reply containing a
+        # question, including one that ends the reply — there is no
+        # "ends_with_question -> allow stop" guard any more.
         self._write_transcript([
             {"type": "assistant",
              "message": {"content": [
                  {"type": "text", "text": "Which migration should run first?"}]}},
         ])
         out = self._run_main({"stop_hook_active": False}, state="WF_EXECUTE", mid_turn=False)
-        self.assertEqual(out.strip(), "{}")
+        self.assertIn('"decision": "block"', out)
 
     def test_no_guard_triggered_still_blocks_confirmation_pattern(self):
-        # Control: with none of the three guards true, the pre-existing
-        # confirmation-pattern block still fires for WF_EXECUTE. Must NOT end
-        # in a question mark (ends_with_question guard) and must NOT match
-        # GENUINE_INPUT_PATTERNS (e.g. "proceed", "delete") or the stop is
-        # correctly allowed through by pre-existing logic, not this guard.
+        # Control: with none of the guards true and no unresolved item in the
+        # final reply, the pre-existing confirmation-pattern block still
+        # fires for WF_EXECUTE. Must NOT end in a question mark and must NOT
+        # match an invite pattern, or the stop is blocked by the
+        # unresolved-items gate instead of this pre-existing logic.
         self._write_transcript([
             {"type": "assistant",
              "message": {"content": [
@@ -595,6 +604,47 @@ class TestContinueWorkingEarlyAllowGuards(unittest.TestCase):
         ])
         out = self._run_main({"stop_hook_active": False}, state="WF_EXECUTE", mid_turn=False)
         self.assertIn('"decision": "block"', out)
+
+    def test_unresolved_item_blocks_in_wf_done(self):
+        # The unresolved-items gate fires in ANY state, including WF_DONE,
+        # which would otherwise be in ALLOW_STOP_STATES.
+        self._write_transcript([
+            {"type": "assistant",
+             "message": {"content": [
+                 {"type": "text",
+                  "text": "Cleaned up the temp file. Should I delete it?"}]}},
+        ])
+        out = self._run_main({"stop_hook_active": False}, state="WF_DONE", mid_turn=False)
+        self.assertIn('"decision": "block"', out)
+
+    def test_clean_summary_allows_stop_in_wf_done(self):
+        self._write_transcript([
+            {"type": "assistant",
+             "message": {"content": [
+                 {"type": "text", "text": "Fixed the bug and all tests pass."}]}},
+        ])
+        out = self._run_main({"stop_hook_active": False}, state="WF_DONE", mid_turn=False)
+        self.assertEqual(out.strip(), "{}")
+
+    def test_stop_hook_active_allows_stop_even_with_unresolved_question(self):
+        self._write_transcript([
+            {"type": "assistant",
+             "message": {"content": [
+                 {"type": "text", "text": "Should I delete it?"}]}},
+        ])
+        out = self._run_main({"stop_hook_active": True}, state="WF_DONE", mid_turn=False)
+        self.assertEqual(out.strip(), "{}")
+
+    def test_blanket_consent_wording_in_block_reason(self):
+        self._write_transcript([
+            {"type": "assistant",
+             "message": {"content": [
+                 {"type": "text", "text": "Should I delete it?"}]}},
+        ])
+        out = self._run_main({"stop_hook_active": False}, state="WF_DONE",
+                              mid_turn=False, blanket_consent=True)
+        self.assertIn('"decision": "block"', out)
+        self.assertIn("resolve each item yourself", out)
 
 
 # ---------------------------------------------------------------------------

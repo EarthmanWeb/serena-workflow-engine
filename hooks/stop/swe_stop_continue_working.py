@@ -11,6 +11,9 @@ Blocks Claude from stopping when:
   - Claude is presenting implementation options instead of choosing — continues
   - Workflow is in an incomplete state (WF_EXECUTE, WF_VERIFY, etc.) — continues
 
+  - Final reply leaves questions/pending items in prose — forces
+    AskUserQuestion (any state, CLI and VS Code alike)
+
 Allows Claude to stop when:
   - Task is genuinely complete (WF_DONE)
   - Session is uninitialized
@@ -29,9 +32,9 @@ try:
     from swe_hooks.core.output import output_empty
     from swe_hooks.core.state_manager import StateManager
     from swe_hooks.core.stream import get_stream_path, append_event
-    from swe_hooks.core.session import extract_session_id
+    from swe_hooks.core.session import extract_session_id, wm_has_blanket_consent
     from swe_hooks.core.config import read_state_file, write_state_file
-    from swe_hooks.core.turn_signals import ends_with_question, user_spoke_mid_turn
+    from swe_hooks.core.turn_signals import final_reply_text, unresolved_items, user_spoke_mid_turn
 except ImportError as e:
     swe_hooks.bootstrap.import_error_exit(e, "Stop")
 
@@ -165,6 +168,26 @@ def extract_last_assistant_text(transcript_path: str) -> str:
 
 
 
+def unresolved_items_reason(items, blanket_consent: bool) -> str:
+    """Block reason for a final reply that leaves items in prose."""
+    listing = "\n".join(f"- {item}" for item in items)
+    head = ("⛔ UNRESOLVED ITEMS in your final reply — the user must not have to "
+            "read prose to find open questions or pending decisions:\n"
+            f"{listing}\n\n")
+    if blanket_consent:
+        return head + (
+            "Blanket consent is active: resolve each item yourself (pick the most "
+            "logical option), act on it, and note the decision in WM. Only a "
+            "destructive action may be asked via AskUserQuestion with the "
+            "[consent-override] tag. Then end with a terse summary containing no "
+            "questions, offers, or pending-item sections.")
+    return head + (
+        "Call AskUserQuestion NOW with one question per item (2-4 concrete "
+        "options each, recommended first; a [section] covers every item listed "
+        "under it). Then end with a terse summary containing no questions, "
+        "offers, or pending-item sections.")
+
+
 def _persist_state_on_stop(session_id: str, current_state: str):
     """Persist current state to JSON state file at end of response.
 
@@ -210,17 +233,25 @@ def main():
         #   - user_spoke_mid_turn: the user already typed a follow-up before
         #     this Stop event — forcing a continue produces a turn the user
         #     will not even see before their own next message lands.
-        #   - last assistant text ends with a question: it needs an answer
-        #     before anything else can happen; blocking here would just
-        #     re-ask the same question via a forced continue.
         if stop_hook_active or user_spoke_mid_turn(transcript_path):
             _persist_state_on_stop(session_id, current_state)
             output_empty()
             return
-        last_assistant_text = extract_last_assistant_text(transcript_path)
-        if ends_with_question(last_assistant_text):
-            _persist_state_on_stop(session_id, current_state)
-            output_empty()
+
+        # --- Unresolved items in the final reply — ANY state ---
+        # Questions/pending decisions left in prose force the user to read the
+        # summary to find them; route them through AskUserQuestion instead.
+        items = unresolved_items(final_reply_text(transcript_path))
+        if items:
+            if session_id:
+                try:
+                    append_event(get_stream_path(session_id), 'stop_blocked',
+                                 state=current_state, s=session_id,
+                                 reason='unresolved_items', count=len(items))
+                except Exception:
+                    pass
+            block_stop(unresolved_items_reason(
+                items, wm_has_blanket_consent(cwd, session_id)))
             return
 
         # WF_DONE or uninitialized — always allow stop

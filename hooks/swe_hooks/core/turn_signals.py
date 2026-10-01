@@ -24,6 +24,7 @@ BEFORE it (i.e. consumed by a prior turn already) must not count.
 """
 import json
 import os
+import re
 
 
 # ---------------------------------------------------------------------------
@@ -76,6 +77,108 @@ def ends_with_question(text):
     # Ignore trailing closing punctuation/quotes/markdown emphasis after '?'.
     tail = stripped.rstrip("`*_\"')]} \n\t")
     return tail.endswith("?")
+
+
+# ---------------------------------------------------------------------------
+# Unresolved-item detection (final reply → AskUserQuestion gate)
+# ---------------------------------------------------------------------------
+_FENCED_CODE_RE = re.compile(r"```.*?```|~~~.*?~~~", re.DOTALL)
+_INLINE_CODE_RE = re.compile(r"`[^`\n]*`")
+_URL_RE = re.compile(r"https?://\S+")
+# A short standalone line (markdown heading, bold, or bare label) naming a
+# section of open items the user still has to act on.
+_PENDING_HEADING_RE = re.compile(
+    r"^(?:before (?:fixing|proceeding|continuing|implementing|merging|deploying)"
+    r"|open (?:questions?|items?|issues?)|questions?(?: for you)?"
+    r"|pending(?: items?| tasks?| decisions?)?|outstanding(?: items?| tasks?)?"
+    r"|unresolved(?: items?| questions?)?"
+    r"|needs? (?:your )?(?:decision|input|confirmation|answer)s?"
+    r"|decisions? (?:needed|required)|remaining(?: work| tasks?| items?)?"
+    r"|follow[- ]?ups?|to[- ]?dos?)$",
+    re.IGNORECASE,
+)
+_MAX_HEADING_LEN = 40
+# Indirect asks phrased as statements — they still leave a decision with the
+# user ("Tell me if you want it removed.", "Happy to add that too.").
+_INVITE_RE = re.compile(
+    r"\b(?:tell me|let me know|say the word|ping me|confirm)\b.*\b(?:if|whether|which|when|what|how)\b"
+    r"|\bif you(?:'d| would)? (?:want|like|prefer|need)\b"
+    r"|\b(?:i can|i could|happy to|glad to)\b(?!')(?:.*\b(?:also|too|instead)\b)"
+    r"|\b(?:want|would you like) me to\b"
+    r"|\byour call\b|\bup to you\b",
+    re.IGNORECASE,
+)
+_SENTENCE_RE = re.compile(r"[^.!?\n]+[.!?]?")
+# A real question ends in a word (or closing quote/paren) then '?'; a bare
+# '?' after a space is an operator fragment ("the ?? fallback").
+_QUESTION_END_RE = re.compile(r"[\w\"')\]]\?$")
+
+
+def _strip_non_prose(text):
+    """Drop code, URLs and blockquote lines — '?' there is not a question."""
+    text = _FENCED_CODE_RE.sub("", text)
+    text = _INLINE_CODE_RE.sub("", text)
+    text = _URL_RE.sub("", text)
+    return "\n".join(l for l in text.splitlines() if not l.lstrip().startswith(">"))
+
+
+def unresolved_items(text):
+    """Return the open questions, indirect asks ("Tell me if you want it
+    removed.") and pending-item section headings found ANYWHERE in `text`
+    (not just its final paragraph), in order. Empty list means the reply
+    leaves nothing for the user to resolve."""
+    prose = _strip_non_prose(text or "")
+    items = []
+    for line in prose.splitlines():
+        label = line.strip().strip("#*_ ").rstrip(":").strip("*_ ")
+        if label and len(label) <= _MAX_HEADING_LEN and _PENDING_HEADING_RE.match(label):
+            items.append(f"[section] {label}")
+            continue
+        for sentence in _SENTENCE_RE.findall(line):
+            sentence = sentence.strip().lstrip("-*#0123456789.) ").strip()
+            if sentence and (_QUESTION_END_RE.search(sentence) or _INVITE_RE.search(sentence)):
+                items.append(sentence)
+    return items
+
+
+def final_reply_text(transcript_path):
+    """Assistant text emitted AFTER the last tool call of the current turn —
+    the closing reply the user actually reads. Text written before a later
+    tool call (e.g. before an AskUserQuestion) is excluded. Missing/unreadable
+    transcript -> ""."""
+    if not transcript_path:
+        return ""
+    try:
+        with open(transcript_path, encoding="utf-8") as f:
+            lines = f.readlines()
+    except OSError:
+        return ""
+    parts = []
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            rec = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if is_genuine_user(rec) or queued_command_prompt_text(rec) is not None:
+            parts = []
+            continue
+        if rec.get("type") != "assistant":
+            continue
+        content = (rec.get("message") or {}).get("content")
+        if isinstance(content, str):
+            parts.append(content)
+            continue
+        for block in content or []:
+            if not isinstance(block, dict):
+                continue
+            if block.get("type") == "tool_use":
+                parts = []
+            elif block.get("type") == "text":
+                parts.append(block.get("text", ""))
+    return "\n".join(parts)
 
 
 # ---------------------------------------------------------------------------

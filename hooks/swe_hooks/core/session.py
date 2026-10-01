@@ -153,6 +153,22 @@ def find_working_memory_for_session(cwd: str, session_id: Optional[str]) -> Opti
     return None
 
 
+CONSENT_FLAG_RE = re.compile(
+    r'\b(blanket_consent|auto_approve)\s*:\s*true\b', re.IGNORECASE)
+
+
+def wm_has_blanket_consent(cwd: str, session_id: Optional[str]) -> bool:
+    """True when this session's WM carries a blanket-consent flag."""
+    try:
+        wm_filepath = find_working_memory_for_session(cwd, session_id)
+        if not wm_filepath or not os.path.exists(wm_filepath):
+            return False
+        with open(wm_filepath, 'r', encoding='utf-8') as f:
+            return bool(CONSENT_FLAG_RE.search(f.read()))
+    except (IOError, OSError):
+        return False
+
+
 def validate_working_memory_session(filepath: str, session_id: Optional[str]) -> bool:
     """Validate that a working memory file belongs to the specified session.
 

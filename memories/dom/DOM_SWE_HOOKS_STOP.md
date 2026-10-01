@@ -2,8 +2,9 @@
 name: DOM_SWE_HOOKS_STOP
 description: Stop-event hooks — continue-working enforcement and the terse-format response gate (word budget, detail triggers, exemptions).
 obligations:
-  - swe_stop_continue_working.py and swe_stop_response_format.py both allow the stop BEFORE any blocking logic when stop_hook_active is set or when turn_signals.user_spoke_mid_turn(transcript_path) is true (queued_command human attachment or queue-operation enqueue after the last genuine user prompt).
-  - swe_stop_continue_working.py also allows the stop when the last assistant message ends with a question (turn_signals.ends_with_question).
+  - turn_signals.py exports unresolved_items(text) — returns [section] labels + sentences ending in ? or matching indirect-ask patterns; final_reply_text(transcript_path) returns assistant prose after last tool_use.
+  - swe_stop_continue_working.py and swe_stop_response_format.py both allow stop BEFORE any blocking logic when stop_hook_active is set or when turn_signals.user_spoke_mid_turn(transcript_path) is true (queued_command human attachment or queue-operation enqueue after last genuine user prompt).
+  - swe_stop_continue_working.py applies unresolved-items gate in ANY state (incl. WF_DONE/WF_VERIFY): non-empty unresolved_items(final_reply_text()) → decision:block with AskUserQuestion instruction (one question per item, 2-4 options); logs stop_blocked reason unresolved_items. Under blanket consent, reason directs self-resolution with [consent-override] only for destructive actions.
   - swe_stop_response_format.py in the default "advise" mode NEVER emits decision:block — it marks the sentinel + logs the offender so swe_prompt_format_reminder.py still surfaces the budget next turn; set response_format_mode=block for the legacy blocking behavior.
   - At most ONE format block per user turn in "block" mode; a second overage in the same turn emits a WARN attachment, never a second block.
 metadata:
@@ -19,7 +20,7 @@ Hub: `mem:dom/DOM_SWE_HOOKS`.
 | `swe_stop_continue_working.py` | Stop  | Block unnecessary stops, continue-working |
 | `swe_stop_response_format.py`  | Stop  | Terse-format gate — see below             |
 
-## Shared mid-turn detection (`core/turn_signals.py`)
+## Shared mid-turn detection & prose analysis (`core/turn_signals.py`)
 
 Both Stop hooks import `hooks/swe_hooks/core/turn_signals.py` — pure helpers, no IO except reading the transcript file:
 
@@ -27,10 +28,12 @@ Both Stop hooks import `hooks/swe_hooks/core/turn_signals.py` — pure helpers, 
 - `ends_with_question(text)` — true when the final non-blank paragraph ends with `?` (ignoring trailing closing punctuation/quotes/markdown emphasis). Moved from `swe_stop_response_format.py`, re-exported there too.
 - `queued_command_prompt_text(rec)` — returns the prompt text of a `type: "attachment"` record whose `attachment.type == "queued_command"` and is human-originated (`humanTurn is True` or `origin.kind == "human"`); else `None`.
 - `user_spoke_mid_turn(transcript_path)` — true when, AFTER the last genuine user prompt record, the transcript contains a human queued_command attachment or a `type: "queue-operation", operation: "enqueue"` record — i.e. the user already typed a follow-up before this Stop event fired. Missing/unreadable transcript → `False` (fail safe, never suppresses a gate's normal behavior).
+- `unresolved_items(text)` — returns list of open questions anywhere in text (word char/quote/paren directly before `?`), indirect asks (tell me/let me know ... if/whether/which; "if you want/like/prefer/need"; "I can/happy to ... also/too/instead"; "want/would you like me to"; "your call"/"up to you"), and short standalone pending-section headings (Before fixing/proceeding…, Open questions, Questions, Pending, Outstanding, Unresolved, Needs your decision/input, Decisions needed, Remaining, Follow-ups, TODO) as "[section] <label>". Ignores fenced/inline code, URLs, blockquotes. Empty list means reply leaves nothing unresolved.
+- `final_reply_text(transcript_path)` — returns assistant text AFTER the last tool_use of the current turn (the closing reply user reads); text written before a later tool call is excluded. Missing/unreadable transcript → "" (fail safe).
 
 ## `swe_stop_continue_working.py` detail
 
-Allow the stop BEFORE any blocking logic, in order: `stop_hook_active` set → `user_spoke_mid_turn(transcript_path)` → last assistant text `ends_with_question`. Each case persists state and returns `output_empty()` immediately — none of the continue-working logic below it runs.
+Order: `stop_hook_active` set → `user_spoke_mid_turn(transcript_path)` allow; THEN unresolved-items gate in ANY state (incl. WF_DONE/WF_VERIFY): non-empty `unresolved_items(final_reply_text())` → `decision: block` with reason from `unresolved_items_reason()` instructing AskUserQuestion (one question per item, 2-4 options, then terse summary with no questions/offers/pending sections); logs `stop_blocked` reason `unresolved_items`. Under WM blanket consent (`session.wm_has_blanket_consent`, MOVED from swe_pre_question_consent_gate.py to core/session.py) the reason instead says resolve each item yourself; destructive only via AskUserQuestion with `[consent-override]`. The old "ends_with_question → allow stop" guard is REMOVED — ends_with_question still used by swe_stop_response_format.py.
 
 ## `swe_stop_response_format.py` detail
 

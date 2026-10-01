@@ -17,7 +17,6 @@ blanket consent cannot cover. The tag is an assertion, not a bypass.
 """
 
 import os
-import re
 import sys
 import json
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -26,25 +25,11 @@ import swe_hooks.bootstrap  # noqa: E402
 try:
     from swe_hooks.core.output import output_empty, output_block
     from swe_hooks.core.input import read_stdin_safe, get_input_field
-    from swe_hooks.core.session import extract_session_id, find_working_memory_for_session
+    from swe_hooks.core.session import extract_session_id, wm_has_blanket_consent
 except ImportError as e:
     swe_hooks.bootstrap.import_error_exit(e, "PreToolUse")
 
-CONSENT_FLAG_RE = re.compile(
-    r'\b(blanket_consent|auto_approve)\s*:\s*true\b', re.IGNORECASE)
 OVERRIDE_TAG = '[consent-override]'
-
-
-def wm_has_blanket_consent(cwd: str, session_id: str) -> bool:
-    """True when this session's WM carries a blanket-consent flag."""
-    try:
-        wm_filepath = find_working_memory_for_session(cwd, session_id)
-        if not wm_filepath or not os.path.exists(wm_filepath):
-            return False
-        with open(wm_filepath, 'r', encoding='utf-8') as f:
-            return bool(CONSENT_FLAG_RE.search(f.read()))
-    except (IOError, OSError):
-        return False
 
 
 def main():
