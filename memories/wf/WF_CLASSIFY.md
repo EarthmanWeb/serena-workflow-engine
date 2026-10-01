@@ -86,7 +86,7 @@ MANDATORY fuzzy fallback — registry can lag, absence from `INDEX_FEATURES` is 
 
 MANDATORY symptom search: search memories on the request's LITERAL symptom tokens (error strings, class names, option keys) — surfaces memories feature-noun searches miss.
 
-Body-content search sanctioned: when name/front-matter search misses, a Grep/Bash grep across memory BODIES IS a legitimate docs consult — the docs-first gate credits it.
+Body-content search: when name/front-matter search misses, search memory BODIES via `mcp__plugin_swe_serena__search_for_pattern(substring_pattern="<terms>", relative_path=".serena/memory")` — NEVER Bash/Grep/Glob/Read on memory trees (`swe_pre_memory_fs_gate.py` denies both reads and shell writes into `.serena/memory/`, `.serena/memories/`, and the auto-memory symlink).
 
 ### 4c. Load the Primary FEATURE_[KEY]
 
@@ -98,15 +98,13 @@ Load the feature's knowledge set before transitioning — the sweep sentinel unl
 
 #### TIER 0 — Digest Pass (ALWAYS, ONE extraction)
 
-Enumerate candidates from the primary FEATURE memory's links, `MEMORY.md` index, and `search_memories_by_name`. Then run ONE sanctioned front-matter extraction (`name`+`description`+`obligations`) across `.serena/memory/{dom,ref,dev,feature}` + aliased trees in `.serena/memory-paths.conf`:
+Enumerate candidates from the primary FEATURE memory's links, `MEMORY.md` index, and `search_memories_by_name`. Then run ONE sanctioned front-matter extraction (`name`+`description`+`obligations`) with ONE call:
 
-```bash
-awk '
-  /^name:/ { name=$0 }
-  /^description:/ { desc=$0 }
-  /^obligations:/ { print FILENAME; print "  " name; print "  " desc; getline; while ($0 ~ /^  - /) { print $0; getline } }
-' .serena/memory/{dom,ref,dev,feature}/*.md
 ```
+mcp__plugin_swe_serena__search_memories_by_front_matter(query="<task key terms>")
+```
+
+Returns name/description/obligations across every `.serena/memory-paths.conf` root, incl. aliased trees and plugin memories — NEVER Bash/awk/grep over `.serena/memory/` (`swe_pre_memory_fs_gate.py` denies it).
 
 No `obligations:` field → digest by `description:` alone.
 

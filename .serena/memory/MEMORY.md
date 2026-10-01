@@ -12,6 +12,7 @@ metadata:
 
 - [Plugin Source Location](feedback/FEEDBACK_PLUGIN_SOURCE_LOCATION.md) — this repo IS the plugin source; NEVER write to ~/.claude/plugins/cache/
 - [Bypass & Setup Location](feedback/FEEDBACK_BYPASS_AND_SETUP_LOCATION.md) — init gate detects setup in .serena AND legacy .claude; project bypass is user-only (/swe-bypass), un-settable by LLM
+- [Memory Access Serena-Only](feedback/FEEDBACK_MEMORY_ACCESS_SERENA_ONLY.md) — memories via Serena tools only; never sanction/credit Bash/Grep/Read on memory stores (memory-fs gate)
 - [v4 FSM Redesign](feedback/FEEDBACK_V4_FSM_REDESIGN.md) — reads CAN forward-advance via readAdvance (rank-forward matrix edges only); explicit set_state remains the only backward/pivot driver; WF_START removed; arch review is complexity-gated
 
 ## Response & Style

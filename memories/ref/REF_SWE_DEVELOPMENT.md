@@ -2,8 +2,8 @@
 name: REF_SWE_DEVELOPMENT
 description: Development standards for the Serena Workflow Engine plugin — how to deploy (push to GitHub → auto-update next load), dual-location sync, hook synchronization, plugin-file edit method, pre-commit checklist.
 obligations:
-  - When modifying a hook, keep all THREE files in sync — the hook script, `hooks/hooks.json`, and `.claude/settings.json`.
-  - NEVER use Edit/Write on `.claude/` files — use Bash + Python for all plugin file edits (bypassPermissions hardcodes a write-prompt bug on `.claude/`).
+  - When modifying a hook, keep the hook script and `hooks/hooks.json` in sync — this repo has no `.claude/settings.json`; hooks register ONLY in `hooks/hooks.json` with `${CLAUDE_PLUGIN_ROOT}` paths.
+  - NEVER use Edit/Write on `.claude/` files — use Bash + Python for those edits (bypassPermissions hardcodes a write-prompt bug on `.claude/`).
 metadata:
   type: reference
   keywords: deploy, push, github, publish, release, plugin auto-update, cache priming, dual-location, hook sync
@@ -57,26 +57,17 @@ SWE files live in TWO locations. Route every change by type.
 | Project REF_* docs | `.serena/swe/wm/` only |
 | FEATURE_* configs  | `.serena/swe/wm/` only |
 
-## Hook Sync — MUST keep THREE files synchronized
+## Hook Sync — keep TWO files synchronized
 
-When modifying a hook, update all three:
+This repo IS the plugin source — no `.claude/settings.json` exists here and none is needed. When modifying a hook, update:
 
-1. Hook script: `.claude/plugins/serena-workflow-engine/hooks/*.py`
-2. `.claude/plugins/serena-workflow-engine/hooks/hooks.json` — uses `${CLAUDE_PLUGIN_ROOT}` paths
-3. `.claude/settings.json` — uses literal paths `.claude/plugins/serena-workflow-engine/hooks/*.py`
+1. Hook script: `hooks/{pre,post,prompt,session,stop}/*.py` (or `hooks/swe_hooks/**` for shared core modules).
+2. `hooks/hooks.json` — registers every hook with `${CLAUDE_PLUGIN_ROOT}` paths.
 
-### Path Translation
-
-| hooks.json                            | settings.json                                          |
-| ------------------------------------- | ------------------------------------------------------ |
-| `${CLAUDE_PLUGIN_ROOT}/hooks/file.py` | `.claude/plugins/serena-workflow-engine/hooks/file.py` |
-
-### Verify hooks match (ignoring path syntax)
+### Verify hooks.json is valid
 
 ```bash
-diff <(jq -S '.hooks' .claude/plugins/serena-workflow-engine/hooks/hooks.json) \
-     <(jq -S '.hooks' .claude/settings.json | \
-       sed 's|\.claude/plugins/serena-workflow-engine|\${CLAUDE_PLUGIN_ROOT}|g')
+jq . hooks/hooks.json
 ```
 
 ## Adding a New Workflow State
@@ -88,11 +79,10 @@ diff <(jq -S '.hooks' .claude/plugins/serena-workflow-engine/hooks/hooks.json) \
 
 ## Adding a New Hook
 
-1. Create `hooks/new_hook.py`.
+1. Create `hooks/{pre,post,prompt,session,stop}/new_hook.py`.
 2. Update `hooks/hooks.json` with `${CLAUDE_PLUGIN_ROOT}`.
-3. Update `.claude/settings.json` with the literal path.
-4. Document in `DOM_SWE_HOOKS`.
-5. Test: `python3 hooks/new_hook.py < /dev/null`.
+3. Document in `DOM_SWE_HOOKS`.
+4. Test: `python3 hooks/{pre,post,prompt,session,stop}/new_hook.py < /dev/null`.
 
 ## Editing Plugin Files (.claude/ Directory)
 
@@ -118,7 +108,7 @@ with open(path, 'w') as f:
 
 - [ ] Generic changes synced to BOTH locations.
 - [ ] Project-specific changes in local memories ONLY.
-- [ ] Hook changes synced across all three files.
+- [ ] Hook changes synced across both files (hook script + `hooks/hooks.json`).
 - [ ] `states.json` updated if new states added.
 - [ ] Documentation updated (`DOM_SWE_*`, README).
 - [ ] Tests pass: `jq . state-machine/states.json`.

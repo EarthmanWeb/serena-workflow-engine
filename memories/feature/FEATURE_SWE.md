@@ -41,15 +41,15 @@ Main: `state-machine/states.json` · Config: `.claude-plugin/plugin.json` · Hoo
 
 ## Core Modules (`hooks/swe_hooks/core/`)
 
-`state_manager.py` (transitions/persistence) · `config.py` (paths, WM I/O) · `session.py` (session/WM mgmt) · `input.py`/`output.py` (hook I/O) · `stream.py` (JSONL event log) · `wm_validator.py` (WM validation) · `loop_guard.py` (`loopCaps` for `readAdvance` — refuse on cap exceeded, warn on oscillation) · `memory_size.py` (size thresholds; shared by `memory-size-audit.py`, `swe_post_memory_style.py`).
+`state_manager.py` (transitions/persistence) · `config.py` (paths, WM I/O) · `session.py` (session/WM mgmt) · `input.py`/`output.py` (hook I/O) · `stream.py` (JSONL event log) · `wm_validator.py` (WM validation) · `loop_guard.py` (`loopCaps` for `readAdvance` — refuse on cap exceeded, warn on oscillation) · `memory_size.py` (size thresholds; shared by `memory-size-audit.py`, `swe_post_memory_style.py`) · `memory_fs.py` (shared memory-store path/Bash classifier for `swe_pre_memory_fs_gate.py`, symlink-aware).
 
 ## MCP Server: swe-wm (`hooks/swe_hooks/mcp/`)
 
 Stdlib-only stdio MCP server for WM updates; registered as `swe-wm`, started via `scripts/start-wm-mcp.sh`. Tools: `swe_wm_read` · `swe_wm_update` (CANONICAL — batched) · `swe_wm_update_section`/`swe_wm_update_status` (legacy) · `swe_wm_transition(session_id, target_state, reason, force=false)` — the ONLY MCP way to change Current State; validates against `states.json` (matrix, subflows rejected, loop caps unless `force=true`), shares `state_manager.perform_transition` with the `set_state.py` CLI. Protected: `Workflow Context`, `Transitions`. Session resolution: explicit param > `SWE_SESSION_ID` > `CLAUDE_SESSION_ID[:8]` > ERROR — NEVER most-recent-WM guessing.
 
-## Hooks (20 scripts)
+## Hooks (21 scripts)
 
-Hub: DOM_SWE_HOOKS (architecture/triggers/mechanics; children: PROMPT_ROUTING, PRE_GATES, POST, STOP, CORE_MODULES). Session: `swe_session_start.py`, `swe_session_end.py`. Prompt: `swe_user_prompt_workflow.py`, `swe_prompt_format_reminder.py`. Pre (6): init/edit/memory-index/bash-test/search-docs/question-consent gates. Post (8): read-state, edit-checkpoint, search-docs-hint, todo-wm-sync, write-continue, memory-index, memory-style (`📏 MEMORY SIZE` advisory), tool-failure. Stop: `swe_stop_continue_working.py`, `swe_stop_response_format.py` (DOM_SWE_RESPONSE_FORMAT_GATE). Sweep gate: DOM_SWE_FEATURE_GATES.
+Hub: DOM_SWE_HOOKS (architecture/triggers/mechanics; children: PROMPT_ROUTING, PRE_GATES, POST, STOP, CORE_MODULES). Session: `swe_session_start.py`, `swe_session_end.py`. Prompt: `swe_user_prompt_workflow.py`, `swe_prompt_format_reminder.py`. Pre (8): init/memory-fs/edit/memory-index/bash-test/search-docs/question-consent/agent-model gates. Post (8): read-state, edit-checkpoint, search-docs-hint, todo-wm-sync, write-continue, memory-index, memory-style (`📏 MEMORY SIZE` advisory), tool-failure. Stop: `swe_stop_continue_working.py`, `swe_stop_response_format.py` (DOM_SWE_RESPONSE_FORMAT_GATE). Sweep gate: DOM_SWE_FEATURE_GATES.
 
 ## Skills (16), Commands (9), Agents (1)
 

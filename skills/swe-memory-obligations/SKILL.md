@@ -74,27 +74,23 @@ obligations: []
 
 ### Stage 1: Discover
 
-Two calls, EXACTLY these — nothing else:
+Two calls per directory prefix (dom, ref, dev, feature — or only the scope arg's prefix), EXACTLY these — nothing else. NEVER Bash/Grep/Glob/Read on `.serena/memory/` (`swe_pre_memory_fs_gate.py` denies it):
 
-1. The candidate list — files LACKING the field (one read-only grep; `-L` prints non-matching files; this is a memory-tree docs consult, credited by the docs gate):
-
-```bash
-find .serena/memory/dom .serena/memory/ref .serena/memory/dev .serena/memory/feature -maxdepth 1 -name '*.md' -exec grep -L "^obligations:" {} + 2>/dev/null
-```
-
-(`find -exec` form on purpose: a bare glob aborts zsh when a prefix directory is absent; this runs
-identically in bash/zsh with any subset of the four directories present. Exit 1 with no output = zero
-candidates.)
-
-2. The read-only set to exclude from writes:
+1. The full set of names in this prefix:
 
 ```
 mcp__plugin_swe_serena__list_memories(topic="dom")     # repeat for ref, dev, feature (or only the scope arg's prefix)
 ```
 
-- Candidates = grep output MINUS `read_only_memories`, `WM_*`, `MEMORY`. Present-even-as-`[]` files never appear in the grep output — already done.
-- The grep matches `^obligations:` anywhere in a file, not only front-matter. This is deliberately dumb (the key legally appears only in front-matter per `mem:ref/REF_MEMORY_STYLE`); accept the rare false "has" rather than build a parser.
-- Record `<count before>` per directory FROM THE GREP OUTPUT. No counting scripts, no scratch files.
+2. The set that already HAS the field — body search for the front-matter key:
+
+```
+mcp__plugin_swe_serena__search_for_pattern(substring_pattern="^obligations:", relative_path=".serena/memory/dom")   # repeat per prefix
+```
+
+- Candidates LACKING the field = (1) MINUS (2) MINUS `read_only_memories`, `WM_*`, `MEMORY` — set difference, computed from the two tool results, no scratch files.
+- `search_for_pattern` matches `^obligations:` anywhere in a file, not only front-matter. This is deliberately dumb (the key legally appears only in front-matter per `mem:ref/REF_MEMORY_STYLE`); accept the rare false "has" rather than build a parser.
+- Record `<count before>` per directory FROM THE TWO TOOL RESULTS. No counting scripts, no scratch files.
 
 ### Stage 2: Fan Out Extraction (parallel, CHEAP agents)
 
@@ -124,8 +120,8 @@ Apply each derived block via `edit_memory`, prepending/merging `obligations:` in
 
 ### Stage 4: Report Coverage
 
-Re-run the EXACT Stage-1 grep. It must print nothing in scope (or only the skipped/read-only remainder,
-each explained). Per directory (dom/ref/dev/feature): `<count before>` lacking the field → `<count after>`.
+Re-run the EXACT Stage-1 tool calls. The set difference must be empty in scope (or only the skipped/read-only
+remainder, each explained). Per directory (dom/ref/dev/feature): `<count before>` lacking the field → `<count after>`.
 
 ## Skill Return
 

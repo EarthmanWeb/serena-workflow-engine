@@ -9,6 +9,7 @@ obligations:
   - `swe_pre_bash_test_gate.py` gates ONLY the main agent (sentinel/read-once behavior) on TEST docs for every detected test-runner command (unittest/pytest/npm test/jest/vitest/playwright/phpunit/go test/cargo test) — the per-agent subagent gating is REMOVED; a subagent's required test docs are enforced at delegation time via `[sweep-gate]` instead.
   - `swe_pre_agent_model_gate.py`'s `[sweep-gate]` check is NOT a deny — when the orchestrator-written prompt's "Required reading:" section is missing a name `delegation_sweep.required_reading(prompt, wm_text, project_root, cap=8)` computes as required, the gate AUTO-INJECTS the missing names into that section (`with_missing_required_reading`) and ALLOWS the call, surfacing which names it added via `permissionDecisionReason` — `[sweep-exempt: <reason>]` still skips the computation entirely for trivial read-only tasks; on every ALLOW the gate appends a `[swe-required-reading]` block with each required memory's `obligations:` inline.
   - Init gate enforces `[scope-gate]` per spawned agent (test 2/edit 2/bash 3 failure streaks, tool-call budget; `test` limit widens by `EXPECT_RED_TEST_BONUS` (2) when the agent was spawned with `expect_red`); a trip restricts the agent to read-only tools until the orchestrator sends `[scope-extend]`.
+  - `swe_pre_memory_fs_gate.py` DENIES Bash/Grep/Glob/Read access to Serena memory stores (`.serena/memory/`, `.serena/memories/`, the auto-memory symlink) for BOTH main agent and subagents — shell reads and shell content writes alike; exempt only for setup-incomplete/bypassed projects and the spawned `swe-init-agent`.
 metadata:
   type: domain
 ---
@@ -16,6 +17,19 @@ metadata:
 # DOM_SWE_HOOKS_PRE_GATES — Pre-Tool Gatekeepers
 
 Hub: `mem:dom/DOM_SWE_HOOKS`.
+
+## `swe_pre_memory_fs_gate.py` — PreToolUse (Bash/Grep/Glob/Read)
+
+Shared classifier: `hooks/swe_hooks/core/memory_fs.py` (`is_memory_store_path`, `bash_memory_access`, `tool_memory_access`).
+
+- DENIES Bash/Grep/Glob/Read access to Serena memory STORES: `.serena/memory/`, `.serena/memories/`, and the `~/.claude/projects/<enc>/memory` auto-memory symlink — resolved via realpath so the symlink target is caught even when addressed through the link.
+- Applies to BOTH the main agent AND subagents — no subagent-type exemption except the spawned `swe-init-agent` (`agent_type` check).
+- Denies shell READS (cat/grep/rg/awk/sed/head/tail/ls/find/wc, Read/Grep/Glob tool calls) AND shell CONTENT WRITES into a memory path: redirection into a memory file, `tee`, `sed -i`, `perl -i`, an inline `python -c`/`node -e`/heredoc that touches a memory path.
+- Exempt (NOT gated): project setup incomplete or bypassed (`.serena/swe-bypass.json` / no `swe-setup-complete.json`); `git`, `mkdir`, `ln`, `cp`, `mv`, `rm` targeting memory paths; running a script FILE (`python3 scripts/... --root .serena/memory`) — the gate inspects inline code, not script invocations; grepping plugin-SOURCE files for the literal string `.serena/memory` (text search over non-memory trees); `WM_*.md` session files; the plugin-source `memories/` tree (not a Serena memory store — see `mem:dom/DOM_MEMORY_TREES`).
+- Deny message routes each blocked intent to the Serena memory tool that replaces it: a name/keyword lookup → `read_memory`/`list_memories`/`search_memories_by_name`; a "what is this about" lookup → `search_memories_by_front_matter`; a body/content search → `mcp__plugin_swe_serena__search_for_pattern(substring_pattern=…, relative_path=".serena/memory")`; a write → `write_memory`/`edit_memory`; a WM read → `swe_wm_read`.
+- `swe_pre_edit_validate.py`'s `_is_raw_memory_write` check now calls `memory_fs.is_memory_store_path` — symlink-aware, same resolution as this gate.
+- `swe_pre_search_docs_gate.py` B2 credits a "memory-grep" docread ONLY for plugin-source `memories/` path segments — memory-STORE access passes through this gate with no `docread` event (denied here when gated, allowed through uncredited when exempt).
+- Registered in `hooks/hooks.json` as matcher `Bash|Grep|Glob|Read`, directly after the init gate.
 
 ## `swe_pre_tool_init_gate.py` — PreToolUse (all tools)
 
@@ -137,3 +151,4 @@ Pure functions `missing_model_reason`/`missing_bypass_marker_reason`/`opus_on_ro
 - `swe_pre_bash_test_gate.py`: EXEMPT for spawned-agent Bash calls — per-agent TEST-doc gating is REMOVED; a subagent's TEST-doc requirement is enforced once, at delegation time, by `[sweep-gate]`.
 - `swe_pre_edit_validate.py`: EXEMPT for spawned-agent edits — `[doc-gate]` is now MAIN-AGENT-ONLY; a subagent's `doc_requirements` are enforced once, at delegation time, by `[sweep-gate]` (see `swe_pre_agent_model_gate.py` section above), not per edit inside the subagent's own run. The drift-block/sweep-sentinel checks in this gate remain main-agent-only as before.
 - `swe_pre_agent_model_gate.py`: applies ONLY to the orchestrator's Agent/Task call, never to a spawned agent's own tool calls — `[sweep-gate]` is where subagent doc/test-reading enforcement now lives, entirely at spawn time.
+- `swe_pre_memory_fs_gate.py`: NOT exempt for subagents — applies to every spawned agent's Bash/Grep/Glob/Read calls same as the main agent. The ONLY agent-type exemption is the spawned `swe-init-agent` (bootstrap needs direct memory-path access before the Serena memory store exists).

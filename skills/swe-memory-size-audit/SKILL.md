@@ -174,9 +174,12 @@ appear).
    the hub. After splitting, run only the matched test file via the project's scoped-test command (its
    test memory, e.g. `FEATURE_TESTS`/`DEV_TESTS`) — never the full suite from a subagent.
 10. **Cross-reference check**: hub NAME is unchanged so `mem:` links stay valid, but a quoted section
-    reference (e.g. `NAME "Section Title"`) to a moved section goes stale. `grep -rn "<memory-name>"
-    memories/ skills/ hooks/ agents/ commands/ .serena/memory/` (adjust to what exists); report each hit
-    as `file:line → new owning child`. Do NOT fix other files — Stage 4 assigns one fix agent per file.
+    reference (e.g. `NAME "Section Title"`) to a moved section goes stale. Two searches, NEVER Bash/Grep/Glob/Read
+    on `.serena/memory/` (`swe_pre_memory_fs_gate.py` denies it): `grep -rn "<memory-name>" memories/ skills/
+    hooks/ agents/ commands/` (adjust to what exists) for plugin-source files, PLUS
+    `mcp__plugin_swe_serena__search_for_pattern(substring_pattern="<memory-name>", relative_path=".serena/memory")`
+    for the memory store; report each hit as `file:line → new owning child`. Do NOT fix other files — Stage 4
+    assigns one fix agent per file.
 11. Links only as `mem:<topic>/<NAME>` in backticks. Do NOT add children to MEMORY.md (hub already
     indexed).
 12. Sweep interaction (SWE, hub is dom/ref/dev/feature): a `mem:` link in the hub body becomes a

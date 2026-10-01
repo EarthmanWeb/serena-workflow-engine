@@ -185,13 +185,13 @@ Replace the template's placeholder `paths:` glob with the detected project's act
 (Run /swe-feature-onboard to populate)
 ```
 
-**After creation, verify templates were filled out:**
+**After creation, verify templates were filled out** — NEVER Bash/Grep/Glob/Read on `.serena/memory/` (`swe_pre_memory_fs_gate.py` denies it):
 
-```bash
-grep -rl '{{project_name}}\|{{primary_language}}' .serena/memory/ 2>/dev/null
+```
+mcp__plugin_swe_serena__search_for_pattern(substring_pattern="\{\{(project_name|primary_language)\}\}", relative_path=".serena/memory")
 ```
 
-Exit 1 (no output) = clean, all placeholders substituted. Any file listed = bootstrap detection failed for that file; fill the placeholder manually.
+Empty result = clean, all placeholders substituted. Any match = bootstrap detection failed for that file; fill the placeholder manually.
 
 ### Stage 4: First Feature Prompt
 
