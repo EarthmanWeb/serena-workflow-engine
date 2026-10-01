@@ -27,7 +27,7 @@ Applies to RUNTIME symptoms (rendering/behavior a user reports). Static-only exp
 
 - Observe the symptom + capture runtime state BEFORE any static exploration: which stylesheet/script/asset serves (or served) the affected rule — browser tools, curl of page HTML + enqueued asset list, live-vs-local diff.
 - Ask "where does the page get this rule?" before "when did the repo delete this string?".
-- Runtime-source rule: when a selector/class/asset "has no definition in our code", enumerate what ships it at runtime (plugin CSS/JS, CDN, vendor bundles) BEFORE concluding on repo history.
+- Runtime-source rule: when a selector/class/asset "has no definition in our code", enumerate what ships it at runtime (plugin CSS/JS, CDN, vendor bundles) BEFORE concluding on repo history. Applies to DIAGNOSING a symptom only — NEVER apply it to an explicit add/hide/remove/change instruction; see `mem:claude/CLAUDE_OBLIGATIONS` Direct Instruction Fast Path.
 
 ## Step 2 — Recency Triage (WM has `regression: recent`)
 

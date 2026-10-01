@@ -33,7 +33,7 @@ Spawned-agent exemption: `read_state`, `edit_checkpoint`, `write_continue`, `tod
 
 - Counts consecutive main-agent task-work calls since the last BACKGROUND delegation (`task_work` events, reset ONLY by a `delegation` event this same hook appends on Agent/Task calls with `run_in_background: true`, or on any Workflow call).
 - A FOREGROUND Agent/Task call (`run_in_background: false` or omitted, even with a valid `[foreground-justified: <reason>]` tag) does NOT append a `delegation` event — it counts as `task_work`, same as an Edit/Write/Bash call.
-- At `DRIFT_THRESHOLD` (6): advisory "split remaining work into parallel background subagents" (see `mem:feature/FEATURE_SUBAGENTS`).
+- At `DRIFT_THRESHOLD` (6): advisory "split remaining work into parallel background subagents" (see `mem:feature/FEATURE_SUBAGENTS`) — SUPPRESSED when a `direct_instruction` event exists since the last `prompt` event (see `mem:dom/DOM_SWE_HOOKS_PROMPT_ROUTING`). `DRIFT_HARD_THRESHOLD` (12) behavior is unchanged by this suppression.
 - At `DRIFT_HARD_THRESHOLD` (12): MANDATE, not a suggestion — the count feeds `swe_pre_edit_validate.py`, which DENIES further main-agent edits until a BACKGROUND delegation (or Workflow call) resets the counter or `single-agent: <reason>` is recorded in WM `## Workflow Context` (tight single-file coupled-fix exception only).
 - This hook itself never blocks (PostToolUse); enforcement happens on the NEXT edit attempt via the pre-edit gate.
 - Exempt for spawned-agent tool calls (subagents are expected to do direct work, not delegate further).

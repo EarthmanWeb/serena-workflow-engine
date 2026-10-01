@@ -32,10 +32,18 @@ Priority order: KISS → DRY → YAGNI.
 - Do not synthesize or fake data unless explicitly asked.
 - Do not attribute problems to caching unless caching exists in the code.
 - Do not use `as any` type assertions (TypeScript).
-- Do not guess file paths — use Serena tools.
+- Do not guess file paths — use Serena tools. A destination already used/read this session, or the one obvious file for a literal target, is not a guess.
 - Do not run dev servers; the user manages these.
 - Do not implement workarounds without asking.
 - NEVER proceed when memories conflict with user instructions — silently picking one loses the other's requirement. STOP and ask.
+
+## Direct Instruction Fast Path
+
+When the user names the target literally mid-task (a `#id`/`.class` selector, a quoted string, a value, a file path): pick the destination from this session's work or the one obvious file. Read ONLY that file. Edit. Report.
+
+- NEVER search for where the target originates. NEVER confirm the target exists before editing.
+- Ask ONE question ONLY when two destinations are equally plausible.
+- The prompt-hook `⚡ DIRECT INSTRUCTION` note signals this mode.
 
 ## Always Do
 
@@ -87,8 +95,8 @@ When a user instruction contradicts a memory:
 
 ## Working Style
 
-- No time constraints on any task. Prioritize thoroughness and accuracy over speed; do not rush or skip steps to save time.
-- MAKE NO ASSUMPTIONS. Research any assumption in the codebase or on the Web before asserting a direction.
+- No time constraints on any task. Prioritize thoroughness and accuracy over speed; do not rush or skip steps to save time. Does NOT license extra lookups once a `⚡ DIRECT INSTRUCTION` applies — see Direct Instruction Fast Path.
+- MAKE NO ASSUMPTIONS. Research any assumption in the codebase or on the Web before asserting a claim, diagnosis, or design direction. Does NOT apply to placing an explicit literal instruction when one obvious destination exists — see Direct Instruction Fast Path.
 
 ## Parallel Processing
 

@@ -95,6 +95,13 @@ Agent({ description: "Task A", run_in_background: true, model: "<tier>",  // hai
 - `swe_pre_agent_model_gate.py` enforces explicit `model` + bypass line; an orchestrator-drift nudge here flags self-performed file/test work that should have been delegated.
 - Any waiting/polling work (test runs, builds, CI, deploys, remote queues) launched here MUST go to ONE background subagent that runs the work AND polls it itself, reporting on completion — NEVER `Bash run_in_background` + a blocking poll loop in the orchestrator. See `mem:feature/FEATURE_SUBAGENTS`.
 
+## Direct Instructions
+
+On a `⚡ DIRECT INSTRUCTION` prompt-hook note, follow `mem:claude/CLAUDE_OBLIGATIONS` Direct Instruction Fast Path.
+
+- Origin lookups, runtime-source enumeration, and delegation do NOT apply to a single literal edit.
+- Orchestrator mode applies to multi-file work, NEVER to a ≤5-line single-file literal edit.
+
 ## Rules
 
 - Make ONLY approved changes. Do NOT expand scope without asking.

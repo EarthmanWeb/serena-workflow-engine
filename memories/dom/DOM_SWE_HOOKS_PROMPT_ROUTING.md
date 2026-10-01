@@ -14,6 +14,10 @@ Hub: `mem:dom/DOM_SWE_HOOKS`.
 
 `swe_user_prompt_workflow.py` classifies each user prompt by pattern match, then routes.
 
+## Prompt Preprocessing
+
+Strip `<ide_opened_file>`, `<ide_selection>`, `<system-reminder>` blocks from the prompt text BEFORE intent matching — these blocks defeated `^`-anchored patterns (an IDE/system block prefix pushed the real prompt text off the anchor). Intent patterns match the stripped text.
+
 ## Intent Table
 
 - **continuation**: detected by "yes", "okay, do X", "any other issues?", "let me know if", status checks. Action: stay in current state; brief reminder. The CONTINUE directive is emitted ONLY on an actual state change (`continuation` event) — a same-state continuation prompt gets the brief reminder without re-emitting CONTINUE.
@@ -22,6 +26,7 @@ Hub: `mem:dom/DOM_SWE_HOOKS`.
 - **possible_pivot**: detected by a bare imperative verb at start WHILE in an active task state. Action: stay in current state; inject `pivot_analysis_note` — model judges pivot vs. feedback from full context, self-runs `/swe-goto WF_CLASSIFY` only on a genuine pivot.
 - **unknown**: no pattern match. Action: active state → stay + `pivot_analysis_note`; WF_CLASSIFY/WF_INIT → emit classify instruction.
 - **needs_implementation** (WF_RESEARCH only): a change request ("implement", "do it", "do everything", "fix", "add"...) while `current_state == WF_RESEARCH`. Action: emit a `needs_implementation` directive → `WF_CLASSIFY`, instead of the generic "ambiguous, stay" unknown/possible_pivot handling. Take it by reading `wf/WF_CLASSIFY` (declared `readBackward[WF_RESEARCH]` entry — the read itself transitions); on loop-guard "inspecting — no transition", call `mcp__plugin_swe_swe-wm__swe_wm_transition(session_id, target_state="WF_CLASSIFY", reason="needs_implementation")`.
+- **direct_instruction** (`current_state ∈ {WF_EXECUTE, WF_CHECKPOINT, WF_VERIFY, WF_DEBUG_TDD}`, intent would otherwise NOT be `new_task`): detected by an edit verb (`hide|show|remove|delete|add|rename|change|set|replace|move|disable|enable|comment out|uncomment|bump|swap`) PLUS a literal target (`#id`/`.class` selector, backtick code, quoted string, file path with extension, hex color) OR a direct-mode phrase ("just do it", "stop searching", "don't search", "no searching", "why are you searching"). Action: STAY in current state — no transition, no boundary stamp. Append a `direct_instruction` stream event. Emit a `⚡ DIRECT INSTRUCTION` note in place of `pivot_analysis_note`/the continuation reminder. `WF_RESEARCH` keeps its own `research_exit_directive`/`needs_implementation` handling unchanged — this intent never fires there. Pattern + `current_state` ONLY, NEVER message length.
 
 `analyze_prompt(prompt, current_state)` is STATE-AWARE — the same bare-verb prompt is `new_task` before work starts but `possible_pivot` mid-task; in `WF_RESEARCH` a change-request opener is `needs_implementation`, not `possible_pivot`.
 
@@ -43,6 +48,7 @@ Hub: `mem:dom/DOM_SWE_HOOKS`.
 - WF_CLASSIFY + continuation → emit MANDATORY instruction to read WF_CLASSIFY.
 - Active state + continuation → emit brief "Continue with workflow".
 - Active state + unknown/possible_pivot → STAY; emit `pivot_analysis_note` (model decides pivot vs. feedback, self-transitions only on a true pivot).
+- WF_EXECUTE/WF_CHECKPOINT/WF_VERIFY/WF_DEBUG_TDD + direct_instruction → STAY; no boundary stamp; append `direct_instruction` event; emit `⚡ DIRECT INSTRUCTION` note instead of `pivot_analysis_note`/continuation reminder.
 - WF_RESEARCH + change-request opener → emit `needs_implementation` directive → read `wf/WF_CLASSIFY` (`readBackward` entry advances the read) or call `mcp__plugin_swe_swe-wm__swe_wm_transition(session_id, target_state="WF_CLASSIFY", reason="needs_implementation")` — NEVER the bare `/swe-goto WF_CLASSIFY` advice.
 - new_task (unambiguous opener) → transition to WF_CLASSIFY regardless of current state.
 - First transition into WF_CLASSIFY with no WM → create WM + sentinel here.
