@@ -24,7 +24,7 @@ metadata:
 Stdlib `unittest` only — no third-party deps (matches the plugin's stdlib-only runtime).
 
 - Run all: `python3 -m unittest discover -s tests -p 'test_*.py' -v`
-- Run one: `python3 -m unittest tests.test_core_config -v`
+- Run one: `python3 -m unittest discover -s tests -p 'test_core_config.py' -v` — NEVER the dotted `tests.test_X` form (fails `ModuleNotFoundError: _hookutil` for modules importing `_hookutil`).
 - Import hook/core/script modules via `tests/_hookutil.py` loaders: `import_hook` (hooks/), `import_core` (swe_hooks._), `load_script` (hyphenated scripts), `load_serena_patch` (serena_memory_patch, stubs serena._), `reset_caches` (clears config._PROJECT_ROOT, state_manager._transition_matrix_cache, wm_validator._validator between tests).
 - Coverage: all pure + IO-injectable functions across core/, hooks/{pre,post,prompt,stop,session}/, mcp/wm_server pure handlers, scripts/swe-bootstrap.py, scripts/serena_memory_patch.py. Side-effect-heavy `main()`/stdio-loop/subprocess entrypoints are intentionally NOT unit-tested.
 - `.pyc` gotcha: after editing a source module mid-session, clear `__pycache__` if a test loads stale bytecode (`find . -name __pycache__ -type d -not -path './node_modules/*' -exec rm -rf {} +`).
