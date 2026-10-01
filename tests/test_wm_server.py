@@ -1012,6 +1012,17 @@ class TestParseRulesRuledOut(unittest.TestCase):
         self.assertEqual(set(result.keys()), {"ref/ref_x", "dom/dom_y"})
         self.assertTrue(all(result.values()))
 
+    def test_multiple_entries_semicolon_separated(self):
+        # ';' must be accepted as an entry separator alongside ',' — a
+        # single '**Rules ruled out**:' line with two em-dash-reasoned
+        # entries joined by ';' must parse as two distinct entries.
+        content = ("- **Rules ruled out**: ref/REF_A — reason one; "
+                   "ref/REF_B — reason two\n")
+        result = wm._parse_ruled_out(content)
+        self.assertEqual(set(result.keys()), {"ref/ref_a", "ref/ref_b"})
+        self.assertEqual(result["ref/ref_a"], "reason one")
+        self.assertEqual(result["ref/ref_b"], "reason two")
+
 
 class TestCitedMemNames(unittest.TestCase):
     def test_citations_inside_checklist_captured(self):
@@ -1178,6 +1189,90 @@ class TestCheckMemorySweepDispositions(unittest.TestCase):
             sentinel = json.load(f)
         self.assertEqual(sentinel["planned"], [])
         self.assertEqual(sentinel["ruled_out"], [])
+
+    def test_planned_cited_in_headingless_sibling_compliance_spec_passes(self):
+        # Real shape sent by swe_wm_update: a sibling section spec whose
+        # `section` IS "Compliance Checklist" but whose `content` has no
+        # '## Compliance Checklist' heading of its own (the heading is
+        # implied by the section name). The citation inside it must still
+        # count via `_mem_citations` (not just `_cited_mem_names`, which
+        # requires a heading to find the body).
+        self._write_stream([
+            {"type": "docread", "name": "feature/FEATURE_X"},
+        ])
+        content = (
+            "- **Memories loaded**: feature/FEATURE_X\n"
+            "- **Rules planned**: ref/REF_P\n"
+        )
+        other_sections = [{
+            "section": "Compliance Checklist",
+            "content": "- [ ] x (mem:ref/REF_P)\n",
+        }]
+        err = wm._check_memory_sweep(self.session, content, other_sections=other_sections)
+        self.assertIsNone(err)
+        with open(self._sentinel()) as f:
+            self.assertEqual(json.load(f)["planned"], ["ref/ref_p"])
+
+    def test_headingless_sibling_spec_of_different_section_not_credited(self):
+        # A heading-less sibling spec for a DIFFERENT section (e.g. "Context")
+        # must NOT be scanned for bare `mem:<name>` citations — only a spec
+        # whose `section` is literally "Compliance Checklist" gets that
+        # treatment; any other section still requires an actual
+        # '## Compliance Checklist' heading inside its own content.
+        self._write_stream([
+            {"type": "docread", "name": "feature/FEATURE_X"},
+        ])
+        content = (
+            "- **Memories loaded**: feature/FEATURE_X\n"
+            "- **Rules planned**: ref/REF_P\n"
+        )
+        other_sections = [{
+            "section": "Context",
+            "content": "mem:ref/REF_P mentioned here, no checklist heading\n",
+        }]
+        err = wm._check_memory_sweep(self.session, content, other_sections=other_sections)
+        self.assertIsNotNone(err)
+        self.assertIn("ref/ref_p", err)
+        self.assertFalse(os.path.exists(self._sentinel()))
+
+    def test_two_primary_docpending_links_ruled_out_semicolon_separated_passes(self):
+        # Two primary-surfaced docpending links, both ruled out on one line
+        # joined by ';', each with its own em-dash reason.
+        self._write_stream([
+            {"type": "docread", "name": "feature/FEATURE_X"},
+            {"type": "docpending", "new": ["ref/ref_a", "ref/ref_b"],
+             "src": "feature/feature_x"},
+        ])
+        content = (
+            "- **Primary**: X - the working feature\n"
+            "- **Memories loaded**: feature/FEATURE_X\n"
+            "- **Rules ruled out**: ref/REF_A — reason one; "
+            "ref/REF_B — reason two\n"
+        )
+        err = wm._check_memory_sweep(self.session, content)
+        self.assertIsNone(err)
+        with open(self._sentinel()) as f:
+            self.assertEqual(
+                set(json.load(f)["ruled_out"]), {"ref/ref_a", "ref/ref_b"})
+
+    def test_primary_link_rejection_error_lists_parsed_ruled_out(self):
+        # The primary-link rejection error must append a "Parsed as ruled
+        # out: ..." trailer naming what was actually parsed, so the agent
+        # can see why a name it thought it ruled out is still outstanding.
+        self._write_stream([
+            {"type": "docread", "name": "feature/FEATURE_X"},
+            {"type": "docpending", "new": ["dom/dom_hub_child", "ref/ref_a"],
+             "src": "feature/feature_x"},
+        ])
+        content = (
+            "- **Primary**: X - the working feature\n"
+            "- **Memories loaded**: feature/FEATURE_X\n"
+            "- **Rules ruled out**: ref/REF_A — reason one\n"
+        )
+        err = wm._check_memory_sweep(self.session, content)
+        self.assertIsNotNone(err)
+        self.assertIn("Parsed as ruled out:", err)
+        self.assertIn("ref/ref_a", err)
 
 
 class TestUpdateSectionOtherSectionsWiring(_FSBase):

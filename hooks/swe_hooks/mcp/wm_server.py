@@ -95,8 +95,23 @@ TOOL_DEFINITIONS = [
             "any number of section updates in ONE call (replaces serial "
             "swe_wm_update_section/swe_wm_update_status calls). Returns the "
             "post-update workflow state, so a separate swe_wm_read is not needed. "
-            "Sections apply in order; the call stops at the first error. Cannot "
-            "change Current State — use swe_wm_transition for that."
+            "Sections apply in order; the call stops at the first error (earlier "
+            "sections stay applied — see `applied` in the error). Cannot "
+            "change Current State — use swe_wm_transition for that.\n\n"
+            "Affected Features is VERIFIED (WF_CLASSIFY sweep) — grammar:\n"
+            "- **Primary**: <KEY> - <reason>\n"
+            "- **Memories loaded**: a/A, b/B   (comma-separated; each must have "
+            "been read_memory'd this session; ≥1 feature/* or 'no-feature')\n"
+            "- **Memories deferred**: c/C   (NOT allowed for links the Primary "
+            "feature surfaced)\n"
+            "- **Rules planned**: d/D   (each must be cited as `mem:d/D` in the "
+            "Compliance Checklist)\n"
+            "- **Rules ruled out**: e/E — reason, f/F — reason   (separate entries "
+            "with ',' or ';'; every entry needs ' — <reason>')\n"
+            "Every link the Primary feature's read surfaced must be read, planned, "
+            "or ruled out. Planned citations are found in a Compliance Checklist "
+            "section sent in the SAME call (any position in `sections`) or already "
+            "in the WM file — order does not matter."
         ),
         "inputSchema": {
             "type": "object",
@@ -494,7 +509,8 @@ def _parse_ruled_out(content: str) -> dict:
         # pair's reason text is impossible to fully disambiguate with commas
         # allowed in reasons, so split entries by the ' — ' anchor instead:
         # walk left-to-right, each entry starts at a memory-name-shaped token.
-        for raw_entry in re.split(r'(?<=[^\s])\s*,\s*(?=[A-Za-z0-9_.~-]+/)', line_tail.strip()):
+        # Entry separator: ',' or ';' followed by a memory-name-shaped token.
+        for raw_entry in re.split(r'(?<=[^\s])\s*[,;]\s*(?=[A-Za-z0-9_.~-]+/)', line_tail.strip()):
             raw_entry = raw_entry.strip().strip('[]`.,;:')
             if not raw_entry:
                 continue
@@ -527,9 +543,13 @@ def _compliance_checklist_body(content: str) -> str:
 def _cited_mem_names(content: str) -> set:
     """Every `mem:<name>` citation inside the Compliance Checklist section,
     normalized."""
-    body = _compliance_checklist_body(content)
+    return _mem_citations(_compliance_checklist_body(content))
+
+
+def _mem_citations(body: str) -> set:
+    """Every `mem:<name>` citation anywhere in `body`, normalized."""
     names = set()
-    for token in MEM_CITATION_RE.findall(body):
+    for token in MEM_CITATION_RE.findall(body or ''):
         name = normalize_memory_name(token.strip('[]`.,;:'))
         if name:
             names.add(name)
@@ -743,7 +763,13 @@ def _check_memory_sweep(
         for spec in (other_sections or []):
             if not isinstance(spec, dict):
                 continue
-            cited |= _cited_mem_names(str(spec.get('content', '')))
+            spec_content = str(spec.get('content', ''))
+            # A sibling 'Compliance Checklist' spec's content IS the section
+            # body (no heading) — every citation in it counts.
+            if spec.get('section') == 'Compliance Checklist':
+                cited |= _mem_citations(spec_content)
+            else:
+                cited |= _cited_mem_names(spec_content)
         cited |= _cited_mem_names(content)
         cwd = get_project_root()
         wm_filepath = find_working_memory_for_session(cwd, session_id)
@@ -818,7 +844,10 @@ def _check_memory_sweep(
             "not applicable to this task'.\n"
             "A link the feature you are working on links to is on-topic by "
             "construction — deferral (asserting it is cold) is reserved for "
-            "links raised by a paused/other-feature read during a pivot."
+            "links raised by a paused/other-feature read during a pivot.\n"
+            f"Parsed as ruled out: {', '.join(sorted(ruled_out)) or '(none)'} — "
+            "if a name you ruled out is missing there, separate entries with "
+            "',' or ';' and start each with the memory name."
         )
     dispositioned = deferred | planned | set(ruled_out.keys())
     outstanding = sorted(other_pending - read_names - dispositioned)
