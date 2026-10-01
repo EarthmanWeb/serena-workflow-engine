@@ -594,8 +594,9 @@ This tool is NOT allowed before initialization.
 Only read_memory and list_memories (init-chain) are permitted.
 
 NOTE: If mcp__plugin_swe_serena__read_memory fails with "No such tool
-available", Serena is still connecting — re-issue the SAME call once.
-Always use the fully-qualified name.
+available", Serena is still connecting — call
+ToolSearch("select:mcp__plugin_swe_serena__read_memory") (waits for the
+server to connect), then re-issue the call. Always use the fully-qualified name.
 
 MANDATORY ACTION — Complete the full init chain:
    1. mcp__plugin_swe_serena__read_memory(memory_name="wf/WF_INIT")
@@ -662,8 +663,9 @@ You must complete the WF_INIT workflow before using other tools.
 DO NOT RATIONALIZE. DO NOT NEGOTIATE. INITIALIZE.
 
 NOTE: If mcp__plugin_swe_serena__read_memory fails with "No such tool
-available", Serena is still connecting — re-issue the SAME call once.
-Always use the fully-qualified name.
+available", Serena is still connecting — call
+ToolSearch("select:mcp__plugin_swe_serena__read_memory") (waits for the
+server to connect), then re-issue the call. Always use the fully-qualified name.
 
 MANDATORY ACTION — Complete the full init chain:
    1. mcp__plugin_swe_serena__read_memory(memory_name="wf/WF_INIT")

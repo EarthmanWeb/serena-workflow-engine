@@ -115,7 +115,7 @@ section_content = get_wm_section(wm_content, "Workflow Context")
 ## Instruction File Strategy
 
 - Hooks NEVER read and echo instruction-file contents.
-- Hooks point the agent to `mcp__serena__read_memory("wf/WF_*")`.
+- Hooks point the agent to `mcp__plugin_swe_serena__read_memory("wf/WF_*")`.
 - Instruction files are copied to `.serena/swe/` during `/swe-init`.
 
 ## Hook Loading

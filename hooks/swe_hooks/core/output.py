@@ -34,8 +34,9 @@ from typing import Optional, Dict, Any
 # one-line reminder instead of a duplicate block.
 WF_INIT_GUIDANCE = """STOP. Your next action MUST be a tool call. Not text. A tool call.
 
-If it fails with "No such tool available", Serena is still connecting —
-re-issue the SAME call once (tools register by the next turn):
+If Serena is listed as still connecting, or the call fails with "No such tool
+available", FIRST call ToolSearch("select:mcp__plugin_swe_serena__read_memory")
+— it waits for the server to connect — then make the call:
 
   mcp__plugin_swe_serena__read_memory(memory_name="wf/WF_INIT")
 
