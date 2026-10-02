@@ -33,6 +33,7 @@ Single choke point: `StateManager.transition_to` — reached by the prompt hook 
 
 - Every entry into `WF_CLASSIFY` clears the per-task sweep sentinel (`clear_sweep_sentinel`).
 - Entry from a LATER state (`resets_blanket_consent`: `states.json` rank ≥ WF_CLASSIFY's rank — WF_CONTINUE, WF_RESEARCH, WF_ARCH_REVIEW, WF_EXECUTE, WF_CHECKPOINT, WF_DEBUG_TDD, WF_VERIFY, WF_DONE) clears the WM blanket-consent flag via `session.clear_blanket_consent` and logs a `consent_reset` stream event. Applies to forced transitions too.
+- The SAME `resets_blanket_consent(old, new)` guard also clears the session's edit-mode sentinel (`core.stream.set_edit_mode(session_id, False)`) — see `mem:dom/DOM_SWE_HOOKS_PROMPT_ROUTING` Edit Mode. One call site, both flags; no separate gap for a model-driven pivot via `swe_wm_transition`/`set_state.py`.
 - WF_CLARIFY return, WF_ONBOARD return, and the initial WF_INIT entry NEVER reset consent — same-task detours.
 
 ## State Set (v5)

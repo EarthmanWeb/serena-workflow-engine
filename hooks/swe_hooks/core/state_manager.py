@@ -561,6 +561,8 @@ class StateManager:
                 from .stream import get_stream_path, append_event
                 append_event(get_stream_path(sid), 'consent_reset',
                              from_s=old_state, to_s=new_state, s=sid)
+            from .stream import set_edit_mode
+            set_edit_mode(sid, False)
 
         suffix = f" ⚠️ {oscillation_warning}" if oscillation_warning else ""
 

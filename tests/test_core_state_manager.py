@@ -740,6 +740,56 @@ class BlanketConsentResetTest(_StateManagerBase):
         self.assertTrue(self._consent())
 
 
+class EditModeResetTest(_StateManagerBase):
+    """Edit mode (hooks/swe_hooks/core/stream.is_edit_mode/set_edit_mode)
+    clears on the SAME condition as blanket consent — any re-entry into
+    WF_CLASSIFY from a LATER state (resets_blanket_consent) — via the one
+    choke point StateManager.transition_to. Mirrors BlanketConsentResetTest."""
+
+    SID = "edmode01"
+
+    def _seed(self, state):
+        path = self._write_wm(name=f"WM_{self.SID}", current_state=state,
+                              session_id=self.SID)
+        config.write_state_file(self.SID, state, prev_state="WF_CLASSIFY")
+        stream_mod = import_core("swe_hooks.core.stream")
+        stream_mod.set_edit_mode(self.SID, True)
+        return path
+
+    def _edit_mode_on(self):
+        stream_mod = import_core("swe_hooks.core.stream")
+        return stream_mod.is_edit_mode(self.SID)
+
+    def test_transition_to_from_done_clears_edit_mode(self):
+        # Prompt-hook new-task path: WF_DONE -> WF_CLASSIFY via transition_to.
+        self._seed("WF_DONE")
+        self.assertTrue(self._edit_mode_on())
+        sm = mod.StateManager(self.root, session_id=self.SID)
+        ok, msg = sm.transition_to("WF_CLASSIFY")
+        self.assertTrue(ok, msg)
+        self.assertFalse(self._edit_mode_on())
+
+    def test_forced_pivot_from_execute_clears_edit_mode(self):
+        self._seed("WF_EXECUTE")
+        self.assertTrue(self._edit_mode_on())
+        result = mod.perform_transition(self.root, self.SID, "WF_CLASSIFY", force=True)
+        self.assertTrue(result["success"], result)
+        self.assertFalse(self._edit_mode_on())
+
+    def test_clarify_return_keeps_edit_mode(self):
+        self._seed("WF_CLARIFY")
+        sm = mod.StateManager(self.root, session_id=self.SID)
+        ok, msg = sm.transition_to("WF_CLASSIFY", force=True)
+        self.assertTrue(ok, msg)
+        self.assertTrue(self._edit_mode_on())
+
+    def test_non_classify_transition_keeps_edit_mode(self):
+        self._seed("WF_EXECUTE")
+        result = mod.perform_transition(self.root, self.SID, "WF_VERIFY")
+        self.assertTrue(result["success"], result)
+        self.assertTrue(self._edit_mode_on())
+
+
 class MultiTaskGateTest(_StateManagerBase):
     """USER-APPROVED RULE: WF_CLASSIFY -> WF_EXECUTE is refused when Current
     Task names 2+ independent tickets/jobs and WM lacks `parallel_agents:
