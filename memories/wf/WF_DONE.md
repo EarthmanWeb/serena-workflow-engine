@@ -22,6 +22,8 @@ metadata:
 - [ ] No pending violations
 - [ ] User informed of follow-up items
 - [ ] `## Open Decisions` has no unchecked entries — every decision resolved via AskUserQuestion and marked `[x]`
+- [ ] Every `— deferred: chose <X>` entry (queued under blanket consent) asked via AskUserQuestion — one question per entry, `<X>` first as recommended; the consent gate ALLOWS AskUserQuestion in WF_DONE
+- [ ] Each answer that differs from the deferred choice applied (edit + verify) before ending
 
 ## Summarize To User
 

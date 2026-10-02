@@ -513,8 +513,9 @@ class TestContinueWorkingEarlyAllowGuards(unittest.TestCase):
     INCOMPLETE_STATES blocking logic fires. In ANY workflow state (including
     WF_DONE/WF_VERIFY), an unresolved item (question / indirect ask / pending
     heading) found anywhere in the final reply blocks the stop instead,
-    unless blanket consent is active (in which case the block reason tells
-    Claude to resolve each item itself)."""
+    unless blanket consent is active outside WF_DONE (in which case the block
+    reason tells Claude to act and record each item as a deferred ledger
+    entry; deferred entries block only in WF_DONE)."""
 
     mod = import_hook("stop/swe_stop_continue_working")
 
@@ -556,7 +557,9 @@ class TestContinueWorkingEarlyAllowGuards(unittest.TestCase):
              mock.patch.object(self.mod, "StateManager", _StubState), \
              mock.patch.object(self.mod, "user_spoke_mid_turn", return_value=mid_turn), \
              mock.patch.object(self.mod, "wm_has_blanket_consent", return_value=blanket_consent), \
-             mock.patch.object(self.mod, "wm_open_decisions", return_value=open_decisions or []), \
+             mock.patch.object(self.mod, "wm_open_decision_entries", return_value=[
+                 e if isinstance(e, tuple) else (e, False)
+                 for e in (open_decisions or [])]), \
              mock.patch.object(self.mod, "_persist_state_on_stop", return_value=None), \
              redirect_stdout(buf):
             try:
@@ -644,10 +647,52 @@ class TestContinueWorkingEarlyAllowGuards(unittest.TestCase):
              "message": {"content": [
                  {"type": "text", "text": "Should I delete it?"}]}},
         ])
-        out = self._run_main({"stop_hook_active": False}, state="WF_DONE",
+        out = self._run_main({"stop_hook_active": False}, state="WF_EXECUTE",
                               mid_turn=False, blanket_consent=True)
         self.assertIn('"decision": "block"', out)
-        self.assertIn("resolve each item yourself", out)
+        self.assertIn("deferred: chose", out)
+        self.assertIn("[consent-override]", out)
+        self.assertNotIn("Call AskUserQuestion NOW", out)
+
+    DEFERRED = ("Cache TTL — options: 60s | 300s — deferred: chose 60s", True)
+    CLEAN = [{"type": "assistant",
+              "message": {"content": [
+                  {"type": "text", "text": "Fixed the bug and all tests pass."}]}}]
+
+    def test_deferred_entry_does_not_block_under_consent_outside_done(self):
+        self._write_transcript(self.CLEAN)
+        out = self._run_main({"stop_hook_active": False}, state="WF_VERIFY",
+                              mid_turn=False, blanket_consent=True,
+                              open_decisions=[self.DEFERRED])
+        self.assertEqual(out.strip(), "{}")
+
+    def test_non_deferred_entry_blocks_under_consent_with_record_instruction(self):
+        self._write_transcript(self.CLEAN)
+        out = self._run_main({"stop_hook_active": False}, state="WF_VERIFY",
+                              mid_turn=False, blanket_consent=True,
+                              open_decisions=[self.DEFERRED, "Pick a log format"])
+        self.assertIn('"decision": "block"', out)
+        self.assertIn("[decision] Pick a log format", out)
+        self.assertNotIn("Cache TTL", out)
+        self.assertIn("deferred: chose <A>", out)
+
+    def test_deferred_entry_blocks_in_done_with_normal_instruction(self):
+        self._write_transcript(self.CLEAN)
+        out = self._run_main({"stop_hook_active": False}, state="WF_DONE",
+                              mid_turn=False, blanket_consent=True,
+                              open_decisions=[self.DEFERRED])
+        self.assertIn('"decision": "block"', out)
+        self.assertIn("[decision] Cache TTL", out)
+        self.assertIn("Call AskUserQuestion NOW", out)
+        self.assertIn("apply the change before ending", out)
+
+    def test_deferred_entry_blocks_without_consent(self):
+        self._write_transcript(self.CLEAN)
+        out = self._run_main({"stop_hook_active": False}, state="WF_VERIFY",
+                              mid_turn=False, blanket_consent=False,
+                              open_decisions=[self.DEFERRED])
+        self.assertIn('"decision": "block"', out)
+        self.assertIn("Call AskUserQuestion NOW", out)
 
     def test_open_decisions_ledger_blocks_with_decision_prefix(self):
         # A WM with unchecked Open Decisions blocks even with clean prose —
@@ -665,7 +710,7 @@ class TestContinueWorkingEarlyAllowGuards(unittest.TestCase):
         self.assertIn("[decision] Truncate TITLE at 80 chars", out)
 
     def test_only_resolved_ledger_entries_with_clean_prose_allows_stop(self):
-        # wm_open_decisions() never returns "[x]" entries, so a ledger with
+        # wm_open_decision_entries() never returns "[x]" entries, so a ledger with
         # only resolved decisions combined with clean prose allows the stop.
         self._write_transcript([
             {"type": "assistant",

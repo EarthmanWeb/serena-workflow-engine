@@ -44,6 +44,8 @@ Detect EXPLICIT intent to skip the WF_ARCH_REVIEW approval gate. ONLY: "skip app
 
 Explicit opt-out → note `auto_approve: true` in WM (plan still presented; gate skipped). Default → approval required at WF_ARCH_REVIEW.
 
+- NEVER set `blanket_consent` here. It requires an explicit no-question phrase ("no questions", "don't ask me (any) questions", "don't ask me anything", "skip all questions") — see `mem:wf/WF_ARCH_REVIEW` Consent-Skip Check. "get it done", "continue to completion", "don't stop till finished", "run to completion" do NOT qualify.
+
 ### 2c. Command & Skill Identification
 
 Check for an existing command/skill before planning manual implementation: scan skills list, project/user/plugin commands; fuzzy-match intent; respect `disable-model-invocation`. Match → note `matched_skill:`/`matched_command:` in WM, invoke it. No match → Step 3. Detail: `mem:ref/REF_WF_CLASSIFY_PROTOCOLS`.

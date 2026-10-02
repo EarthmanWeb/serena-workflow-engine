@@ -407,6 +407,53 @@ class WmOpenDecisionsTests(unittest.TestCase):
             ["In section"],
         )
 
+    def test_entries_flag_deferred_marker(self):
+        self._write_wm(
+            "## Open Decisions\n"
+            "- [ ] TTL — options: 60s | 300s — deferred: chose 60s\n"
+            "- [ ] Log format — options: json | text\n"
+            "- [x] Done — deferred: chose A\n"
+        )
+        self.assertEqual(
+            session.wm_open_decision_entries(self.root, "abcd1234"),
+            [("TTL — options: 60s | 300s — deferred: chose 60s", True),
+             ("Log format — options: json | text", False)],
+        )
+        self.assertEqual(
+            session.wm_open_decisions(self.root, "abcd1234"),
+            ["TTL — options: 60s | 300s — deferred: chose 60s",
+             "Log format — options: json | text"],
+        )
+
+
+class ClearBlanketConsentTests(unittest.TestCase):
+    setUp = WmOpenDecisionsTests.setUp
+    tearDown = WmOpenDecisionsTests.tearDown
+    _write_wm = WmOpenDecisionsTests._write_wm
+
+    BODY = ("# WM\n## Context\n- blanket_consent: true (operator said go)\n"
+            "- auto_approve: TRUE\n## Notes\n- keep me: true story\n")
+
+    def test_flags_cleared_rest_untouched(self):
+        path = self._write_wm(self.BODY)
+        self.assertTrue(session.clear_blanket_consent(self.root, "abcd1234"))
+        with open(path, encoding="utf-8") as f:
+            content = f.read()
+        self.assertEqual(content, (
+            "# WM\n## Context\n- blanket_consent: false (operator said go)\n"
+            "- auto_approve: false\n## Notes\n- keep me: true story\n"))
+        self.assertFalse(session.wm_has_blanket_consent(self.root, "abcd1234"))
+        self.assertFalse(os.path.exists(path + ".tmp"))
+
+    def test_no_flag_returns_false_and_leaves_file(self):
+        path = self._write_wm("## Context\n- auto_approve: false\n")
+        self.assertFalse(session.clear_blanket_consent(self.root, "abcd1234"))
+        with open(path, encoding="utf-8") as f:
+            self.assertEqual(f.read(), "## Context\n- auto_approve: false\n")
+
+    def test_missing_wm_is_noop(self):
+        self.assertFalse(session.clear_blanket_consent(self.root, "nope9999"))
+
 
 class GetSessionContextTests(unittest.TestCase):
     def setUp(self):

@@ -16,7 +16,7 @@ from .config import (
 )
 from .session import (
     extract_session_id, find_working_memory_for_session,
-    validate_working_memory_session
+    validate_working_memory_session, clear_blanket_consent
 )
 
 
@@ -351,6 +351,23 @@ def clear_sweep_sentinel(session_id: str) -> None:
         pass
 
 
+def resets_blanket_consent(old_state: str, new_state: str) -> bool:
+    """True when a transition re-enters WF_CLASSIFY from a LATER state
+    (states.json rank >= WF_CLASSIFY's rank: WF_CONTINUE, WF_RESEARCH,
+    WF_ARCH_REVIEW, WF_EXECUTE, WF_CHECKPOINT, WF_DEBUG_TDD, WF_VERIFY,
+    WF_DONE). Same-task detours (WF_CLARIFY return, WF_ONBOARD return) and
+    the initial WF_INIT entry never reset — consent stays scoped to the task
+    it was granted for."""
+    if new_state != 'WF_CLASSIFY' or old_state == new_state:
+        return False
+    ranks = load_forward_rank()
+    old_rank = ranks.get(old_state)
+    classify_rank = ranks.get('WF_CLASSIFY')
+    if old_rank is None or classify_rank is None:
+        return False
+    return old_rank >= classify_rank
+
+
 class StateManager:
     """Manages workflow state transitions.
 
@@ -513,6 +530,16 @@ class StateManager:
         # sweep sentinel so the edit gate re-arms for follow-up tasks.
         if new_state == 'WF_CLASSIFY':
             clear_sweep_sentinel(sid)
+
+        # Re-entering classification from a later state ends the task that
+        # blanket consent was granted for: clear the WM flag so
+        # AskUserQuestion works again (single choke point for the prompt
+        # hook, read-advance, swe_wm_transition and set_state.py).
+        if sid and resets_blanket_consent(old_state, new_state):
+            if clear_blanket_consent(self.cwd, sid):
+                from .stream import get_stream_path, append_event
+                append_event(get_stream_path(sid), 'consent_reset',
+                             from_s=old_state, to_s=new_state, s=sid)
 
         suffix = f" ⚠️ {oscillation_warning}" if oscillation_warning else ""
 

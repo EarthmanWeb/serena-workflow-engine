@@ -169,13 +169,47 @@ def wm_has_blanket_consent(cwd: str, session_id: Optional[str]) -> bool:
         return False
 
 
+def clear_blanket_consent(cwd: str, session_id: Optional[str]) -> bool:
+    """Rewrite every `blanket_consent: true` / `auto_approve: true` flag in
+    this session's WM to `false` (atomic tmp + os.replace). Called on every
+    re-entry into WF_CLASSIFY from a later state — consent covers ONE task,
+    never the rest of the session. Returns True when a flag was cleared.
+    Missing WM -> False (no-op), same contract as wm_has_blanket_consent."""
+    wm_filepath = find_working_memory_for_session(cwd, session_id)
+    if not wm_filepath or not os.path.exists(wm_filepath):
+        return False
+    with open(wm_filepath, 'r', encoding='utf-8') as f:
+        content = f.read()
+    updated, count = CONSENT_FLAG_RE.subn(
+        lambda m: f'{m.group(1)}: false', content)
+    if not count:
+        return False
+    tmp = f'{wm_filepath}.tmp'
+    with open(tmp, 'w', encoding='utf-8') as f:
+        f.write(updated)
+    os.replace(tmp, wm_filepath)
+    return True
+
+
 _OPEN_DECISION_RE = re.compile(r'^-\s*\[\s\]\s*(.+)$')
+
+# Blanket-consent deferral marker on a ledger entry:
+#   - [ ] <decision> — options: A | B — deferred: chose <A>
+DEFERRED_DECISION_RE = re.compile(r'(?:—|--)\s*deferred:', re.IGNORECASE)
 
 
 def wm_open_decisions(cwd: str, session_id: Optional[str]) -> list:
     """Return the unchecked `- [ ] <text>` entries in this session's WM
     `## Open Decisions` section, in order. `- [x]` entries are resolved and
     ignored. Missing file or section -> []."""
+    return [text for text, _ in wm_open_decision_entries(cwd, session_id)]
+
+
+def wm_open_decision_entries(cwd: str, session_id: Optional[str]) -> list:
+    """Like wm_open_decisions, but returns `(text, deferred)` tuples —
+    `deferred` is True for a blanket-consent entry carrying the
+    `— deferred: chose <X>` marker (acted on provisionally, asked at
+    WF_DONE)."""
     try:
         wm_filepath = find_working_memory_for_session(cwd, session_id)
         if not wm_filepath or not os.path.exists(wm_filepath):
@@ -195,7 +229,8 @@ def wm_open_decisions(cwd: str, session_id: Optional[str]) -> list:
             continue
         match = _OPEN_DECISION_RE.match(line.strip())
         if match:
-            items.append(match.group(1).strip())
+            text = match.group(1).strip()
+            items.append((text, bool(DEFERRED_DECISION_RE.search(text))))
     return items
 
 

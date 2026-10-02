@@ -27,6 +27,14 @@ metadata:
 - CLI: `python3 "${CLAUDE_PLUGIN_ROOT}/hooks/swe_hooks/tools/set_state.py" <session_id> <STATE> [--force]` — shares the same core (`state_manager.perform_transition`) as the MCP tool. JSON output; exit 1 on failure. Session id = the 8-char id printed in every hook message (`WM[<id>]` / `session="<id>"`, also the WM filename `WM_<id>.md`). `${CLAUDE_PLUGIN_ROOT}` is set by the plugin system; in this dev repo the plugin root is the repo root.
 - `--force`/`force=true` skips matrix-edge/loop-cap validation ONLY — subflow targets are rejected even with `--force`.
 
+## Transition Side-Effects (WF_CLASSIFY entry)
+
+Single choke point: `StateManager.transition_to` — reached by the prompt hook (pivot, WF_DONE → new task), read-advance/readBackward (`swe_post_read_state.py`), and `perform_transition` (`swe_wm_transition` MCP + `set_state.py` CLI).
+
+- Every entry into `WF_CLASSIFY` clears the per-task sweep sentinel (`clear_sweep_sentinel`).
+- Entry from a LATER state (`resets_blanket_consent`: `states.json` rank ≥ WF_CLASSIFY's rank — WF_CONTINUE, WF_RESEARCH, WF_ARCH_REVIEW, WF_EXECUTE, WF_CHECKPOINT, WF_DEBUG_TDD, WF_VERIFY, WF_DONE) clears the WM blanket-consent flag via `session.clear_blanket_consent` and logs a `consent_reset` stream event. Applies to forced transitions too.
+- WF_CLARIFY return, WF_ONBOARD return, and the initial WF_INIT entry NEVER reset consent — same-task detours.
+
 ## State Set (v5)
 
 FSM = 12 state nodes in `states.json` PLUS the `WF_INIT` entry pseudo-state and 4 non-FSM subflows.

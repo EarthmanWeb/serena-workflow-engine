@@ -128,7 +128,8 @@ Session: <SESSION_ID>
 Section heading: `## Open Decisions`.
 
 - Record on discovery: `- [ ] <decision> — options: <A> | <B>`
-- Resolve via AskUserQuestion (or self-resolve under blanket consent), then mark: `- [x] <decision> — resolved: <choice>`
+- Under blanket consent (`blanket_consent: true`): record, act, ask at WF_DONE — pick the most logical option, act on it, record `- [ ] <decision> — options: <A> | <B> — deferred: chose <A>`, keep working. Deferred entries do NOT block the stop gate before WF_DONE; in WF_DONE every unchecked entry blocks.
+- Resolve via AskUserQuestion, then mark: `- [x] <decision> — resolved: <choice>`. For a deferred entry list the provisional choice first as recommended; a different answer → apply the change before ending.
 - Record a decision the moment an option/follow-up for the user is identified — in ANY state.
 - NEVER leave an option in reply prose without a ledger entry.
 - Resolve every `- [ ]` entry via AskUserQuestion before ending the task; mark `[x]` with the chosen option.

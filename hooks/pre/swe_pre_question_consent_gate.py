@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """PreToolUse hook for AskUserQuestion — blanket-consent gate.
 
-When the operator has granted blanket consent for the session ("continue
-through to completion", "all authorized", "you have your marching orders"),
-the agent must NOT stop to ask scope/approach questions — it derives the most
-logical choice and proceeds (session 264de5e5 Failure 7: agent asked twice
-after explicit blanket authorization).
+When the operator has granted blanket consent for the CURRENT TASK with an
+explicit no-question phrase ("no questions", "don't ask me (any) questions",
+"don't ask me anything", "skip all questions"), the agent must NOT stop to ask
+scope/approach questions mid-task — it picks the most logical option, acts,
+and queues the decision as a deferred Open Decisions entry.
 
 Mechanism: WF_CLASSIFY / WF_ARCH_REVIEW note `auto_approve: true` or
 `blanket_consent: true` in the session WM. While either flag is present,
@@ -14,6 +14,10 @@ AskUserQuestion is DENIED unless the call explicitly overrides.
 Override: include the literal tag [consent-override] in a question's text plus
 the reason — reserved for destructive actions or genuine scope changes that
 blanket consent cannot cover. The tag is an assertion, not a bypass.
+
+WF_DONE: ALLOWED regardless of consent — the completion round asks every
+`— deferred: chose <X>` Open Decisions entry queued under blanket consent.
+The flag itself is cleared on WF_CLASSIFY re-entry (StateManager.transition_to).
 """
 
 import os
@@ -26,10 +30,19 @@ try:
     from swe_hooks.core.output import output_empty, output_block
     from swe_hooks.core.input import read_stdin_safe, get_input_field
     from swe_hooks.core.session import extract_session_id, wm_has_blanket_consent
+    from swe_hooks.core.state_manager import StateManager
 except ImportError as e:
     swe_hooks.bootstrap.import_error_exit(e, "PreToolUse")
 
 OVERRIDE_TAG = '[consent-override]'
+
+
+def question_denied(blanket_consent: bool, current_state: str, tool_input) -> bool:
+    """True when AskUserQuestion must be denied: blanket consent active,
+    not in the WF_DONE completion round, and no [consent-override] tag."""
+    if not blanket_consent or current_state == 'WF_DONE':
+        return False
+    return OVERRIDE_TAG not in json.dumps(tool_input)
 
 
 def main():
@@ -47,19 +60,21 @@ def main():
             output_empty()
             return
 
-        # Explicit override present in the call → allowed.
-        tool_input = input_data.get('tool_input', {})
-        if OVERRIDE_TAG in json.dumps(tool_input):
+        current_state = StateManager(cwd, session_id=session_id).get_current_state()
+        if not question_denied(True, current_state,
+                               input_data.get('tool_input', {})):
             output_empty()
             return
 
         output_block(
             "🚫 BLANKET CONSENT IS ACTIVE for this session (WM flag "
-            "blanket_consent/auto_approve: true — the operator already said to "
-            "continue through to completion).\n\n"
-            "Do NOT stop to ask scope/approach questions. Derive the most logical "
-            "choice from the loaded memories and existing patterns, note the "
-            "decision in WM, and proceed.\n\n"
+            "blanket_consent/auto_approve: true — the operator said no questions "
+            "for this task).\n\n"
+            "Do NOT stop to ask scope/approach questions now. Pick the most "
+            "logical option from the loaded memories and existing patterns, act "
+            "on it, and RECORD it in WM `## Open Decisions` as "
+            "`- [ ] <decision> — options: A | B — deferred: chose <A>` — every "
+            "deferred entry is asked via AskUserQuestion at WF_DONE.\n\n"
             "Genuinely blocked on a DESTRUCTIVE action or a scope change blanket "
             "consent cannot cover? Re-call AskUserQuestion with the literal tag "
             "[consent-override] plus the reason inside the question text. The tag "

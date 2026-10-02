@@ -16,6 +16,13 @@ Read COMPLETELY. Obey every rule below on every task.
 - Use bullets, numbered lists, tables.
 - Remote environment: request operator output only when debugging AND it cannot be obtained via MCP tools.
 
+## Questions & Decisions — AskUserQuestion Only
+
+- Route EVERY question, choice, offer, pending decision, or unresolved item for the user through the AskUserQuestion tool — 2-4 concrete options, recommended first.
+- NEVER end a reply with a prose question or offer — banned: "If you want, I can…", "Want me to…", "Should I…?", "Say the word…", "Happy to…", "Let me know if…", "Next step would be…", "One option is…".
+- Nothing left to decide → end on the result. No offers, no follow-up suggestions.
+- Reason: sessions run over Remote Control — only AskUserQuestion pushes to the user's phone; prose questions go unseen.
+
 ## Core Coding Principles
 
 Priority order: KISS → DRY → YAGNI.
@@ -42,7 +49,7 @@ Priority order: KISS → DRY → YAGNI.
 When the user names the target literally mid-task (a `#id`/`.class` selector, a quoted string, a value, a file path): pick the destination from this session's work or the one obvious file. Read ONLY that file. Edit. Report.
 
 - NEVER search for where the target originates. NEVER confirm the target exists before editing.
-- Ask ONE question ONLY when two destinations are equally plausible.
+- Ask (via AskUserQuestion) ONLY when two destinations are equally plausible — this limits fast-path lookups, not questions in general.
 - The prompt-hook `⚡ DIRECT INSTRUCTION` note signals this mode.
 
 ## Always Do
@@ -52,11 +59,11 @@ When the user names the target literally mid-task (a `#id`/`.class` selector, a 
 - Check `MEMORY.md` or `index/INDEX_FEATURES` when navigating features.
 - Use Serena symbolic tools for code edits: `replace_symbol_body`, `insert_before_symbol`, `insert_after_symbol` to modify; `find_symbol`, `get_symbols_overview`, `search_for_pattern` to discover. Fall back to `Read`/`Edit` only for non-code files or when symbols cannot be resolved.
 - Update WM using `swe-wm` MCP tools: `swe_wm_update_section` for section updates, `swe_wm_update_status` for status, `swe_wm_read` to read. NEVER use `write_memory`/`edit_memory` on WM files — these bypass the daemon and can clobber the `Workflow Context`/`Transitions` fields the state machine depends on.
-- Ask for clarification when uncertain.
+- Ask for clarification via AskUserQuestion when uncertain.
 - Follow existing patterns. Check docs and existing code first.
 - Document new patterns or deviations in Serena memories.
 - Clean up after tasks: remove temp files, branches, agents.
-- Communicate blockers or uncertainties immediately.
+- Raise blockers or uncertainties immediately via AskUserQuestion.
 
 ## Skill Execution Is VERBATIM
 
@@ -83,14 +90,14 @@ Do not flail with variations of the same broken approach.
 
 ## User Interaction
 
-- When the user is frustrated: verify their instructions were followed exactly; offer to update docs if a conflict exists.
+- When the user is frustrated: verify their instructions were followed exactly; offer a docs update via AskUserQuestion if a conflict exists.
 
 ## On Conflicts
 
 When a user instruction contradicts a memory:
 
 1. STOP.
-2. ASK for clarification.
+2. ASK for clarification via AskUserQuestion.
 3. UPDATE the memory after confirmation.
 
 ## Working Style

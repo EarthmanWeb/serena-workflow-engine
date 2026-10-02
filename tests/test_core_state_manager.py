@@ -664,5 +664,81 @@ class PerformTransitionTest(_StateManagerBase):
         self.assertEqual(result["reason"], "needs_implementation exit")
 
 
+
+class BlanketConsentResetTest(_StateManagerBase):
+    """Re-entry into WF_CLASSIFY from a later state clears the WM
+    blanket-consent flag — single choke point StateManager.transition_to,
+    reached by the prompt hook, read-advance (swe_post_read_state),
+    swe_wm_transition MCP and set_state.py (both via perform_transition)."""
+
+    SID = "c0ffee12"
+
+    def _seed(self, state):
+        path = self._write_wm(name=f"WM_{self.SID}", current_state=state,
+                              session_id=self.SID)
+        with open(path, "a") as f:
+            f.write("## Context\n- blanket_consent: true (no questions)\n")
+        config.write_state_file(self.SID, state, prev_state="WF_CLASSIFY")
+        return path
+
+    def _consent(self):
+        session = import_core("swe_hooks.core.session")
+        return session.wm_has_blanket_consent(self.root, self.SID)
+
+    def _events(self, kind):
+        stream_mod = import_core("swe_hooks.core.stream")
+        path = stream_mod.get_stream_path(self.SID)
+        if not os.path.exists(path):
+            return []
+        import json
+        with open(path) as f:
+            return [json.loads(l) for l in f if l.strip()
+                    and json.loads(l).get("type") == kind]
+
+    def test_resets_blanket_consent_rank_rule(self):
+        for old in ("WF_RESEARCH", "WF_ARCH_REVIEW", "WF_EXECUTE", "WF_VERIFY",
+                    "WF_DONE", "WF_CONTINUE", "WF_CHECKPOINT", "WF_DEBUG_TDD"):
+            self.assertTrue(mod.resets_blanket_consent(old, "WF_CLASSIFY"), old)
+        for old in ("WF_CLARIFY", "WF_ONBOARD", "WF_INIT", "WF_CLASSIFY"):
+            self.assertFalse(mod.resets_blanket_consent(old, "WF_CLASSIFY"), old)
+        self.assertFalse(mod.resets_blanket_consent("WF_EXECUTE", "WF_VERIFY"))
+
+    def test_perform_transition_clears_flag(self):
+        self._seed("WF_RESEARCH")
+        self.assertTrue(self._consent())
+        result = mod.perform_transition(self.root, self.SID, "WF_CLASSIFY")
+        self.assertTrue(result["success"], result)
+        self.assertFalse(self._consent())
+        self.assertEqual(len(self._events("consent_reset")), 1)
+
+    def test_transition_to_from_done_clears_flag(self):
+        # Prompt-hook new-task path: WF_DONE -> WF_CLASSIFY via transition_to.
+        self._seed("WF_DONE")
+        sm = mod.StateManager(self.root, session_id=self.SID)
+        ok, msg = sm.transition_to("WF_CLASSIFY")
+        self.assertTrue(ok, msg)
+        self.assertFalse(self._consent())
+
+    def test_forced_pivot_from_execute_clears_flag(self):
+        self._seed("WF_EXECUTE")
+        result = mod.perform_transition(self.root, self.SID, "WF_CLASSIFY", force=True)
+        self.assertTrue(result["success"], result)
+        self.assertFalse(self._consent())
+
+    def test_clarify_return_keeps_flag(self):
+        self._seed("WF_CLARIFY")
+        sm = mod.StateManager(self.root, session_id=self.SID)
+        ok, msg = sm.transition_to("WF_CLASSIFY", force=True)
+        self.assertTrue(ok, msg)
+        self.assertTrue(self._consent())
+        self.assertEqual(self._events("consent_reset"), [])
+
+    def test_non_classify_transition_keeps_flag(self):
+        self._seed("WF_EXECUTE")
+        result = mod.perform_transition(self.root, self.SID, "WF_VERIFY")
+        self.assertTrue(result["success"], result)
+        self.assertTrue(self._consent())
+
+
 if __name__ == "__main__":
     unittest.main()

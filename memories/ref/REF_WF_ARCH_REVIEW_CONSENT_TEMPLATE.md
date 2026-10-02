@@ -35,3 +35,5 @@ AskUserQuestion({
 ```
 
 Answering this call IS consent. There is no second approval prompt.
+
+- "Continue through to completion" skips ONLY the separate plan review. NEVER set `blanket_consent` from it — later questions still go through AskUserQuestion.

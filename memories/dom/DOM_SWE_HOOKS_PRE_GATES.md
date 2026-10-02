@@ -111,6 +111,11 @@ Validate test commands against WF_DEBUG_TDD.
 
 Deny questions while `auto_approve`/`blanket_consent` is set in WM (override tag for destructive/scope changes).
 
+- Pure fn `question_denied(blanket_consent, current_state, tool_input)` — True only when consent is set, state is NOT `WF_DONE`, and the call lacks `[consent-override]`.
+- ALLOW in `WF_DONE` regardless of consent — the completion round asks every `— deferred: chose <X>` Open Decisions entry queued under consent. State read via `StateManager(cwd, session_id).get_current_state()`.
+- Deny message instructs: pick the most logical option, act, record `- [ ] <decision> — options: A | B — deferred: chose <A>` in WM `## Open Decisions`.
+- Flag lifetime = ONE task: `core.session.clear_blanket_consent(cwd, session_id)` rewrites both flags to `false` (atomic tmp + `os.replace`); `StateManager.transition_to` calls it on WF_CLASSIFY re-entry from a later state (see `mem:dom/DOM_SWE_STATE_MACHINE` Transition Side-Effects).
+
 ## `swe_pre_agent_model_gate.py` — PreToolUse (Agent/Task)
 
 Enforces orchestrator + swarm delegation with complexity-based model tiers. FIVE independent DENY checks, plus a non-denying `[sweep-gate]` auto-inject:

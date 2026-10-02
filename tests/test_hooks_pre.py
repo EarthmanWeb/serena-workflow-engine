@@ -2006,6 +2006,20 @@ class TestQuestionConsentGate(unittest.TestCase):
     def test_missing_wm_returns_false(self):
         self.assertFalse(consent_mod.wm_has_blanket_consent(self.root, self.SESSION))
 
+    def test_denied_under_consent_outside_done(self):
+        for state in ('WF_EXECUTE', 'WF_VERIFY', 'WF_ARCH_REVIEW'):
+            self.assertTrue(consent_mod.question_denied(True, state, {'q': 'x'}), state)
+
+    def test_allowed_in_done_under_consent(self):
+        self.assertFalse(consent_mod.question_denied(True, 'WF_DONE', {'q': 'x'}))
+
+    def test_allowed_with_override_tag(self):
+        self.assertFalse(consent_mod.question_denied(
+            True, 'WF_EXECUTE', {'q': '[consent-override] drop table'}))
+
+    def test_allowed_without_consent(self):
+        self.assertFalse(consent_mod.question_denied(False, 'WF_EXECUTE', {'q': 'x'}))
+
 
 if __name__ == "__main__":
     unittest.main()

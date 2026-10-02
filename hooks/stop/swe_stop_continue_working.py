@@ -32,7 +32,7 @@ try:
     from swe_hooks.core.output import output_empty
     from swe_hooks.core.state_manager import StateManager
     from swe_hooks.core.stream import get_stream_path, append_event
-    from swe_hooks.core.session import extract_session_id, wm_has_blanket_consent, wm_open_decisions
+    from swe_hooks.core.session import extract_session_id, wm_has_blanket_consent, wm_open_decision_entries
     from swe_hooks.core.config import read_state_file, write_state_file
     from swe_hooks.core.turn_signals import final_reply_text, unresolved_items, user_spoke_mid_turn
 except ImportError as e:
@@ -170,23 +170,40 @@ def extract_last_assistant_text(transcript_path: str) -> str:
 
 def unresolved_items_reason(items, blanket_consent: bool) -> str:
     """Block reason for a final reply that leaves items in prose. `[decision]`
-    entries come from the WM Open Decisions ledger (primary signal)."""
+    entries come from the WM Open Decisions ledger (primary signal).
+    `blanket_consent` is True only while consent is active AND the session
+    is not yet in WF_DONE — the deferred queue is asked at completion."""
     listing = "\n".join(f"- {item}" for item in items)
     head = ("⛔ UNRESOLVED ITEMS in your final reply — the user must not have to "
             "read prose to find open questions or pending decisions:\n"
             f"{listing}\n\n")
     if blanket_consent:
         return head + (
-            "Blanket consent is active: resolve each item yourself (pick the most "
-            "logical option), act on it, and note the decision in WM. Only a "
-            "destructive action may be asked via AskUserQuestion with the "
+            "Blanket consent is active: for each item pick the most logical "
+            "option, act on it, and RECORD it in WM `## Open Decisions` as "
+            "`- [ ] <decision> — options: A | B — deferred: chose <A>` — every "
+            "deferred entry is asked via AskUserQuestion at WF_DONE. Only a "
+            "destructive action may be asked now via AskUserQuestion with the "
             "[consent-override] tag. Then end with a terse summary containing no "
             "questions, offers, or pending-item sections.")
     return head + (
         "Call AskUserQuestion NOW with one question per item (2-4 concrete "
         "options each, recommended first; a [section] covers every item listed "
-        "under it). Then end with a terse summary containing no questions, "
+        "under it; for a `deferred: chose <X>` entry list <X> first as "
+        "recommended). If the user picks differently from a deferred choice, "
+        "apply the change before ending. Mark each answered ledger entry "
+        "`- [x]`. Then end with a terse summary containing no questions, "
         "offers, or pending-item sections.")
+
+
+def ledger_blocking_items(entries, blanket_consent: bool, current_state: str) -> list:
+    """Ledger entries that block the stop. `entries` = (text, deferred)
+    tuples from wm_open_decision_entries. Under blanket consent outside
+    WF_DONE, deferred entries are queued (non-blocking); in WF_DONE every
+    unchecked entry blocks."""
+    queue_deferred = blanket_consent and current_state != 'WF_DONE'
+    return [text for text, deferred in entries
+            if not (queue_deferred and deferred)]
 
 
 def _persist_state_on_stop(session_id: str, current_state: str):
@@ -243,7 +260,9 @@ def main():
         # The WM Open Decisions ledger is the PRIMARY signal (structured,
         # agent-maintained); the final-reply prose scan is the backstop for
         # decisions left in prose without a matching ledger entry.
-        ledger = wm_open_decisions(cwd, session_id)
+        consent = wm_has_blanket_consent(cwd, session_id)
+        ledger = ledger_blocking_items(
+            wm_open_decision_entries(cwd, session_id), consent, current_state)
         items = ([f"[decision] {d}" for d in ledger]
                  + unresolved_items(final_reply_text(transcript_path)))
         if items:
@@ -256,7 +275,7 @@ def main():
                 except Exception:
                     pass
             block_stop(unresolved_items_reason(
-                items, wm_has_blanket_consent(cwd, session_id)))
+                items, consent and current_state != 'WF_DONE'))
             return
 
         # WF_DONE or uninitialized — always allow stop

@@ -77,15 +77,20 @@ Before proposing new files: check existing patterns in similar files, read relev
 
 ### Consent-Skip Check (Initial-Prompt Blanket Consent)
 
-Check whether the INITIAL user prompt gave blanket consent — phrases like "get it done", "continue to completion", "don't stop till finished", "run to completion", "don't ask me questions", "no questions" (the `auto_approve` / `no_questions` flags noted at WF_CLASSIFY).
+Set `blanket_consent: true` ONLY on an EXPLICIT no-question phrase in the INITIAL user prompt: "no questions", "don't ask me questions" / "don't ask me any questions", "don't ask me anything", "skip all questions".
 
-- If blanket consent given: SKIP the final validate-or-continue question. If "no questions" was requested, ALSO derive the most logical choices for any design/approach questions yourself and proceed on that consent — do NOT call `AskUserQuestion`. Go directly to `WF_EXECUTE` (parallel subagents, if planned, launch there).
-- PERSIST the grant: note `blanket_consent: true` in WM `Context` (via `swe_wm_update_section`). While set, a PreToolUse gate DENIES `AskUserQuestion` for the rest of the session — derive choices and proceed. Only a destructive action or genuine scope change may re-ask, using the literal tag `[consent-override]` + reason in the question text (the tag asserts the condition holds; it is not a bypass).
+- "get it done", "continue to completion", "don't stop till finished", "run to completion" NEVER set `blanket_consent` — they skip ONLY the final validate-or-continue plan question. Ask every design/approach question normally.
+- Selecting "Continue through to completion" in the consent-gate question NEVER sets `blanket_consent` — it skips ONLY the separate plan review.
+- Blanket consent given: SKIP the whole question call. For each design/approach question pick the most logical option, act on it, and RECORD it in WM `## Open Decisions` as `- [ ] <decision> — options: A | B — deferred: chose <A>`. Go directly to `WF_EXECUTE` (parallel subagents, if planned, launch there).
+- PERSIST the grant: note `blanket_consent: true` in WM `Context` (via `swe_wm_update_section`). While set, a PreToolUse gate DENIES `AskUserQuestion` until WF_DONE — record each new decision as a deferred entry and keep working. WF_DONE asks every deferred entry via AskUserQuestion. Only a destructive action or genuine scope change may ask earlier, using the literal tag `[consent-override]` + reason in the question text (the tag asserts the condition holds; it is not a bypass).
+- Scope: the flag covers ONE task. Re-entry into `WF_CLASSIFY` from any later state (pivot, new task after WF_DONE) clears it automatically.
 - Otherwise: assemble and ask the single question call — exact template + validate-or-continue question text/options: `mem:ref/REF_WF_ARCH_REVIEW_CONSENT_TEMPLATE`.
 
 ### Non-Interactive Session Check
 
-No user available to answer: treat as blanket consent — derive the most reasonable answer for every design question, note each derived choice + assumption in WM, proceed to `WF_EXECUTE`. NEVER block an autonomous session on `AskUserQuestion`.
+Applies ONLY when `AskUserQuestion` is unavailable: a spawned subagent, or a headless `-p` / SDK print run. There: pick the most reasonable answer for every design question, record each as a deferred `## Open Decisions` entry, proceed to `WF_EXECUTE`.
+
+- An interactive or Remote Control session is ALWAYS interactive — the user is reachable via push. NEVER treat it as non-interactive and NEVER treat it as consent.
 
 ### Heavy Memory Load (After Questions Answered)
 
