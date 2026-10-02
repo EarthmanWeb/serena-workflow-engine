@@ -7,9 +7,12 @@ explicit no-question phrase ("no questions", "don't ask me (any) questions",
 scope/approach questions mid-task — it picks the most logical option, acts,
 and queues the decision as a deferred Open Decisions entry.
 
-Mechanism: WF_CLASSIFY / WF_ARCH_REVIEW note `auto_approve: true` or
-`blanket_consent: true` in the session WM. While either flag is present,
-AskUserQuestion is DENIED unless the call explicitly overrides.
+Mechanism: WF_ARCH_REVIEW notes `blanket_consent: true` in the session WM
+(an explicit no-question phrase only — see wf/WF_ARCH_REVIEW Consent-Skip
+Check). While that flag is present, AskUserQuestion is DENIED unless the
+call explicitly overrides. `auto_approve: true` (WF_CLASSIFY 2b) is a
+SEPARATE flag that only skips the WF_ARCH_REVIEW plan-approval question —
+it NEVER denies AskUserQuestion.
 
 Override: include the literal tag [consent-override] in a question's text plus
 the reason — reserved for destructive actions or genuine scope changes that
@@ -68,7 +71,7 @@ def main():
 
         output_block(
             "🚫 BLANKET CONSENT IS ACTIVE for this session (WM flag "
-            "blanket_consent/auto_approve: true — the operator said no questions "
+            "blanket_consent: true — the operator said no questions "
             "for this task).\n\n"
             "Do NOT stop to ask scope/approach questions now. Pick the most "
             "logical option from the loaded memories and existing patterns, act "

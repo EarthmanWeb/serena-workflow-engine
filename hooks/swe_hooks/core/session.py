@@ -154,11 +154,13 @@ def find_working_memory_for_session(cwd: str, session_id: Optional[str]) -> Opti
 
 
 CONSENT_FLAG_RE = re.compile(
-    r'\b(blanket_consent|auto_approve)\s*:\s*true\b', re.IGNORECASE)
+    r'\b(blanket_consent)\s*:\s*true\b', re.IGNORECASE)
 
 
 def wm_has_blanket_consent(cwd: str, session_id: Optional[str]) -> bool:
-    """True when this session's WM carries a blanket-consent flag."""
+    """True when this session's WM carries the blanket-consent flag.
+    `auto_approve: true` does NOT count here — it only skips the
+    WF_CLASSIFY 2b plan-approval question, never AskUserQuestion."""
     try:
         wm_filepath = find_working_memory_for_session(cwd, session_id)
         if not wm_filepath or not os.path.exists(wm_filepath):
@@ -170,11 +172,11 @@ def wm_has_blanket_consent(cwd: str, session_id: Optional[str]) -> bool:
 
 
 def clear_blanket_consent(cwd: str, session_id: Optional[str]) -> bool:
-    """Rewrite every `blanket_consent: true` / `auto_approve: true` flag in
-    this session's WM to `false` (atomic tmp + os.replace). Called on every
-    re-entry into WF_CLASSIFY from a later state — consent covers ONE task,
-    never the rest of the session. Returns True when a flag was cleared.
-    Missing WM -> False (no-op), same contract as wm_has_blanket_consent."""
+    """Rewrite every `blanket_consent: true` flag in this session's WM to
+    `false` (atomic tmp + os.replace). Called on every re-entry into
+    WF_CLASSIFY from a later state — consent covers ONE task, never the
+    rest of the session. Returns True when a flag was cleared. Missing WM
+    -> False (no-op), same contract as wm_has_blanket_consent."""
     wm_filepath = find_working_memory_for_session(cwd, session_id)
     if not wm_filepath or not os.path.exists(wm_filepath):
         return False

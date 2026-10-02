@@ -1991,9 +1991,11 @@ class TestQuestionConsentGate(unittest.TestCase):
         self._write_wm('## Context\n- blanket_consent: true (operator said go)\n')
         self.assertTrue(consent_mod.wm_has_blanket_consent(self.root, self.SESSION))
 
-    def test_auto_approve_flag_detected(self):
+    def test_auto_approve_flag_alone_not_detected(self):
+        # auto_approve only skips the WF_CLASSIFY 2b plan-approval question —
+        # it must NEVER deny AskUserQuestion.
         self._write_wm('## Task Context\n- auto_approve: true\n')
-        self.assertTrue(consent_mod.wm_has_blanket_consent(self.root, self.SESSION))
+        self.assertFalse(consent_mod.wm_has_blanket_consent(self.root, self.SESSION))
 
     def test_no_flag_returns_false(self):
         self._write_wm('## Context\n- normal session\n')
