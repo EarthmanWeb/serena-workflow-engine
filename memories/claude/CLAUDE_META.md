@@ -26,6 +26,7 @@ metadata:
 ## Step Reporting (contract — do NOT drop)
 
 - Each WF_* memory starts with its step name. Claude MUST output the report line before executing the step. This blocks silent step-skipping and creates the audit trail.
+- Banner line only — NEVER add rationale, transition narration or "next I will…" around it.
 
 | Step             | Report                       |
 | ---------------- | ---------------------------- |

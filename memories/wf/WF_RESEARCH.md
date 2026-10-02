@@ -54,6 +54,7 @@ Applies to RUNTIME symptoms (rendering/behavior a user reports). Static-only exp
 ## Step 5 — Report Findings
 
 - Report findings directly to the user.
+- Report as terse bullets/table: finding + evidence pointer (file:line). No narrative justification. The DIAGNOSIS VERIFICATION block (diagnosis tasks only) stays verbatim.
 - Diagnosis tasks: apply the Diagnosis Exit Criteria below before reporting a cause.
 - Findings that leave the user a choice (fix variants, follow-up actions): record each in WM `## Open Decisions` when discovered; ask via AskUserQuestion before ending — NEVER present options only in prose.
 

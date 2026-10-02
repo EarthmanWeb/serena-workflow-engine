@@ -202,9 +202,9 @@ if the response was lost):
 
 ---
 
-## Step 5: Confirm & Resume
+## Step 5: Resume
 
-Output: `📋 Updated Working Memory: WM_{session_id}`
+Output nothing; resume the calling step immediately.
 
 **⚠️ CRITICAL: DO NOT STOP HERE. This skill is a utility — you MUST continue.**
 
@@ -216,7 +216,7 @@ Output: `📋 Updated Working Memory: WM_{session_id}`
 This is a utility skill — no state change occurs. Your calling step's instructions
 told you to invoke `/swe-wm-update` as a sub-step, NOT as a stopping point.
 
-After outputting the confirmation line above:
+After the update call returns:
 
 1. **Do NOT wait for user input**
 2. **Do NOT end your response**

@@ -99,7 +99,7 @@ Users can always select "Other" for custom text input.
 
 1. Note the state you came from.
 2. Read the WF_* memory for the state you route back to.
-3. Report the new step to the user.
+3. Output the step banner (CLAUDE_META).
 
 ## Routing
 

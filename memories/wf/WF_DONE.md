@@ -20,16 +20,14 @@ metadata:
 - [ ] WM updated with final status
 - [ ] Feature memories updated when changed (`DOM_*`, `SYS_*`, `INDEX_*`)
 - [ ] No pending violations
-- [ ] User informed of follow-up items
+- [ ] Follow-up items recorded in WM `## Open Decisions` (asked via AskUserQuestion), not narrated
 - [ ] `## Open Decisions` has no unchecked entries — every decision resolved via AskUserQuestion and marked `[x]`
 - [ ] Every `— deferred: chose <X>` entry (queued under blanket consent) asked via AskUserQuestion — one question per entry, `<X>` first as recommended; the consent gate ALLOWS AskUserQuestion in WF_DONE
 - [ ] Each answer that differs from the deferred choice applied (edit + verify) before ending
 
 ## Summarize To User
 
-- What was done.
-- Memories updated.
-- Follow-up items (recorded in WM).
+End with ≤3 bullets covering ONLY outcomes not already shown in this turn's earlier text. Omit any category with nothing to report — NEVER write "none". No recap of steps, no restating the request.
 
 ## Learning Checkpoint
 

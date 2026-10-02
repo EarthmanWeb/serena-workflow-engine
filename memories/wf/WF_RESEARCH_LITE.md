@@ -42,6 +42,7 @@ Use tools in this order; start narrow, expand ONLY if needed:
 ### 3. Report & Exit
 
 - Report findings directly.
+- Report as terse bullets/table: finding + evidence pointer (file:line). No narrative justification. The DIAGNOSIS VERIFICATION block (diagnosis tasks only) stays verbatim.
 - Do NOT create WM for simple lookups.
 
 ## Token Budget

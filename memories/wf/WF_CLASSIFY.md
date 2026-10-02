@@ -162,7 +162,7 @@ Routing to a workflow-aware skill: set WM context (calling step, feature key, se
 
 ## Routing Table
 
-Single source of truth for routing — determine which condition applies, read that WF_* memory, report the new step to the user:
+Single source of truth for routing — determine which condition applies, read that WF_* memory, output the step banner (CLAUDE_META):
 
 - Hard blocker, cannot classify → `WF_CLARIFY`
 - Research only → `WF_RESEARCH`

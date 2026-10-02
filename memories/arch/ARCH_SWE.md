@@ -89,7 +89,7 @@ metadata:
 Update WM via `/swe-wm-update` before transitioning.
 ```
 
-Output the step-report line (`> **On step WF_[NAME]**`) immediately on entering the state. Every state declares its transitions in a `## Routing` table — do NOT leave the next state implicit.
+Every state declares its transitions in a `## Routing` table — do NOT leave the next state implicit.
 
 ## Modification Checklist
 

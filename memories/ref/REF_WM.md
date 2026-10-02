@@ -21,7 +21,7 @@ metadata:
 | ----------- | ----------------------- | --------------------------------------------------------------------------------- |
 | Auto-Create | Entry into WF_CLASSIFY  | Prompt hook creates `WM_{session_id}.md` on the first transition into WF_CLASSIFY |
 | Load        | Session resume          | Read file → verify session ID matches → echo to chat                              |
-| Update      | After edits/transitions | Write changes → echo `📋 Updated Working Memory: WM_{session_id}`                 |
+| Update      | After edits/transitions | Write changes. Output nothing; resume the calling step immediately.               |
 
 - Update WM after EVERY: memory edit, file edit, workflow transition, state change.
 

@@ -118,4 +118,4 @@ Missing registration is the most common cause of "code is correct but doesn't wo
 
 ## Next Step
 
-Created/modified file, or completed a phase → `WF_CHECKPOINT`. All work done (including tests) → `WF_VERIFY`. Update WM with progress via `/swe-wm-update`, read that WF_* memory, report the new step to user.
+Created/modified file, or completed a phase → `WF_CHECKPOINT`. All work done (including tests) → `WF_VERIFY`. Update WM with progress via `/swe-wm-update`, read that WF_* memory, output the step banner (CLAUDE_META).

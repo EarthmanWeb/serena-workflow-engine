@@ -86,7 +86,7 @@ Do not flail with variations of the same broken approach.
 
 1. Follow project-specific debugging patterns. Check `REF_*` memories.
 2. Log all findings in WM.
-3. Summarize issues and proposed fixes for user review.
+3. State the recommended fix in ≤2 lines; full findings live in WM — do NOT re-summarize them. Fix choices go through AskUserQuestion.
 
 ## User Interaction
 
