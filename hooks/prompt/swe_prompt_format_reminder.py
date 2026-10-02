@@ -58,10 +58,10 @@ def main():
         print(
             f"⚠️ FORMAT BUDGET: your previous turn {verb}. This turn: lead with the "
             "result, bullets over paragraphs, NO recap/status/next-steps block, end "
-            "on the result or the one blocking question. The detail budget applies "
-            "only when the user asked for it — a `DETAIL:` prefix or natural asks "
-            "(review / report / explain / analysis / summary of / total / walk me "
-            "through / why)."
+            "on the result; ask any blocking question via the AskUserQuestion tool. "
+            "The detail budget applies only when the user asked for it — a `DETAIL:` "
+            "prefix or natural asks (review / report / explain / analysis / summary "
+            "of / total / walk me through / why)."
         )
     sys.exit(0)
 

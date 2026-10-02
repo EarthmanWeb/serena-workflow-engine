@@ -270,8 +270,9 @@ def evaluate(assistant_since_user, last_user_text, terse_limit, detail_limit, re
         reason = (
             f"RESPONSE FORMAT GATE: emitted {', '.join(violations)} — NO recap, NO "
             "status summary, NO closing wrap-up. The work is already visible in the "
-            "tool calls. Re-answer with ONLY the result or the single question you "
-            "need answered (<=10 lines). Do not apologize."
+            "tool calls. Re-answer with ONLY the result; any decision you need from "
+            "the user goes through the AskUserQuestion tool, never prose (<=10 lines). "
+            "Do not apologize."
         )
         return reason, scanned, words
 

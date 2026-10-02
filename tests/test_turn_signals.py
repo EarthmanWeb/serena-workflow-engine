@@ -312,6 +312,30 @@ class TestUnresolvedItems(unittest.TestCase):
         text = "I can make DESCRIPTION use the plain text of event_content."
         self.assertEqual(ts.unresolved_items(text), [text])
 
+    def test_say_the_word(self):
+        text = "Say the word and I'll push it."
+        self.assertEqual(ts.unresolved_items(text), [text])
+
+    def test_happy_to_wire_that_up(self):
+        text = "Happy to wire that up."
+        self.assertEqual(ts.unresolved_items(text), [text])
+
+    def test_glad_to_add_that(self):
+        text = "Glad to add that."
+        self.assertEqual(ts.unresolved_items(text), [text])
+
+    def test_next_step_would_be_to(self):
+        text = "Next step would be to run the migration."
+        self.assertEqual(ts.unresolved_items(text), [text])
+
+    def test_one_option_is_to(self):
+        text = "One option is to switch to ntfy."
+        self.assertEqual(ts.unresolved_items(text), [text])
+
+    def test_if_you_want_i_can_add_a_hook(self):
+        text = "If you want, I can add a hook for that."
+        self.assertEqual(ts.unresolved_items(text), [text])
+
     def test_two_item_sample_reply_yields_at_least_three_items(self):
         text = (
             "Decisions for you:\n"
@@ -353,6 +377,18 @@ class TestUnresolvedItems(unittest.TestCase):
     def test_cant_if_clause_ignored(self):
         self.assertEqual(
             ts.unresolved_items("I can't reproduce it if the flag is unset."), [])
+
+    def test_double_quoted_offer_is_cited_not_asked(self):
+        text = 'That\'s the "if you want, I can…" pattern you described.'
+        self.assertEqual(ts.unresolved_items(text), [])
+
+    def test_curly_quoted_offer_is_cited_not_asked(self):
+        text = "That’s the “Happy to wire that up” line again."
+        self.assertEqual(ts.unresolved_items(text), [])
+
+    def test_bold_label_with_trailing_text_not_a_heading(self):
+        text = "**Questions:** what in the harness blocks X"
+        self.assertEqual(ts.unresolved_items(text), [])
 
     def test_empty_text_no_items(self):
         self.assertEqual(ts.unresolved_items(""), [])

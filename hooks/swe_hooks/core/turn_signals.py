@@ -85,6 +85,11 @@ def ends_with_question(text):
 _FENCED_CODE_RE = re.compile(r"```.*?```|~~~.*?~~~", re.DOTALL)
 _INLINE_CODE_RE = re.compile(r"`[^`\n]*`")
 _URL_RE = re.compile(r"https?://\S+")
+# Quoted material (single-line double-quote or curly-quote spans) is being
+# cited, not asked — "if you want, I can…" inside quotes describes a pattern,
+# it is not itself an offer to the user.
+_DOUBLE_QUOTED_RE = re.compile(r'"[^"\n]*"')
+_CURLY_QUOTED_RE = re.compile(r"“[^”\n]*”")
 # A short standalone line (markdown heading, bold, or bare label) naming a
 # section of open items the user still has to act on.
 _PENDING_HEADING_RE = re.compile(
@@ -101,12 +106,18 @@ _MAX_HEADING_LEN = 40
 # Indirect asks phrased as statements — they still leave a decision with the
 # user ("Tell me if you want it removed.", "Happy to add that too.").
 _INVITE_RE = re.compile(
-    r"\b(?:tell me|let me know|say the word|ping me|confirm)\b.*\b(?:if|whether|which|when|what|how)\b"
+    r"\b(?:tell me|let me know|ping me|confirm)\b.*\b(?:if|whether|which|when|what|how)\b"
+    r"|\bsay the word\b|\bjust say\b|\bgive me the go-?ahead\b"
     r"|\bif you(?:'d| would)? (?:want|like|prefer|need)\b"
-    r"|\b(?:i can|i could|happy to|glad to)\b(?!')(?:.*\b(?:also|too|instead)\b)"
+    r"|\b(?:i can|i could)\b(?!')(?:.*\b(?:also|too|instead)\b)"
+    r"|\bhappy to\b\s+\w+|\bglad to\b\s+\w+"
     r"|\b(?:i can|i could)(?!')\s+(?:also\s+|just\s+|then\s+)?(?:make|add|change|fix|implement|remove|switch|stop|update|rename|refactor|write|create|drop|run|re-?run)\b"
     r"|\b(?:want|would you like) me to\b"
-    r"|\byour call\b|\bup to you\b",
+    r"|\byour call\b|\bup to you\b"
+    r"|\bnext step (?:would be|is|could be) to\b"
+    r"|\b(?:one|another) option (?:is|would be)\b"
+    r"|\bwe could (?:also )?\w+"
+    r"|\bi(?:'d| would) (?:suggest|recommend)\b",
     re.IGNORECASE,
 )
 _SENTENCE_RE = re.compile(r"[^.!?\n]+[.!?]?")
@@ -116,10 +127,13 @@ _QUESTION_END_RE = re.compile(r"[\w\"')\]]\?$")
 
 
 def _strip_non_prose(text):
-    """Drop code, URLs and blockquote lines — '?' there is not a question."""
+    """Drop code, URLs, quoted spans and blockquote lines — '?' there is not
+    a question, and quoted text is cited material, not an ask."""
     text = _FENCED_CODE_RE.sub("", text)
     text = _INLINE_CODE_RE.sub("", text)
     text = _URL_RE.sub("", text)
+    text = _DOUBLE_QUOTED_RE.sub("", text)
+    text = _CURLY_QUOTED_RE.sub("", text)
     return "\n".join(l for l in text.splitlines() if not l.lstrip().startswith(">"))
 
 
