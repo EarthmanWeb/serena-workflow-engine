@@ -52,7 +52,7 @@ Before debugging, load:
 
 ## Subagent Scope-Gate Routing
 
-A subagent `[scope-gate]` failure report (test/edit/bash streak or budget trip) routes HERE. Debug via a NEW scoped debug agent — sonnet first for ordinary failures; opus directly when the failure is cross-system, concurrency/race, security, or root cause is unclear after evidence gathering (tag `[opus-justified: <reason>]`) — NEVER by `[scope-extend]`-ing the stuck agent into open-ended debugging. See `mem:feature/FEATURE_SUBAGENTS` "Scope Limits on Failure".
+A subagent `[scope-gate]` failure report (test/edit/bash streak or budget trip) routes HERE. Debug via a NEW scoped debug agent — sonnet first for ordinary failures; opus directly when the failure is cross-system, concurrency/race, security, or root cause is unclear after evidence gathering (tag `[opus-justified: <reason>]`) — NEVER by `[scope-extend]`-ing the stuck agent into open-ended debugging. See `mem:dom/DOM_SUBAGENTS_PROMPT_CONTRACT` for scope limits on failure.
 
 ## Routing
 

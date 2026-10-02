@@ -20,7 +20,7 @@ metadata:
 
 - Pass `run_in_background: true` on EVERY Agent/Task call. This is the DEFAULT and the REQUIRED value — never omit it.
 - Foreground (`run_in_background: false`) ONLY when the orchestrator has nothing else to do until the result returns (e.g. docs-gate onboarding) AND the prompt carries a literal `[foreground-justified: <reason>]` tag. No subagent_type exemption — `Explore`/`Plan`/`general-purpose` all require the tag to run foreground.
-- `swe_pre_agent_model_gate.py` DENIES any Agent/Task call missing `run_in_background: true` that also lacks the `[foreground-justified: <reason>]` tag — see `mem:dom/DOM_SWE_HOOKS_PRE_GATES` check 5.
+- `swe_pre_agent_model_gate.py` DENIES any Agent/Task call missing `run_in_background: true` that also lacks the `[foreground-justified: <reason>]` tag — see `mem:dom/DOM_SWE_HOOKS_PRE_GATES_AGENT` check 5.
 - Foreground calls do NOT reset the orchestrator-drift counter; only background delegations (or a Workflow call) do — see `mem:dom/DOM_SWE_HOOKS_POST`.
 - Add `isolation: "worktree"` for file isolation when needed, independent of background/foreground.
 

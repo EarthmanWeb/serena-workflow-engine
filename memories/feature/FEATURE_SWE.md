@@ -94,7 +94,7 @@ A docpending link surfaced by the PRIMARY feature is satisfied by read, planned 
 
 ## Hooks — Doc-Gate Fallback
 
-`[doc-gate]` (`swe_pre_edit_validate.py`) falls back to extension-matched `dev/DEV_<LANG>` + `feature/FEATURE_DEV_STANDARDS` when a project's dev-standards memories carry no `paths:` front-matter for the edited file — `mem:dom/DOM_SWE_HOOKS_PRE_GATES`. Give every `feature/*`/`dev/*` memory a `paths:` glob matching its governed files — precise `paths:` matching beats the extension fallback (the fallback cannot distinguish sibling languages sharing an extension, e.g. `.blade.php` vs plain `.php`).
+`[doc-gate]` (`swe_pre_edit_validate.py`) falls back to extension-matched `dev/DEV_<LANG>` + `feature/FEATURE_DEV_STANDARDS` when a project's dev-standards memories carry no `paths:` front-matter for the edited file — `mem:dom/DOM_SWE_HOOKS_PRE_GATES_DOCS`. Give every `feature/*`/`dev/*` memory a `paths:` glob matching its governed files — precise `paths:` matching beats the extension fallback (the fallback cannot distinguish sibling languages sharing an extension, e.g. `.blade.php` vs plain `.php`).
 
 ## Related Memories
 

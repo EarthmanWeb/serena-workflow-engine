@@ -37,10 +37,10 @@ Feature gates block specific tools until the relevant FEATURE_* memory is read. 
 
 Unlike `test`/`sweep`, `doc-gate` never caches a pass into a sentinel file — it re-checks `required_docs_for_path` against the MAIN agent's own docreads on every edit.
 
-- `required_docs_for_path` = every `feature/*`/`dev/*` memory whose front-matter `paths:` glob matches the target file, PLUS `feature/FEATURE_TESTS` (+ `dev/DEV_TESTS` if present) when the target is a test artifact. No `paths:`-matched `dev/*` name → extension-based fallback (`dev/DEV_<LANG>` + `feature/FEATURE_DEV_STANDARDS`), `mem:dom/DOM_SWE_HOOKS_PRE_GATES` doc-gate section.
+- `required_docs_for_path` = every `feature/*`/`dev/*` memory whose front-matter `paths:` glob matches the target file, PLUS `feature/FEATURE_TESTS` (+ `dev/DEV_TESTS` if present) when the target is a test artifact. No `paths:`-matched `dev/*` name → extension-based fallback (`dev/DEV_<LANG>` + `feature/FEATURE_DEV_STANDARDS`), `mem:dom/DOM_SWE_HOOKS_PRE_GATES_DOCS`.
 - Scope: `collect_values_session(stream_path, agent_id=None)` — main agent only, WHOLE SESSION (not per-task): a memory read earlier in the session satisfies a later task's edit. Subagent enforcement is REMOVED from this gate.
-- A subagent's `doc_requirements` are enforced ONCE, at delegation time, by `[sweep-gate]` in `swe_pre_agent_model_gate.py` — not per edit inside the subagent's own run. See `mem:dom/DOM_SWE_HOOKS_PRE_GATES` agent-gate section.
-- A Bash command's in-project write targets (`memory_fs.bash_write_targets`) get this same check, one per target, as if each were an Edit — see `mem:dom/DOM_SWE_HOOKS_PRE_GATES`.
+- A subagent's `doc_requirements` are enforced ONCE, at delegation time, by `[sweep-gate]` in `swe_pre_agent_model_gate.py` — not per edit inside the subagent's own run. See `mem:dom/DOM_SWE_HOOKS_PRE_GATES_AGENT`.
+- A Bash command's in-project write targets (`memory_fs.bash_write_targets`) get this same check, one per target, as if each were an Edit — see `mem:dom/DOM_SWE_HOOKS_PRE_GATES_DOCS`.
 
 ### The `sweep-gate` Gate (delegation-time, no sentinel)
 

@@ -110,7 +110,7 @@ When a user instruction contradicts a memory:
 - Orchestrator mode is the DEFAULT for 2+ independent subtasks: classify, split into disjoint-file tracks, launch ALL as parallel background subagents in ONE message, collect, verify, chain the next stage — do NOT do the task work yourself. Every `Agent` call sets `model` explicitly: `haiku`=routine, `sonnet`=implementation, `opus`=novel design, hard/cross-system debugging, security, concurrency/FSM logic, or operator request (tag `[opus-justified: <reason>]`) — NEVER downgrade hard work to clear the gate, `fable`=NEVER for subagents without `[fable-justified: <reason>]`. See `feature/FEATURE_SUBAGENTS` for the full stage loop, model-tier table, and prompt contract.
 - Parallel + cheaper agents are the PRIMARY token-reduction lever, not a nicety — solo main-agent grinding past 12 undelegated task-work calls is edit-gate BLOCKED (`swe_pre_edit_validate.py`) until a delegation happens or `single-agent: <reason>` is recorded in WM Context.
 - Any waiting/polling work (test runs, builds, CI, deploys, remote queues) MUST run inside ONE background subagent that both does the work and polls it, then reports on completion — NEVER start it with `Bash run_in_background` and poll it yourself with a blocking loop.
-- A subagent failure report goes to a NEW, explicitly scoped debug agent — NEVER let a delegated agent free-debug past its task; see `feature/FEATURE_SUBAGENTS` "Scope Limits on Failure".
+- A subagent failure report goes to a NEW, explicitly scoped debug agent — NEVER let a delegated agent free-debug past its task; see `mem:dom/DOM_SUBAGENTS_PROMPT_CONTRACT`.
 
 ## Quality Standards
 
