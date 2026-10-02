@@ -109,7 +109,7 @@ Validate test commands against WF_DEBUG_TDD.
 
 ## `swe_pre_question_consent_gate.py` — PreToolUse (AskUserQuestion)
 
-Deny questions while `auto_approve`/`blanket_consent` is set in WM (override tag for destructive/scope changes).
+Deny questions while `blanket_consent` is set in WM (override tag for destructive/scope changes). `auto_approve: true` (WF_CLASSIFY 2b plan-approval skip) NEVER denies AskUserQuestion.
 
 - Pure fn `question_denied(blanket_consent, current_state, tool_input)` — True only when consent is set, state is NOT `WF_DONE`, and the call lacks `[consent-override]`.
 - ALLOW in `WF_DONE` regardless of consent — the completion round asks every `— deferred: chose <X>` Open Decisions entry queued under consent. State read via `StateManager(cwd, session_id).get_current_state()`.

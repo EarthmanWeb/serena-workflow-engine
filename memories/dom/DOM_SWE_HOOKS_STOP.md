@@ -33,7 +33,16 @@ Both Stop hooks import `hooks/swe_hooks/core/turn_signals.py` — pure helpers, 
 
 ## `swe_stop_continue_working.py` detail
 
-Order: `stop_hook_active` set → `user_spoke_mid_turn(transcript_path)` allow; THEN the ledger check `wm_open_decisions(cwd, session_id)` (`core/session.py`, beside `wm_has_blanket_consent`) — unchecked `- [ ]` entries in WM `## Open Decisions` — PRIMARY and deterministic; THEN the `unresolved_items(final_reply_text())` prose scan as backstop. `items` = `[decision]`-prefixed ledger entries + prose-scan hits. Non-empty `items` in ANY state (incl. WF_DONE/WF_VERIFY) → `decision: block` listing ALL items, with reason from `unresolved_items_reason()` instructing AskUserQuestion (one question per item, 2-4 options, then terse summary with no questions/offers/pending sections); logs `stop_blocked` reason `open_decisions` when the ledger is non-empty, else `unresolved_items`. Under WM blanket consent (`session.wm_has_blanket_consent`) the reason instead says resolve each item yourself; destructive only via AskUserQuestion with `[consent-override]`. The old "ends_with_question → allow stop" guard is REMOVED — ends_with_question still used by swe_stop_response_format.py.
+Order: `stop_hook_active` set → `user_spoke_mid_turn(transcript_path)` allow; THEN the ledger check `wm_open_decision_entries(cwd, session_id)` (`core/session.py`, beside `wm_has_blanket_consent`) — unchecked `- [ ]` entries in WM `## Open Decisions` — PRIMARY and deterministic; THEN the `unresolved_items(final_reply_text())` prose scan as backstop. `items` = `[decision]`-prefixed ledger entries + prose-scan hits. Non-empty `items` in ANY state (incl. WF_DONE/WF_VERIFY) → `decision: block` listing ALL items, with reason from `unresolved_items_reason()` instructing AskUserQuestion (one question per item, 2-4 options, then terse summary with no questions/offers/pending sections); logs `stop_blocked` reason `open_decisions` when the ledger is non-empty, else `unresolved_items`. Under WM blanket consent (`session.wm_has_blanket_consent`) the reason instead says resolve each item yourself; destructive only via AskUserQuestion with `[consent-override]`. The old "ends_with_question → allow stop" guard is REMOVED — ends_with_question still used by swe_stop_response_format.py.
+
+### Deferred-decision queue (`ledger_blocking_items`)
+
+`ledger_blocking_items(entries, blanket_consent, current_state)` filters `wm_open_decision_entries` tuples `(text, deferred)` before blocking:
+
+- Blanket consent active AND state != `WF_DONE` → drop entries where `deferred` is True (text matches `DEFERRED_DECISION_RE`: `— deferred:`) — these do NOT block the stop.
+- Same condition, non-deferred unchecked entries + prose-scan hits still block — reason instructs recording `- [ ] <decision> — options: A | B — deferred: chose <A>` instead of asking now.
+- State `WF_DONE` OR no blanket consent → ALL unchecked entries block, deferred or not — reason lists each deferred entry's queued choice first as "recommended", applies a changed answer before ending, marks the entry `- [x]`.
+- `swe_pre_question_consent_gate.py`'s `question_denied` ALLOWS AskUserQuestion in `WF_DONE` regardless of consent — this is how the deferred queue gets asked at completion.
 
 ## `swe_stop_response_format.py` detail
 
