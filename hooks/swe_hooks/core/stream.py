@@ -43,6 +43,49 @@ def get_feature_sentinel_path(session_id: str, gate_name: str) -> str:
     return os.path.join(get_stream_dir(), f'.{gate_name}_feature_{session_id}')
 
 
+def get_edit_mode_path(session_id: str) -> str:
+    """Sentinel path for the session's edit-mode flag.
+
+    Pattern: .serena/streams/.edit_mode_{session_id} — same family as
+    get_sentinel_path (init) / get_feature_sentinel_path (test/sweep gates).
+    Presence of the file = edit mode ON; absence = OFF. Content is a small
+    JSON blob (set_at epoch) for debuggability, never parsed for the flag
+    itself — existence is the signal, same as the init sentinel.
+    """
+    return os.path.join(get_stream_dir(), f'.edit_mode_{session_id}')
+
+
+def is_edit_mode(session_id: str) -> bool:
+    """True when the edit-mode sentinel exists for `session_id`."""
+    if not session_id:
+        return False
+    return os.path.exists(get_edit_mode_path(session_id))
+
+
+def set_edit_mode(session_id: str, on: bool) -> bool:
+    """Turn the session's edit-mode flag on or off. Returns True on success.
+
+    on=True writes the sentinel (best-effort, mirrors append_event's
+    IOError swallow). on=False removes it if present; missing-file is not
+    an error.
+    """
+    if not session_id:
+        return False
+    path = get_edit_mode_path(session_id)
+    try:
+        if on:
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, 'w') as f:
+                json.dump({"session_id": session_id, "set_at": int(time.time())},
+                          f, separators=(',', ':'))
+        else:
+            if os.path.exists(path):
+                os.remove(path)
+        return True
+    except IOError:
+        return False
+
+
 def append_event(stream_path: str, event_type: str, **data):
     """Append an event to the stream. O(1) append, no reads."""
     event = {"t": int(time.time()), "type": event_type}

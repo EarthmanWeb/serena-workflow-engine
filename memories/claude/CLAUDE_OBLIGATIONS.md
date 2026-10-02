@@ -46,11 +46,13 @@ Priority order: KISS → DRY → YAGNI.
 
 ## Direct Instruction Fast Path
 
-When the user names the target literally mid-task (a `#id`/`.class` selector, a quoted string, a value, a file path): pick the destination from this session's work or the one obvious file. Read ONLY that file. Edit. Report.
+Applies ONLY in user-enabled edit mode, in `WF_EXECUTE`. Edit mode turns ON via the phrase "edit mode"/"enter edit mode"/"edit mode on" or `/swe-edit-mode`; turns OFF via "exit edit mode"/"edit mode off" or the command, and auto-clears on leaving `WF_EXECUTE` for `WF_CLASSIFY` (new task/pivot). Outside edit mode, or outside `WF_EXECUTE`: normal workflow applies, including delegation — do NOT fast-path.
+
+In edit mode + `WF_EXECUTE`, when the user names the target literally (a `#id`/`.class` selector, a quoted string, a value, a file path): pick the destination from this session's work or the one obvious file. Read ONLY that file. Edit. Report.
 
 - NEVER search for where the target originates. NEVER confirm the target exists before editing.
 - Ask (via AskUserQuestion) ONLY when two destinations are equally plausible — this limits fast-path lookups, not questions in general.
-- The prompt-hook `⚡ DIRECT INSTRUCTION` note signals this mode.
+- The prompt-hook `⚡ DIRECT INSTRUCTION` note signals this mode. NEVER fires on a `<cross-session-message>`/`<agent-message>`/background-notification wrapper, even in edit mode.
 
 ## Always Do
 

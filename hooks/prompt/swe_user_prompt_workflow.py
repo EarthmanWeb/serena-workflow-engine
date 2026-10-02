@@ -28,7 +28,7 @@ try:
     from swe_hooks.core.state_manager import StateManager
     from swe_hooks.core.stream import (
         get_stream_path, get_event_count, get_sentinel_path, append_event,
-        append_task_boundary,
+        append_task_boundary, is_edit_mode, set_edit_mode,
     )
     from swe_hooks.core.output import emit_once, WF_INIT_GUIDANCE
 except ImportError as e:
@@ -395,10 +395,76 @@ def is_direct_instruction(prompt_clean: str) -> bool:
     return bool(_EDIT_VERB_RE.search(prompt_clean) and _has_literal_target(prompt_clean))
 
 
-# States in which a direct instruction gets the fast-path note instead of the
-# ambiguous-intent pivot analysis. WF_RESEARCH is deliberately excluded here —
-# it keeps its own research_exit_directive handling.
-DIRECT_INSTRUCTION_STATES = ('WF_EXECUTE', 'WF_CHECKPOINT', 'WF_VERIFY', 'WF_DEBUG_TDD')
+# The ONLY state in which a direct instruction gets the fast-path note instead
+# of the ambiguous-intent pivot analysis — gated ALSO on edit_mode being ON
+# (see is_edit_mode / EDIT_MODE_ON_RE below). Narrowed from the original
+# {WF_EXECUTE, WF_CHECKPOINT, WF_VERIFY, WF_DEBUG_TDD} set: the fast path
+# misfired on pasted specs, ticket lists, and cross-session agent messages in
+# CHECKPOINT/VERIFY/DEBUG_TDD, where "stay and apply immediately, do not
+# search/confirm" is the wrong default. Edit mode is an explicit, user-opted
+# narrow window (literal edits only, WF_EXECUTE only).
+DIRECT_INSTRUCTION_STATES = ('WF_EXECUTE',)
+
+
+# --- Edit mode ---------------------------------------------------------------
+# Session flag gating the direct-instruction fast path (see
+# DIRECT_INSTRUCTION_STATES above). Stored as a sentinel file
+# (.serena/streams/.edit_mode_{session_id} — core.stream.get_edit_mode_path),
+# the same family as the init/test/sweep sentinels. Turned on/off by a leading
+# phrase in the prompt, or by /swe-edit-mode (hooks/swe_hooks/tools/
+# edit_mode.py). Auto-clears whenever this hook itself drives a transition out
+# of WF_EXECUTE into WF_CLASSIFY (new_task / same-session-new-task branches
+# below) — see docstring on `_clear_edit_mode_on_classify_entry`. A pivot the
+# MODEL self-drives via swe_wm_transition/set_state.py (not through this hook)
+# is NOT caught here — documented gap, see task report.
+
+# Leading or whole-prompt phrase only — "edit mode" mentioned mid-sentence
+# elsewhere ("the edit mode toggle is broken") must NOT flip the flag.
+EDIT_MODE_ON_RE = re.compile(
+    r'^\s*(enter edit mode|edit mode on|edit mode)\s*[.!]?\s*$',
+    re.IGNORECASE,
+)
+EDIT_MODE_OFF_RE = re.compile(
+    r'^\s*(exit edit mode|edit mode off|leave edit mode)\s*[.!]?\s*$',
+    re.IGNORECASE,
+)
+
+EDIT_MODE_ON_NOTE = (
+    "✏️ EDIT MODE ON — literal edits go straight to WF_EXECUTE; "
+    "say 'exit edit mode' to leave\n\n"
+)
+EDIT_MODE_OFF_NOTE = "EDIT MODE OFF\n\n"
+
+
+# A cross-session / background-agent message wrapper. Even with edit mode ON,
+# these never qualify for the direct-instruction fast path — a relayed
+# message is not the user naming a literal edit target in their own words.
+# BACKGROUND_NOTIFICATION_RE (below) already excludes <task-notification>/
+# "[SYSTEM NOTIFICATION"/"Agent ... finished" from classification entirely;
+# this additionally covers <cross-session-message> and <agent-message>
+# wrappers that DO still get classified (they may carry genuine task content)
+# but must never trip the fast path.
+CROSS_SESSION_WRAPPER_RE = re.compile(
+    r'<cross-session-message\b|<agent-message\b', re.IGNORECASE,
+)
+
+
+def detect_edit_mode_toggle(prompt_clean: str):
+    """Return 'on', 'off', or None for an explicit edit-mode phrase toggle in
+    `prompt_clean` (already run through strip_injected_context).
+
+    Matches ONLY a leading/whole-prompt phrase — "edit mode on", "enter edit
+    mode", "edit mode" alone, "exit edit mode", "edit mode off", "leave edit
+    mode" — never an incidental mid-sentence mention (e.g. "the edit mode
+    toggle is broken" matches neither).
+    """
+    if not prompt_clean:
+        return None
+    if EDIT_MODE_OFF_RE.match(prompt_clean):
+        return 'off'
+    if EDIT_MODE_ON_RE.match(prompt_clean):
+        return 'on'
+    return None
 
 
 def direct_instruction_note(current_state: str, wm_file: str, stream_info: str) -> str:
@@ -601,6 +667,45 @@ def main():
         if session_id:
             append_event(get_stream_path(session_id), 'prompt', s=session_id)
 
+        # ═══ EDIT MODE: explicit phrase toggle ═══
+        # "edit mode" / "enter edit mode" / "edit mode on" (leading or
+        # whole-prompt) turns it ON; "exit edit mode" / "edit mode off" /
+        # "leave edit mode" turns it OFF. Never fires inside a cross-session/
+        # agent-message/background wrapper — a relayed message toggling the
+        # flag on the user's behalf is not a real user instruction. Short-
+        # circuits the turn: the toggle itself IS the whole instruction, same
+        # as the slash-command fast track below.
+        if (session_id and not CROSS_SESSION_WRAPPER_RE.search(prompt)
+                and not is_background_notification(prompt)):
+            toggle = detect_edit_mode_toggle(prompt_clean)
+            if toggle == 'on':
+                set_edit_mode(session_id, True)
+                context = EDIT_MODE_ON_NOTE + (
+                    "Edit mode is now ON for this session. While in WF_EXECUTE, "
+                    "a literally-targeted edit instruction gets the "
+                    "⚡ DIRECT INSTRUCTION fast path (see "
+                    "claude/CLAUDE_OBLIGATIONS). Outside WF_EXECUTE it has no "
+                    "effect yet — routing continues normally until execution starts."
+                )
+                output = {
+                    "hookSpecificOutput": {
+                        "hookEventName": "UserPromptSubmit",
+                        "additionalContext": context
+                    }
+                }
+                print(json.dumps(output))
+                sys.exit(0)
+            if toggle == 'off':
+                set_edit_mode(session_id, False)
+                output = {
+                    "hookSpecificOutput": {
+                        "hookEventName": "UserPromptSubmit",
+                        "additionalContext": EDIT_MODE_OFF_NOTE + "Edit mode is now OFF for this session."
+                    }
+                }
+                print(json.dumps(output))
+                sys.exit(0)
+
         # ═══ FAST TRACK: direct slash-command invocation ═══
         # A slash command fully encodes intent — there is nothing to classify.
         # Create the WM + sentinel directly at WF_EXECUTE so the init gate opens
@@ -759,16 +864,27 @@ NO classification, NO WF_INIT chain, NO WF_CLASSIFY. Fast-tracked to WF_EXECUTE.
                     wm_file = create_wm_and_sentinel(cwd, session_id)
                 prompt_intent = 'new_task'
         
-        # ═══ DIRECT INSTRUCTION FAST PATH ═══
+        # ═══ DIRECT INSTRUCTION FAST PATH (edit mode only) ═══
         # A literally-targeted edit instruction mid-task ("hide #foo in the
-        # admin") must STAY in place and be applied immediately — not routed
+        # admin") STAYS in place and is applied immediately — not routed
         # through pivot_analysis_note, which nudges the model to re-search or
-        # re-confirm something it was just told outright. Only applies in an
-        # active execution-family state, only when the prompt hook did NOT
-        # already decide 'new_task' (a genuine pivot still re-classifies),
-        # and WF_RESEARCH is excluded — it keeps research_exit_directive.
+        # re-confirm something it was just told outright. Requires ALL of:
+        #   - edit mode ON for this session (user opted in via phrase or
+        #     /swe-edit-mode) — misfired on pasted specs/ticket lists/
+        #     cross-session messages when it fired unconditionally;
+        #   - current_state == WF_EXECUTE (narrowed from the former
+        #     {WF_EXECUTE, WF_CHECKPOINT, WF_VERIFY, WF_DEBUG_TDD} set);
+        #   - prompt hook did NOT already decide 'new_task' (a genuine pivot
+        #     still re-classifies);
+        #   - prompt is NOT a cross-session/agent-message wrapper, even with
+        #     edit mode on — a relayed message is never the user naming a
+        #     target in their own words.
+        # WF_RESEARCH keeps its own research_exit_directive handling
+        # regardless (it was never in DIRECT_INSTRUCTION_STATES).
         if (current_state in DIRECT_INSTRUCTION_STATES
                 and prompt_intent != 'new_task'
+                and is_edit_mode(session_id)
+                and not CROSS_SESSION_WRAPPER_RE.search(prompt)
                 and is_direct_instruction(prompt_clean)):
             stream_info = ""
             if session_id:
@@ -884,6 +1000,7 @@ Or fast-path: mcp__plugin_swe_serena__read_memory(memory_name="wf/WF_ARCH_REVIEW
         elif prompt_intent == 'new_task':
             # New task - transition to WF_CLASSIFY
             if current_state not in ['WF_CLASSIFY', 'WF_INIT']:
+                leaving_execute_for_classify = (current_state == 'WF_EXECUTE')
                 success, _ = state_mgr.transition_to('WF_CLASSIFY')
                 if success and session_id:
                     # Genuine new task: stamp the boundary. Continuation /
@@ -891,6 +1008,14 @@ Or fast-path: mcp__plugin_swe_serena__read_memory(memory_name="wf/WF_ARCH_REVIEW
                     # the in-flight task's docreads for sweep verification.
                     append_task_boundary(
                         get_stream_path(session_id), current_state, session_id)
+                    if leaving_execute_for_classify:
+                        # Auto-off: edit mode scopes to WF_EXECUTE only. This
+                        # catches every WF_EXECUTE -> WF_CLASSIFY pivot THIS
+                        # HOOK drives (new_task intent). A pivot the MODEL
+                        # self-drives via swe_wm_transition/set_state.py
+                        # bypasses this hook entirely — NOT caught here (gap;
+                        # see task report / DOM_SWE_HOOKS_PROMPT_ROUTING).
+                        set_edit_mode(session_id, False)
                 current_state = 'WF_CLASSIFY'
                 if not wm_file:
                     wm_file = create_wm_and_sentinel(cwd, session_id)

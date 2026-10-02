@@ -80,7 +80,7 @@ Param cheat-sheet: `mem:ref/REF_WF_EXECUTE_SERENA_EDIT_TOOLS`.
 
 ## Parallel Execution — Orchestrator Mode
 
-Parallel subagents launch here. Orchestrator mode is MANDATORY per `mem:feature/FEATURE_SUBAGENTS` when ANY hold: ≥2 independent subtasks exist, `parallel_agents: true` noted in WM, 6+ files affected, or 3+ layers touched. Read that memory for the full stage loop, model-tier routing, prompt contract, anti-patterns BEFORE launching. Do NOT do the file-edit/test-run work yourself when its conditions apply.
+Parallel subagents launch here. Orchestrator mode is MANDATORY per `mem:feature/FEATURE_SUBAGENTS` when ANY hold: ≥2 independent subtasks exist, `parallel_agents: true` noted in WM, 6+ files affected, or 3+ layers touched. Read `mem:feature/FEATURE_SUBAGENTS` for the stage loop and anti-patterns BEFORE launching; model-tier routing lives in `mem:dom/DOM_SUBAGENTS_MODEL_ROUTING`, the prompt contract in `mem:dom/DOM_SUBAGENTS_PROMPT_CONTRACT`. Do NOT do the file-edit/test-run work yourself when its conditions apply.
 
 Hard-block thresholds (enforced by `swe_post_orchestrator_drift.py` / `swe_pre_edit_validate.py`, full rules `mem:feature/FEATURE_SUBAGENTS`): 6 consecutive main-agent task-work calls = advisory nudge; 12 = HARD edit-gate block until a delegation or a recorded `single-agent: <reason>` resets it.
 
@@ -97,10 +97,10 @@ Agent({ description: "Task A", run_in_background: true, model: "<tier>",  // hai
 
 ## Direct Instructions
 
-On a `⚡ DIRECT INSTRUCTION` prompt-hook note, follow `mem:claude/CLAUDE_OBLIGATIONS` Direct Instruction Fast Path.
+Applies ONLY in user-enabled edit mode (phrase "edit mode"/"edit mode on" or `/swe-edit-mode`), in `WF_EXECUTE`. Outside edit mode: normal workflow, including delegation, applies — do NOT fast-path. On a `⚡ DIRECT INSTRUCTION` prompt-hook note, follow `mem:claude/CLAUDE_OBLIGATIONS` Direct Instruction Fast Path.
 
 - Origin lookups, runtime-source enumeration, and delegation do NOT apply to a single literal edit.
-- Orchestrator mode applies to multi-file work, NEVER to a ≤5-line single-file literal edit.
+- Edit mode literal edits ≤5 lines in one file are exempt from orchestrator mode.
 
 ## Rules
 

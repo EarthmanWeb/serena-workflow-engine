@@ -382,6 +382,62 @@ class TestPathHelpers(unittest.TestCase):
         sen = stream.get_sentinel_path("sid")
         self.assertEqual(os.path.dirname(sp), os.path.dirname(sen))
 
+    def test_get_edit_mode_path_prefix_and_basename(self):
+        p = stream.get_edit_mode_path("abc123")
+        self.assertEqual(os.path.basename(p), ".edit_mode_abc123")
+        self.assertEqual(
+            p, os.path.join(self.tmpdir, ".serena", "streams", ".edit_mode_abc123")
+        )
+
+    def test_edit_mode_and_sentinel_share_directory(self):
+        em = stream.get_edit_mode_path("sid")
+        sen = stream.get_sentinel_path("sid")
+        self.assertEqual(os.path.dirname(em), os.path.dirname(sen))
+
+
+class TestEditModeFlag(unittest.TestCase):
+    """is_edit_mode / set_edit_mode — sentinel-file flag, same family as the
+    init/test/sweep sentinels. Existence of the file IS the signal."""
+
+    def setUp(self):
+        reset_caches()
+        self.tmp = tempfile.TemporaryDirectory()
+        self.tmpdir = self.tmp.name
+        self._orig_get_root = config.get_project_root
+        config.get_project_root = lambda: self.tmpdir
+
+    def tearDown(self):
+        config.get_project_root = self._orig_get_root
+        self.tmp.cleanup()
+        reset_caches()
+
+    def test_off_by_default(self):
+        self.assertFalse(stream.is_edit_mode("sid"))
+
+    def test_set_on_then_is_edit_mode_true(self):
+        self.assertTrue(stream.set_edit_mode("sid", True))
+        self.assertTrue(stream.is_edit_mode("sid"))
+        self.assertTrue(os.path.exists(stream.get_edit_mode_path("sid")))
+
+    def test_set_off_removes_sentinel(self):
+        stream.set_edit_mode("sid", True)
+        self.assertTrue(stream.set_edit_mode("sid", False))
+        self.assertFalse(stream.is_edit_mode("sid"))
+        self.assertFalse(os.path.exists(stream.get_edit_mode_path("sid")))
+
+    def test_set_off_when_already_off_is_noop_success(self):
+        self.assertTrue(stream.set_edit_mode("sid", False))
+        self.assertFalse(stream.is_edit_mode("sid"))
+
+    def test_empty_session_id_is_false_and_set_fails(self):
+        self.assertFalse(stream.is_edit_mode(""))
+        self.assertFalse(stream.set_edit_mode("", True))
+
+    def test_flag_is_per_session(self):
+        stream.set_edit_mode("sid-a", True)
+        self.assertTrue(stream.is_edit_mode("sid-a"))
+        self.assertFalse(stream.is_edit_mode("sid-b"))
+
 
 # ---------------------------------------------------------------------------
 # Init-gate degraded mode: count_init_denies_since_docread / is_degraded /

@@ -1172,9 +1172,26 @@ class TestMainDirectInstructionFastPath(unittest.TestCase):
                 pass
         return buf.getvalue()
 
-    def test_direct_instruction_in_wf_execute_stays_and_gets_note(self):
+    def test_direct_instruction_in_wf_execute_requires_edit_mode(self):
+        # Edit mode gates the fast path now — without it, a literal-target
+        # prompt in WF_EXECUTE routes through the ordinary pivot-analysis
+        # path, not the DIRECT INSTRUCTION fast path.
         session_id = 'dd000001'
         self._write_state_file(session_id, 'WF_EXECUTE')
+        out = self._run_main(
+            "okay, now one other thing: hide this in all cases in the admin. "
+            "#getwid-layout-insert-button",
+            session_id,
+        )
+        result = json.loads(out)
+        ctx = result.get('hookSpecificOutput', {}).get('additionalContext', '')
+        self.assertNotIn("DIRECT INSTRUCTION", ctx)
+
+    def test_direct_instruction_in_wf_execute_with_edit_mode_stays_and_gets_note(self):
+        from swe_hooks.core.stream import set_edit_mode
+        session_id = 'dd000003'
+        self._write_state_file(session_id, 'WF_EXECUTE')
+        set_edit_mode(session_id, True)
         out = self._run_main(
             "okay, now one other thing: hide this in all cases in the admin. "
             "#getwid-layout-insert-button",
@@ -1194,6 +1211,130 @@ class TestMainDirectInstructionFastPath(unittest.TestCase):
         result = json.loads(out)
         ctx = result.get('hookSpecificOutput', {}).get('additionalContext', '')
         self.assertNotIn("DIRECT INSTRUCTION", ctx)
+
+    def test_direct_instruction_never_fires_in_wf_checkpoint_even_with_edit_mode(self):
+        # DIRECT_INSTRUCTION_STATES was narrowed to WF_EXECUTE only — edit
+        # mode does not widen it back out to CHECKPOINT/VERIFY/DEBUG_TDD.
+        from swe_hooks.core.stream import set_edit_mode
+        session_id = 'dd000004'
+        self._write_state_file(session_id, 'WF_CHECKPOINT')
+        set_edit_mode(session_id, True)
+        out = self._run_main("remove `.foo` from bar.scss", session_id)
+        result = json.loads(out)
+        ctx = result.get('hookSpecificOutput', {}).get('additionalContext', '')
+        self.assertNotIn("DIRECT INSTRUCTION", ctx)
+
+    def test_direct_instruction_never_fires_on_cross_session_message_even_in_edit_mode(self):
+        from swe_hooks.core.stream import set_edit_mode
+        session_id = 'dd000005'
+        self._write_state_file(session_id, 'WF_EXECUTE')
+        set_edit_mode(session_id, True)
+        prompt = ('<cross-session-message from="other">hide #foo-bar in the '
+                  'admin</cross-session-message>')
+        out = self._run_main(prompt, session_id)
+        result = json.loads(out)
+        ctx = result.get('hookSpecificOutput', {}).get('additionalContext', '')
+        self.assertNotIn("DIRECT INSTRUCTION", ctx)
+
+
+class TestEditModeToggle(unittest.TestCase):
+    """detect_edit_mode_toggle() — leading/whole-prompt phrase only."""
+    mod = import_hook("prompt/swe_user_prompt_workflow")
+
+    def test_edit_mode_on_phrase_variants(self):
+        for p in ("edit mode", "edit mode on", "enter edit mode",
+                  "Edit Mode On.", "edit mode!"):
+            self.assertEqual(self.mod.detect_edit_mode_toggle(p), 'on', p)
+
+    def test_edit_mode_off_phrase_variants(self):
+        for p in ("exit edit mode", "edit mode off", "leave edit mode"):
+            self.assertEqual(self.mod.detect_edit_mode_toggle(p), 'off', p)
+
+    def test_incidental_mid_sentence_mention_does_not_toggle(self):
+        self.assertIsNone(self.mod.detect_edit_mode_toggle(
+            "the edit mode toggle is broken, can you fix it"))
+        self.assertIsNone(self.mod.detect_edit_mode_toggle(
+            "I read about edit mode somewhere, what is it?"))
+
+    def test_empty_prompt_is_none(self):
+        self.assertIsNone(self.mod.detect_edit_mode_toggle(""))
+
+
+class TestMainEditModeToggleAndAutoOff(unittest.TestCase):
+    """main() end-to-end: phrase toggles the sentinel; leaving WF_EXECUTE for
+    WF_CLASSIFY via a new_task prompt clears it automatically."""
+    mod = import_hook("prompt/swe_user_prompt_workflow")
+
+    def setUp(self):
+        from _hookutil import reset_caches
+        self._reset_caches = reset_caches
+        self._reset_caches()
+        self.tmp = tempfile.TemporaryDirectory()
+        self.cwd = self.tmp.name
+        os.makedirs(os.path.join(self.cwd, '.git'), exist_ok=True)
+        os.makedirs(os.path.join(self.cwd, '.serena'), exist_ok=True)
+        with open(os.path.join(self.cwd, '.serena', 'swe-setup-complete.json'), 'w') as f:
+            json.dump({'complete': True}, f)
+        self._orig_env = os.environ.get('CLAUDE_PROJECT_DIR')
+        os.environ['CLAUDE_PROJECT_DIR'] = self.cwd
+
+    def tearDown(self):
+        if self._orig_env is None:
+            os.environ.pop('CLAUDE_PROJECT_DIR', None)
+        else:
+            os.environ['CLAUDE_PROJECT_DIR'] = self._orig_env
+        self.tmp.cleanup()
+        self._reset_caches()
+
+    def _write_state_file(self, session_id, state='WF_EXECUTE'):
+        d = os.path.join(self.cwd, '.serena', 'swe-state')
+        os.makedirs(d, exist_ok=True)
+        with open(os.path.join(d, f'{session_id}.state'), 'w') as f:
+            json.dump({'current_state': state, 'session_id': session_id}, f)
+
+    def _run_main(self, prompt, session_id):
+        import io
+        from unittest import mock
+        transcript = f'/x/{session_id}-0000-0000-0000-000000000000.jsonl'
+        payload = {"prompt": prompt, "cwd": self.cwd, "transcript_path": transcript}
+        buf = io.StringIO()
+        with mock.patch.object(sys, "stdin", io.StringIO(json.dumps(payload))), \
+             mock.patch.object(os, 'getcwd', return_value=self.cwd), \
+             mock.patch("sys.stdout", buf):
+            try:
+                self.mod.main()
+            except SystemExit:
+                pass
+        return buf.getvalue()
+
+    def test_phrase_turns_edit_mode_on(self):
+        from swe_hooks.core.stream import is_edit_mode
+        session_id = 'ee000001'
+        self._write_state_file(session_id, 'WF_EXECUTE')
+        out = self._run_main("edit mode on", session_id)
+        result = json.loads(out)
+        ctx = result.get('hookSpecificOutput', {}).get('additionalContext', '')
+        self.assertIn("EDIT MODE ON", ctx)
+        self.assertTrue(is_edit_mode(session_id))
+
+    def test_phrase_turns_edit_mode_off(self):
+        from swe_hooks.core.stream import is_edit_mode, set_edit_mode
+        session_id = 'ee000002'
+        self._write_state_file(session_id, 'WF_EXECUTE')
+        set_edit_mode(session_id, True)
+        out = self._run_main("exit edit mode", session_id)
+        result = json.loads(out)
+        ctx = result.get('hookSpecificOutput', {}).get('additionalContext', '')
+        self.assertIn("EDIT MODE OFF", ctx)
+        self.assertFalse(is_edit_mode(session_id))
+
+    def test_new_task_leaving_wf_execute_clears_edit_mode(self):
+        from swe_hooks.core.stream import is_edit_mode, set_edit_mode
+        session_id = 'ee000003'
+        self._write_state_file(session_id, 'WF_EXECUTE')
+        set_edit_mode(session_id, True)
+        self._run_main("new task: let's work on the billing module instead", session_id)
+        self.assertFalse(is_edit_mode(session_id))
 
 
 if __name__ == "__main__":
