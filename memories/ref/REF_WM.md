@@ -62,6 +62,11 @@ Session: <SESSION_ID>
 
 [Single feature key OR comma-separated list]
 
+## Open Decisions
+
+- [ ] <decision> — options: <A> | <B>
+- [x] <decision> — resolved: <choice>
+
 ### Progress
 
 - [ ] Step 1
@@ -117,6 +122,17 @@ Session: <SESSION_ID>
 ```
 
 - Status codes: `success`, `success_with_findings`, `needs_clarification`, `blocked`, `escalate_complexity`.
+
+## Open Decisions Ledger
+
+Section heading: `## Open Decisions`.
+
+- Record on discovery: `- [ ] <decision> — options: <A> | <B>`
+- Resolve via AskUserQuestion (or self-resolve under blanket consent), then mark: `- [x] <decision> — resolved: <choice>`
+- Record a decision the moment an option/follow-up for the user is identified — in ANY state.
+- NEVER leave an option in reply prose without a ledger entry.
+- Resolve every `- [ ]` entry via AskUserQuestion before ending the task; mark `[x]` with the chosen option.
+- Stop gate blocks turn end while unchecked entries exist.
 
 ## Rules
 

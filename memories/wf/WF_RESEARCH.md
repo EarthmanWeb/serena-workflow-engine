@@ -55,6 +55,7 @@ Applies to RUNTIME symptoms (rendering/behavior a user reports). Static-only exp
 
 - Report findings directly to the user.
 - Diagnosis tasks: apply the Diagnosis Exit Criteria below before reporting a cause.
+- Findings that leave the user a choice (fix variants, follow-up actions): record each in WM `## Open Decisions` when discovered; ask via AskUserQuestion before ending — NEVER present options only in prose.
 
 ## Diagnosis Exit Criteria
 

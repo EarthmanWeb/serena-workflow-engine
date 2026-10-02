@@ -93,6 +93,7 @@ mcp__swe-wm__swe_wm_read(session_id="{session_id}")
 - [ ] Update `Files` with files examined
 - [ ] Update `Progress` with research outcomes
 - [ ] Update `Notes` with findings
+- [ ] Open decisions recorded for any user-facing options surfaced
 
 ### WF_CONTINUE
 
@@ -110,6 +111,7 @@ mcp__swe-wm__swe_wm_read(session_id="{session_id}")
 - [ ] User approval status noted
 - [ ] Update `Progress` with review results
 - [ ] Update `Notes` with design decisions
+- [ ] Open decisions recorded for any user-facing options surfaced
 
 ### WF_EXECUTE
 
@@ -142,6 +144,7 @@ mcp__swe-wm__swe_wm_read(session_id="{session_id}")
 - [ ] Update `Notes` with memories updated during session
 - [ ] Follow-up items documented (if any)
 - [ ] All `Progress` items checked off
+- [ ] `## Open Decisions` has no unchecked entries — every decision resolved via AskUserQuestion and marked `[x]`
 
 ### WF_CLARIFY
 
@@ -177,7 +180,7 @@ mcp__swe-wm__swe_wm_update(
 
 `Current Task`, `Progress`, `Files`, `Notes`, `Requirements`,
 `Implementation Notes`, `Previous Task`, `Task Context`,
-`Affected Features`, `Context`, `Feature(s)`
+`Affected Features`, `Context`, `Feature(s)`, `Open Decisions`
 
 **Protected sections** (tool will reject these):
 

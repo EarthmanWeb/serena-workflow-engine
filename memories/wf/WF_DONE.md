@@ -21,6 +21,7 @@ metadata:
 - [ ] Feature memories updated when changed (`DOM_*`, `SYS_*`, `INDEX_*`)
 - [ ] No pending violations
 - [ ] User informed of follow-up items
+- [ ] `## Open Decisions` has no unchecked entries — every decision resolved via AskUserQuestion and marked `[x]`
 
 ## Summarize To User
 

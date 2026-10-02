@@ -71,6 +71,8 @@ Run the applicable test-verification steps (tests-as-deliverable, standard cover
 
 Fix all found violations before proceeding.
 
+- Verification follow-ups that need a user choice go into WM `## Open Decisions`; unchecked entries block completion at the stop gate.
+
 ## 7. Update WM
 
 Invoke `/swe-wm-update --from WF_VERIFY` — provides the complete checklist and template; handles reading, validating, and writing WM.

@@ -106,6 +106,7 @@ On a `⚡ DIRECT INSTRUCTION` prompt-hook note, follow `mem:claude/CLAUDE_OBLIGA
 
 - Make ONLY approved changes. Do NOT expand scope without asking.
 - Tests required for functional code; integration tests required for components interacting with external systems.
+- Discovered alternative/scope question during implementation: record it in WM `## Open Decisions` + ask via AskUserQuestion — NEVER present options only in prose.
 
 ### New File Creation
 
