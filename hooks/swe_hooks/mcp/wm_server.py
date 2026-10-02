@@ -58,7 +58,7 @@ ALLOWED_SECTIONS = [
     "Current Task", "Progress", "Files", "Notes",
     "Requirements", "Implementation Notes", "Previous Task",
     "Task Context", "Affected Features", "Context", "Feature(s)",
-    "Compliance Checklist", "Doc Claims Used",
+    "Compliance Checklist", "Doc Claims Used", "Open Decisions",
 ]
 
 VALID_STATUSES = [

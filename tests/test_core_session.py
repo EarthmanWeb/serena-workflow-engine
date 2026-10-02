@@ -345,6 +345,69 @@ class FindWorkingMemoryForSessionTests(unittest.TestCase):
         self.assertEqual(result, path)
 
 
+class WmOpenDecisionsTests(unittest.TestCase):
+    def setUp(self):
+        reset_caches()
+        self._orig_root = session.get_project_root
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = self.tmp.name
+        self.mem_dir = os.path.join(self.root, ".serena", "memories")
+        os.makedirs(self.mem_dir)
+        session.get_project_root = lambda: self.root
+
+    def tearDown(self):
+        session.get_project_root = self._orig_root
+        self.tmp.cleanup()
+        reset_caches()
+
+    def _write_wm(self, content, name="WM_abcd1234.md"):
+        path = os.path.join(self.mem_dir, name)
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(content)
+        return path
+
+    def test_unchecked_entries_returned_in_order(self):
+        self._write_wm(
+            "## Open Decisions\n"
+            "- [ ] First decision\n"
+            "- [ ] Second decision\n"
+        )
+        self.assertEqual(
+            session.wm_open_decisions(self.root, "abcd1234"),
+            ["First decision", "Second decision"],
+        )
+
+    def test_checked_entries_skipped(self):
+        self._write_wm(
+            "## Open Decisions\n"
+            "- [x] Resolved decision\n"
+            "- [ ] Still open\n"
+        )
+        self.assertEqual(
+            session.wm_open_decisions(self.root, "abcd1234"),
+            ["Still open"],
+        )
+
+    def test_section_absent_returns_empty(self):
+        self._write_wm("## Current Task\nsome task\n")
+        self.assertEqual(session.wm_open_decisions(self.root, "abcd1234"), [])
+
+    def test_file_absent_returns_empty(self):
+        self.assertEqual(session.wm_open_decisions(self.root, "nope9999"), [])
+
+    def test_parsing_stops_at_next_heading(self):
+        self._write_wm(
+            "## Open Decisions\n"
+            "- [ ] In section\n"
+            "## Notes\n"
+            "- [ ] Not a decision\n"
+        )
+        self.assertEqual(
+            session.wm_open_decisions(self.root, "abcd1234"),
+            ["In section"],
+        )
+
+
 class GetSessionContextTests(unittest.TestCase):
     def setUp(self):
         reset_caches()

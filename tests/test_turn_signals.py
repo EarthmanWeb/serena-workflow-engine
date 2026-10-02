@@ -302,9 +302,33 @@ class TestUnresolvedItems(unittest.TestCase):
             ["[section] Pending"],
         )
 
+    def test_pending_heading_decisions_for_you(self):
+        self.assertEqual(
+            ts.unresolved_items("Decisions for you:"),
+            ["[section] Decisions for you"],
+        )
+
+    def test_bare_offer_i_can_make(self):
+        text = "I can make DESCRIPTION use the plain text of event_content."
+        self.assertEqual(ts.unresolved_items(text), [text])
+
+    def test_two_item_sample_reply_yields_at_least_three_items(self):
+        text = (
+            "Decisions for you:\n"
+            "I can make DESCRIPTION use the plain text of event_content.\n"
+            "I can also make TITLE truncate at 80 chars.\n"
+        )
+        self.assertGreaterEqual(len(ts.unresolved_items(text)), 3)
+
     # --- negatives ---
     def test_plain_statement_no_items(self):
         self.assertEqual(ts.unresolved_items("Fixed the bug. All tests pass."), [])
+
+    def test_i_can_see_the_file_ignored(self):
+        self.assertEqual(ts.unresolved_items("I can see the file."), [])
+
+    def test_i_can_confirm_it_works_ignored(self):
+        self.assertEqual(ts.unresolved_items("I can confirm it works."), [])
 
     def test_fenced_code_question_ignored(self):
         text = "Here is the fix:\n```\nis this right?\n```\nDone."

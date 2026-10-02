@@ -93,7 +93,7 @@ _PENDING_HEADING_RE = re.compile(
     r"|pending(?: items?| tasks?| decisions?)?|outstanding(?: items?| tasks?)?"
     r"|unresolved(?: items?| questions?)?"
     r"|needs? (?:your )?(?:decision|input|confirmation|answer)s?"
-    r"|decisions? (?:needed|required)|remaining(?: work| tasks?| items?)?"
+    r"|decisions? (?:needed|required|for you)|remaining(?: work| tasks?| items?)?"
     r"|follow[- ]?ups?|to[- ]?dos?)$",
     re.IGNORECASE,
 )
@@ -104,6 +104,7 @@ _INVITE_RE = re.compile(
     r"\b(?:tell me|let me know|say the word|ping me|confirm)\b.*\b(?:if|whether|which|when|what|how)\b"
     r"|\bif you(?:'d| would)? (?:want|like|prefer|need)\b"
     r"|\b(?:i can|i could|happy to|glad to)\b(?!')(?:.*\b(?:also|too|instead)\b)"
+    r"|\b(?:i can|i could)(?!')\s+(?:also\s+|just\s+|then\s+)?(?:make|add|change|fix|implement|remove|switch|stop|update|rename|refactor|write|create|drop|run|re-?run)\b"
     r"|\b(?:want|would you like) me to\b"
     r"|\byour call\b|\bup to you\b",
     re.IGNORECASE,

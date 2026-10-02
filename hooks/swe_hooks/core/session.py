@@ -169,6 +169,36 @@ def wm_has_blanket_consent(cwd: str, session_id: Optional[str]) -> bool:
         return False
 
 
+_OPEN_DECISION_RE = re.compile(r'^-\s*\[\s\]\s*(.+)$')
+
+
+def wm_open_decisions(cwd: str, session_id: Optional[str]) -> list:
+    """Return the unchecked `- [ ] <text>` entries in this session's WM
+    `## Open Decisions` section, in order. `- [x]` entries are resolved and
+    ignored. Missing file or section -> []."""
+    try:
+        wm_filepath = find_working_memory_for_session(cwd, session_id)
+        if not wm_filepath or not os.path.exists(wm_filepath):
+            return []
+        with open(wm_filepath, 'r', encoding='utf-8') as f:
+            lines = f.readlines()
+    except (IOError, OSError):
+        return []
+
+    items = []
+    in_section = False
+    for line in lines:
+        if line.startswith('## '):
+            in_section = line.strip() == '## Open Decisions'
+            continue
+        if not in_section:
+            continue
+        match = _OPEN_DECISION_RE.match(line.strip())
+        if match:
+            items.append(match.group(1).strip())
+    return items
+
+
 def validate_working_memory_session(filepath: str, session_id: Optional[str]) -> bool:
     """Validate that a working memory file belongs to the specified session.
 

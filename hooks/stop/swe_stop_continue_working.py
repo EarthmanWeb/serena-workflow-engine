@@ -32,7 +32,7 @@ try:
     from swe_hooks.core.output import output_empty
     from swe_hooks.core.state_manager import StateManager
     from swe_hooks.core.stream import get_stream_path, append_event
-    from swe_hooks.core.session import extract_session_id, wm_has_blanket_consent
+    from swe_hooks.core.session import extract_session_id, wm_has_blanket_consent, wm_open_decisions
     from swe_hooks.core.config import read_state_file, write_state_file
     from swe_hooks.core.turn_signals import final_reply_text, unresolved_items, user_spoke_mid_turn
 except ImportError as e:
@@ -169,7 +169,8 @@ def extract_last_assistant_text(transcript_path: str) -> str:
 
 
 def unresolved_items_reason(items, blanket_consent: bool) -> str:
-    """Block reason for a final reply that leaves items in prose."""
+    """Block reason for a final reply that leaves items in prose. `[decision]`
+    entries come from the WM Open Decisions ledger (primary signal)."""
     listing = "\n".join(f"- {item}" for item in items)
     head = ("⛔ UNRESOLVED ITEMS in your final reply — the user must not have to "
             "read prose to find open questions or pending decisions:\n"
@@ -238,16 +239,20 @@ def main():
             output_empty()
             return
 
-        # --- Unresolved items in the final reply — ANY state ---
-        # Questions/pending decisions left in prose force the user to read the
-        # summary to find them; route them through AskUserQuestion instead.
-        items = unresolved_items(final_reply_text(transcript_path))
+        # --- Unresolved items — ANY state ---
+        # The WM Open Decisions ledger is the PRIMARY signal (structured,
+        # agent-maintained); the final-reply prose scan is the backstop for
+        # decisions left in prose without a matching ledger entry.
+        ledger = wm_open_decisions(cwd, session_id)
+        items = ([f"[decision] {d}" for d in ledger]
+                 + unresolved_items(final_reply_text(transcript_path)))
         if items:
             if session_id:
                 try:
                     append_event(get_stream_path(session_id), 'stop_blocked',
                                  state=current_state, s=session_id,
-                                 reason='unresolved_items', count=len(items))
+                                 reason='open_decisions' if ledger else 'unresolved_items',
+                                 count=len(items))
                 except Exception:
                     pass
             block_stop(unresolved_items_reason(

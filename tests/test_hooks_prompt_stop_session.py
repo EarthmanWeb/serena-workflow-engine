@@ -531,7 +531,7 @@ class TestContinueWorkingEarlyAllowGuards(unittest.TestCase):
                 f.write(json.dumps(entry) + "\n")
 
     def _run_main(self, payload_extra, state="WF_EXECUTE", mid_turn=False,
-                  blanket_consent=False):
+                  blanket_consent=False, open_decisions=None):
         from unittest import mock
         import io
         import sys
@@ -556,6 +556,7 @@ class TestContinueWorkingEarlyAllowGuards(unittest.TestCase):
              mock.patch.object(self.mod, "StateManager", _StubState), \
              mock.patch.object(self.mod, "user_spoke_mid_turn", return_value=mid_turn), \
              mock.patch.object(self.mod, "wm_has_blanket_consent", return_value=blanket_consent), \
+             mock.patch.object(self.mod, "wm_open_decisions", return_value=open_decisions or []), \
              mock.patch.object(self.mod, "_persist_state_on_stop", return_value=None), \
              redirect_stdout(buf):
             try:
@@ -647,6 +648,47 @@ class TestContinueWorkingEarlyAllowGuards(unittest.TestCase):
                               mid_turn=False, blanket_consent=True)
         self.assertIn('"decision": "block"', out)
         self.assertIn("resolve each item yourself", out)
+
+    def test_open_decisions_ledger_blocks_with_decision_prefix(self):
+        # A WM with unchecked Open Decisions blocks even with clean prose —
+        # the ledger is the primary signal, independent of the prose scan.
+        self._write_transcript([
+            {"type": "assistant",
+             "message": {"content": [
+                 {"type": "text", "text": "Fixed the bug and all tests pass."}]}},
+        ])
+        out = self._run_main(
+            {"stop_hook_active": False}, state="WF_DONE", mid_turn=False,
+            open_decisions=["Use plain text for DESCRIPTION", "Truncate TITLE at 80 chars"])
+        self.assertIn('"decision": "block"', out)
+        self.assertIn("[decision] Use plain text for DESCRIPTION", out)
+        self.assertIn("[decision] Truncate TITLE at 80 chars", out)
+
+    def test_only_resolved_ledger_entries_with_clean_prose_allows_stop(self):
+        # wm_open_decisions() never returns "[x]" entries, so a ledger with
+        # only resolved decisions combined with clean prose allows the stop.
+        self._write_transcript([
+            {"type": "assistant",
+             "message": {"content": [
+                 {"type": "text", "text": "Fixed the bug and all tests pass."}]}},
+        ])
+        out = self._run_main(
+            {"stop_hook_active": False}, state="WF_DONE", mid_turn=False,
+            open_decisions=[])
+        self.assertEqual(out.strip(), "{}")
+
+    def test_ledger_and_prose_items_combine_into_one_block(self):
+        self._write_transcript([
+            {"type": "assistant",
+             "message": {"content": [
+                 {"type": "text", "text": "Should I delete it?"}]}},
+        ])
+        out = self._run_main(
+            {"stop_hook_active": False}, state="WF_DONE", mid_turn=False,
+            open_decisions=["Pick a migration strategy"])
+        self.assertIn('"decision": "block"', out)
+        self.assertIn("[decision] Pick a migration strategy", out)
+        self.assertIn("Should I delete it?", out)
 
 
 # ---------------------------------------------------------------------------

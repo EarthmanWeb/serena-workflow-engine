@@ -43,6 +43,7 @@ class TestConstants(unittest.TestCase):
         self.assertIn("Progress", wm.ALLOWED_SECTIONS)
         self.assertIn("Files", wm.ALLOWED_SECTIONS)
         self.assertIn("Notes", wm.ALLOWED_SECTIONS)
+        self.assertIn("Open Decisions", wm.ALLOWED_SECTIONS)
         # Protected sections must NOT appear in the agent-owned allowlist.
         for prot in wm.PROTECTED_SECTIONS:
             self.assertNotIn(prot, wm.ALLOWED_SECTIONS)
