@@ -210,8 +210,10 @@ class TestEditDriftBlockVerdict(unittest.TestCase):
     """_drift_block_verdict: hard-threshold enforcement pure function.
 
     Fail-open (returns None, no block) with no session id, no stream file, or
-    no WM file. Denies once count_task_work_since_delegation reaches
-    DRIFT_HARD_THRESHOLD UNLESS the WM file records 'single-agent: <reason>'.
+    no WM file. Denies once the weighted count_task_work_since_delegation
+    reaches DRIFT_HARD_THRESHOLD UNLESS a 'single-agent: <reason>' line was
+    added to WM AFTER the first hard block (drift_hard_block snapshot) of the
+    current run; a delegation reset re-arms the block.
     """
 
     def setUp(self):
@@ -278,20 +280,73 @@ class TestEditDriftBlockVerdict(unittest.TestCase):
         self.assertIsNone(
             edit_mod._drift_block_verdict(self.session_id, self.cwd))
 
-    def test_single_agent_note_in_wm_allows(self):
+    def _stream_events(self):
+        path = os.path.join(self.streams_dir, f'{self.session_id}.jsonl')
+        with open(path) as f:
+            return [json.loads(line) for line in f if line.strip()]
+
+    def test_preemptive_single_agent_note_does_not_disarm(self):
+        # Note written BEFORE the hard block fired: snapshotted, never counts.
         self._write_stream(
             [{'type': 'task_work'}] * edit_mod.DRIFT_HARD_THRESHOLD)
         self._write_wm(
             '## Context\nsingle-agent: tight coupled fix in one file\n')
+        self.assertIsNotNone(
+            edit_mod._drift_block_verdict(self.session_id, self.cwd))
+        # Still denied on retry — same note, already in the snapshot.
+        self.assertIsNotNone(
+            edit_mod._drift_block_verdict(self.session_id, self.cwd))
+        blocks = [e for e in self._stream_events()
+                  if e.get('type') == 'drift_hard_block']
+        self.assertEqual(len(blocks), 1)
+        self.assertEqual(blocks[0]['notes'],
+                         ['single-agent: tight coupled fix in one file'])
+
+    def test_note_added_after_hard_block_disarms(self):
+        self._write_stream(
+            [{'type': 'task_work'}] * edit_mod.DRIFT_HARD_THRESHOLD)
+        self._write_wm('## Context\nnormal session\n')
+        self.assertIsNotNone(
+            edit_mod._drift_block_verdict(self.session_id, self.cwd))
+        self._write_wm(
+            '## Context\nnormal session\nSINGLE-AGENT: one-file fix\n')
         self.assertIsNone(
             edit_mod._drift_block_verdict(self.session_id, self.cwd))
 
-    def test_single_agent_note_case_insensitive(self):
+    def test_disarm_ends_at_next_delegation_reset(self):
         self._write_stream(
             [{'type': 'task_work'}] * edit_mod.DRIFT_HARD_THRESHOLD)
-        self._write_wm('## Context\nSINGLE-AGENT: reason here\n')
+        self._write_wm('## Context\nnormal session\n')
+        self.assertIsNotNone(
+            edit_mod._drift_block_verdict(self.session_id, self.cwd))
+        self._write_wm('## Context\nsingle-agent: one-file fix\n')
         self.assertIsNone(
             edit_mod._drift_block_verdict(self.session_id, self.cwd))
+        # Background delegation resets; a new run of 12 re-arms the block and
+        # the old note is snapshotted, so it no longer disarms.
+        path = os.path.join(self.streams_dir, f'{self.session_id}.jsonl')
+        with open(path, 'a') as f:
+            f.write(json.dumps({'type': 'delegation', 'tool': 'Agent'}) + '\n')
+            for _ in range(edit_mod.DRIFT_HARD_THRESHOLD):
+                f.write(json.dumps({'type': 'task_work', 'w': 1.0}) + '\n')
+        self.assertIsNotNone(
+            edit_mod._drift_block_verdict(self.session_id, self.cwd))
+
+    def test_low_weight_events_below_threshold_not_blocked(self):
+        # 12 low-weight (0.5) events = 6 < 12.
+        self._write_stream(
+            [{'type': 'task_work', 'w': 0.5}] * edit_mod.DRIFT_HARD_THRESHOLD)
+        self._write_wm('## Context\nnormal session\n')
+        self.assertIsNone(
+            edit_mod._drift_block_verdict(self.session_id, self.cwd))
+
+    def test_low_weight_events_reach_threshold_blocked(self):
+        self._write_stream(
+            [{'type': 'task_work', 'w': 0.5}] * (edit_mod.DRIFT_HARD_THRESHOLD * 2))
+        self._write_wm('## Context\nnormal session\n')
+        msg = edit_mod._drift_block_verdict(self.session_id, self.cwd)
+        self.assertIsNotNone(msg)
+        self.assertIn('weighted task-work 12', msg)
 
     def test_delegation_event_resets_count_below_threshold(self):
         events = ([{'type': 'task_work'}] * (edit_mod.DRIFT_HARD_THRESHOLD - 1)
@@ -392,11 +447,18 @@ class TestEditGateDriftMainIntegration(unittest.TestCase):
         self.assertIn('STOP doing the work yourself',
                        out.get('permissionDecisionReason', ''))
 
-    def test_allowed_with_single_agent_note(self):
+    def test_preemptive_note_blocked_then_new_note_allowed(self):
         self._write_stream(
             [{'type': 'task_work'}] * edit_mod.DRIFT_HARD_THRESHOLD)
         self._write_wm(
-            '## Context\nsingle-agent: one-file coupled fix, no split\n')
+            '## Context\nsingle-agent: written up front, before any work\n')
+        result = self._run_main({'file_path': '/proj/src/x.py'})
+        self.assertEqual(
+            result.get('hookSpecificOutput', {}).get('permissionDecision'),
+            'deny')
+        self._write_wm(
+            '## Context\nsingle-agent: written up front, before any work\n'
+            'single-agent: one-file coupled fix, no split\n')
         result = self._run_main({'file_path': '/proj/src/x.py'})
         self.assertNotEqual(
             result.get('hookSpecificOutput', {}).get('permissionDecision'),

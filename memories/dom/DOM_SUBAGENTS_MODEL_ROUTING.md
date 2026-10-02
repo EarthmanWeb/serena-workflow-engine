@@ -4,6 +4,7 @@ description: Model-tier routing table for Agent calls, the Opus-required trigger
 obligations:
   - Every `Agent` call MUST pass `model` explicitly per the routing table — haiku routine/mechanical, sonnet implementation, opus REQUIRED for novel design/hard cross-file debugging/security/concurrency-FSM logic/broad refactors/explicit operator request (tag `[opus-justified: <reason>]`, NEVER downgraded to clear the gate).
   - Only BACKGROUND delegations (`run_in_background: true`) or a `Workflow` call reset the orchestrator-drift counter — a foreground Agent/Task call counts as task_work, same as Edit/Write/Bash.
+  - NEVER write `single-agent:` pre-emptively — only a line added AFTER the drift hard block (weighted sum ≥12; reads 0.5, edits 1.0) disarms it, and only until the next background delegation.
 metadata:
   type: domain
 ---
@@ -32,10 +33,14 @@ When ANY hold — novel design, hard/cross-file/cross-system debugging, security
 
 ## Drift Enforcement
 
-The main agent NEVER burns premium-model tokens on routine tool loops. `swe_post_orchestrator_drift.py` counts consecutive main-agent task-work calls since the last delegation. Only BACKGROUND delegations reset the counter — `Agent`/`Task` with `run_in_background: true`, or any `Workflow` call. A FOREGROUND `Agent`/`Task` call does NOT reset the counter; it counts as `task_work`, same as an Edit/Write/Bash call.
+The main agent NEVER burns premium-model tokens on routine tool loops. `swe_post_orchestrator_drift.py` sums WEIGHTED main-agent task-work calls since the last delegation. Only BACKGROUND delegations reset the counter — `Agent`/`Task` with `run_in_background: true`, or any `Workflow` call. A FOREGROUND `Agent`/`Task` call does NOT reset the counter; it counts as `task_work` at full weight.
 
-- At 6 consecutive calls (`DRIFT_THRESHOLD`) — advisory nudge to split remaining work into parallel background subagents.
-- At 12 consecutive calls (`DRIFT_HARD_THRESHOLD`) — `swe_pre_edit_validate.py` DENIES further main-agent edits until either a BACKGROUND subagent is launched (or a Workflow call is made — this resets the counter) or `single-agent: <reason>` is recorded in WM `## Workflow Context` — the tight single-file coupled-fix exception ONLY (`mem:feature/FEATURE_SUBAGENTS` Stage Loop), not a routine bypass.
+- Weight 1.0: edits/writes, Serena edit tools, mutating Bash, foreground Agent/Task.
+- Weight 0.5: reads, searches (Read/Grep/Glob), inspection/verification Bash, every non-delegation MCP tool (Serena read/symbol, jira, browser-devtools, wp-cli).
+- Weight 0 (never trips the brake): Serena memory tools, swe-wm MCP tools, ToolSearch, AskUserQuestion, TodoWrite, Skill, SendMessage.
+- At weighted sum ≥ 6 (`DRIFT_THRESHOLD`) — advisory nudge to split remaining work into parallel background subagents (12 reads reach it).
+- At weighted sum ≥ 12 (`DRIFT_HARD_THRESHOLD`) — `swe_pre_edit_validate.py` DENIES further main-agent edits until either a BACKGROUND subagent is launched (or a Workflow call is made — this resets the counter) or a NEW `single-agent: <reason>` line is recorded in WM `## Workflow Context` — the tight single-file coupled-fix exception ONLY (`mem:feature/FEATURE_SUBAGENTS` Stage Loop), not a routine bypass.
+- NEVER write `single-agent:` pre-emptively — a note present before the hard block fires is snapshotted into the `drift_hard_block` event and NEVER disarms. Only a line added AFTER the block disarms it, and only until the next background delegation; the next hard block requires a fresh line.
 
 ## Cheap-Output Verification Rule
 

@@ -6,6 +6,7 @@ This allows multiple concurrent sessions without state conflicts.
 
 import json
 import os
+import re
 from typing import Dict, Any, Optional, Tuple, List
 from .config import (
     load_workflow_state, save_workflow_state,
@@ -333,6 +334,22 @@ EXIT_PLAN_MODE_STATES = {
 }
 
 
+def _extract_section(wm_content: str, section: str) -> str:
+    """Return the body text of a '## <section>' / '### <section>' heading in
+    `wm_content`, up to the next heading of equal-or-higher level or EOF.
+    Empty string if the section is absent. Same heading-match shape as
+    wm_server.py's tool_swe_wm_update_section (H3 tried first, then H2)."""
+    escaped = re.escape(section)
+    for level in (3, 2):
+        hashes = "#" * level
+        next_heading = "|".join(re.escape("#" * l) + " " for l in range(1, level + 1))
+        pattern = rf"{hashes} {escaped}\s*\n(.*?)(?=\n(?:{next_heading})|\Z)"
+        match = re.search(pattern, wm_content, re.DOTALL)
+        if match:
+            return match.group(1)
+    return ""
+
+
 def clear_sweep_sentinel(session_id: str) -> None:
     """Remove the per-task Feature Knowledge Sweep sentinel.
 
@@ -492,6 +509,10 @@ class StateManager:
             claims_block = self._check_doc_claims_gate(new_state)
             if claims_block is not None:
                 return False, claims_block
+
+            multi_task_block = self._check_multi_task_gate(old_state, new_state)
+            if multi_task_block is not None:
+                return False, multi_task_block
 
         oscillation_warning = None
         if not force:
@@ -656,6 +677,50 @@ class StateManager:
             f"Doc Claims Used has {len(blocked)} blocking row(s): {rows}. "
             "Confirm or correct each claim (edit the source memory; a "
             "'corrected' row MUST record the true value) before VERIFY/DONE."
+        )
+
+    def _check_multi_task_gate(self, old_state: str, new_state: str) -> Optional[str]:
+        """Refuse WF_CLASSIFY -> WF_EXECUTE when Current Task names 2+
+        independent tickets/jobs and WM does not record `parallel_agents: true`.
+
+        USER-APPROVED RULE: a task bundling 2+ separate tickets/jobs must go
+        through WF_ARCH_REVIEW and be split across parallel subagents — it
+        cannot self-certify `arch_review_skipped: true` and jump straight to
+        WF_EXECUTE. Detection: core.wm_validator.multi_task_signals() scans
+        the WM Current Task section text for distinct ticket IDs, a
+        numbered/bulleted list of 2+ items, or a collective phrase ("all
+        open tickets", "each ticket", "these N tasks").
+
+        Only fires on the WF_CLASSIFY -> WF_EXECUTE edge — every other
+        transition (including WF_CLASSIFY -> WF_ARCH_REVIEW, the correct
+        route) is unaffected. Missing WM file = no Current Task to scan =
+        pass (zero-cost when the ledger is unused, same degrade-to-no-op
+        pattern as the doc-claims gate). Same mechanism as the other
+        validated-branch gates — --force overrides it.
+
+        Returns the refusal message, or None to allow the transition.
+        """
+        if old_state != 'WF_CLASSIFY' or new_state != 'WF_EXECUTE':
+            return None
+        if not self.wm_filepath or not os.path.exists(self.wm_filepath):
+            return None
+        try:
+            from .wm_validator import multi_task_signals
+        except ImportError:
+            return None
+        with open(self.wm_filepath, 'r') as f:
+            wm_content = f.read()
+        if re.search(r'\*{0,2}parallel_agents\*{0,2}\s*:\s*true', wm_content, re.IGNORECASE):
+            return None
+        current_task_body = _extract_section(wm_content, 'Current Task')
+        evidence = multi_task_signals(current_task_body)
+        if not evidence:
+            return None
+        return (
+            f"⛔ Current Task lists {len(evidence)} separate tickets/jobs "
+            f"({'; '.join(evidence)}). Multiple tickets must go through "
+            "WF_ARCH_REVIEW and be split across parallel subagents — "
+            "transition to WF_ARCH_REVIEW and note `parallel_agents: true`."
         )
 
     def _detect_oscillation_warning(self, old_state: str, new_state: str) -> Optional[str]:

@@ -6,14 +6,22 @@ No staleness blocking — checkpoint is informational only.
 
 Orchestrator-drift hard enforcement: in execution states, once all the
 existing checks above pass, an additional DRIFT BLOCK applies. When the main
-agent's consecutive task-work-since-delegation streak (the same counter
-swe_post_orchestrator_drift.py nudges on) reaches
-core.stream.DRIFT_HARD_THRESHOLD (12) AND the session's WM file does not
-record a 'single-agent: <reason>' override, the edit is DENIED — the
-orchestrator must fan the remaining work out to parallel subagents
-(FEATURE_SUBAGENTS) instead of continuing to do it directly. Launching a
-subagent (an 'Agent'/'Task'/'Workflow' call — a 'delegation' stream event)
-resets the counter and unlocks edits immediately.
+agent's WEIGHTED task-work-since-delegation sum (the same counter
+swe_post_orchestrator_drift.py nudges on: edits/mutating Bash 1.0, reads/
+searches/inspection/MCP 0.5) reaches core.stream.DRIFT_HARD_THRESHOLD (12),
+the edit is DENIED — the orchestrator must fan the remaining work out to
+parallel subagents (FEATURE_SUBAGENTS) instead of continuing to do it
+directly. A background delegation (Agent/Task with run_in_background: true,
+or Workflow — a 'delegation' stream event) resets the counter and unlocks
+edits immediately.
+
+single-agent override: a 'single-agent: <reason>' WM line disarms the block
+ONLY when written AFTER the hard block fired in the current run of
+undelegated work. The first hard block logs a 'drift_hard_block' stream
+event snapshotting the WM's existing single-agent lines
+(core.stream.record_drift_hard_block); only a line absent from that snapshot
+disarms (core.stream.single_agent_disarmed). Pre-emptive notes never count.
+The disarm lasts until the next reset (delegation/state/checkpoint).
 
 Spawned agents (Agent/Task tool) are FULLY EXEMPT from this hook's
 edit-validation logic — state-gate, sweep-gate, doc-requirement gate, and
@@ -83,7 +91,8 @@ try:
         get_stream_path, get_feature_sentinel_path,
         collect_values_since_task_start, collect_values_session,
         normalize_memory_name,
-        count_task_work_since_delegation, wm_has_single_agent_note,
+        count_task_work_since_delegation, format_drift_weight,
+        record_drift_hard_block, single_agent_disarmed,
         DRIFT_HARD_THRESHOLD,
     )
     from swe_hooks.core.doc_requirements import (
@@ -299,22 +308,28 @@ DRIFT_MANDATE_TEXT = (
     "STOP doing the work yourself. Split the remaining work and launch "
     "parallel subagents NOW (haiku=routine/recon/tests, sonnet=implementation "
     "— FEATURE_SUBAGENTS). For a genuinely tight single-file coupled fix, "
-    "record 'single-agent: <reason>' in the WM Context section to continue "
-    "solo; the edit gate blocks further edits otherwise."
+    "record a NEW 'single-agent: <reason>' line in the WM Context section "
+    "to continue solo — a note written before this block does NOT count, and "
+    "the override lasts only until the next background delegation; the edit "
+    "gate blocks further edits otherwise."
 )
 
 
-def _drift_block_message(drift_count: int) -> str:
+def _drift_block_message(drift_count) -> str:
     return (
-        f"\U0001f6d1 ORCHESTRATOR DRIFT — edit blocked: {drift_count} direct "
-        f"task-work calls without delegating (>= hard threshold "
-        f"{DRIFT_HARD_THRESHOLD}).\n\n" + DRIFT_MANDATE_TEXT
+        f"\U0001f6d1 ORCHESTRATOR DRIFT — edit blocked: weighted task-work "
+        f"{format_drift_weight(drift_count)} without delegating (>= hard "
+        f"threshold {DRIFT_HARD_THRESHOLD}; edits/mutating Bash = 1, reads/"
+        f"searches/inspection/MCP = 0.5).\n\n" + DRIFT_MANDATE_TEXT
     )
 
 
 def _drift_block_verdict(session_id, cwd):
     """Deny message when the orchestrator-drift hard threshold is hit and the
-    session WM carries no 'single-agent: <reason>' override, else None.
+    block is not disarmed by a single-agent note written AFTER the block
+    (core.stream.single_agent_disarmed), else None. Logs the
+    'drift_hard_block' snapshot event on the first deny of a run
+    (idempotent — the drift post-hook may already have logged it).
 
     Fail-open by design: no session id, no stream, or no WM file → not
     gated (this specific check only — every other check in this hook is
@@ -338,9 +353,9 @@ def _drift_block_verdict(session_id, cwd):
             wm_content = f.read()
     except IOError:
         return None
-    if wm_has_single_agent_note(wm_content):
+    if single_agent_disarmed(stream_path, wm_content):
         return None
-
+    record_drift_hard_block(stream_path, wm_content, session_id)
     return _drift_block_message(drift_count)
 
 

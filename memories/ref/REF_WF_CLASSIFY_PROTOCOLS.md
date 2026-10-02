@@ -55,3 +55,7 @@ Scan locations:
 Triggers (ANY): 2+ independent subtasks, OR explicit operator fan-out request, OR 6+ files, OR 3+ architectural layers.
 
 Independent concurrent subtasks with disjoint file ownership — orchestrator mode per `feature/FEATURE_SUBAGENTS` is the DEFAULT, not an escalation. Note `parallel_agents: true`; use `Agent` tool with `run_in_background: true`, explicit `model` per tier, and optionally `isolation: "worktree"` for edit conflicts. Route to `WF_ARCH_REVIEW`.
+
+### 3b Criteria — Multi-Ticket Tasks MUST NOT Skip Arch Review
+
+A task bundling 2+ separate tickets/jobs (2+ distinct ticket IDs, e.g. `SPS-855`/`SPS-856`; a numbered/bulleted list of 2+ task items; or a collective phrase — "all open tickets", "each ticket", "these N tasks") MUST NOT skip `WF_ARCH_REVIEW`, regardless of per-ticket file count. Route to `WF_ARCH_REVIEW` and split across parallel subagents; note `parallel_agents: true`. Hard-enforced: `state_manager.transition_to` (`hooks/swe_hooks/core/state_manager.py`) refuses WF_CLASSIFY → WF_EXECUTE when `wm_validator.multi_task_signals()` finds evidence and WM lacks `parallel_agents: true`; `swe_wm_update`/`swe_wm_update_section` (`hooks/swe_hooks/mcp/wm_server.py`) likewise rejects an `arch_review_skipped: true` write under the same condition. `force=true` bypasses the transition gate only.

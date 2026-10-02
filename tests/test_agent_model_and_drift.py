@@ -1006,9 +1006,9 @@ class TestOrchestratorDriftMain(unittest.TestCase):
         })
         self.assertEqual(result, {})
 
-    def test_verification_bash_never_reaches_threshold(self):
-        # Must-not-fire: repeated git/test-runner Bash calls never nudge, no
-        # matter how many — they are checking state, not doing task work.
+    def test_verification_bash_counts_at_low_weight(self):
+        # Verification Bash counts at LOW_WEIGHT (0.5): 11 calls = 5.5, still
+        # below the advisory threshold of 6.
         session_id = "mnop3456"
         for _ in range(drift_hook.DRIFT_THRESHOLD + 5):
             result = self._run_main({
@@ -1308,6 +1308,152 @@ class TestIsBackgroundDelegation(unittest.TestCase):
         # Must be exactly True, not merely truthy.
         self.assertFalse(drift_hook.is_background_delegation(
             "Agent", {"run_in_background": 1}))
+
+
+class TestWeightedDriftMain(unittest.TestCase):
+    """Weighted counting end-to-end: reads/searches/MCP at 0.5, edits at
+    1.0, workflow machinery at 0 (no event), hard-block snapshot logging."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        reset_caches()
+        self._config_patch = mock.patch(
+            "swe_hooks.core.config.get_project_root", return_value=self.tmp.name)
+        self._config_patch.start()
+        self.addCleanup(self._config_patch.stop)
+
+    def _transcript(self, session_id):
+        return f"/x/{session_id}0000-0000-0000-0000-000000000000.jsonl"
+
+    def _run(self, session_id, tool_name, tool_input=None, extra=None):
+        payload = {"tool_name": tool_name,
+                   "transcript_path": self._transcript(session_id),
+                   "tool_input": tool_input or {}}
+        if extra:
+            payload.update(extra)
+        captured = io.StringIO()
+        with mock.patch("sys.stdin", io.StringIO(json.dumps(payload))), \
+             mock.patch("select.select", return_value=([sys.stdin], [], [])), \
+             mock.patch("sys.stdout", captured):
+            try:
+                drift_hook.main()
+            except SystemExit:
+                pass
+        out = json.loads(captured.getvalue() or "{}")
+        return out.get("hookSpecificOutput", {}).get("additionalContext", "")
+
+    def _path(self, session_id):
+        return stream.get_stream_path(
+            session_mod.extract_session_id(self._transcript(session_id)))
+
+    def _events(self, session_id, etype):
+        path = self._path(session_id)
+        if not os.path.exists(path):
+            return []
+        with open(path) as f:
+            return [e for e in (json.loads(l) for l in f if l.strip())
+                    if e.get("type") == etype]
+
+    def test_reads_count_at_half_weight(self):
+        sid = "aa000001"
+        for _ in range(11):
+            ctx = self._run(sid, "Read", {"file_path": "/x.py"})
+        self.assertNotIn("Orchestrator drift", ctx)  # 5.5
+        ctx = self._run(sid, "Grep", {"pattern": "x"})
+        self.assertIn("Orchestrator drift", ctx)      # 6
+        self.assertIn("weighted task-work 6", ctx)
+        self.assertEqual(stream.count_task_work_since_delegation(self._path(sid)), 6.0)
+
+    def test_edits_count_at_full_weight(self):
+        sid = "aa000002"
+        for _ in range(drift_hook.DRIFT_THRESHOLD - 1):
+            self._run(sid, "Edit")
+        self.assertEqual(stream.count_task_work_since_delegation(self._path(sid)), 5.0)
+        ctx = self._run(sid, "Write")
+        self.assertIn("Orchestrator drift", ctx)
+
+    def test_non_delegation_mcp_and_inspection_bash_low_weight(self):
+        sid = "aa000003"
+        self._run(sid, "mcp__jira__get_issue")
+        self._run(sid, "mcp__plugin_swe_serena__find_symbol")
+        self._run(sid, "Bash", {"command": "grep -rn x src/"})
+        self.assertEqual(stream.count_task_work_since_delegation(self._path(sid)), 1.5)
+
+    def test_exempt_tools_log_nothing(self):
+        sid = "aa000004"
+        for tool in ("mcp__plugin_swe_serena__read_memory",
+                     "mcp__plugin_swe_serena__list_memories",
+                     "mcp__plugin_swe_serena__search_memories_by_name",
+                     "mcp__plugin_swe_serena__write_memory",
+                     "mcp__plugin_swe_serena__edit_memory",
+                     "mcp__plugin_swe_swe-wm__swe_wm_update",
+                     "ToolSearch", "AskUserQuestion", "TodoWrite", "Skill"):
+            self._run(sid, tool)
+        self.assertEqual(self._events(sid, "task_work"), [])
+
+    def test_background_delegation_resets_weighted_count(self):
+        sid = "aa000005"
+        for _ in range(10):
+            self._run(sid, "Read")
+        self._run(sid, "Agent", {"run_in_background": True})
+        self.assertEqual(stream.count_task_work_since_delegation(self._path(sid)), 0)
+        self._run(sid, "Edit")
+        self.assertEqual(stream.count_task_work_since_delegation(self._path(sid)), 1.0)
+
+    def test_hard_threshold_logs_single_drift_hard_block_with_snapshot(self):
+        sid = "aa000006"
+        mem_dir = os.path.join(self.tmp.name, ".serena", "memories")
+        os.makedirs(mem_dir, exist_ok=True)
+        wm_sid = session_mod.extract_session_id(self._transcript(sid))
+        with open(os.path.join(mem_dir, f"WM_{wm_sid}.md"), "w") as f:
+            f.write("## Context\nsingle-agent: pre-emptive\n")
+        extra = {"cwd": self.tmp.name}
+        with mock.patch("swe_hooks.core.session.get_project_root",
+                        return_value=self.tmp.name):
+            for _ in range(drift_hook.DRIFT_HARD_THRESHOLD + 2):
+                ctx = self._run(sid, "Edit", extra=extra)
+        self.assertIn("STOP doing the work yourself", ctx)
+        blocks = self._events(sid, "drift_hard_block")
+        self.assertEqual(len(blocks), 1)
+        self.assertEqual(blocks[0]["notes"], ["single-agent: pre-emptive"])
+        wm = "## Context\nsingle-agent: pre-emptive\n"
+        self.assertFalse(stream.single_agent_disarmed(self._path(sid), wm))
+        self.assertTrue(stream.single_agent_disarmed(
+            self._path(sid), wm + "single-agent: tight one-file fix\n"))
+
+
+class TestDriftWeight(unittest.TestCase):
+    def test_edit_full(self):
+        self.assertEqual(drift_hook.drift_weight("Edit", {}), 1.0)
+
+    def test_mutating_bash_full(self):
+        self.assertEqual(drift_hook.drift_weight("Bash", {"command": "rm x"}), 1.0)
+
+    def test_inspection_bash_low(self):
+        self.assertEqual(drift_hook.drift_weight("Bash", {"command": "cat x"}), 0.5)
+
+    def test_read_grep_glob_low(self):
+        for tool in ("Read", "Grep", "Glob"):
+            self.assertEqual(drift_hook.drift_weight(tool, {}), 0.5)
+
+    def test_serena_edit_full_serena_read_low(self):
+        self.assertEqual(drift_hook.drift_weight(
+            "mcp__serena__replace_symbol_body", {}), 1.0)
+        self.assertEqual(drift_hook.drift_weight(
+            "mcp__plugin_swe_serena__search_for_pattern", {}), 0.5)
+
+    def test_other_mcp_low(self):
+        self.assertEqual(drift_hook.drift_weight(
+            "mcp__chrome-devtools__take_snapshot", {}), 0.5)
+
+    def test_workflow_machinery_exempt(self):
+        for tool in ("mcp__serena__read_memory",
+                     "mcp__plugin_swe_serena__search_memories_by_front_matter",
+                     "mcp__plugin_swe_swe-wm__swe_wm_transition",
+                     "ToolSearch", "AskUserQuestion", "TodoWrite", "Skill",
+                     "SendMessage"):
+            self.assertEqual(drift_hook.drift_weight(tool, {}), 0.0, tool)
 
 
 class TestIsTaskWork(unittest.TestCase):

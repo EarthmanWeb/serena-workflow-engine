@@ -308,6 +308,84 @@ class ValidateSessionOwnershipTest(unittest.TestCase):
         self.assertEqual(err, "")
 
 
+class MultiTaskSignalsTest(unittest.TestCase):
+    """Detector for 2+ independent tickets/jobs in Current Task text —
+    multi_task_signals(). USER-APPROVED RULE: multi-ticket tasks cannot skip
+    WF_ARCH_REVIEW. Evidence categories: distinct ticket IDs, a
+    numbered/bulleted list of 2+ items, or a collective phrase.
+    """
+
+    def test_two_distinct_ticket_ids(self):
+        evidence = mod.multi_task_signals("Fix SPS-855 and SPS-856 today")
+        self.assertEqual(len(evidence), 1)
+        self.assertIn("SPS-855", evidence[0])
+        self.assertIn("SPS-856", evidence[0])
+        self.assertIn("2 distinct ticket IDs", evidence[0])
+
+    def test_numbered_list_two_items(self):
+        evidence = mod.multi_task_signals("1. fix X\n2. fix Y")
+        self.assertEqual(len(evidence), 1)
+        self.assertIn("2-item", evidence[0])
+
+    def test_bulleted_list_two_items(self):
+        evidence = mod.multi_task_signals("- fix X\n- fix Y")
+        self.assertEqual(len(evidence), 1)
+        self.assertIn("2-item", evidence[0])
+
+    def test_collective_phrase_all_open_tickets(self):
+        evidence = mod.multi_task_signals("Handle all open tickets created today")
+        self.assertEqual(len(evidence), 1)
+        self.assertIn("all open tickets", evidence[0])
+
+    def test_collective_phrase_each_ticket(self):
+        evidence = mod.multi_task_signals("Review each ticket in the backlog")
+        self.assertEqual(len(evidence), 1)
+        self.assertIn("each ticket", evidence[0])
+
+    def test_collective_phrase_these_n_tasks(self):
+        evidence = mod.multi_task_signals("Fix these 3 tasks before EOD")
+        self.assertEqual(len(evidence), 1)
+        self.assertIn("3+", evidence[0])
+
+    def test_single_ticket_mentioned_twice_is_one_unit(self):
+        # Same ticket ID appearing twice must NOT be counted as two units.
+        evidence = mod.multi_task_signals(
+            "Fix SPS-855. Also remember SPS-855 needs a changelog entry.")
+        self.assertEqual(evidence, [])
+
+    def test_single_task_with_substep_bullets_documented_limitation(self):
+        # List-structure detection cannot distinguish "N tickets" from "N
+        # steps of one ticket" — this is a documented limitation, not a bug.
+        evidence = mod.multi_task_signals(
+            "Implement the feature:\n1. read code\n2. write test\n3. ship it")
+        self.assertEqual(len(evidence), 1)
+        self.assertIn("3-item", evidence[0])
+
+    def test_plain_single_task_no_signal(self):
+        evidence = mod.multi_task_signals("Please fix the bug in the login form.")
+        self.assertEqual(evidence, [])
+
+    def test_empty_string_no_signal(self):
+        self.assertEqual(mod.multi_task_signals(""), [])
+
+    def test_none_input_no_signal(self):
+        self.assertEqual(mod.multi_task_signals(None), [])
+
+    def test_single_ticket_id_no_signal(self):
+        evidence = mod.multi_task_signals("Fix SPS-855 only.")
+        self.assertEqual(evidence, [])
+
+    def test_single_list_item_no_signal(self):
+        evidence = mod.multi_task_signals("- fix the one thing")
+        self.assertEqual(evidence, [])
+
+    def test_multiple_evidence_categories_all_reported(self):
+        evidence = mod.multi_task_signals(
+            "Fix SPS-855 and SPS-856:\n1. patch A\n2. patch B")
+        # Both ticket-ID and list-item evidence present.
+        self.assertEqual(len(evidence), 2)
+
+
 class GetValidatorSingletonTest(unittest.TestCase):
     def setUp(self):
         reset_caches()

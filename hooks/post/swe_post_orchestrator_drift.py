@@ -1,16 +1,26 @@
 #!/usr/bin/env python3
-"""PostToolUse hook for main-agent task-work tools — orchestrator-drift nudge.
+"""PostToolUse hook (matcher ".*") — orchestrator-drift nudge.
 
-Counts consecutive direct task-work calls (Edit, Write, NotebookEdit, Serena
-edit tools, Bash) made by the MAIN agent since the last Agent/Workflow launch
-in this session. At DRIFT_THRESHOLD (6), nudges the orchestrator to stop
+Sums WEIGHTED direct task-work calls made by the MAIN agent since the last
+background delegation in this session (see drift_weight):
+  - FULL_WEIGHT (1.0): Edit/Write/NotebookEdit/MultiEdit, Serena edit tools,
+    mutating Bash, foreground Agent/Task.
+  - LOW_WEIGHT (0.5): Read/Grep/Glob/WebFetch and every other built-in,
+    verification/inspection Bash (bash_is_verification), and every
+    non-delegation MCP tool (Serena read/symbol tools, jira, browser, wp-cli…).
+  - EXEMPT (0, nothing logged): workflow machinery — Serena memory tools,
+    swe-wm MCP tools, ToolSearch, AskUserQuestion, TodoWrite, Skill,
+    SendMessage.
+At DRIFT_THRESHOLD (6) of weighted sum, nudges the orchestrator to stop
 doing the work itself and split what remains into parallel subagents — the
 "orchestrator + swarm delegation" model this session is meant to follow
 (FEATURE_SUBAGENTS). At DRIFT_HARD_THRESHOLD (12), the advisory escalates
 into a MANDATE: split remaining work into parallel subagents NOW, or record a
-'single-agent: <reason>' override in the WM Context section — the sibling
+NEW 'single-agent: <reason>' override in the WM Context section — the sibling
 PreToolUse edit gate (swe_pre_edit_validate.py) hard-enforces this same
-threshold by DENYING further edits without that override.
+threshold by DENYING further edits unless a single-agent line was written
+AFTER the hard block (pre-emptive notes never count; the disarm ends at the
+next background delegation).
 
 A delegation resets the streak (the orchestrator just handed work off) ONLY
 when it is a real hand-off the orchestrator is not blocking on:
@@ -29,13 +39,16 @@ launch — that event is the reset marker, not task work, and is recorded as
 'delegation' instead of 'task_work' by this same hook (registered on both
 matchers so one script covers count + reset).
 
-Also exempt: a Bash call whose PRIMARY command is verification/inspection
-rather than task work — git status/diff/log/show/commit/add, test runners
-(python3 -m unittest / pytest / npm test), py_compile, jq ., and the
-project's own validate-*.py scripts. Checking your own work, or reading
-codebase state to decide what to do next, is not "doing the work itself" in
-the sense this nudge targets; counting it as task work produced false
-positives that nudged delegation mid-verification.
+A Bash call whose every command group is verification/inspection (git
+status/diff/log/show/commit/add, test runners, py_compile, jq ., validate-*.py,
+grep/rg/cat/head/tail/ls/find/sed -n/awk/diff…) counts at LOW_WEIGHT, not
+zero: a long read/inspect loop in the orchestrator IS drift (12 reads = 6 =
+advisory), just slower-accruing than edits.
+
+On reaching DRIFT_HARD_THRESHOLD this hook also logs the 'drift_hard_block'
+snapshot event (core.stream.record_drift_hard_block) so a single-agent note
+written after the mandate message disarms the edit gate, while a note that
+pre-dates it never does.
 
 Scope-guard event logging (core.scope_guard — see that module's docstring
 for the full event vocabulary): this hook is also where the remaining scope-
@@ -77,11 +90,12 @@ try:
     from swe_hooks.core.input import read_stdin_safe, get_input_field
     from swe_hooks.core.session import (
         extract_session_id, is_spawned_agent, is_subagent_transcript,
-        get_agent_id,
+        get_agent_id, find_working_memory_for_session,
     )
     from swe_hooks.core.stream import (
         get_stream_path, append_event, count_task_work_since_delegation,
-        has_event_since_last, DRIFT_HARD_THRESHOLD,
+        has_event_since_last, format_drift_weight, record_drift_hard_block,
+        DRIFT_HARD_THRESHOLD,
     )
     from swe_hooks.core.scope_guard import (
         classify_kind, budget_for_model, parse_budget_tag, parse_scope_extend,
@@ -90,8 +104,35 @@ try:
 except ImportError as e:
     swe_hooks.bootstrap.import_error_exit(e)
 
-# Consecutive direct task-work calls before the advisory drift nudge.
+# Weighted direct task-work sum before the advisory drift nudge.
 DRIFT_THRESHOLD = 6
+
+# Per-call drift weights (see module docstring / drift_weight).
+FULL_WEIGHT = 1.0
+LOW_WEIGHT = 0.5
+
+WEIGHT_LEGEND = "edits/writes/mutating Bash = 1, reads/searches/inspection/MCP = 0.5"
+
+# Workflow machinery that must never trip the brake — weight 0, no event.
+DRIFT_EXEMPT_TOOL_NAMES = frozenset({
+    'ToolSearch', 'AskUserQuestion', 'TodoWrite', 'Skill', 'SendMessage',
+})
+
+# Built-in mutating tools — full weight.
+FULL_WEIGHT_TOOL_NAMES = frozenset({'Edit', 'Write', 'NotebookEdit', 'MultiEdit'})
+
+# Serena (any server name containing 'serena') tool short-names.
+SERENA_MEMORY_TOOLS = frozenset({
+    'read_memory', 'list_memories', 'search_memories_by_name',
+    'search_memories_by_front_matter', 'write_memory', 'edit_memory',
+    'delete_memory', 'rename_memory',
+})
+SERENA_EDIT_TOOLS = frozenset({
+    'replace_symbol_body', 'replace_content', 'insert_before_symbol',
+    'insert_after_symbol', 'rename_symbol', 'safe_delete_symbol',
+    'replace_in_files', 'create_text_file', 'replace_lines', 'delete_lines',
+    'insert_at_line',
+})
 
 # At this streak, the advisory becomes a MANDATE (see core.stream for the
 # shared constant the sibling edit gate also enforces against).
@@ -99,8 +140,10 @@ MANDATE_TEXT = (
     "STOP doing the work yourself. Split the remaining work and launch "
     "parallel subagents NOW (haiku=routine/recon/tests, sonnet=implementation "
     "— FEATURE_SUBAGENTS). For a genuinely tight single-file coupled fix, "
-    "record 'single-agent: <reason>' in the WM Context section to continue "
-    "solo; the edit gate blocks further edits otherwise."
+    "record a NEW 'single-agent: <reason>' line in the WM Context section to "
+    "continue solo — a note written before this mandate does NOT count, and "
+    "the override lasts only until the next background delegation; the edit "
+    "gate blocks further edits otherwise."
 )
 
 DELEGATION_TOOL_NAMES = {'Agent', 'Task', 'Workflow'}
@@ -210,16 +253,40 @@ def is_background_delegation(tool_name: str, tool_input: dict) -> bool:
     return False
 
 
-def is_task_work(tool_name: str, tool_input: dict) -> bool:
-    """True when this tool call counts toward the orchestrator-drift streak.
+def drift_weight(tool_name: str, tool_input: dict) -> float:
+    """Drift weight of one main-agent, non-delegation tool call.
 
-    Everything the matcher routes here counts as task work EXCEPT a Bash call
-    that is entirely verification/inspection (see bash_is_verification).
+    0.0 for workflow machinery (DRIFT_EXEMPT_TOOL_NAMES, Serena memory tools,
+    swe-wm MCP tools); FULL_WEIGHT for built-in edits, Serena edit tools and
+    mutating Bash; LOW_WEIGHT for verification/inspection Bash, every other
+    MCP tool, and every other built-in (Read/Grep/Glob/WebFetch/…).
     """
+    if tool_name in DRIFT_EXEMPT_TOOL_NAMES:
+        return 0.0
+    if tool_name in FULL_WEIGHT_TOOL_NAMES:
+        return FULL_WEIGHT
     if tool_name == 'Bash':
         command = str((tool_input or {}).get('command', ''))
-        return not bash_is_verification(command)
-    return True
+        return LOW_WEIGHT if bash_is_verification(command) else FULL_WEIGHT
+    if tool_name.startswith('mcp__'):
+        parts = tool_name.split('__')
+        server = parts[1].lower() if len(parts) > 2 else ''
+        short = parts[-1]
+        if 'swe-wm' in server or 'swe_wm' in server:
+            return 0.0
+        if 'serena' in server:
+            if short in SERENA_MEMORY_TOOLS:
+                return 0.0
+            if short in SERENA_EDIT_TOOLS:
+                return FULL_WEIGHT
+        return LOW_WEIGHT
+    return LOW_WEIGHT
+
+
+def is_task_work(tool_name: str, tool_input: dict) -> bool:
+    """True when this tool call is FULL-weight task work (an edit, Serena
+    edit, or mutating Bash) — see drift_weight for the full scale."""
+    return drift_weight(tool_name, tool_input) >= FULL_WEIGHT
 
 
 # ---------------------------------------------------------------------------
@@ -358,19 +425,33 @@ def main():
             # ordinary task_work path below.
             foreground_delegation = True
 
-        if not foreground_delegation and not is_task_work(tool_name, tool_input):
-            output_status(f"✓ verification call exempt from drift count: {tool_name}")
+        weight = FULL_WEIGHT if foreground_delegation else drift_weight(tool_name, tool_input)
+        if weight <= 0:
+            output_empty()
             return
 
-        append_event(stream_path, 'task_work', tool=tool_name, s=session_id)
+        append_event(stream_path, 'task_work', tool=tool_name, w=weight, s=session_id)
         drift_count = count_task_work_since_delegation(stream_path)
+        shown = format_drift_weight(drift_count)
 
         if drift_count >= DRIFT_HARD_THRESHOLD:
+            # Snapshot pre-existing single-agent notes NOW so only a note
+            # written after this mandate disarms the edit gate.
+            wm_content = ''
+            cwd = get_input_field(input_data, 'cwd', default='') or os.getcwd()
+            wm_path = find_working_memory_for_session(cwd, session_id)
+            if wm_path:
+                try:
+                    with open(wm_path, 'r') as f:
+                        wm_content = f.read()
+                except IOError:
+                    wm_content = ''
+            record_drift_hard_block(stream_path, wm_content, session_id)
             output = HookOutput(event_name="PostToolUse")
             message = (
-                f"Orchestrator drift: {drift_count} direct task-work calls without "
-                f"delegating (>= hard threshold {DRIFT_HARD_THRESHOLD}). "
-                + MANDATE_TEXT
+                f"Orchestrator drift: weighted task-work {shown} without "
+                f"delegating (>= hard threshold {DRIFT_HARD_THRESHOLD}; "
+                f"{WEIGHT_LEGEND}). " + MANDATE_TEXT
             )
             if foreground_delegation:
                 message = (
@@ -391,13 +472,14 @@ def main():
             # the hard threshold; HARD-threshold behavior (deny + mandate)
             # stays unconditional regardless of a direct instruction.
             if has_event_since_last(stream_path, 'direct_instruction', marker_type='prompt'):
-                output_status(f"\U0001f6e0️ task-work #{drift_count} since last delegation "
+                output_status(f"\U0001f6e0️ weighted task-work {shown} since last delegation "
                               "(direct instruction this turn — advisory suppressed)")
                 return
             output = HookOutput(event_name="PostToolUse")
             message = (
-                f"Orchestrator drift: {drift_count} direct task-work calls without "
-                "delegating — split remaining work into parallel subagents "
+                f"Orchestrator drift: weighted task-work {shown} without "
+                f"delegating (advisory threshold {DRIFT_THRESHOLD}; {WEIGHT_LEGEND}) "
+                "— split remaining work into parallel background subagents "
                 "(see FEATURE_SUBAGENTS)."
             )
             if foreground_delegation:
@@ -412,12 +494,13 @@ def main():
 
         if foreground_delegation:
             output_status(
-                f"\U0001f6e0️ task-work #{drift_count} since last delegation "
+                f"\U0001f6e0️ weighted task-work {shown} since last delegation "
                 f"(FOREGROUND {tool_name} does not reset drift — relaunch with "
                 "run_in_background: true to hand off for real)"
             )
         else:
-            output_status(f"\U0001f6e0️ task-work #{drift_count} since last delegation")
+            output_status(f"\U0001f6e0️ weighted task-work {shown} (+{format_drift_weight(weight)} "
+                          f"{tool_name}) since last delegation")
 
     except Exception as e:
         output = {"hookSpecificOutput": {"hookEventName": "PostToolUse",

@@ -11,6 +11,27 @@ import re
 from typing import Tuple, Optional, List
 
 
+# Ticket-ID pattern: a project prefix (uppercase letters/digits, starting
+# with a letter) + '-' + digits, e.g. SPS-855, AB1-12. Word-boundaried so it
+# never matches inside a longer token.
+TICKET_ID_RE = re.compile(r'\b[A-Z][A-Z0-9]+-\d+\b')
+
+# A numbered or bulleted list item under Current Task, e.g. "1. fix X" or
+# "- fix Y" / "* fix Y". Matched per-line; counting DISTINCT list items (not
+# occurrences of the marker elsewhere) is the caller's job.
+LIST_ITEM_RE = re.compile(r'^\s*(?:\d+[.)]|[-*])\s+\S', re.MULTILINE)
+
+# Collective-task phrases implying 2+ independent units without naming
+# explicit ticket IDs. The trailing \s+\S captures the first word after the
+# quantifier so a bare "all open tickets" (no number) still counts — N is
+# inferred as 2 (the minimum this signal can mean) unless digits are present.
+COLLECTIVE_PHRASE_RE = re.compile(
+    r'\b(?:all open|each|every|both)\s+(?:tickets?|jobs?|tasks?|issues?)\b'
+    r'|\bthese\s+(\d+)\s+(?:tickets?|jobs?|tasks?|issues?)\b',
+    re.IGNORECASE,
+)
+
+
 class WMFormatValidator:
     """Validates Working Memory format against REF_WM specs."""
 
@@ -103,6 +124,53 @@ class WMFormatValidator:
 
         return True, ""
 
+
+
+def multi_task_signals(current_task_text: str) -> List[str]:
+    """Detect evidence that Current Task names 2+ independent tickets/jobs.
+
+    Returns a list of human-readable evidence strings (empty = no signal
+    found — single-task or ambiguous text passes). Each evidence category is
+    independent; any ONE non-empty category is sufficient to flag the task
+    as multi-ticket. Low false-positive rules:
+
+    - 2+ DISTINCT ticket IDs (SPS-855, SPS-856, ...) — the SAME id repeated
+      twice counts as ONE unit, not two.
+    - A numbered/bulleted list under the text with 2+ items — a single task
+      described across several prose lines (no list markers) does not match;
+      a single ticket's own sub-steps (e.g. "1. read code  2. write test")
+      also matches this rule (documented limitation — list structure alone
+      cannot distinguish "N tickets" from "N steps of one ticket").
+    - A collective phrase ("all open tickets", "each ticket", "every job",
+      "both issues", "these 3 tasks") — implies N>=2 even with no ticket IDs
+      enumerated.
+
+    Args:
+        current_task_text: the raw text of the WM Current Task section (or
+            any task-description text to scan).
+
+    Returns:
+        List of evidence strings, e.g. ["2 distinct ticket IDs: SPS-855, SPS-856"].
+        Empty list means no multi-task signal detected.
+    """
+    text = current_task_text or ''
+    evidence: List[str] = []
+
+    ticket_ids = sorted(set(TICKET_ID_RE.findall(text)))
+    if len(ticket_ids) >= 2:
+        evidence.append(f"{len(ticket_ids)} distinct ticket IDs: {', '.join(ticket_ids)}")
+
+    list_items = LIST_ITEM_RE.findall(text)
+    if len(list_items) >= 2:
+        evidence.append(f"{len(list_items)}-item numbered/bulleted list under Current Task")
+
+    for match in COLLECTIVE_PHRASE_RE.finditer(text):
+        n_group = match.group(1)
+        n = int(n_group) if n_group else 2
+        if n >= 2:
+            evidence.append(f"collective phrase implying {n}+ tasks: \"{match.group(0).strip()}\"")
+
+    return evidence
 
 
 # Singleton instance for reuse

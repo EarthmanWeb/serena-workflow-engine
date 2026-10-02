@@ -31,6 +31,7 @@ from swe_hooks.core.session import (
     get_project_root,
 )
 from swe_hooks.core.state_manager import perform_transition
+from swe_hooks.core.wm_validator import multi_task_signals
 from swe_hooks.core.stream import (
     append_event,
     get_stream_path,
@@ -398,6 +399,78 @@ def tool_swe_wm_read(session_id: str = None) -> dict:
         "state": state,
         "content": content,
     }
+
+
+# Matches a '`arch_review_skipped: true`'-style declaration anywhere in an
+# update's content — the self-certification this task's enforcement targets
+# (WF_CLASSIFY Step 3b "Skipping: note `arch_review_skipped: true`").
+ARCH_REVIEW_SKIPPED_RE = re.compile(r'arch_review_skipped\s*:\s*true', re.IGNORECASE)
+
+# Current-Task-shaped sections multi_task_signals should scan — the task
+# description lives under one of these headings depending on WM layout.
+CURRENT_TASK_SECTIONS = {'current task', 'task context'}
+
+
+def _check_arch_review_skip(
+    session_id: str, section: str, content: str,
+    other_sections: Optional[List[Dict[str, Any]]] = None,
+) -> Optional[str]:
+    """Reject an `arch_review_skipped: true` write when Current Task carries
+    2+ independent-ticket signals and WM does not already record
+    `parallel_agents: true`.
+
+    USER-APPROVED RULE (mirrors the state_manager transition gate): a task
+    bundling 2+ separate tickets/jobs cannot self-certify a skipped arch
+    review. Scans, in order: THIS section's own content (if it IS a
+    Current-Task-shaped section), any sibling Current-Task-shaped section in
+    the same batched call, then the existing WM file's Current Task section
+    on disk — first non-empty text wins. Absent any Current Task text, there
+    is nothing to scan: pass (same degrade-to-no-op as other gates).
+
+    Returns the refusal message, or None to allow the write.
+    """
+    if not ARCH_REVIEW_SKIPPED_RE.search(content or ''):
+        return None
+    if re.search(r'\*{0,2}parallel_agents\*{0,2}\s*:\s*true', content or '', re.IGNORECASE):
+        return None
+
+    task_text = ''
+    if section.strip().lower() in CURRENT_TASK_SECTIONS:
+        task_text = content
+    if not task_text:
+        for spec in (other_sections or []):
+            if not isinstance(spec, dict):
+                continue
+            if str(spec.get('section', '')).strip().lower() in CURRENT_TASK_SECTIONS:
+                task_text = str(spec.get('content', ''))
+                if task_text:
+                    break
+    if not task_text:
+        cwd = get_project_root()
+        wm_filepath = find_working_memory_for_session(cwd, session_id)
+        if wm_filepath and os.path.exists(wm_filepath):
+            try:
+                with open(wm_filepath, 'r') as f:
+                    wm_content = f.read()
+                if re.search(r'\*{0,2}parallel_agents\*{0,2}\s*:\s*true', wm_content, re.IGNORECASE):
+                    return None
+                match = re.search(
+                    r'#+\s*(?:Current Task|Task Context)\s*\n(.*?)(?=\n#+\s|\Z)',
+                    wm_content, re.IGNORECASE | re.DOTALL)
+                if match:
+                    task_text = match.group(1)
+            except IOError:
+                pass
+
+    evidence = multi_task_signals(task_text)
+    if not evidence:
+        return None
+    return (
+        f"⛔ Current Task lists {len(evidence)} separate tickets/jobs "
+        f"({'; '.join(evidence)}). Multiple tickets must go through "
+        "WF_ARCH_REVIEW and be split across parallel subagents — "
+        "transition to WF_ARCH_REVIEW and note `parallel_agents: true`."
+    )
 
 
 # "Memories loaded" line inside an Affected Features write, e.g.
@@ -913,6 +986,13 @@ def tool_swe_wm_update_section(
         sweep_error = _check_memory_sweep(session_id, content, other_sections=other_sections)
         if sweep_error:
             return {"error": sweep_error}
+
+    # arch_review_skipped: true cannot be self-certified for a multi-ticket
+    # task (USER-APPROVED RULE) — same evidence/refusal wording as the
+    # state_manager WF_CLASSIFY -> WF_EXECUTE transition gate.
+    skip_error = _check_arch_review_skip(session_id, section, content, other_sections=other_sections)
+    if skip_error:
+        return {"error": skip_error}
 
     cwd = get_project_root()
     wm_filepath = find_working_memory_for_session(cwd, session_id)

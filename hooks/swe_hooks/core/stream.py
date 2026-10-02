@@ -378,27 +378,78 @@ def count_searches_since_docread(stream_path: str) -> int:
     )
 
 
-def count_task_work_since_delegation(stream_path: str) -> int:
-    """Count consecutive main-agent task-work events since the last delegation.
+# Events that end a run of undelegated main-agent work: a background
+# delegation (Agent/Task with run_in_background, or Workflow), a state
+# transition, or a checkpoint. Shared by the drift counter and the
+# single-agent disarm lookup so both agree on what "since the last reset" means.
+DRIFT_RESET_MARKERS = ('state', 'checkpoint', 'delegation')
 
-    A 'delegation' event (appended when the main agent launches an Agent or
-    Workflow tool) resets the streak, so this counts only direct task work
-    (Edit/Write/NotebookEdit/Serena edit tools/Bash) done in the main
-    orchestrator thread WITHOUT fanning work out to subagents — the
-    orchestrator-drift signal.
+# Tail window for drift scans. Larger than count_events_since_last's 10KB so a
+# 'drift_hard_block' event survives a long disarmed solo run (~600 events).
+DRIFT_SCAN_WINDOW_BYTES = 65536
+
+
+def _events_since_drift_reset(stream_path: str) -> list:
+    """Events (chronological) appended after the most recent
+    DRIFT_RESET_MARKERS event, read from the last DRIFT_SCAN_WINDOW_BYTES of
+    the stream. [] when the stream is missing or unreadable."""
+    if not os.path.exists(stream_path):
+        return []
+    try:
+        file_size = os.path.getsize(stream_path)
+        with open(stream_path, 'r') as f:
+            if file_size > DRIFT_SCAN_WINDOW_BYTES:
+                f.seek(file_size - DRIFT_SCAN_WINDOW_BYTES)
+                f.readline()  # Skip partial first line
+            lines = f.readlines()
+    except IOError:
+        return []
+    events = []
+    for line in reversed(lines):
+        try:
+            event = json.loads(line.strip())
+        except (json.JSONDecodeError, ValueError):
+            continue
+        if not isinstance(event, dict):
+            continue
+        if event.get('type') in DRIFT_RESET_MARKERS:
+            break
+        events.append(event)
+    events.reverse()
+    return events
+
+
+def _task_work_weight(event: dict) -> float:
+    """Weight of one 'task_work' event: its 'w' field, or 1.0 when absent
+    (events logged before weighting existed count at full weight)."""
+    try:
+        return float(event.get('w', 1.0))
+    except (TypeError, ValueError):
+        return 1.0
+
+
+def count_task_work_since_delegation(stream_path: str) -> float:
+    """WEIGHTED sum of main-agent 'task_work' events since the last drift
+    reset (DRIFT_RESET_MARKERS) — the orchestrator-drift signal.
+
+    swe_post_orchestrator_drift.py logs each task_work event with a weight
+    'w': 1.0 for edits/writes/mutating Bash/foreground Agent, 0.5 for reads,
+    searches, inspection/verification Bash and non-delegation MCP tools.
+    Compared against DRIFT_THRESHOLD (6) / DRIFT_HARD_THRESHOLD (12).
     """
-    return count_events_since_last(
-        stream_path,
-        marker_types=('state', 'checkpoint', 'delegation'),
-        count_type='task_work',
-    )
+    return sum(_task_work_weight(e) for e in _events_since_drift_reset(stream_path)
+               if e.get('type') == 'task_work')
 
 
-# Consecutive main-agent task-work events since last delegation at which the
-# orchestrator-drift nudge (swe_post_orchestrator_drift.py) escalates from an
-# advisory to a hard mandate, and the edit gate (swe_pre_edit_validate.py)
-# starts hard-enforcing it. Shared here so both hooks read one constant
-# instead of duplicating the number.
+def format_drift_weight(weight: float) -> str:
+    """Render a weighted drift count: '12' for integral values, '6.5' else."""
+    return str(int(weight)) if float(weight).is_integer() else f'{weight:.1f}'
+
+
+# Weighted main-agent task-work since last reset at which the orchestrator-
+# drift nudge (swe_post_orchestrator_drift.py) escalates from an advisory to
+# a hard mandate, and the edit gate (swe_pre_edit_validate.py) starts
+# hard-enforcing it. Shared here so both hooks read one constant.
 DRIFT_HARD_THRESHOLD = 12
 
 # A logged, deliberate exception recorded in the session's WM file: a
@@ -406,12 +457,63 @@ DRIFT_HARD_THRESHOLD = 12
 # DRIFT_HARD_THRESHOLD instead of splitting into parallel subagents.
 SINGLE_AGENT_NOTE_RE = re.compile(r'single-agent\s*:', re.IGNORECASE)
 
+# Stream event logged the FIRST time the hard threshold is reached in a run of
+# undelegated work. Payload 'notes' = snapshot of the WM's single-agent lines
+# at that moment; only a line NOT in that snapshot disarms the edit block.
+DRIFT_HARD_BLOCK_EVENT = 'drift_hard_block'
+
 
 def wm_has_single_agent_note(wm_content: str) -> bool:
     """True when `wm_content` (a session WM file's text) records a
     'single-agent: <reason>' override line, case-insensitive. Pure string
-    check — callers resolve and read the WM file themselves."""
+    check — callers resolve and read the WM file themselves. Presence alone
+    NEVER disarms the drift block — see single_agent_disarmed."""
     return bool(SINGLE_AGENT_NOTE_RE.search(wm_content or ''))
+
+
+def single_agent_note_lines(wm_content: str) -> list:
+    """Sorted, de-duplicated, stripped WM lines carrying a 'single-agent:'
+    note. Line identity is the comparison key for the hard-block snapshot."""
+    return sorted({line.strip() for line in (wm_content or '').splitlines()
+                   if SINGLE_AGENT_NOTE_RE.search(line)})
+
+
+def last_drift_hard_block(stream_path: str):
+    """Most recent 'drift_hard_block' event since the last drift reset, or
+    None — a delegation/state/checkpoint reset re-arms the block."""
+    for event in reversed(_events_since_drift_reset(stream_path)):
+        if event.get('type') == DRIFT_HARD_BLOCK_EVENT:
+            return event
+    return None
+
+
+def record_drift_hard_block(stream_path: str, wm_content: str,
+                            session_id: str = '') -> dict:
+    """Idempotently log the 'drift_hard_block' event for the current run of
+    undelegated work, snapshotting the WM's existing single-agent lines.
+    Returns the (existing or new) event. Called by both the drift post-hook
+    (on reaching the hard threshold) and the edit pre-gate (on first deny),
+    so a note written after EITHER announcement counts."""
+    existing = last_drift_hard_block(stream_path)
+    if existing is not None:
+        return existing
+    notes = single_agent_note_lines(wm_content)
+    append_event(stream_path, DRIFT_HARD_BLOCK_EVENT, notes=notes, s=session_id)
+    return {'type': DRIFT_HARD_BLOCK_EVENT, 'notes': notes}
+
+
+def single_agent_disarmed(stream_path: str, wm_content: str) -> bool:
+    """True when the drift hard block is disarmed: a 'drift_hard_block'
+    event exists since the last reset AND the WM now holds a single-agent
+    line absent from that event's snapshot. A note written BEFORE the block
+    (pre-emptive) is in the snapshot and never disarms. The disarm ends at
+    the next reset (delegation/state/checkpoint), whose next hard block
+    snapshots the old note too."""
+    event = last_drift_hard_block(stream_path)
+    if event is None:
+        return False
+    snapshot = set(event.get('notes') or [])
+    return any(line not in snapshot for line in single_agent_note_lines(wm_content))
 
 
 # ---------------------------------------------------------------------------

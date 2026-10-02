@@ -740,5 +740,87 @@ class BlanketConsentResetTest(_StateManagerBase):
         self.assertTrue(self._consent())
 
 
+class MultiTaskGateTest(_StateManagerBase):
+    """USER-APPROVED RULE: WF_CLASSIFY -> WF_EXECUTE is refused when Current
+    Task names 2+ independent tickets/jobs and WM lacks `parallel_agents:
+    true`. Only fires on this exact edge; --force overrides it, same as the
+    doc-claims gate.
+    """
+
+    MATRIX = {
+        "WF_CLASSIFY": ["WF_ARCH_REVIEW", "WF_EXECUTE", "WF_RESEARCH", "WF_CLARIFY"],
+        "WF_ARCH_REVIEW": ["WF_EXECUTE", "WF_CLASSIFY"],
+    }
+
+    def setUp(self):
+        super().setUp()
+        mod._transition_matrix_cache = dict(self.MATRIX)
+
+    def _sm_with_task(self, task_body, current_state="WF_CLASSIFY"):
+        content = (
+            "# WORKING MEMORY\n\n"
+            "## Workflow Context\n"
+            f"**Current State**: {current_state}\n\n"
+            "## Current Task\n"
+            f"{task_body}\n"
+        )
+        path = os.path.join(self.memories_dir, "WM_20260101_120000.md")
+        with open(path, "w") as f:
+            f.write(content)
+        return mod.StateManager(self.root)
+
+    def test_multi_ticket_task_blocks_execute(self):
+        sm = self._sm_with_task("Fix SPS-855 and SPS-856 today")
+        ok, msg = sm.transition_to("WF_EXECUTE")
+        self.assertFalse(ok)
+        self.assertIn("separate tickets/jobs", msg)
+        self.assertIn("WF_ARCH_REVIEW", msg)
+        self.assertIn("parallel_agents", msg)
+        self.assertEqual(sm.get_current_state(), "WF_CLASSIFY")
+
+    def test_multi_ticket_task_allowed_with_parallel_agents_flag(self):
+        sm = self._sm_with_task(
+            "Fix SPS-855 and SPS-856 today\n- **parallel_agents**: true")
+        ok, msg = sm.transition_to("WF_EXECUTE")
+        self.assertTrue(ok, msg)
+        self.assertEqual(sm.get_current_state(), "WF_EXECUTE")
+
+    def test_multi_ticket_task_allowed_with_force(self):
+        sm = self._sm_with_task("Fix SPS-855 and SPS-856 today")
+        ok, msg = sm.transition_to("WF_EXECUTE", force=True)
+        self.assertTrue(ok, msg)
+        self.assertEqual(sm.get_current_state(), "WF_EXECUTE")
+
+    def test_single_ticket_task_allowed(self):
+        sm = self._sm_with_task("Fix SPS-855 only.")
+        ok, msg = sm.transition_to("WF_EXECUTE")
+        self.assertTrue(ok, msg)
+        self.assertEqual(sm.get_current_state(), "WF_EXECUTE")
+
+    def test_gate_does_not_fire_on_other_targets(self):
+        # Same multi-ticket task, but targeting WF_ARCH_REVIEW (the correct
+        # route) — must not be blocked.
+        sm = self._sm_with_task("Fix SPS-855 and SPS-856 today")
+        ok, msg = sm.transition_to("WF_ARCH_REVIEW")
+        self.assertTrue(ok, msg)
+        self.assertEqual(sm.get_current_state(), "WF_ARCH_REVIEW")
+
+    def test_gate_does_not_fire_from_other_states(self):
+        # Same multi-ticket text, but starting from WF_ARCH_REVIEW (already
+        # routed correctly) -> WF_EXECUTE must not be blocked.
+        sm = self._sm_with_task("Fix SPS-855 and SPS-856 today",
+                                 current_state="WF_ARCH_REVIEW")
+        ok, msg = sm.transition_to("WF_EXECUTE")
+        self.assertTrue(ok, msg)
+        self.assertEqual(sm.get_current_state(), "WF_EXECUTE")
+
+    def test_missing_wm_file_passes(self):
+        # No WM written at all — nothing to scan, degrade-to-no-op.
+        sm = mod.StateManager(self.root)
+        mod._transition_matrix_cache = dict(self.MATRIX)
+        ok, msg = sm.transition_to("WF_EXECUTE")
+        self.assertTrue(ok, msg)
+
+
 if __name__ == "__main__":
     unittest.main()

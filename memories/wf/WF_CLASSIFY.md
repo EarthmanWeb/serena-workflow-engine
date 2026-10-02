@@ -62,7 +62,7 @@ Signals only — see Routing Table for the actual route:
 - Debugging (TDD; failing tests, env-divergent).
 - Operational (shell/WP-CLI/HTTP/DB/tests/deploy-check; no edits).
 - Code change (bug fix/feature/refactor/doc; modifies source) — see Step 3b for arch-review necessity.
-- Parallel subagents — signal detail incl. triggers and orchestrator-default rule: `mem:ref/REF_WF_CLASSIFY_PROTOCOLS`. Note `parallel_agents: true` when triggered.
+- Parallel subagents — signal detail incl. triggers and orchestrator-default rule: `mem:ref/REF_WF_CLASSIFY_PROTOCOLS`. Note `parallel_agents: true` when triggered. 2+ tickets/jobs → note `parallel_agents: true`.
 
 Regression route — WM `regression: recent` (Step 2) → Feature Knowledge Sweep DEFERRED (loads on-miss after evidence); note "sweep deferred: regression route" in WM Affected Features. Edit gate still requires the sweep before any edit. Full detail: `mem:ref/REF_WF_CLASSIFY_SWEEP`.
 
@@ -70,7 +70,7 @@ Regression route — WM `regression: recent` (Step 2) → Feature Knowledge Swee
 
 REQUIRES `WF_ARCH_REVIEW` if ANY: new feature; major module addition; touches MORE than 5 files; touches 3+ layers OR `parallel_agents` noted; `gherkin_spec_needed: true` (2d).
 
-MAY SKIP → `WF_EXECUTE` ONLY if ALL: minor patch to EXISTING functionality; ≤5 files; all design questions resolved. Skipping: note `arch_review_skipped: true` + reason in WM; still load relevant DEV__/DOM__ standards scoped to touched files at start of WF_EXECUTE; WF_EXECUTE reveals a larger change → STOP, route back to `WF_ARCH_REVIEW`. When in doubt, do NOT skip. Full criteria: `mem:ref/REF_WF_CLASSIFY_PROTOCOLS`.
+MAY SKIP → `WF_EXECUTE` ONLY if ALL: minor patch to EXISTING functionality; ≤5 files; all design questions resolved. Skipping: note `arch_review_skipped: true` + reason in WM; still load relevant DEV__/DOM__ standards scoped to touched files at start of WF_EXECUTE; WF_EXECUTE reveals a larger change → STOP, route back to `WF_ARCH_REVIEW`. When in doubt, do NOT skip. MUST NOT skip when the task contains 2+ separate tickets/jobs — hard-enforced at the WF_CLASSIFY → WF_EXECUTE transition (`state_manager.transition_to` refuses the edge unless WM records `parallel_agents: true`; `swe_wm_update` likewise rejects an `arch_review_skipped: true` write for a multi-ticket Current Task). Full criteria: `mem:ref/REF_WF_CLASSIFY_PROTOCOLS`.
 
 ## Step 4: Feature Loading (Gate)
 

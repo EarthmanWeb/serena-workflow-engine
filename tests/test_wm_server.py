@@ -583,6 +583,85 @@ class TestToolSweWmUpdateSection(_FSBase):
         self.assertEqual(state["progress"], ["done one", "done two"])
 
 
+class TestArchReviewSkipGate(_FSBase):
+    """_check_arch_review_skip / tool_swe_wm_update_section wiring:
+    `arch_review_skipped: true` is rejected for a multi-ticket Current Task
+    that lacks `parallel_agents: true` (USER-APPROVED RULE, mirrors the
+    state_manager transition gate)."""
+
+    def test_rejected_when_current_task_in_same_call_is_multi_ticket(self):
+        self._write_wm("# WM\n\n## Current Task\n\nold task\n\n## Previous Task\n\n-\n")
+        result = wm.tool_swe_wm_update_section(
+            "Current Task",
+            "Fix SPS-855 and SPS-856\narch_review_skipped: true",
+            session_id=self.SID,
+        )
+        self.assertIn("error", result)
+        self.assertIn("separate tickets/jobs", result["error"])
+        self.assertIn("WF_ARCH_REVIEW", result["error"])
+
+    def test_allowed_when_parallel_agents_flag_present_in_same_content(self):
+        self._write_wm("# WM\n\n## Current Task\n\nold task\n\n## Previous Task\n\n-\n")
+        result = wm.tool_swe_wm_update_section(
+            "Current Task",
+            "Fix SPS-855 and SPS-856\narch_review_skipped: true\nparallel_agents: true",
+            session_id=self.SID,
+        )
+        self.assertTrue(result.get("success"), result)
+
+    def test_allowed_for_single_ticket_task(self):
+        self._write_wm("# WM\n\n## Current Task\n\nold task\n\n## Previous Task\n\n-\n")
+        result = wm.tool_swe_wm_update_section(
+            "Current Task",
+            "Fix SPS-855 only\narch_review_skipped: true",
+            session_id=self.SID,
+        )
+        self.assertTrue(result.get("success"), result)
+
+    def test_rejected_using_existing_wm_current_task_when_writing_other_section(self):
+        # arch_review_skipped written into e.g. Notes; multi-ticket evidence
+        # lives in the WM file's existing Current Task section on disk.
+        self._write_wm(
+            "# WM\n\n## Current Task\n\nFix SPS-855 and SPS-856\n\n"
+            "## Notes\n\nold\n\n## Previous Task\n\n-\n"
+        )
+        result = wm.tool_swe_wm_update_section(
+            "Notes", "arch_review_skipped: true - minor patch", session_id=self.SID
+        )
+        self.assertIn("error", result)
+        self.assertIn("separate tickets/jobs", result["error"])
+
+    def test_allowed_using_existing_wm_parallel_agents_flag(self):
+        self._write_wm(
+            "# WM\n\n## Current Task\n\nFix SPS-855 and SPS-856\n\n"
+            "parallel_agents: true\n\n## Notes\n\nold\n\n## Previous Task\n\n-\n"
+        )
+        result = wm.tool_swe_wm_update_section(
+            "Notes", "arch_review_skipped: true - split across agents", session_id=self.SID
+        )
+        self.assertTrue(result.get("success"), result)
+
+    def test_no_arch_review_skipped_token_passes_even_if_multi_ticket(self):
+        # The gate only fires when the write actually claims the skip.
+        self._write_wm("# WM\n\n## Current Task\n\nold\n\n## Previous Task\n\n-\n")
+        result = wm.tool_swe_wm_update_section(
+            "Current Task", "Fix SPS-855 and SPS-856", session_id=self.SID
+        )
+        self.assertTrue(result.get("success"), result)
+
+    def test_batched_update_rejects_arch_review_skip_citing_sibling_current_task(self):
+        self._write_wm("# WM\n\n## Current Task\n\nold\n\n## Previous Task\n\n-\n")
+        result = wm.tool_swe_wm_update(
+            session_id=self.SID,
+            sections=[
+                {"section": "Current Task", "content": "Fix SPS-855 and SPS-856"},
+                {"section": "Notes", "content": "arch_review_skipped: true"},
+            ],
+        )
+        self.assertIn("error", result)
+        self.assertIn("separate tickets/jobs", result["error"])
+
+
 class TestToolSweWmUpdateStatus(_FSBase):
     def test_invalid_status_rejected(self):
         self._write_wm("# WM\n\n## Current Task\n\n**[IN_PROGRESS]**: work\n")
