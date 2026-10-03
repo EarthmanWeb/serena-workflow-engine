@@ -43,9 +43,8 @@ import shlex
 MEMORY_STORE_RE = re.compile(
     r'(?:^|[/\s"\'=(])\.serena/memor(?:y|ies)(?:/|$)')
 
-# --- Bash command splitting (shared with swe_pre_search_docs_gate.py; that
-# module imports these three names from here so BOTH modules reference the
-# same regex objects — DRY, single source of truth). ------------------------
+# --- Bash command splitting (single source of truth for this module's
+# own Bash-target extraction). ----------------------------------------------
 BASH_GROUP_SPLIT_RE = re.compile(r'(?:;|&&|\|\||&|\n)+')
 BASH_PIPE_SPLIT_RE = re.compile(r'\|(?!\|)')
 BASH_ENV_ASSIGN_RE = re.compile(

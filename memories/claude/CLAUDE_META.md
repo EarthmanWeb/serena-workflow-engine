@@ -101,6 +101,15 @@ project/
 - `write_memory("NAME", content)` — write one.
 - `edit_memory("NAME", old, new)` — patch one.
 
+## WM Blueprint (orchestration, 2+ agents)
+
+WM is the orchestration BLUEPRINT, not just a log. Before spawning 2+ agents sharing a repo, the orchestrator writes into WM Implementation Notes a `## BLUEPRINT` section:
+
+| Track | Model | OWNS (only these) | Goal |
+| ----- | ----- | ----------------- | ---- |
+
+Plus a rules line (no edits outside OWNS; cross-boundary → report to orchestrator; ignore other tracks' failures; scoped per-file tests; no commits unless told) and a deferred/sequencing note. Every spawned agent's prompt names its track + OWNS and instructs it to `swe_wm_read` the blueprint at start and whenever unsure. Full contract: `mem:dom/DOM_SUBAGENTS_PROMPT_CONTRACT` Multi-Agent Comms.
+
 ## Invariants
 
 - Claude knows its next step ONLY by reading the next memory file.

@@ -1,11 +1,11 @@
 ---
 name: DOM_SWE_HOOKS_POST
-description: PostToolUse observer/learner hooks (read-state, edit checkpoint, search hints, memory index/style, tool failure, doc-claims, orchestrator drift) and the sentinel nudge pattern they share.
+description: PostToolUse observer/learner hooks (read-state, edit checkpoint, memory index/style, tool failure, doc-claims, orchestrator drift) and the sentinel nudge pattern they share.
 obligations:
   - Sentinels NEVER block (PostToolUse cannot deny) and always exit 0 — nudges only.
   - Orchestrator-drift count feeds the pre-edit gate's HARD BLOCK at 12 (`mem:dom/DOM_SWE_HOOKS_PRE_GATES`) — this hook itself never blocks.
   - Only a BACKGROUND Agent/Task call (`run_in_background: true`) or a Workflow call resets the drift counter; a foreground Agent/Task call counts as `task_work`.
-  - `read_state`/`edit_checkpoint`/`write_continue`/`todo_wm_sync`/`search_docs_hint`/`doc_claims` are exempt for spawned agents — no workflow directives (ON STEP/CONTINUE/checkpoint nudges) are injected into a subagent's tool stream; `read_state` still logs `docread` for a subagent but NEVER readAdvances the FSM on its behalf.
+  - `read_state`/`edit_checkpoint`/`write_continue`/`todo_wm_sync`/`doc_claims` are exempt for spawned agents — no workflow directives (ON STEP/CONTINUE/checkpoint nudges) are injected into a subagent's tool stream; `read_state` still logs `docread` for a subagent but NEVER readAdvances the FSM on its behalf.
   - `e2e_fail`/`browser_repro` stream events are recorded for BOTH main agent and spawned agents (never exempt) — a browser-repro-first gate failure/repro from any agent must be visible to the whole session.
 metadata:
   type: domain
@@ -17,11 +17,10 @@ Hub: `mem:dom/DOM_SWE_HOOKS`.
 
 ## Post-Tool Hooks (`post/`)
 
-Spawned-agent exemption: `read_state`, `edit_checkpoint`, `write_continue`, `todo_wm_sync`, `search_docs_hint`, and `doc_claims` are ALL exempt for spawned-agent tool calls — NEVER inject workflow directives (ON STEP/CONTINUE, init denial, checkpoint nudges) into a subagent's stream. A spawned agent's `read_memory`/`list_memories` calls still append a `docread` event (bookkeeping for the parent session's metrics) but NEVER trigger readAdvance for that agent — the FSM transition is orchestrator-only.
+Spawned-agent exemption: `read_state`, `edit_checkpoint`, `write_continue`, `todo_wm_sync`, and `doc_claims` are ALL exempt for spawned-agent tool calls — NEVER inject workflow directives (ON STEP/CONTINUE, init denial, checkpoint nudges) into a subagent's stream. A spawned agent's `read_memory`/`list_memories` calls still append a `docread` event (bookkeeping for the parent session's metrics) but NEVER trigger readAdvance for that agent — the FSM transition is orchestrator-only.
 
-- `swe_post_read_state.py` (PostToolUse: read_memory/list_memories/search_memories_by_name/search_memories_by_front_matter): logs "ON STEP" for the resulting state — see readAdvance below. Appends a `docread` event WITH the memory name (resets the wide-search streak, refills the docs-first gate budget, feeds sweep verification). Memory searches get credit ONLY when they surface no unread names; new names → `docsearch` event + instruction to read them first. Reads surface their own `mem:`/`[[…]]` links: unread linked docs → `docpending` event + read-these instruction (wf/claude/spec/report/research/project/templates excluded). Exempt for spawned agents: logs `docread` only, NEVER emits "ON STEP"/"CONTINUE" and NEVER readAdvances.
+- `swe_post_read_state.py` (PostToolUse: read_memory/list_memories/search_memories_by_name/search_memories_by_front_matter): logs "ON STEP" for the resulting state — see readAdvance below. Appends a `docread` event WITH the memory name (feeds sweep verification). Memory searches get credit ONLY when they surface no unread names; new names → `docsearch` event + instruction to read them first. Reads surface their own `mem:`/`[[…]]` links: unread linked docs → `docpending` event + read-these instruction (wf/claude/spec/report/research/project/templates excluded). Exempt for spawned agents: logs `docread` only, NEVER emits "ON STEP"/"CONTINUE" and NEVER readAdvances.
 - `swe_post_edit_checkpoint.py` (PostToolUse: Edit/Write/Serena): edit counting, checkpoint at 10 edits (`CHECKPOINT_THRESHOLD`). Exempt for spawned agents — no checkpoint nudge injected.
-- `swe_post_search_docs_hint.py` (PostToolUse: Grep/Glob/search_for_pattern): counts CONSECUTIVE wide searches; at 3 in a row (`SEARCH_HINT_THRESHOLD`) reminds to check memories/docs first. `docread`/`state`/`checkpoint` events reset the streak. Exempt for spawned agents.
 - `swe_post_write_continue.py` (PostToolUse: write_memory): post-write continuation. Exempt for spawned agents.
 - `swe_post_todo_wm_sync.py` (PostToolUse: TodoWrite): WM sync reminder on todo changes. Exempt for spawned agents.
 - `swe_post_memory_index.py` (PostToolUse: write_memory): enforce MEMORY.md index update.

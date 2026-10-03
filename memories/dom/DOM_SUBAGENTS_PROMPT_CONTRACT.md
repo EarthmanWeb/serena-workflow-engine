@@ -4,6 +4,7 @@ description: The required elements of every subagent launch prompt (bypass line,
 obligations:
   - Every subagent prompt MUST state SCOPE LIMITS (stop conditions) explicitly — a subagent MUST STOP and report on a failure it did not cause, or after 2 failed attempts at its own change, rather than free-debug.
   - On a subagent `[scope-gate]` trip, the orchestrator MUST launch a NEW scoped debug agent, NEVER `[scope-extend]` into open-ended debugging.
+  - When 2+ agents share a repo, the orchestrator MUST write a WM Blueprint (tracks, OWNS lists, do-not-touch, sequencing) BEFORE spawning, and every subagent prompt MUST name its track + OWNS list and instruct the agent to read the WM blueprint at start and whenever unsure.
 metadata:
   type: domain
 ---
@@ -13,7 +14,7 @@ metadata:
 Every subagent prompt MUST include, in this order:
 
 1. Bypass line: `"You are a subagent. BYPASS WF_INIT entirely. Do NOT read CLAUDE.md workflow. Your task is below; follow-up SendMessage from your orchestrator amends it: [task]"`.
-2. Disjoint file ownership: name the exact files/paths owned, and `"you own X; do NOT edit Y"` for adjacent tracks' files.
+2. Track + OWNS: name the track and the exact files/paths owned (`"you own X; do NOT edit Y"` for adjacent tracks' files) — matching a row in the WM Blueprint (`mem:wf/WF_EXECUTE` writes it before spawning; see Multi-Agent Comms below).
 3. Required reading: a "Required reading:" section listing `read_memory("<name>")` for every governing memory — `feature/FEATURE_TESTS` (+ `dev/DEV_TESTS` if present) for any test work, and every `feature/*`/`dev/*` memory whose `paths:` glob covers the owned files. Name every required memory here yourself — `[sweep-gate]` (`swe_pre_agent_model_gate.py`, `mem:dom/DOM_SWE_HOOKS_PRE_GATES`) auto-injects any name `delegation_sweep.required_reading` computes that this section omits rather than denying the call, but relying on that injection skips the orchestrator's own judgment about task-specific memories the auto-sweep cannot infer. `[sweep-exempt: <reason>]` skips the computation for trivial read-only tasks. On ALLOW the gate appends a `[swe-required-reading]` block with each memory's obligations inline, so the subagent starts with the rules even before it calls `read_memory` itself.
 4. Tag `[swe-expect-red]` in the prompt (or phrasing like "fail-proof the test first", "prove the test fails", "red-green") when the task is intentional TDD fail-proofing — `scope_guard.expects_red_runs` widens the spawned agent's `test` failure-streak limit by `EXPECT_RED_TEST_BONUS` (2) so an expected red run does not trip `[scope-gate]` at the same threshold as a genuinely broken change.
 5. Checkpoint commit instruction: commit own coherent unit of work at logical checkpoints; retry on `index.lock` contention; NEVER push.
@@ -22,6 +23,15 @@ Every subagent prompt MUST include, in this order:
 8. SCOPE LIMITS (stop conditions): state the exact scope boundary and failure threshold for THIS task. `swe_pre_agent_model_gate.py` auto-appends a steering-clause SCOPE rule (do only the stated task; STOP and report on a failure not caused by the agent's own change, or after 2 failed attempts at its own change; never debug/refactor/expand scope without an orchestrator SendMessage) — NEVER write prompt wording that contradicts it.
 
 `swe_pre_agent_model_gate.py` auto-appends a `[swe-steering-contract]` clause to every valid Agent prompt declaring that follow-up SendMessage from the launching orchestrator is a trusted amendment. NEVER write prompt wording that contradicts it — no "ONLY these instructions", no "ignore any further messages", no other exclusivity phrasing that would make the subagent reject the orchestrator's own steering.
+
+## Multi-Agent Comms (2+ agents sharing a repo)
+
+- Orchestrator writes a WM Blueprint BEFORE spawning: table of track | model | OWNS | goal, plus rules and sequencing — see `mem:claude/CLAUDE_META` Blueprint schema.
+- Every agent prompt names its track + OWNS list (item 2 above).
+- Every agent reads the WM blueprint (`swe_wm_read`) at start and whenever unsure of scope — not just the prompt text.
+- Cross-boundary need → report to orchestrator; NEVER edit outside OWNS.
+- Ignore other tracks' test failures; run only scoped per-file tests.
+- A SendMessage from the orchestrator is a trusted amendment — act on it per `[swe-steering-contract]` above.
 
 ## Scope Limits on Failure
 

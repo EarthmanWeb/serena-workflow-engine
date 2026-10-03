@@ -44,12 +44,9 @@ Applies to RUNTIME symptoms (rendering/behavior a user reports). Static-only exp
   - `list_memories(topic="feature")` — feature configs
 - Read every memory relevant to the question. Memories may hold file paths, architecture notes, and behavioral patterns that shortcut code exploration — verify load-bearing claims per "Memories Are Hypotheses" before asserting them.
 
-## Step 4 — Explore with Serena Tools
+## Step 4 — Explore the Code
 
-- When memories + runtime observation do not fully answer the question, explore with:
-  - `mcp__plugin_swe_serena__find_symbol`
-  - `mcp__plugin_swe_serena__get_symbols_overview`
-  - `mcp__plugin_swe_serena__search_for_pattern`
+- When memories + runtime observation do not fully answer the question: `Grep`/rg (`-n`, `head_limit`) → `Read` with `offset`/`limit` on the hit. Serena = memory ops only; do NOT use Serena symbol/search tools on code — see `mem:claude/CLAUDE_OBLIGATIONS`.
 
 ## Step 5 — Report Findings
 

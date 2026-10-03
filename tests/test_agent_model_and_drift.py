@@ -495,6 +495,72 @@ class TestWithSteeringClause(unittest.TestCase):
         self.assertEqual(agent_gate.with_steering_clause("not-a-dict"), "not-a-dict")
         self.assertIsNone(agent_gate.with_steering_clause(None))
 
+    def test_no_session_id_omits_blueprint_line(self):
+        result = agent_gate.with_steering_clause({"prompt": "Do X."})
+        self.assertNotIn("Blueprint:", result["prompt"])
+
+    def test_session_id_appends_blueprint_line(self):
+        result = agent_gate.with_steering_clause({"prompt": "Do X."}, "020bb6c2")
+        self.assertIn("Blueprint:", result["prompt"])
+        self.assertIn('session_id="020bb6c2"', result["prompt"])
+        self.assertIn('section="Blueprint"', result["prompt"])
+
+    def test_blueprint_line_comes_after_steering_clause(self):
+        result = agent_gate.with_steering_clause({"prompt": "Do X."}, "020bb6c2")
+        self.assertLess(
+            result["prompt"].index(agent_gate.STEERING_CLAUSE_MARKER),
+            result["prompt"].index("Blueprint:"),
+        )
+
+    def test_idempotent_blueprint_not_duplicated(self):
+        once = agent_gate.with_steering_clause({"prompt": "Do X."}, "020bb6c2")
+        twice = agent_gate.with_steering_clause(once, "020bb6c2")
+        self.assertEqual(once["prompt"], twice["prompt"])
+        self.assertEqual(once["prompt"].count("Blueprint:"), 1)
+
+
+# ──────────────────────────────────────────────────────────────────
+# pre/swe_pre_agent_model_gate — blueprint_line
+# ──────────────────────────────────────────────────────────────────
+
+class TestBlueprintLine(unittest.TestCase):
+    def test_empty_session_id_returns_empty_string(self):
+        self.assertEqual(agent_gate.blueprint_line(""), "")
+        self.assertEqual(agent_gate.blueprint_line(None), "")
+
+    def test_known_session_id_builds_toolsearch_then_read(self):
+        line = agent_gate.blueprint_line("020bb6c2")
+        self.assertIn("ToolSearch", line)
+        self.assertIn(
+            'select:mcp__plugin_swe_swe-wm__swe_wm_read', line)
+        self.assertIn(
+            'mcp__plugin_swe_swe-wm__swe_wm_read(session_id="020bb6c2", '
+            'section="Blueprint")', line)
+        # ToolSearch load must precede the actual read call.
+        self.assertLess(line.index("ToolSearch"), line.index("swe_wm_read("))
+
+    def test_mentions_ownership_scope_instruction(self):
+        line = agent_gate.blueprint_line("020bb6c2")
+        self.assertIn("OWNS", line)
+        self.assertIn("scope", line.lower())
+
+
+# ──────────────────────────────────────────────────────────────────
+# pre/swe_pre_agent_model_gate — _resolve_project_root_and_wm (3-tuple)
+# ──────────────────────────────────────────────────────────────────
+
+class TestResolveProjectRootAndWmReturnsSessionId(unittest.TestCase):
+    def test_returns_three_values_on_total_failure(self):
+        # No transcript_path, no project root resolvable from this context
+        # — every branch degrades to '' rather than raising, and the
+        # return shape is always a 3-tuple (project_root, wm_text, session_id).
+        result = agent_gate._resolve_project_root_and_wm({})
+        self.assertEqual(len(result), 3)
+        project_root, wm_text, session_id = result
+        self.assertIsInstance(project_root, str)
+        self.assertIsInstance(wm_text, str)
+        self.assertIsInstance(session_id, str)
+
 
 # ──────────────────────────────────────────────────────────────────
 # pre/swe_pre_agent_model_gate — with_budget_tag / budget stamping

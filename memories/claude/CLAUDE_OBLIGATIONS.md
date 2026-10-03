@@ -39,7 +39,7 @@ Priority order: KISS → DRY → YAGNI.
 - Do not synthesize or fake data unless explicitly asked.
 - Do not attribute problems to caching unless caching exists in the code.
 - Do not use `as any` type assertions (TypeScript).
-- Do not guess file paths — use Serena tools. A destination already used/read this session, or the one obvious file for a literal target, is not a guess.
+- Do not guess file paths — confirm via rg/Grep first. A destination already used/read this session, or the one obvious file for a literal target, is not a guess.
 - Do not run dev servers; the user manages these.
 - Do not implement workarounds without asking.
 - NEVER proceed when memories conflict with user instructions — silently picking one loses the other's requirement. STOP and ask.
@@ -59,7 +59,7 @@ In edit mode + `WF_EXECUTE`, when the user names the target literally (a `#id`/`
 - Follow `wf/WF_INIT` → `claude/CLAUDE_OBLIGATIONS` → `wf/WF_CLASSIFY` sequence. No shortcuts. See `wf/WF_INIT`.
 - "Let It Fail": remove defensive code, add none, allow clear failures.
 - Check `MEMORY.md` or `index/INDEX_FEATURES` when navigating features.
-- Use Serena symbolic tools for code edits: `replace_symbol_body`, `insert_before_symbol`, `insert_after_symbol` to modify; `find_symbol`, `get_symbols_overview`, `search_for_pattern` to discover. Fall back to `Read`/`Edit` only for non-code files or when symbols cannot be resolved.
+- Serena = memory ops ONLY (`read_memory`/`write_memory`/`edit_memory`/memory search). Code discovery: `Grep`/rg (`-n`, `head_limit`) → `Read` with `offset`/`limit`. Full-file `Read` only for files <300 lines or config. Code edits: native `Edit`/`Write`. NEVER `find_symbol`/`replace_symbol_body`/`search_for_pattern`/etc. on code — measured: windowed `Read` ≈ `find_symbol` body (605 vs 609 tok); targeted rg beats Serena search 1.42× overall; rg 10–100× faster (0.01–0.36s vs 0.03–9.4s); Serena `search_for_pattern` empty 30% of calls + false negatives on sibling paths.
 - Update WM using `swe-wm` MCP tools: `swe_wm_update_section` for section updates, `swe_wm_update_status` for status, `swe_wm_read` to read. NEVER use `write_memory`/`edit_memory` on WM files — these bypass the daemon and can clobber the `Workflow Context`/`Transitions` fields the state machine depends on.
 - Ask for clarification via AskUserQuestion when uncertain.
 - Follow existing patterns. Check docs and existing code first.

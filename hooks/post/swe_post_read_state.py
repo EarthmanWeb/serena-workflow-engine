@@ -362,6 +362,11 @@ def _bootstrap_session_at_classify(cwd, session_id):
 
 ## Implementation Notes
 (none yet)
+
+## Blueprint
+(none yet — the orchestrator writes tracks + file-ownership (OWNS) here
+before spawning 2+ edit-capable parallel agents; each subagent reads this
+section at start and whenever unsure of scope)
 """
     try:
         os.makedirs(os.path.dirname(wm_filepath), exist_ok=True)
@@ -457,8 +462,7 @@ def main():
                 output_status(_discovery_no_credit_message(new_names))
             return
 
-        # Consulting documentation (any list_memories / read_memory) resets the
-        # wide-search streak tracked by swe_post_search_docs_hint.py and records
+        # Consulting documentation (any list_memories / read_memory) records
         # WHICH memory was read (sweep-gate verification). Best-effort.
         try:
             append_event(get_stream_path(session_id), 'docread', s=session_id,

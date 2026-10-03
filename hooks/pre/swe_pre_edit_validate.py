@@ -540,8 +540,7 @@ def main():
         input_data = read_stdin_safe(timeout_seconds=2.0)
         cwd = get_input_field(input_data, 'cwd', default=os.getcwd())
 
-        # Spawned-agent status is resolved FIRST (matching
-        # swe_pre_search_docs_gate.py's exemption order) so the drift block
+        # Spawned-agent status is resolved FIRST so the drift block
         # below can consult it — spawned agents are expected to do direct
         # work and must NEVER hit that block. It does NOT bypass the
         # security guards immediately below (bypass-write / raw-memory-write

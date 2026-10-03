@@ -16,7 +16,6 @@ Covers:
                                     orchestrator's checkpoint counter).
   post/swe_post_write_continue   — output_empty(), no continuation text.
   post/swe_post_todo_wm_sync     — output_empty(), no stream event, no WM sync.
-  post/swe_post_search_docs_hint — output_empty(), no 'search' stream event.
 
 post/swe_post_doc_claims is covered separately in test_doc_claims.py.
 
@@ -37,7 +36,6 @@ read_state_mod = import_hook("post/swe_post_read_state")
 edit_checkpoint_mod = import_hook("post/swe_post_edit_checkpoint")
 write_continue_mod = import_hook("post/swe_post_write_continue")
 todo_sync_mod = import_hook("post/swe_post_todo_wm_sync")
-search_hint_mod = import_hook("post/swe_post_search_docs_hint")
 
 SESSION = "ab12cd34"
 TRANSCRIPT = f"/x/{SESSION}-0000-0000-0000-000000000000.jsonl"
@@ -323,42 +321,6 @@ class TestPostTodoWmSyncSpawnedAgentExempt(SpawnedAgentHookTestCase):
         with open(wm_path) as f:
             after = f.read()
         self.assertIn("[ ] x", after)
-
-
-class TestPostSearchDocsHintSpawnedAgentExempt(SpawnedAgentHookTestCase):
-    def setUp(self):
-        super().setUp()
-        self._orig_stream_path = search_hint_mod.get_stream_path
-        search_hint_mod.get_stream_path = lambda sid: self.stream_path
-
-    def tearDown(self):
-        search_hint_mod.get_stream_path = self._orig_stream_path
-        super().tearDown()
-
-    def _payload(self, agent_id="agent-xyz"):
-        return {
-            "tool_name": "Grep",
-            "tool_input": {"pattern": "foo"},
-            "transcript_path": TRANSCRIPT,
-            "cwd": self.cwd,
-            "agent_id": agent_id,
-        }
-
-    def test_empty_output(self):
-        result = _run_main(search_hint_mod, self._payload())
-        self.assertEqual(result, {})
-
-    def test_no_search_stream_event_appended(self):
-        _run_main(search_hint_mod, self._payload())
-        events = _read_events(self.stream_path)
-        self.assertEqual([e for e in events if e.get("type") == "search"], [])
-
-    def test_main_agent_unaffected_still_counts_search(self):
-        payload = self._payload(agent_id=None)
-        del payload["agent_id"]
-        _run_main(search_hint_mod, payload)
-        events = _read_events(self.stream_path)
-        self.assertEqual(len([e for e in events if e.get("type") == "search"]), 1)
 
 
 if __name__ == "__main__":

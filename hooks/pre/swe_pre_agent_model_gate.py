@@ -468,17 +468,41 @@ def with_required_reading(tool_input: dict, full_read, digest, project_root: str
     return updated
 
 
-def with_steering_clause(tool_input: dict) -> dict:
-    """Return a COPY of `tool_input` with STEERING_CLAUSE appended to `prompt`,
+def blueprint_line(session_id: str) -> str:
+    """The Blueprint-read instruction appended to STEERING_CLAUSE for every
+    orchestrator Agent/Task call, when `session_id` is known.
+
+    Prefixes with a ToolSearch load (swe-wm tools are deferred, so a
+    subagent that calls swe_wm_read cold spends 1-2 extra ToolSearch calls
+    discovering it first — measured this session) before the actual read,
+    scoped to just the "Blueprint" section via swe_wm_read's `section` param
+    so the subagent isn't forced to ingest the entire WM. Empty
+    `session_id` -> "" (no line — swe_wm_read would have nothing to resolve
+    without one either).
+    """
+    if not session_id:
+        return ''
+    return (
+        f'\nBlueprint: First: ToolSearch(query="select:'
+        f'mcp__plugin_swe_swe-wm__swe_wm_read", max_results=1). Then call '
+        f'mcp__plugin_swe_swe-wm__swe_wm_read(session_id="{session_id}", '
+        f'section="Blueprint") and follow the Blueprint section (your '
+        f'track, OWNS list) at start and whenever unsure of scope.'
+    )
+
+
+def with_steering_clause(tool_input: dict, session_id: str = '') -> dict:
+    """Return a COPY of `tool_input` with STEERING_CLAUSE (plus a
+    Blueprint-read line, when `session_id` is known) appended to `prompt`,
     followed by a `[swe-budget: N]` tag (see with_budget_tag).
 
     Pure/non-mutating. Idempotent — if the marker is already present in the
-    prompt, the steering clause is not appended again, but the budget tag is
-    still applied (and is itself idempotent — an existing tag, including one
-    added by a prior pass or an orchestrator override, is kept verbatim).
-    Passes the input through unchanged (still copied, for non-dict inputs
-    unchanged as-is) when `tool_input` is not a dict, or `prompt` is
-    missing/not a string.
+    prompt, neither the steering clause nor the Blueprint line is appended
+    again, but the budget tag is still applied (and is itself idempotent —
+    an existing tag, including one added by a prior pass or an orchestrator
+    override, is kept verbatim). Passes the input through unchanged (still
+    copied, for non-dict inputs unchanged as-is) when `tool_input` is not a
+    dict, or `prompt` is missing/not a string.
     """
     if not isinstance(tool_input, dict):
         return tool_input
@@ -487,37 +511,40 @@ def with_steering_clause(tool_input: dict) -> dict:
         return dict(tool_input)
     updated = dict(tool_input)
     if STEERING_CLAUSE_MARKER not in prompt:
-        updated['prompt'] = prompt + STEERING_CLAUSE
+        updated['prompt'] = prompt + STEERING_CLAUSE + blueprint_line(session_id)
     return with_budget_tag(updated)
 
 
 def _resolve_project_root_and_wm(input_data: dict):
-    """Best-effort (project_root, wm_text) for the calling session.
+    """Best-effort (project_root, wm_text, session_id) for the calling
+    session.
 
     project_root via the standard core.config helper. wm_text is the calling
     session's WM file content, located the same way other pre-hooks resolve
     a session's WM (transcript_path -> extract_session_id ->
-    find_working_memory_for_session). Any failure (missing transcript_path,
-    no WM yet, IO error) yields ('', '') for wm_text/project_root
-    respectively — required_reading() degrades gracefully to path/test-only
-    sourcing (or nothing) rather than raising.
+    find_working_memory_for_session). session_id is returned alongside so
+    callers (e.g. the Blueprint line in with_steering_clause) don't have to
+    re-derive it. Any failure (missing transcript_path, no WM yet, IO error)
+    yields ('', '', '') respectively — required_reading() degrades
+    gracefully to path/test-only sourcing (or nothing) rather than raising.
     """
     project_root = ''
     wm_text = ''
+    session_id = ''
     try:
         project_root = get_project_root() or ''
     except Exception:
         project_root = ''
     try:
         transcript_path = get_input_field(input_data, 'transcript_path', default='')
-        session_id = extract_session_id(transcript_path)
+        session_id = extract_session_id(transcript_path) or ''
         wm_path = find_working_memory_for_session(project_root, session_id)
         if wm_path:
             with open(wm_path, 'r', encoding='utf-8') as f:
                 wm_text = f.read()
     except Exception:
         wm_text = ''
-    return project_root, wm_text
+    return project_root, wm_text, session_id
 
 
 def main():
@@ -558,7 +585,7 @@ def main():
             output_block(reason)
             return
 
-        project_root, wm_text = _resolve_project_root_and_wm(input_data)
+        project_root, wm_text, session_id = _resolve_project_root_and_wm(input_data)
         try:
             full_read, digest = required_reading_split(prompt, wm_text, project_root)
         except Exception:
@@ -581,7 +608,7 @@ def main():
             )
 
         updated = with_required_reading(working_input, full_read, digest, project_root)
-        final_input = with_steering_clause(updated)
+        final_input = with_steering_clause(updated, session_id)
         if allow_context:
             output_allow_with_input(final_input, context=allow_context)
         else:

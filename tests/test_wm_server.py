@@ -502,6 +502,57 @@ class TestToolSweWmRead(_FSBase):
         self.assertEqual(result["state"]["progress"], [])
 
 
+class TestToolSweWmReadSectionFilter(_FSBase):
+    """swe_wm_read's `section` param: found / absent / unknown name."""
+
+    WM_BODY = (
+        "# WM\n\n"
+        "## Workflow Context\n**Current State**: WF_EXECUTE\n\n"
+        "## Blueprint\n\n"
+        "| Track | OWNS |\n|---|---|\n| B7 | wm_server.py |\n\n"
+        "## Notes\n\nsome other note\n"
+    )
+
+    def test_known_section_found_returns_only_that_body(self):
+        self._write_wm(self.WM_BODY)
+        result = wm.tool_swe_wm_read(session_id=self.SID, section="Blueprint")
+        self.assertNotIn("error", result)
+        self.assertEqual(result["section"], "Blueprint")
+        self.assertTrue(result["section_found"])
+        self.assertIn("B7", result["content"])
+        self.assertNotIn("some other note", result["content"])
+
+    def test_known_section_absent_from_wm_returns_empty_not_error(self):
+        # WM exists but has no Blueprint heading at all.
+        self._write_wm("# WM\n\n## Notes\n\nonly notes here\n")
+        result = wm.tool_swe_wm_read(session_id=self.SID, section="Blueprint")
+        self.assertNotIn("error", result)
+        self.assertEqual(result["section"], "Blueprint")
+        self.assertFalse(result["section_found"])
+        self.assertEqual(result["content"], "")
+
+    def test_unknown_section_name_is_an_error_listing_valid_names(self):
+        self._write_wm(self.WM_BODY)
+        result = wm.tool_swe_wm_read(session_id=self.SID, section="Not A Real Section")
+        self.assertIn("error", result)
+        self.assertIn("Not A Real Section", result["error"])
+        self.assertIn("Blueprint", result["error"])
+        self.assertIn("Workflow Context", result["error"])
+
+    def test_no_section_param_returns_full_content_unchanged(self):
+        self._write_wm(self.WM_BODY)
+        result = wm.tool_swe_wm_read(session_id=self.SID)
+        self.assertNotIn("section", result)
+        self.assertNotIn("section_found", result)
+        self.assertEqual(result["content"], self.WM_BODY)
+
+    def test_readable_sections_includes_protected_for_read_only(self):
+        # Protected sections are write-blocked elsewhere, but readable here.
+        self.assertIn("Workflow Context", wm.READABLE_SECTIONS)
+        self.assertIn("Transitions", wm.READABLE_SECTIONS)
+        self.assertIn("Blueprint", wm.READABLE_SECTIONS)
+
+
 class TestToolSweWmUpdateSection(_FSBase):
     def test_no_wm_file_error(self):
         result = wm.tool_swe_wm_update_section("Notes", "hi", session_id=self.SID)

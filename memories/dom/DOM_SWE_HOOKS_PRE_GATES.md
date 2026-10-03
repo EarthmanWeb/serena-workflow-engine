@@ -1,9 +1,9 @@
 ---
 name: DOM_SWE_HOOKS_PRE_GATES
-description: PreToolUse gatekeeper hub — init gate, memory-fs gate, edit validation, memory index gate, bash test gate, docs-first search gate, question consent gate, agent model gate.
+description: PreToolUse gatekeeper hub — init gate, memory-fs gate, edit validation, memory index gate, bash test gate, read guard, question consent gate, agent model gate.
 obligations:
   - Init gate blocks ALL tools until the WF_INIT chain completes; `swe_pre_memory_fs_gate.py` DENIES Bash/Grep/Glob/Read on Serena memory stores for both main agent and subagents. Full detail: `mem:dom/DOM_SWE_HOOKS_PRE_GATES_INIT_FS`.
-  - `[doc-gate]` in `swe_pre_edit_validate.py` and the docs-first search gate's budget model are MAIN-AGENT-ONLY doc enforcement. Full detail: `mem:dom/DOM_SWE_HOOKS_PRE_GATES_DOCS`.
+  - `[doc-gate]` in `swe_pre_edit_validate.py` is MAIN-AGENT-ONLY doc enforcement; `swe_pre_read_guard.py` DENIES an unwindowed Read of a large code file for BOTH main agent and subagents. Full detail: `mem:dom/DOM_SWE_HOOKS_PRE_GATES_DOCS`.
   - `swe_pre_agent_model_gate.py` runs five DENY checks plus the non-denying `[sweep-gate]` auto-inject and budget/scope-gate stamping on every Agent/Task call. Full detail: `mem:dom/DOM_SWE_HOOKS_PRE_GATES_AGENT`.
   - `swe_pre_memory_index_gate.py` HARD-DENIES spec/report/research/project links into MEMORY.md and any dom/ref/dev/feature memory write with no `obligations:` field.
   - `swe_pre_bash_test_gate.py` gates ONLY the main agent on TEST docs for detected test-runner commands; subagent TEST-doc reading is enforced at delegation time via `[sweep-gate]`.
@@ -21,12 +21,12 @@ This memory is a split hub. Read a child per the routing table below for full de
 
 ## Routing Table
 
-| When                                                                                        | Read                                      |
-| ------------------------------------------------------------------------------------------- | ----------------------------------------- |
-| Debugging/editing the init gate (two-tier breaker, sentinel recovery) or the memory-fs gate | `mem:dom/DOM_SWE_HOOKS_PRE_GATES_INIT_FS` |
-| Debugging/editing `[doc-gate]` (edit-time doc enforcement) or the docs-first search gate    | `mem:dom/DOM_SWE_HOOKS_PRE_GATES_DOCS`    |
-| Debugging/editing the agent model gate, `[sweep-gate]`, scope budget/stamping               | `mem:dom/DOM_SWE_HOOKS_PRE_GATES_AGENT`   |
-| Editing memory-index enforcement, bash-test gate, or question-consent gate                  | Stay in this hub — see sections below     |
+| When                                                                                         | Read                                      |
+| -------------------------------------------------------------------------------------------- | ----------------------------------------- |
+| Debugging/editing the init gate (two-tier breaker, sentinel recovery) or the memory-fs gate  | `mem:dom/DOM_SWE_HOOKS_PRE_GATES_INIT_FS` |
+| Debugging/editing `[doc-gate]` (edit-time doc enforcement) or the large-code-file Read guard | `mem:dom/DOM_SWE_HOOKS_PRE_GATES_DOCS`    |
+| Debugging/editing the agent model gate, `[sweep-gate]`, scope budget/stamping                | `mem:dom/DOM_SWE_HOOKS_PRE_GATES_AGENT`   |
+| Editing memory-index enforcement, bash-test gate, or question-consent gate                   | Stay in this hub — see sections below     |
 
 ## `swe_pre_edit_validate.py` — PreToolUse (Edit/Write/Serena)
 

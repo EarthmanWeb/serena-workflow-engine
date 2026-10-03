@@ -14,7 +14,7 @@ ALWAYS obey hook data. Before proceeding, confirm:
 - Followed hook instructions exactly.
 - Read all references named in hook responses COMPLETELY.
 - Checked `INDEX_FEATURES` or `MEMORY.md` for existing features.
-- Used Serena tools before Read/Edit.
+- Serena for memory ops only; rg/Grep + windowed Read for code discovery; native Edit/Write for code edits.
 - Logged findings to WM.
 - Updated WM after significant steps.
 

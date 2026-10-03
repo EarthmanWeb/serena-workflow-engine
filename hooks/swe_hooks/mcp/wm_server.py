@@ -60,6 +60,7 @@ ALLOWED_SECTIONS = [
     "Requirements", "Implementation Notes", "Previous Task",
     "Task Context", "Affected Features", "Context", "Feature(s)",
     "Compliance Checklist", "Doc Claims Used", "Open Decisions",
+    "Blueprint",
 ]
 
 VALID_STATUSES = [
@@ -76,7 +77,10 @@ TOOL_DEFINITIONS = [
         "description": (
             "Read the current Working Memory state and full content for a session. "
             "Returns workflow context (current state, feature keys, session ID), "
-            "the raw markdown content, and the WM file path."
+            "the raw markdown content, and the WM file path. Pass `section` to "
+            "get back just that section's markdown body (e.g. \"Blueprint\") "
+            "instead of the whole WM file — an unknown section name is an "
+            "error listing the valid names."
         ),
         "inputSchema": {
             "type": "object",
@@ -84,6 +88,10 @@ TOOL_DEFINITIONS = [
                 "session_id": {
                     "type": "string",
                     "description": "8-character session ID (e.g., 'ca2d3450'). If omitted, uses SWE_SESSION_ID env var.",
+                },
+                "section": {
+                    "type": "string",
+                    "description": "Optional — restrict `content` to just this section's body (e.g. \"Blueprint\", \"Current Task\") instead of the full WM. Must be a valid WM section name.",
                 },
             },
             "required": [],
@@ -353,16 +361,55 @@ def _sync_section_to_state_file(session_id: str, section: str, content: str):
             progress=state.get('progress'),
         )
 
-def tool_swe_wm_read(session_id: str = None) -> dict:
+# Section names swe_wm_read's `section` filter accepts — the agent-owned
+# ALLOWED_SECTIONS plus the two daemon-managed ones (read-only access to
+# those is fine; only *writing* them is blocked elsewhere).
+READABLE_SECTIONS = ALLOWED_SECTIONS + sorted(PROTECTED_SECTIONS)
+
+
+def _extract_section(content: str, section: str) -> Optional[str]:
+    """Return just `section`'s body (the markdown between its heading and
+    the next heading of the same or shallower level, or EOF), or None when
+    that heading is not present in `content`. Tries H3 then H2, mirroring
+    tool_swe_wm_update_section's own matching order.
+    """
+    for level in [3, 2]:
+        hashes = "#" * level
+        escaped_section = re.escape(section)
+        next_heading = "|".join(re.escape("#" * l) + " " for l in range(1, level + 1))
+        pattern = rf"{hashes} {escaped_section}\s*\n(.*?)(?=\n(?:{next_heading})|\Z)"
+        match = re.search(pattern, content, re.DOTALL)
+        if match:
+            return match.group(1).strip("\n")
+    return None
+
+
+def tool_swe_wm_read(session_id: str = None, section: str = None) -> dict:
     """Read WM state and content for a session.
 
     Returns state from expanded JSON state file (authoritative) merged with
     WM markdown content (display). If WM markdown doesn't exist but state
     file does, returns state-only response.
+
+    `section`, when given, restricts `content` to just that section's
+    markdown body instead of the whole WM file — avoids every caller (in
+    particular a delegated subagent reading just the Blueprint section)
+    ingesting the entire WM. Must be one of READABLE_SECTIONS; an unknown
+    name is an error listing the valid names rather than a silent empty
+    read. A section not found in a WM that otherwise exists returns a
+    `content: ""` plus a `section_found: false` flag (never an error — the
+    WM may simply not have written it yet, e.g. no Blueprint written for a
+    single-track task).
     """
     session_id = _resolve_session_id(session_id)
     if not session_id:
         return {"error": "No session_id provided and no SWE_SESSION_ID env var set — pass session_id explicitly (it is printed in every workflow hook message, e.g. WM[<id>] / session=\"<id>\")"}
+
+    if section is not None and section not in READABLE_SECTIONS:
+        return {
+            "error": f"Unknown section '{section}' — valid section names: "
+                     f"{', '.join(READABLE_SECTIONS)}"
+        }
 
     cwd = get_project_root()
 
@@ -393,12 +440,20 @@ def tool_swe_wm_read(session_id: str = None) -> dict:
     else:
         return {"error": f"No state file or WM found for session {session_id}"}
 
-    return {
+    result = {
         "session_id": session_id,
         "wm_filepath": wm_filepath or "",
         "state": state,
         "content": content,
     }
+
+    if section is not None:
+        section_body = _extract_section(content, section) if content else None
+        result["section"] = section
+        result["section_found"] = section_body is not None
+        result["content"] = section_body or ""
+
+    return result
 
 
 # Matches a '`arch_review_skipped: true`'-style declaration anywhere in an

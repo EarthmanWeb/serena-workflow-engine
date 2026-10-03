@@ -94,36 +94,9 @@ Complete the init chain (WF_INIT → CLAUDE_OBLIGATIONS → WF_CLASSIFY) first. 
 2. `list_memories(topic="ref")` — load any REF_* memories relevant to the task.
 3. `list_memories(topic="dev")` — load any DEV_* memories relevant to the task.
 
-## Symbol Extraction
+## Code Discovery (NOT Serena)
 
-Use Serena symbolic tools before reading full files:
-
-- `get_symbols_overview` — understand file structure without reading it.
-- `find_symbol` with `include_body=True` — read only the symbol you need.
-- `find_referencing_symbols` — trace dependencies between symbols.
-- `search_for_pattern` — targeted search when the symbol name is unknown.
-
-### `depth` Levels
-
-| depth | Returns                                                                       |
-| ----- | ----------------------------------------------------------------------------- |
-| `0`   | Top-level symbols only (classes, standalone functions, constants)             |
-| `1`   | Top-level + immediate children (e.g. class methods, function-local variables) |
-| `2+`  | Deeper nesting levels                                                         |
-
-### Language Server Coverage
-
-| File Type                 | Symbol Quality | Notes                                                               |
-| ------------------------- | -------------- | ------------------------------------------------------------------- |
-| **PHP**                   | Excellent      | Functions, classes, variables, DOM elements in templates            |
-| **Python**                | Excellent      | Classes, functions, variables                                       |
-| **TypeScript/JavaScript** | Good           | Named exports, classes, functions. jQuery wrappers may return empty |
-| **Markdown**              | Limited        | Headings only (H2/H3 as symbols)                                    |
-| **SCSS/CSS**              | Poor           | Language server rarely exposes selectors or variables               |
-| **JSON/YAML/Config**      | None           | No symbolic structure — use `Read` or `search_for_pattern`          |
-
-- When symbol extraction returns empty, fall back to `search_for_pattern` with regex.
-- Read full files ONLY for config files, files with poor language server support, or when full file context is explicitly needed.
+Serena = memory ops ONLY. Discover code with `Grep`/rg (`-n`, `head_limit`) → `Read` with `offset`/`limit` on the hit. Full-file `Read` ONLY for files <300 lines or config/JSON/YAML. Edit with native `Edit`/`Write`, never a Serena edit tool. Measured: windowed `Read` ≈ Serena symbol-body read (605 vs 609 tok); rg beats Serena search 1.42× overall and 10–100× faster (0.01–0.36s vs 0.03–9.4s); Serena `search_for_pattern` returns empty 30% of calls plus false negatives on sibling paths.
 
 ## Step Reporting
 

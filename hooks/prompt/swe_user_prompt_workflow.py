@@ -84,6 +84,11 @@ def create_wm_and_sentinel(cwd, session_id, initial_state='WF_CLASSIFY',
 
 ## Implementation Notes
 (none yet)
+
+## Blueprint
+(none yet — the orchestrator writes tracks + file-ownership (OWNS) here
+before spawning 2+ edit-capable parallel agents; each subagent reads this
+section at start and whenever unsure of scope)
 """
     os.makedirs(os.path.dirname(wm_filepath), exist_ok=True)
     with open(wm_filepath, 'w', encoding='utf-8') as f:

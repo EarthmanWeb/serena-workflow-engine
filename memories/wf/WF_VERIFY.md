@@ -17,7 +17,7 @@ Check for violations:
 
 - Used inappropriate type assertions (e.g. `as any`)?
 - Created files without permission?
-- Guessed paths without Serena?
+- Guessed a file path instead of confirming it via rg/Grep?
 
 ## 2. Architecture & Compliance Check
 

@@ -66,14 +66,14 @@ Do NOT write code until relevant memories are loaded.
 
 ## Single-Layer Implementation
 
-Use Serena tools directly: `find_symbol` (locate code) → `get_symbols_overview` (file structure) → `Edit` / `replace_symbol_body` (make changes).
+`Grep`/rg (locate code) → `Read` with `offset`/`limit` (confirm context) → `Edit`/`Write` (make changes). Serena = memory ops only; see `mem:claude/CLAUDE_OBLIGATIONS`.
 
-## Serena Edit Tool Signatures
+## Serena Memory Tool Signatures
 
-**⚠️ MANDATORY — fetch the live schema before your FIRST Serena write/edit call this session**, for EVERY `mcp__plugin_swe_serena__*` param-taking tool (`replace_content`, `replace_symbol_body`, `insert_*`, `edit_memory`, `write_memory`): schemas are deferred, not loaded until fetched. Guessing params fails validation and wastes a turn.
+**⚠️ MANDATORY — fetch the live schema before your FIRST Serena memory write/edit call this session**, for `edit_memory`/`write_memory`: schemas are deferred, not loaded until fetched. Guessing params fails validation and wastes a turn.
 
 ```
-ToolSearch("select:mcp__plugin_swe_serena__replace_content")   # or edit_memory, write_memory, …
+ToolSearch("select:mcp__plugin_swe_serena__edit_memory")   # or write_memory
 ```
 
 Param cheat-sheet: `mem:ref/REF_WF_EXECUTE_SERENA_EDIT_TOOLS`.

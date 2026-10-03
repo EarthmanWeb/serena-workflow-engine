@@ -1,0 +1,115 @@
+
+=== Scanned 1028 transcripts (mtime>=2026-09-20, excl experiments/private-var)
+=== 127 transcripts had browser-devtools or claude-in-chrome tool calls
+=== deferred_tools listing mentions of browser-devtools tool count: {}
+
+--- browser-devtools (Playwright-based) per-tool stats ---
+tool                                           calls   res_tok  avg_tok  imgs  img_KB   carry_tok  err  err% avg_wall_s  #sess  #proj
+mcp__browser-devtools__execute                  1180   249,094      211     0       0  38,366,471   20  1.7%       5.7s     93     21
+mcp__browser-devtools__navigation_go-to          394   200,897      509     0       0  22,984,236   27  6.9%       5.8s     85     21
+mcp__browser-devtools__a11y_take-aria-snapshot    159   260,410    1,637     0       0  37,879,450   13  8.2%       2.5s     48     18
+mcp__browser-devtools__interaction_click         137     2,907       21     0       0     319,359   28 20.4%       5.5s     42     16
+mcp__browser-devtools__interaction_fill          116       686        5     0       0      82,928   11  9.5%       0.8s     24     13
+mcp__browser-devtools__content_take-screenshot     96     2,793       29     1     101     334,124    9  9.4%       3.0s     38     14
+mcp__browser-devtools__scenario-run               91    17,993      197     0       0   4,049,558   12 13.2%       9.6s     43     16
+mcp__browser-devtools__content_get-as-html        84    50,285      598     0       0   6,800,591   12 14.3%       0.4s     23     10
+mcp__browser-devtools__o11y_get-console-messages     79    52,668      666     0       0   3,246,547    2  2.5%       0.6s     35     13
+mcp__browser-devtools__interaction_resize-viewport     59     2,295       38     0       0     140,828    2  3.4%       0.1s     17      9
+mcp__browser-devtools__scenario-list              39   224,914    5,767     0       0  28,672,336    0  0.0%       1.0s     38      8
+mcp__browser-devtools__o11y_get-http-requests     36    58,455    1,623     0       0  10,430,397    1  2.8%       0.4s     19      8
+mcp__browser-devtools__navigation_reload          32    48,827    1,525     0       0   2,344,288    2  6.2%       5.1s     14      8
+mcp__browser-devtools__browser_close              26       372       14     0       0      28,811    4 15.4%       0.2s     18     11
+mcp__browser-devtools__sync_wait-for-network-idle     26       798       30     0       0     175,965   11 42.3%       9.5s     10      4
+mcp__browser-devtools__content_get-as-text        17     1,584       93     0       0     593,965    1  5.9%       0.7s      5      2
+mcp__browser-devtools__scenario-search            12    15,617    1,301     0       0   3,620,241    7 58.3%       0.8s      9      5
+mcp__browser-devtools__interaction_scroll         11       947       86     0       0      78,483    2 18.2%       0.1s      6      5
+mcp__browser-devtools__browser_reset-state         8       183       22     0       0      13,891    5 62.5%       0.1s      8      5
+mcp__browser-devtools__interaction_press-key       4         2        0     0       0          79    0  0.0%       0.1s      3      3
+mcp__browser-devtools__interaction_select          2         1        0     0       0         172    0  0.0%       0.0s      2      2
+mcp__browser-devtools__debug_put-exceptionpoint      2        45       22     0       0         879    0  0.0%       0.5s      1      1
+mcp__browser-devtools__mcp__browser-devtools__execute      1        29       29     0       0      16,848    1100.0%       0.0s      1      1
+mcp__browser-devtools__scenario-add                1     1,610    1,610     0       0     132,061    0  0.0%       0.1s      1      1
+mcp__browser-devtools__navigation_go_to            1        25       25     0       0          51    1100.0%       0.0s      1      1
+mcp__browser-devtools__interaction_hover           1         0        0     0       0         288    0  0.0%       0.1s      1      1
+mcp__browser-devtools__debug_get-probe-snapshots      1       639      639     0       0      18,531    0  0.0%       0.1s      1      1
+
+TOTAL calls=2615 result_tok=1,194,083 errors=171 (6.5%)
+
+--- top error strings across all browser-devtools tools ---
+  [  28] Error: Session context is already closed
+  [  16] Error: browserContext.newPage: Target page, context or browser has been closed
+  [  14] The user doesn't want to proceed with this tool use. The tool use was rejected (eg. if it was a file edit, the new_string was NOT written to the file)
+  [   9] Error: Lane limit exceeded: this server already has 8 active lane(s) (max 8, configurable via BROWSER_LANE_MAX_COUNT). Close an existing lane (browser
+  [   8] Error: page.screenshot: Timeout 30000ms exceeded.
+Call log:
+  - taking page screenshot
+  - waiting for fonts to load...
+  - fonts loaded
+  [   3] Error: locator.click: Timeout 10000ms exceeded.
+Call log:
+  - waiting for getByRole('button', { name: 'Open Form Settings' }).first()
+  [   2] PreToolUse:mcp__browser-devtools__execute hook error: [.claude/hooks/require-login-doc-before-browser-login.sh]: STOP: browser WP-admin login attempt 
+  [   2] Error: Navigation timed out (30000ms). Ensure the click triggers a page load (e.g. link or submit). Original: page.waitForNavigation: Timeout 30000ms 
+  [   2] Error: Navigation timed out (30000ms). Ensure the click triggers a page load (e.g. link or submit). Original: locator.click: Timeout 10000ms exceeded.
+  [   2] PreToolUse:mcp__browser-devtools__scenario-run hook error: [.claude/hooks/require-login-doc-before-browser-login.sh]: STOP: browser WP-admin login att
+  [   2] Error: Element with selector ".sps-list" not found
+  [   2] Error: Element with selector "#attendees-container" not found
+  [   2] Error: mode="by" requires dx and/or dy to be non-zero.
+  [   2] Error: page.reload: net::ERR_ABORTED; maybe frame was detached?
+Call log:
+  - waiting for navigation until "load"
+  [   1] MCP error -32602: Input validation error: Invalid arguments for tool execute: Required at code
+
+--- sessions with browser-devtools calls (per-session call count) ---
+  agent-ae81864bb46450d6d: 143 calls
+  fb7b4c00-2ae8-41d8-9844-345909331d8d: 84 calls
+  agent-a0d96ebd8216297f4: 78 calls
+  agent-abe21169d1cf0b72c: 73 calls
+  1da09bc5-8b7a-4751-93ef-fc47615b9d1b: 72 calls
+  3158f245-b852-457b-a05e-ecbf299654c9: 60 calls
+  agent-ace8160fe5cd48f19: 60 calls
+  562c4ef0-ec17-4396-9572-afff6e33abc0: 54 calls
+  f9553519-c55a-45f5-ae5b-1d8081d80456: 52 calls
+  agent-a80c2e873dc25e625: 52 calls
+  63fd1a05-09a7-4f13-ac4d-ceecef638fcc: 51 calls
+  agent-aa967954963c4e977: 48 calls
+  agent-ac05277c6a2d3d034: 46 calls
+  agent-ad94647fcbb4c7301: 43 calls
+  5d4d44f5-ab82-47a4-a825-50235d37ad65: 40 calls
+  ad99d43f-ce4c-46f6-9638-1e2e7d758a82: 39 calls
+  agent-a6be45ccfef1ec979: 38 calls
+  agent-a8493f9bb75ec9a61: 38 calls
+  afc906c4-a928-4674-9ca2-e40fbf84107c: 37 calls
+  agent-a0a00d28ebef57a38: 36 calls
+  ... total distinct sessions with calls: 127
+
+--- projects using browser-devtools ---
+  -Users-webdev-LocalSites-convenely-convenely-scaffold-base
+  -Users-webdev-LocalSites-projects-em-devtools
+  -Users-webdev-LocalSites-sps-sps-wpms-master
+  -Users-webdev-LocalSites-sps-sps-wpms-refactor
+  -private-tmp
+  16be47fd-8d83-4513-9672-6e6cc81e1789
+  23b7051d-278c-42ef-ae87-528b5a6ab30e
+  3accd0d4-308f-4387-9933-5dd398c39f16
+  40b4dd6c-4d1e-4942-bc1a-ab1267283afe
+  4d2e1866-7c39-4508-87a6-446a447c95f4
+  5b9165eb-6817-4c01-871b-d3b27888e01d
+  71133e2f-b681-481e-b615-1af1f6c60296
+  857f6445-b39e-4cd3-9ab4-0e8711567ff1
+  87034066-8e76-4202-94ac-dd701d521988
+  8d8cb1be-ced6-4418-b446-290f1996932d
+  981da884-f189-4832-a6e9-fb0afac70cb3
+  982777ec-5dd7-4433-a3da-a1a64db7fa1e
+  98d1f1e2-53ea-45a8-9d5c-c20970f95f5f
+  98e2f007-dce3-41cc-b893-13a51dffe036
+  a7a51833-a9cc-48ec-9c67-b32639fe61b5
+  afc906c4-a928-4674-9ca2-e40fbf84107c
+  c998f0ef-ded5-4591-9c36-0ba71dbd6352
+  e23d696b-968b-4893-a740-fb8fbbb8573c
+  e49658ee-c021-445d-878b-e6aa389ddad9
+
+--- claude-in-chrome (mcp__claude-in-chrome__*) usage ---
+  NONE FOUND in scanned transcripts
+
+(raw per-transcript data written to browser_analysis.json, 127 transcripts)
