@@ -15,7 +15,10 @@ import glob as _glob
 import os
 import re
 
-from swe_hooks.core.doc_requirements import required_docs_for_path, read_obligations, memory_exists
+from swe_hooks.core.doc_requirements import (
+    required_docs_for_path, read_obligations, memory_exists, _read_memory_text,
+    _FRONTMATTER_RE, TEST_DOC_NAMES,
+)
 
 # Prefixes/names excluded from a WM-sourced required-reading list: workflow
 # machinery (wf/*, claude/*), session state (WM_*), and the four sweep-
@@ -193,68 +196,169 @@ def _expand_glob_paths(token: str, project_root: str) -> list:
     return rel
 
 
-def required_reading(prompt: str, wm_text: str, project_root: str, cap: int = 8) -> list:
-    """Ordered, de-duplicated required-reading memory names for a subagent
-    prompt, capped at `cap` entries.
+_TEST_DOC_NAMES_LOWER = {n.lower() for n in TEST_DOC_NAMES}
 
-    Sources, in priority order:
-      1. required_docs_for_path for every path token in `prompt` (glob
-         tokens expanded via glob.glob under project_root first).
-      2. feature/FEATURE_TESTS + dev/DEV_TESTS when is_test_work(prompt) and
-         they exist under project_root.
-      3. wm_memories(wm_text) — the orchestrator's own loaded/planned/cited
-         memories.
+
+def _path_match_names(prompt: str, project_root: str, cap: int) -> list:
+    """Ordered, de-duplicated memory names whose `paths:` front-matter glob
+    matches a file path token named in `prompt` (edit targets) — the FULL-
+    READ source. Capped at `cap`.
+
+    Excludes TEST_DOC_NAMES (feature/FEATURE_TESTS, dev/DEV_TESTS) even when
+    required_docs_for_path adds one for a test-file path — that inclusion is
+    the is_test_work heuristic, not a genuine paths:-glob edit-target match,
+    and belongs in the digest set (required_reading_split handles it there).
     """
     names = []
     seen = set()
-
-    def _add(name):
-        if name and name.lower() not in seen:
-            seen.add(name.lower())
-            names.append(name)
-
     for token in prompt_paths(prompt, project_root):
         for expanded in _expand_glob_paths(token, project_root):
             for doc in required_docs_for_path(expanded, project_root):
-                _add(doc)
+                if doc.lower() in _TEST_DOC_NAMES_LOWER:
+                    continue
+                if doc.lower() not in seen:
+                    seen.add(doc.lower())
+                    names.append(doc)
                 if len(names) >= cap:
                     return names[:cap]
+    return names[:cap]
+
+
+def required_reading_split(prompt: str, wm_text: str, project_root: str,
+                            full_cap: int = 3, cap: int = 8):
+    """Split required-reading memory names into (full_read, digest).
+
+    Digest-first (QW1): measured that requiring a full read_memory() of
+    every listed name cost subagents a median 18.7k tokens upfront (+444%
+    memory cost vs pre-rollout, net -0 effectiveness: flail rate rose
+    5%->8%), while 87% of listed names were read in full and never referenced
+    again. Only names that match an actual edit target get a full read; the
+    rest ship as an inline digest the subagent is told NOT to re-read.
+
+    full_read: names from _path_match_names (paths:-glob matches a file path
+    named in the prompt — likely edit targets), capped at `full_cap`.
+
+    digest: everything else required_reading() used to return, in the same
+    priority order: feature/FEATURE_TESTS + dev/DEV_TESTS for test work, then
+    wm_memories(wm_text) (WM Memories loaded / Rules planned / Compliance
+    Checklist citations). Any path-matched name beyond `full_cap` also falls
+    through to digest rather than being dropped. De-duplicated against
+    full_read. Combined length of both lists never exceeds `cap`.
+    """
+    full_read = []
+    seen = set()
+    for doc in _path_match_names(prompt, project_root, full_cap):
+        if doc.lower() not in seen:
+            seen.add(doc.lower())
+            full_read.append(doc)
+
+    digest = []
+
+    def _add_digest(name):
+        if name and name.lower() not in seen:
+            seen.add(name.lower())
+            digest.append(name)
+
+    # Path-matched names beyond full_cap still owe a digest, not silence.
+    for doc in _path_match_names(prompt, project_root, cap):
+        _add_digest(doc)
 
     if is_test_work(prompt):
         for doc in ('feature/FEATURE_TESTS', 'dev/DEV_TESTS'):
             if memory_exists(doc, project_root):
-                _add(doc)
-                if len(names) >= cap:
-                    return names[:cap]
+                _add_digest(doc)
 
     for name in wm_memories(wm_text):
-        _add(name)
-        if len(names) >= cap:
-            return names[:cap]
+        _add_digest(name)
 
+    total_room = max(0, cap - len(full_read))
+    return full_read, digest[:total_room]
+
+
+def required_reading(prompt: str, wm_text: str, project_root: str, cap: int = 8) -> list:
+    """The combined (full_read + digest) ordered name list — "which memories
+    does this sweep touch" without the FULL-READ vs DIGEST distinction. See
+    required_reading_split for the split callers that need to enforce only
+    the FULL-READ subset (e.g. missing_sweep_reason's deny-avoidance set).
+    """
+    full_read, digest = required_reading_split(prompt, wm_text, project_root, cap=cap)
+    names = list(full_read)
+    seen = {n.lower() for n in names}
+    for name in digest:
+        if name.lower() not in seen:
+            seen.add(name.lower())
+            names.append(name)
     return names[:cap]
 
 
 _BLOCK_HEADER = (
-    "\n\n[swe-required-reading] Before any other work, read these memories "
-    "yourself with read_memory — the orchestrator's reads do not carry over "
-    "to you:"
+    "\n\n[swe-required-reading] FULL READ — before any other work, read "
+    "these memories yourself with read_memory (the orchestrator's reads do "
+    "not carry over to you):"
+)
+
+_DIGEST_HEADER = (
+    "\n\nDIGEST — these are the required knowledge for this task already. Do "
+    "NOT call read_memory on these unless a specific edit needs detail "
+    "beyond what is summarized here:"
 )
 
 
-def required_reading_block(names, project_root: str) -> str:
-    """The `[swe-required-reading]` prompt-injection block for `names`.
-
-    Empty `names` -> "". Each name gets a `- read_memory("<name>")` line,
-    followed by its obligations (read_obligations) indented as
-    `    • <obligation>` lines — omitted entirely when there are none.
+def read_description(name: str, project_root: str) -> str:
+    """The memory's front-matter `description:` scalar value, or '' when the
+    memory is missing, has no front-matter, or declares no `description:`.
     """
-    names = [n for n in (names or []) if n]
-    if not names:
+    text = _read_memory_text(name, project_root)
+    if not text:
         return ''
-    lines = [_BLOCK_HEADER]
-    for name in names:
-        lines.append(f'- read_memory("{name}")')
-        for obligation in read_obligations(name, project_root):
-            lines.append(f'    • {obligation}')
+    m = _FRONTMATTER_RE.match(text)
+    if not m:
+        return ''
+    desc_re = re.compile(r'^description\s*:\s*(.*)$')
+    for line in m.group(1).splitlines():
+        if line.startswith(' '):
+            continue
+        dm = desc_re.match(line.strip())
+        if dm:
+            return dm.group(1).strip().strip('"').strip("'")
+    return ''
+
+
+def required_reading_block(full_read, digest, project_root: str) -> str:
+    """The `[swe-required-reading]` prompt-injection block.
+
+    `full_read` names each get a `- read_memory("<name>")` line, followed by
+    that memory's obligations (read_obligations) indented as
+    `    • <obligation>` lines — omitted entirely when there are none.
+
+    `digest` names each get a single `- <name>: <summary>` line instead,
+    where <summary> is the memory's obligations joined with '; ', falling
+    back to its front-matter `description:` when it declares no
+    obligations, falling back to '(no digest available)' when neither is
+    present. These lines ARE the required knowledge for the digest names —
+    the block explicitly tells the subagent not to read_memory() them absent
+    a specific need.
+
+    Both lists empty -> "".
+    """
+    full_read = [n for n in (full_read or []) if n]
+    digest = [n for n in (digest or []) if n]
+    if not full_read and not digest:
+        return ''
+    lines = []
+    if full_read:
+        lines.append(_BLOCK_HEADER)
+        for name in full_read:
+            lines.append(f'- read_memory("{name}")')
+            for obligation in read_obligations(name, project_root):
+                lines.append(f'    • {obligation}')
+    if digest:
+        lines.append(_DIGEST_HEADER)
+        for name in digest:
+            obligations = read_obligations(name, project_root)
+            if obligations:
+                summary = '; '.join(obligations)
+            else:
+                summary = read_description(name, project_root) or '(no digest available)'
+            lines.append(f'- {name}: {summary}')
     return '\n'.join(lines)

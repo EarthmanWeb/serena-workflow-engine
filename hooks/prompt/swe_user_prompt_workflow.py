@@ -29,6 +29,7 @@ try:
     from swe_hooks.core.stream import (
         get_stream_path, get_event_count, get_sentinel_path, append_event,
         append_task_boundary, is_edit_mode, set_edit_mode,
+        get_last_prompted_state, set_last_prompted_state,
     )
     from swe_hooks.core.output import emit_once, WF_INIT_GUIDANCE
 except ImportError as e:
@@ -251,6 +252,28 @@ conversation, not this message alone:
 Default to STAY when uncertain — re-classifying mid-task is the costly error.
 Review the current step if needed: mcp__plugin_swe_serena__read_memory(memory_name="wf/{current_state}")
 """
+
+
+def mandatory_read_or_banner(state: str, wm_file: str, stream_info: str,
+                             last_prompted_state, banner_emoji: str = "\U0001f4cb") -> str:
+    """The repeat-every-prompt 'MANDATORY: read wf/<state>' instruction,
+    gated on whether `state` changed since the previous prompt.
+
+    Measured motivation: per-prompt "MANDATORY read WF_X" caused up to 9
+    re-reads of WF_CLASSIFY (27.5k tokens) in one session — the state had
+    not changed between prompts, so the full instruction was pure repeat
+    cost. Emit the full MANDATORY block only when `state` differs from
+    `last_prompted_state` (None counts as different — first time this state
+    is prompted this session, or no prior record). When unchanged, emit only
+    the one-line state banner plus a "review if needed" pointer — same
+    information, no repeated directive.
+    """
+    header = f"{banner_emoji} WORKFLOW STATE: {state}\nWorking Memory: {wm_file or 'None'}{stream_info}\n"
+    if state != last_prompted_state:
+        return (header + f"\nMANDATORY: Before responding, read and follow "
+                f'the {state} workflow.\nUse: mcp__plugin_swe_serena__read_memory(memory_name="wf/{state}")\n')
+    return (header + f"\nState unchanged since last prompt — continue without "
+            f're-reading. Review if needed: mcp__plugin_swe_serena__read_memory(memory_name="wf/{state}")\n')
 
 
 def research_exit_directive(session_id: str, wm_file: str, stream_info: str) -> str:
@@ -903,6 +926,11 @@ NO classification, NO WF_INIT chain, NO WF_CLASSIFY. Fast-tracked to WF_EXECUTE.
             print(json.dumps(output))
             sys.exit(0)
 
+        # Last-prompted state: gates the repeat-every-prompt "MANDATORY: read
+        # wf/WF_X" instruction down to a one-line banner once the state has
+        # already been prompted unchanged (see mandatory_read_or_banner).
+        last_prompted_state = get_last_prompted_state(session_id) if session_id else None
+
         # Build context based on prompt intent and state
         if prompt_intent == 'continuation':
             # User is continuing - stay in current state, provide brief reminder
@@ -915,12 +943,8 @@ NO classification, NO WF_INIT chain, NO WF_CLASSIFY. Fast-tracked to WF_EXECUTE.
                     event_count = get_event_count(stream_path)
                     if event_count > 0:
                         stream_info = f"\nStream Events: {event_count}"
-                context = f"""📋 WORKFLOW STATE: {current_state}
-Working Memory: {wm_file or 'None'}{stream_info}
-
-MANDATORY: Before responding, read and follow the WF_CLASSIFY workflow.
-Use: mcp__plugin_swe_serena__read_memory(memory_name="wf/WF_CLASSIFY")
-"""
+                context = mandatory_read_or_banner(current_state, wm_file, stream_info,
+                                                   last_prompted_state)
             else:
                 # In active state - continue workflow
                 # Get stream event count for observability
@@ -1075,12 +1099,8 @@ Use: mcp__plugin_swe_serena__read_memory(memory_name="wf/{current_state}")
                     stream_info = f"\nStream Events: {event_count}"
             if current_state in ('WF_CLASSIFY', 'WF_INIT'):
                 # Not yet classified — genuinely need to classify.
-                context = f"""❓ INTENT UNCLEAR - WORKFLOW STATE: {current_state}
-Working Memory: {wm_file or 'None'}{stream_info}
-
-MANDATORY: Classify this task using WF_CLASSIFY.
-Use: mcp__plugin_swe_serena__read_memory(memory_name="wf/WF_CLASSIFY")
-"""
+                context = mandatory_read_or_banner(current_state, wm_file, stream_info,
+                                                   last_prompted_state, banner_emoji="❓")
             elif current_state == 'WF_RESEARCH' and RESEARCH_IMPLEMENT_RE.search(prompt_lower):
                 context = research_exit_directive(session_id, wm_file, stream_info)
             else:
@@ -1089,7 +1109,13 @@ Use: mcp__plugin_swe_serena__read_memory(memory_name="wf/WF_CLASSIFY")
                 context = pivot_analysis_note(current_state, wm_file,
                                               stream_info, cue_hint=False,
                                               session_id=session_id)
-        
+
+        # Record this prompt's state as the new "last prompted" marker so
+        # the NEXT prompt's mandatory_read_or_banner call can tell whether
+        # the state actually changed.
+        if session_id:
+            set_last_prompted_state(session_id, current_state)
+
         output = {
             "hookSpecificOutput": {
                 "hookEventName": "UserPromptSubmit",

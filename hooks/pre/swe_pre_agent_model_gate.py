@@ -43,25 +43,35 @@ FIVE independent DENY checks, each with its own message:
    orchestrator genuinely has nothing else to do until the result returns.
    No `subagent_type` is exempt.
 
-Doc sweep ([sweep-gate]) is not a deny check: when required_reading() finds
-names missing from the orchestrator's prompt, the gate AUTO-INJECTS them into
-the prompt's "Required reading:" section — see with_missing_required_reading()
-— and ALLOWS the call; no relaunch round-trip. `[sweep-exempt: <reason>]`
-still skips the required_reading() computation entirely for a genuinely
-trivial read-only task. missing_sweep_reason remains the pure "what is
-missing" helper (used by with_missing_required_reading and by tests), just
-never wired to a deny in main().
+Doc sweep ([sweep-gate]) is not a deny check: required_reading_split()
+computes two sets per prompt — FULL-READ names (paths:-glob matches a file
+path named in the prompt, i.e. an edit target, capped at 3) and DIGEST names
+(everything else: WM Memories loaded/Rules planned/Compliance Checklist
+citations, FEATURE_TESTS/DEV_TESTS for test work). Only FULL-READ names
+missing from the orchestrator's prompt are AUTO-INJECTED into the prompt's
+"Required reading:" section — see with_missing_required_reading() — and the
+call is ALLOWED; no relaunch round-trip. DIGEST names never cause a deny or
+an auto-inject: they ship purely as inline summaries in the
+[swe-required-reading] block (delegation_sweep.required_reading_block),
+marked as already being the required knowledge, with an explicit instruction
+not to read_memory() them absent a specific need. `[sweep-exempt: <reason>]`
+still skips the required_reading_split() computation entirely for a
+genuinely trivial read-only task. missing_sweep_reason remains the pure
+"what is missing" helper (used by with_missing_required_reading and by
+tests, and now evaluated only against FULL-READ names), just never wired to
+a deny in main().
 
 When all five deny checks below pass, the call is ALLOWED but its input is
-rewritten (via permissionDecision="allow" + updatedInput): any names
-required_reading() finds missing from the prompt's "Required reading:"
-section are auto-injected there (with_missing_required_reading), then a
-`[swe-required-reading]` block is appended (read_memory(...) lines + each
-memory's obligations digest, from delegation_sweep.required_reading_block)
-when required_reading() found anything, followed by the standard
-trust/steering clause (see STEERING_CLAUSE) and a `[swe-budget: N]` tag. The
-allow's `permissionDecisionReason` names which memories (if any) were
-auto-added, so the orchestrator learns for next time.
+rewritten (via permissionDecision="allow" + updatedInput): any FULL-READ
+names required_reading_split() finds missing from the prompt's "Required
+reading:" section are auto-injected there (with_missing_required_reading),
+then a `[swe-required-reading]` block is appended — read_memory(...) lines +
+obligations for each FULL-READ name, plus a `<name>: <summary>` digest line
+for each DIGEST name — from delegation_sweep.required_reading_block, when
+required_reading_split() found anything in either set, followed by the
+standard trust/steering clause (see STEERING_CLAUSE) and a `[swe-budget: N]`
+tag. The allow's `permissionDecisionReason` names which FULL-READ memories
+(if any) were auto-added, so the orchestrator learns for next time.
 
 Model-tiering goal: this project's harness must HEAVILY enforce cutting token
 usage via parallel + cheaper subagents. Premium models (opus, fable) are never
@@ -85,7 +95,7 @@ try:
     from swe_hooks.core.scope_guard import budget_for_model, parse_budget_tag, BUDGET_TAG_RE
     from swe_hooks.core.session import extract_session_id, find_working_memory_for_session
     from swe_hooks.core.config import get_project_root
-    from swe_hooks.core.delegation_sweep import required_reading, required_reading_block
+    from swe_hooks.core.delegation_sweep import required_reading_split, required_reading_block
 except ImportError as e:
     swe_hooks.bootstrap.import_error_exit(e, "PreToolUse")
 
@@ -433,10 +443,10 @@ def with_budget_tag(tool_input: dict) -> dict:
 REQUIRED_READING_MARKER = '[swe-required-reading]'
 
 
-def with_required_reading(tool_input: dict, required, project_root: str) -> dict:
+def with_required_reading(tool_input: dict, full_read, digest, project_root: str) -> dict:
     """Return a COPY of `tool_input` with the [swe-required-reading] block
     (delegation_sweep.required_reading_block) appended to `prompt`, when
-    `required` is non-empty.
+    `full_read` or `digest` is non-empty.
 
     Idempotent — a prompt already carrying REQUIRED_READING_MARKER (e.g. the
     orchestrator wrote its own, or a prior pass already applied one) is left
@@ -452,7 +462,7 @@ def with_required_reading(tool_input: dict, required, project_root: str) -> dict
     updated = dict(tool_input)
     if REQUIRED_READING_MARKER in prompt:
         return updated
-    block = required_reading_block(required, project_root)
+    block = required_reading_block(full_read, digest, project_root)
     if block:
         updated['prompt'] = prompt + block
     return updated
@@ -550,11 +560,15 @@ def main():
 
         project_root, wm_text = _resolve_project_root_and_wm(input_data)
         try:
-            required = required_reading(prompt, wm_text, project_root)
+            full_read, digest = required_reading_split(prompt, wm_text, project_root)
         except Exception:
-            required = []
+            full_read, digest = [], []
 
-        missing = _missing_sweep_names(prompt, required)
+        # Only FULL-READ names (paths:-glob matches an edit target named in
+        # the prompt) are enforced by the deny-avoidance/auto-inject path —
+        # digest names never cause a deny; they ship as inline summaries via
+        # with_required_reading below instead.
+        missing = _missing_sweep_names(prompt, full_read)
         allow_context = None
         working_input = tool_input
         if missing:
@@ -566,7 +580,7 @@ def main():
                 f"\U0001f4cb [sweep-gate] auto-added required reading: {names}"
             )
 
-        updated = with_required_reading(working_input, required, project_root)
+        updated = with_required_reading(working_input, full_read, digest, project_root)
         final_input = with_steering_clause(updated)
         if allow_context:
             output_allow_with_input(final_input, context=allow_context)

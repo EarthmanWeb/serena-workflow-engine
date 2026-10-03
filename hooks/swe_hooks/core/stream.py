@@ -86,6 +86,52 @@ def set_edit_mode(session_id: str, on: bool) -> bool:
         return False
 
 
+def get_last_prompted_state_path(session_id: str) -> str:
+    """Sentinel path for the session's last-prompted WF_* state.
+
+    Pattern: .serena/streams/.last_prompted_{session_id} — same family as
+    get_edit_mode_path/get_sentinel_path. Content is a small JSON blob
+    ({"state": "<WF_X>"}) — unlike the edit-mode sentinel, the VALUE is read
+    (not just existence), so swe_user_prompt_workflow.py can suppress the
+    "MANDATORY: read wf/WF_X" instruction when the state is unchanged since
+    the previous prompt (measured: up to 9 re-reads of WF_CLASSIFY, 27.5k
+    tokens, in one session).
+    """
+    return os.path.join(get_stream_dir(), f'.last_prompted_{session_id}')
+
+
+def get_last_prompted_state(session_id: str) -> Optional[str]:
+    """Return the WF_* state recorded as of the previous prompt for
+    `session_id`, or None if never recorded (first prompt, or sentinel
+    missing/unreadable)."""
+    if not session_id:
+        return None
+    path = get_last_prompted_state_path(session_id)
+    try:
+        with open(path, 'r') as f:
+            data = json.load(f)
+        state = data.get('state')
+        return state if isinstance(state, str) and state else None
+    except (IOError, ValueError):
+        return None
+
+
+def set_last_prompted_state(session_id: str, state: str) -> bool:
+    """Record `state` as this session's last-prompted WF_* state.
+    Best-effort — mirrors set_edit_mode's IOError swallow."""
+    if not session_id or not state:
+        return False
+    path = get_last_prompted_state_path(session_id)
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, 'w') as f:
+            json.dump({"session_id": session_id, "state": state,
+                      "set_at": int(time.time())}, f, separators=(',', ':'))
+        return True
+    except IOError:
+        return False
+
+
 def append_event(stream_path: str, event_type: str, **data):
     """Append an event to the stream. O(1) append, no reads."""
     event = {"t": int(time.time()), "type": event_type}
@@ -476,8 +522,10 @@ def count_task_work_since_delegation(stream_path: str) -> float:
     reset (DRIFT_RESET_MARKERS) — the orchestrator-drift signal.
 
     swe_post_orchestrator_drift.py logs each task_work event with a weight
-    'w': 1.0 for edits/writes/mutating Bash/foreground Agent, 0.5 for reads,
-    searches, inspection/verification Bash and non-delegation MCP tools.
+    'w': 1.0 for edits/writes/mutating Bash/foreground Agent, 0 for reads,
+    searches, inspection/verification Bash and non-delegation MCP tools (the
+    0.5 class was dropped — measured false-positive driver, see
+    swe_post_orchestrator_drift.DRIFT_THRESHOLD comment).
     Compared against DRIFT_THRESHOLD (6) / DRIFT_HARD_THRESHOLD (12).
     """
     return sum(_task_work_weight(e) for e in _events_since_drift_reset(stream_path)

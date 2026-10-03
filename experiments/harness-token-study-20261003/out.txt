@@ -1,0 +1,844 @@
+
+=== 98d1f1e2 MAIN  (1 transcripts, 225 API calls)
+usage: in=450 cache_create=452,049 cache_read=62,995,030 out=138,544 | total_in=63,447,529
+group                   calls    res_tok     avg     carry_tok  err
+serena-memory              57     54,232     951     8,094,862    3
+Bash-read                  17     15,459     909     2,409,018    1
+Bash-search                31     10,165     327       920,107    1
+Agent                      14      3,818     272       404,215    0
+mcp:wp-cli                 21      5,099     242       369,810    0
+serena-search               7      2,227     318       367,922    1
+Bash-other                 29      3,399     117       314,060    2
+swe-wm                     34        952      28       123,695    0
+serena-symbol-read          5      2,296     459       100,897    0
+SendMessage                11        570      51        42,755    0
+AskUserQuestion             6        401      66        40,494    0
+TaskStop                    2         93      46         5,579    0
+Skill                       1         11      11         1,419    0
+serena-edit/other           1          0       0             9    0
+ToolSearch                  8          0       0             0    0
+hooks (calls, est tok):
+  UserPromptSubmit                                 34     5,868
+  PostToolUse:mcp__plugin_swe_serena__search_memories_by_front_matter     2     4,135
+  PostToolUse:mcp__plugin_swe_serena__read_memory    30     3,485
+  PostToolUse:Bash                                 73     2,344
+  PostToolUse:mcp__plugin_swe_serena__search_memories_by_name     4       937
+  PostToolUse:mcp__wp-cli__wp_cli                  21       748
+  PostToolUse:mcp__plugin_swe_serena__edit_memory    19       649
+  PostToolUse:mcp__plugin_swe_serena__write_memory     4       328
+  PostToolUse:mcp__plugin_swe_serena__search_for_pattern    12       277
+  SessionStart                                      1       229
+  PostToolUse:mcp__plugin_swe_serena__get_symbols_overview     3       176
+  PostToolUse:Agent                                14       143
+  PostToolUse:mcp__plugin_swe_serena__find_symbol     2        81
+  PostToolUse:TaskStop                              2        31
+  PostToolUse:mcp__plugin_swe_serena__replace_symbol_body     2        26
+  PreToolUse:mcp__plugin_swe_serena__replace_symbol_body     1         6
+  PostToolUse:mcp__plugin_swe_serena__list_memories     1         4
+detail:
+  DENIED:Bash-other                                       1
+  DENIED:serena-memory                                    2
+  DENIED:serena-search                                    1
+  ERR:Bash-other                                          2
+  ERR:Bash-read                                           1
+  ERR:Bash-search                                         1
+  ERR:serena-memory                                       3
+  ERR:serena-search                                       1
+  S:find_symbol+body:calls                                2
+  S:find_symbol+body:chars                            2,136 tok
+  S:find_symbol:calls                                     2
+  S:find_symbol:chars                                 2,136 tok
+  S:get_symbols_overview:calls                            3
+  S:get_symbols_overview:chars                          159 tok
+  S:search_for_pattern:calls                              7
+  S:search_for_pattern:chars                          2,227 tok
+  S:search_for_pattern:empty_or_err                       2
+
+=== 98d1f1e2 SUBAGENTS  (14 transcripts, 671 API calls)
+usage: in=1,396 cache_create=2,088,741 cache_read=122,290,056 out=69,099 | total_in=124,380,193
+group                   calls    res_tok     avg     carry_tok  err
+serena-memory             140    272,863   1,949    16,252,407    0
+serena-symbol-read        133     81,318     611     7,112,231    0
+Read                      100     80,941     809     3,971,759    4
+Bash-read                  40     21,678     541     1,187,525    1
+serena-search              54     33,636     622     1,055,592    1
+Bash-search                46     17,447     379       987,758    0
+Bash-other                166     23,396     140       876,447   38
+mcp:browser-devtools       59     18,494     313       871,898    7
+mcp:wp-cli                 52     10,187     195       287,581    2
+Edit                       54      2,360      43       120,004    2
+serena-edit/other          47        311       6        30,545    3
+Write                       8        401      50        16,099    0
+WebSearch                   6      3,811     635        10,933    0
+Monitor                     2        151      75         7,380    0
+SendMessage                 3         61      20         2,378    0
+WebFetch                    3        827     275         1,804    0
+Agent                       1        150     150           753    1
+ToolSearch                 25          0       0             0    0
+hooks (calls, est tok):
+  PreToolUse:Bash                                 251     1,882
+  PreToolUse:Edit                                  53       397
+  PreToolUse:mcp__plugin_swe_serena__replace_symbol_body    26       195
+  PreToolUse:mcp__plugin_swe_serena__replace_content     9        67
+  PreToolUse:Write                                  8        60
+  PreToolUse:mcp__plugin_swe_serena__insert_after_symbol     7        52
+detail:
+  DENIED:Agent                                            1
+  DENIED:Bash-other                                      16
+  DENIED:Edit                                             1
+  DENIED:mcp:wp-cli                                       2
+  ERR:Agent                                               1
+  ERR:Bash-other                                         38
+  ERR:Bash-read                                           1
+  ERR:Edit                                                2
+  ERR:Read                                                4
+  ERR:mcp:browser-devtools                                7
+  ERR:mcp:wp-cli                                          2
+  ERR:serena-edit/other                                   3
+  ERR:serena-search                                       1
+  Read-ext:(none):calls                                   4
+  Read-ext:(none):chars                                 424 tok
+  Read-ext:.conf:calls                                    1
+  Read-ext:.conf:chars                                  775 tok
+  Read-ext:.css:calls                                     9
+  Read-ext:.css:chars                                 3,717 tok
+  Read-ext:.js:calls                                      8
+  Read-ext:.js:chars                                 10,215 tok
+  Read-ext:.md:calls                                      2
+  Read-ext:.md:chars                                    897 tok
+  Read-ext:.output:calls                                  7
+  Read-ext:.output:chars                              1,972 tok
+  Read-ext:.php:calls                                    66
+  Read-ext:.php:chars                                62,605 tok
+  Read-ext:.png:calls                                     1
+  Read-ext:.png:chars                                     0 tok
+  Read-ext:.xml:calls                                     2
+  Read-ext:.xml:chars                                   333 tok
+  Read-full:calls                                        29
+  Read-full:chars                                    38,963 tok
+  Read-windowed:calls                                    71
+  Read-windowed:chars                                41,978 tok
+  S:find_referencing_symbols:calls                        5
+  S:find_referencing_symbols:chars                    1,512 tok
+  S:find_referencing_symbols:empty_or_err                 1
+  S:find_symbol+body:calls                               95
+  S:find_symbol+body:chars                           67,444 tok
+  S:find_symbol:calls                                   105
+  S:find_symbol:chars                                70,962 tok
+  S:find_symbol:empty_or_err                              1
+  S:get_symbols_overview:calls                           23
+  S:get_symbols_overview:chars                        8,843 tok
+  S:search_for_pattern:calls                             54
+  S:search_for_pattern:chars                         33,636 tok
+  S:search_for_pattern:empty_or_err                      17
+
+=== a7a51833 MAIN  (1 transcripts, 194 API calls)
+usage: in=409 cache_create=392,895 cache_read=47,606,475 out=101,670 | total_in=47,999,779
+group                   calls    res_tok     avg     carry_tok  err
+serena-memory              20     35,112   1,755     4,914,551    0
+Bash-other                 35     17,694     505     1,012,797    5
+Bash-read                   8      7,318     914       936,814    1
+Agent                      22      9,166     416       878,641    1
+Bash-search                15      3,715     247       493,279    0
+mcp:browser-devtools       15      2,217     147       350,172    1
+serena-search               2      1,234     617       149,578    1
+swe-wm                     15        700      46       121,558    0
+Edit                       22      1,066      48       116,459    4
+SendMessage                20      1,117      55        94,448    0
+Read                        8      1,131     141        80,354    0
+AskUserQuestion             4        238      59        17,676    0
+ListAgents                  1        240     240         5,760    0
+mcp:wp-cli                  1        171     171         2,401    0
+Skill                       1         10      10            52    0
+ToolSearch                  8          0       0             0    0
+hooks (calls, est tok):
+  UserPromptSubmit                                 24     3,985
+  PostToolUse:Bash                                 52     3,407
+  PostToolUse:mcp__plugin_swe_serena__read_memory    15     2,520
+  PostToolUse:Edit                                 37     1,347
+  PostToolUse:mcp__browser-devtools__execute       11       986
+  PostToolUse:Read                                  8       571
+  PostToolUse:mcp__plugin_swe_serena__edit_memory     7       308
+  PostToolUse:Agent                                21       241
+  SessionStart                                      1       229
+  PostToolUse:mcp__plugin_swe_serena__search_for_pattern     2       160
+  PostToolUse:mcp__plugin_swe_serena__search_memories_by_name     1       142
+  PostToolUse:mcp__browser-devtools__scenario-run     3       140
+  PreToolUse:Edit                                  18       121
+  BLOCK:Stop                                        1        45
+  PostToolUse:mcp__wp-cli__wp_cli                   1        18
+  PostToolUse:ListAgents                            1        16
+detail:
+  DENIED:Agent                                            1
+  DENIED:Bash-other                                       3
+  DENIED:Bash-read                                        1
+  DENIED:Edit                                             4
+  DENIED:serena-search                                    1
+  ERR:Agent                                               1
+  ERR:Bash-other                                          5
+  ERR:Bash-read                                           1
+  ERR:Edit                                                4
+  ERR:mcp:browser-devtools                                1
+  ERR:serena-search                                       1
+  Read-ext:.png:calls                                     7
+  Read-ext:.png:chars                                     0 tok
+  Read-ext:.ts:calls                                      1
+  Read-ext:.ts:chars                                  1,131 tok
+  Read-full:calls                                         7
+  Read-full:chars                                         0 tok
+  Read-windowed:calls                                     1
+  Read-windowed:chars                                 1,131 tok
+  S:search_for_pattern:calls                              2
+  S:search_for_pattern:chars                          1,234 tok
+
+=== a7a51833 SUBAGENTS  (21 transcripts, 901 API calls)
+usage: in=1,882 cache_create=3,175,080 cache_read=140,458,752 out=79,151 | total_in=143,635,714
+group                   calls    res_tok     avg     carry_tok  err
+serena-memory             137    415,424   3,032    17,578,553    3
+Read                      136    165,893   1,219     8,966,109    6
+Bash-other                174     69,148     397     3,544,042   22
+Bash-read                  84     80,647     960     3,446,283    1
+serena-symbol-read        106     37,863     357     2,688,581    1
+Bash-search               161     63,514     394     1,756,243    5
+serena-edit/other          31      7,399     238     1,017,392    6
+serena-search              20      6,695     334       525,131    0
+mcp:wp-cli                 17      7,277     428       299,972    3
+Edit                      164      6,697      40       288,577    1
+mcp:browser-devtools       44      9,627     218       215,320    1
+Write                       1         58      58           293    0
+ToolSearch                 35          0       0             0    0
+hooks (calls, est tok):
+  PreToolUse:Bash                                 419     3,142
+  PreToolUse:Edit                                 164     1,230
+  PostToolUse:Edit                                  6       736
+  PostToolUse:mcp__plugin_swe_serena__write_memory     3       504
+  PreToolUse:mcp__plugin_swe_serena__replace_symbol_body    23       172
+  PostToolUse:Write                                 1       122
+  PreToolUse:mcp__plugin_swe_serena__replace_content     5        37
+  PreToolUse:Write                                  1         7
+detail:
+  DENIED:Bash-other                                      11
+  DENIED:Bash-search                                      1
+  DENIED:Edit                                             1
+  DENIED:serena-edit/other                                2
+  DENIED:serena-memory                                    3
+  ERR:Bash-other                                         22
+  ERR:Bash-read                                           1
+  ERR:Bash-search                                         5
+  ERR:Edit                                                1
+  ERR:Read                                                6
+  ERR:mcp:browser-devtools                                1
+  ERR:mcp:wp-cli                                          3
+  ERR:serena-edit/other                                   6
+  ERR:serena-memory                                       3
+  ERR:serena-symbol-read                                  1
+  Read-ext:(none):calls                                   7
+  Read-ext:(none):chars                               2,078 tok
+  Read-ext:.css:calls                                     4
+  Read-ext:.css:chars                                 2,878 tok
+  Read-ext:.feature:calls                                 2
+  Read-ext:.feature:chars                             1,048 tok
+  Read-ext:.js:calls                                     10
+  Read-ext:.js:chars                                  7,191 tok
+  Read-ext:.log:calls                                     1
+  Read-ext:.log:chars                                 4,228 tok
+  Read-ext:.php:calls                                    49
+  Read-ext:.php:chars                                43,360 tok
+  Read-ext:.png:calls                                     7
+  Read-ext:.png:chars                                    29 tok
+  Read-ext:.ts:calls                                     56
+  Read-ext:.ts:chars                                105,078 tok
+  Read-full:calls                                        41
+  Read-full:chars                                   111,891 tok
+  Read-over10k-tok:calls                                  5
+  Read-over10k-tok:chars                             66,315 tok
+  Read-windowed:calls                                    95
+  Read-windowed:chars                                54,002 tok
+  S:find_referencing_symbols:calls                        1
+  S:find_referencing_symbols:chars                        0 tok
+  S:find_referencing_symbols:empty_or_err                 1
+  S:find_symbol+body:calls                               68
+  S:find_symbol+body:chars                           31,718 tok
+  S:find_symbol:calls                                    87
+  S:find_symbol:chars                                37,642 tok
+  S:find_symbol:empty_or_err                              1
+  S:get_symbols_overview:calls                           18
+  S:get_symbols_overview:chars                          220 tok
+  S:get_symbols_overview:empty_or_err                     1
+  S:search_for_pattern:calls                             20
+  S:search_for_pattern:chars                          6,695 tok
+  S:search_for_pattern:empty_or_err                       3
+
+=== afc906c4 MAIN  (1 transcripts, 211 API calls)
+usage: in=415 cache_create=418,804 cache_read=58,750,257 out=110,774 | total_in=59,169,476
+group                   calls    res_tok     avg     carry_tok  err
+serena-memory              37     53,517   1,446     8,734,252    0
+mcp:browser-devtools       37     15,137     409     2,220,331    2
+mcp:wp-cli                 17      9,262     544       869,213    1
+Bash-read                  13      6,167     474       788,090    0
+Bash-other                 23      5,618     244       656,590    1
+Bash-search                25      5,636     225       578,520    1
+mcp:jira                   12      2,670     222       534,104    1
+WebSearch                   3      2,517     839       315,635    0
+Read                        8      3,508     438       148,513    1
+WebFetch                    4      1,102     275       136,660    0
+Agent                       4      1,077     269       126,816    0
+AskUserQuestion             7        836     119       107,857    0
+SendMessage                 8        520      65        61,985    0
+swe-wm                     13        150      11        22,054    0
+ListAgents                  1        155     155        22,010    0
+TaskStop                    3        145      48        11,570    1
+Write                       1         52      52         5,304    0
+Edit                        2         87      43         4,355    0
+serena-edit/other           7          3       0           279    0
+ToolSearch                 12          0       0             0    0
+hooks (calls, est tok):
+  UserPromptSubmit                                 28     4,782
+  PostToolUse:Bash                                 59     3,320
+  PostToolUse:mcp__plugin_swe_serena__read_memory    33     3,152
+  PostToolUse:mcp__browser-devtools__execute       11     1,686
+  PostToolUse:mcp__plugin_swe_serena__search_memories_by_front_matter     1     1,147
+  PostToolUse:mcp__wp-cli__wp_cli                   5       765
+  PostToolUse:mcp__plugin_swe_serena__replace_content    14       540
+  SessionStart                                      2       459
+  PostToolUse:Edit                                  4       192
+  BLOCK:Stop                                        1       184
+  PostToolUse:mcp__jira__jira_add-comment           1       153
+  PostToolUse:Read                                  1       153
+  PostToolUse:mcp__plugin_swe_serena__edit_memory     3        75
+  PreToolUse:mcp__plugin_swe_serena__replace_content     7        47
+  PostToolUse:Agent                                 4        41
+  PostToolUse:TaskStop                              1        15
+  PreToolUse:Edit                                   2        13
+  PostToolUse:Write                                 2        12
+  PreToolUse:Write                                  1         6
+detail:
+  DENIED:mcp:jira                                         1
+  ERR:Bash-other                                          1
+  ERR:Bash-search                                         1
+  ERR:Read                                                1
+  ERR:TaskStop                                            1
+  ERR:mcp:browser-devtools                                2
+  ERR:mcp:jira                                            1
+  ERR:mcp:wp-cli                                          1
+  Read-ext:.php:calls                                     1
+  Read-ext:.php:chars                                   653 tok
+  Read-ext:.png:calls                                     6
+  Read-ext:.png:chars                                    26 tok
+  Read-ext:.scss:calls                                    1
+  Read-ext:.scss:chars                                2,828 tok
+  Read-full:calls                                         8
+  Read-full:chars                                     3,508 tok
+
+=== afc906c4 SUBAGENTS  (4 transcripts, 102 API calls)
+usage: in=206 cache_create=767,247 cache_read=11,071,366 out=7,305 | total_in=11,838,819
+group                   calls    res_tok     avg     carry_tok  err
+serena-memory              24     45,646   1,901     1,464,077    0
+Bash-other                 44     39,594     899       564,352    7
+mcp:browser-devtools       28     18,581     663       342,528    0
+Read                        2     10,155   5,077       156,904    0
+Bash-read                   3      2,665     888        88,388    0
+Write                       7        387      55         8,399    0
+Bash-search                 2        169      84         1,949    2
+ToolSearch                  7          0       0             0    0
+hooks (calls, est tok):
+  PreToolUse:Bash                                  49       367
+  PreToolUse:Write                                  7        52
+detail:
+  DENIED:Bash-search                                      2
+  ERR:Bash-other                                          7
+  ERR:Bash-search                                         2
+  Read-ext:.md:calls                                      2
+  Read-ext:.md:chars                                 10,155 tok
+  Read-full:calls                                         1
+  Read-full:chars                                     9,457 tok
+  Read-windowed:calls                                     1
+  Read-windowed:chars                                   697 tok
+
+=== b54039c8 MAIN  (1 transcripts, 139 API calls)
+usage: in=286 cache_create=1,688,116 cache_read=39,934,612 out=111,964 | total_in=41,623,014
+group                   calls    res_tok     avg     carry_tok  err
+serena-memory              31     42,837   1,381     4,703,091    0
+Bash-search                 7      5,773     824       579,960    0
+Bash-read                   5      4,260     852       335,295    1
+Agent                      19      5,172     272       322,888    0
+Read                        2      1,868     934       122,388    0
+Bash-other                 10      2,233     223       115,958    0
+AskUserQuestion            13      1,531     117        67,934    0
+serena-search               1        429     429        55,437    0
+swe-wm                     30        690      23        54,686    0
+WebFetch                    1        557     557        52,381    0
+serena-symbol-read          1        276     276        36,221    0
+Workflow                    1        339     339        14,259    0
+SendMessage                 4        172      43         7,275    0
+Edit                        3        226      75         6,001    1
+ListAgents                  1        158     158         5,214    0
+Skill                       3         26       8         2,296    0
+hooks (calls, est tok):
+  UserPromptSubmit                                 20     3,887
+  PostToolUse:mcp__plugin_swe_serena__read_memory    26     1,977
+  SessionStart                                      3       688
+  PostToolUse:mcp__plugin_swe_serena__search_memories_by_name     4       411
+  PostToolUse:mcp__plugin_swe_serena__search_memories_by_front_matter     1       256
+  PostToolUse:Bash                                 21       227
+  PostToolUse:Agent                                19       194
+  BLOCK:Stop                                        1       170
+  PostToolUse:Edit                                  4        24
+  PreToolUse:Edit                                   2        13
+  PostToolUse:Workflow                              1        10
+  PostToolUse:mcp__plugin_swe_serena__search_for_pattern     1         7
+detail:
+  DENIED:Bash-read                                        1
+  DENIED:Edit                                             1
+  ERR:Bash-read                                           1
+  ERR:Edit                                                1
+  Read-ext:.json:calls                                    1
+  Read-ext:.json:chars                                1,294 tok
+  Read-ext:.md:calls                                      1
+  Read-ext:.md:chars                                    573 tok
+  Read-full:calls                                         1
+  Read-full:chars                                     1,294 tok
+  Read-windowed:calls                                     1
+  Read-windowed:chars                                   573 tok
+  S:find_symbol+body:calls                                1
+  S:find_symbol+body:chars                              276 tok
+  S:find_symbol:calls                                     1
+  S:find_symbol:chars                                   276 tok
+  S:search_for_pattern:calls                              1
+  S:search_for_pattern:chars                            429 tok
+
+=== b54039c8 SUBAGENTS  (19 transcripts, 447 API calls)
+usage: in=904 cache_create=2,198,666 cache_read=61,273,196 out=62,405 | total_in=63,472,766
+group                   calls    res_tok     avg     carry_tok  err
+Read                       88    212,526   2,415     5,894,851    2
+serena-memory             119    156,955   1,318     4,244,552    2
+Bash-other                177    118,700     670     2,140,904    4
+Bash-read                  51     58,873   1,154     1,120,214    0
+Bash-search                97     33,832     348       692,501    4
+Edit                       93      4,124      44        75,229    0
+WebFetch                    5      9,476   1,895        50,186    0
+serena-symbol-read          1        137     137         5,912    0
+Write                       9        439      48         5,780    0
+serena-search               7        286      40         3,477    0
+SendMessage                 4         82      20           369    0
+serena-edit/other           1          0       0            21    0
+ToolSearch                  9          0       0             0    0
+hooks (calls, est tok):
+  PreToolUse:Bash                                 325     2,437
+  PreToolUse:Edit                                  93       697
+  PostToolUse:Write                                 1       122
+  PreToolUse:Write                                  9        67
+  PreToolUse:mcp__plugin_swe_serena__insert_after_symbol     1         7
+detail:
+  DENIED:Bash-other                                       3
+  DENIED:Bash-search                                      1
+  ERR:Bash-other                                          4
+  ERR:Bash-search                                         4
+  ERR:Read                                                2
+  ERR:serena-memory                                       2
+  Read-ext:.md:calls                                     44
+  Read-ext:.md:chars                                 73,708 tok
+  Read-ext:.py:calls                                     43
+  Read-ext:.py:chars                                124,701 tok
+  Read-ext:.txt:calls                                     1
+  Read-ext:.txt:chars                                14,116 tok
+  Read-full:calls                                        56
+  Read-full:chars                                   189,289 tok
+  Read-over10k-tok:calls                                  5
+  Read-over10k-tok:chars                             63,223 tok
+  Read-windowed:calls                                    32
+  Read-windowed:chars                                23,236 tok
+  S:find_symbol+body:calls                                1
+  S:find_symbol+body:chars                              137 tok
+  S:find_symbol:calls                                     1
+  S:find_symbol:chars                                   137 tok
+  S:search_for_pattern:calls                              7
+  S:search_for_pattern:chars                            286 tok
+  S:search_for_pattern:empty_or_err                       5
+
+=== 6751cf81 MAIN  (1 transcripts, 49 API calls)
+usage: in=97 cache_create=158,651 cache_read=6,028,047 out=39,143 | total_in=6,186,795
+group                   calls    res_tok     avg     carry_tok  err
+serena-memory               6     11,405   1,900       507,709    0
+Bash-read                   7      3,322     474        88,702    0
+Bash-other                 14      2,953     210        71,320    1
+Bash-search                 4      1,958     489        67,693    0
+Read                        2      1,776     888        39,077    0
+Write                       6        313      52         6,161    0
+mcp:browser-devtools        1        398     398         3,190    0
+AskUserQuestion             1        168     168         2,856    0
+swe-wm                      7         85      12         2,337    0
+Artifact                    1        409     409         1,639    0
+Skill                       2         14       7           182    0
+SendMessage                 1         75      75           150    0
+ToolSearch                  4          0       0             0    0
+hooks (calls, est tok):
+  PostToolUse:Bash                                 24     2,367
+  UserPromptSubmit                                  9     1,256
+  PostToolUse:mcp__plugin_swe_serena__search_memories_by_front_matter     1       982
+  PostToolUse:Write                                12       841
+  PostToolUse:mcp__plugin_swe_serena__read_memory     5       637
+  PostToolUse:Read                                  2       306
+  SessionStart                                      1       229
+  PostToolUse:mcp__browser-devtools__navigation_go-to     1       153
+  PostToolUse:Artifact                              1       153
+  PreToolUse:Write                                  6        40
+detail:
+  ERR:Bash-other                                          1
+  Read-ext:.png:calls                                     1
+  Read-ext:.png:chars                                     0 tok
+  Read-ext:.py:calls                                      1
+  Read-ext:.py:chars                                  1,776 tok
+  Read-full:calls                                         2
+  Read-full:chars                                     1,776 tok
+
+=== ALL MAIN  (5 transcripts, 818 API calls)
+usage: in=1,657 cache_create=3,110,515 cache_read=215,314,421 out=502,095 | total_in=218,426,593
+group                   calls    res_tok     avg     carry_tok  err
+serena-memory             151    197,105   1,305    26,954,466    3
+Bash-read                  50     36,527     730     4,557,922    3
+Bash-search                82     27,249     332     2,639,560    2
+mcp:browser-devtools       53     17,753     334     2,573,694    3
+Bash-other                111     31,899     287     2,170,726    9
+Agent                      59     19,234     326     1,732,561    1
+mcp:wp-cli                 39     14,533     372     1,241,424    1
+serena-search              10      3,891     389       572,938    2
+mcp:jira                   12      2,670     222       534,104    1
+Read                       20      8,284     414       390,333    1
+swe-wm                     99      2,579      26       324,332    0
+WebSearch                   3      2,517     839       315,635    0
+AskUserQuestion            31      3,176     102       236,818    0
+SendMessage                44      2,456      55       206,614    0
+WebFetch                    5      1,659     331       189,041    0
+serena-symbol-read          6      2,572     428       137,118    0
+Edit                       27      1,380      51       126,816    5
+ListAgents                  3        553     184        32,984    0
+TaskStop                    5        238      47        17,149    1
+Workflow                    1        339     339        14,259    0
+Write                       7        365      52        11,465    0
+Skill                       7         62       8         3,949    0
+Artifact                    1        409     409         1,639    0
+serena-edit/other           8          4       0           288    0
+ToolSearch                 32          0       0             0    0
+hooks (calls, est tok):
+  UserPromptSubmit                                115    19,779
+  PostToolUse:mcp__plugin_swe_serena__read_memory   109    11,773
+  PostToolUse:Bash                                229    11,666
+  PostToolUse:mcp__plugin_swe_serena__search_memories_by_front_matter     5     6,520
+  PostToolUse:mcp__browser-devtools__execute       22     2,672
+  SessionStart                                      8     1,836
+  PostToolUse:Edit                                 45     1,564
+  PostToolUse:mcp__wp-cli__wp_cli                  27     1,532
+  PostToolUse:mcp__plugin_swe_serena__search_memories_by_name     9     1,491
+  PostToolUse:mcp__plugin_swe_serena__edit_memory    29     1,032
+  PostToolUse:Read                                 11     1,031
+  PostToolUse:Write                                14       853
+  PostToolUse:Agent                                58       620
+  PostToolUse:mcp__plugin_swe_serena__replace_content    14       540
+  PostToolUse:mcp__plugin_swe_serena__search_for_pattern    15       445
+  BLOCK:Stop                                        3       400
+  PostToolUse:mcp__plugin_swe_serena__write_memory     4       328
+  PostToolUse:mcp__plugin_swe_serena__get_symbols_overview     3       176
+  PostToolUse:mcp__jira__jira_add-comment           1       153
+  PostToolUse:mcp__browser-devtools__navigation_go-to     1       153
+  PostToolUse:Artifact                              1       153
+  PreToolUse:Edit                                  22       148
+  PostToolUse:mcp__browser-devtools__scenario-run     3       140
+  PostToolUse:mcp__plugin_swe_serena__find_symbol     2        81
+  PostToolUse:TaskStop                              3        47
+  PreToolUse:mcp__plugin_swe_serena__replace_content     7        47
+  PreToolUse:Write                                  7        47
+  PostToolUse:mcp__plugin_swe_serena__replace_symbol_body     2        26
+  PostToolUse:ListAgents                            1        16
+  PostToolUse:Workflow                              1        10
+  PreToolUse:mcp__plugin_swe_serena__replace_symbol_body     1         6
+  PostToolUse:mcp__plugin_swe_serena__list_memories     1         4
+detail:
+  DENIED:Agent                                            1
+  DENIED:Bash-other                                       4
+  DENIED:Bash-read                                        2
+  DENIED:Edit                                             5
+  DENIED:mcp:jira                                         1
+  DENIED:serena-memory                                    2
+  DENIED:serena-search                                    2
+  ERR:Agent                                               1
+  ERR:Bash-other                                          9
+  ERR:Bash-read                                           3
+  ERR:Bash-search                                         2
+  ERR:Edit                                                5
+  ERR:Read                                                1
+  ERR:TaskStop                                            1
+  ERR:mcp:browser-devtools                                3
+  ERR:mcp:jira                                            1
+  ERR:mcp:wp-cli                                          1
+  ERR:serena-memory                                       3
+  ERR:serena-search                                       2
+  Read-ext:.json:calls                                    1
+  Read-ext:.json:chars                                1,294 tok
+  Read-ext:.md:calls                                      1
+  Read-ext:.md:chars                                    573 tok
+  Read-ext:.php:calls                                     1
+  Read-ext:.php:chars                                   653 tok
+  Read-ext:.png:calls                                    14
+  Read-ext:.png:chars                                    26 tok
+  Read-ext:.py:calls                                      1
+  Read-ext:.py:chars                                  1,776 tok
+  Read-ext:.scss:calls                                    1
+  Read-ext:.scss:chars                                2,828 tok
+  Read-ext:.ts:calls                                      1
+  Read-ext:.ts:chars                                  1,131 tok
+  Read-full:calls                                        18
+  Read-full:chars                                     6,579 tok
+  Read-windowed:calls                                     2
+  Read-windowed:chars                                 1,705 tok
+  S:find_symbol+body:calls                                3
+  S:find_symbol+body:chars                            2,413 tok
+  S:find_symbol:calls                                     3
+  S:find_symbol:chars                                 2,413 tok
+  S:get_symbols_overview:calls                            3
+  S:get_symbols_overview:chars                          159 tok
+  S:search_for_pattern:calls                             10
+  S:search_for_pattern:chars                          3,891 tok
+  S:search_for_pattern:empty_or_err                       2
+
+=== ALL SUBAGENTS  (58 transcripts, 2121 API calls)
+usage: in=4,388 cache_create=8,229,734 cache_read=335,093,370 out=217,960 | total_in=343,327,492
+group                   calls    res_tok     avg     carry_tok  err
+serena-memory             420    890,888   2,121    39,539,590    5
+Read                      326    469,516   1,440    18,989,624   12
+serena-symbol-read        240    119,319     497     9,806,725    1
+Bash-other                561    250,839     447     7,125,746   71
+Bash-read                 178    163,863     920     5,842,411    2
+Bash-search               306    114,963     375     3,438,452   11
+serena-search              81     40,617     501     1,584,201    1
+mcp:browser-devtools      131     46,702     356     1,429,747    8
+serena-edit/other          79      7,710      97     1,047,959    9
+mcp:wp-cli                 69     17,464     253       587,553    5
+Edit                      311     13,182      42       483,811    3
+WebFetch                    8     10,303   1,287        51,991    0
+Write                      25      1,286      51        30,573    0
+WebSearch                   6      3,811     635        10,933    0
+Monitor                     2        151      75         7,380    0
+SendMessage                 7        143      20         2,747    0
+Agent                       1        150     150           753    1
+ToolSearch                 76          0       0             0    0
+hooks (calls, est tok):
+  PreToolUse:Bash                                1044     7,830
+  PreToolUse:Edit                                 310     2,325
+  PostToolUse:Edit                                  6       736
+  PostToolUse:mcp__plugin_swe_serena__write_memory     3       504
+  PreToolUse:mcp__plugin_swe_serena__replace_symbol_body    49       367
+  PostToolUse:Write                                 2       245
+  PreToolUse:Write                                 25       187
+  PreToolUse:mcp__plugin_swe_serena__replace_content    14       105
+  PreToolUse:mcp__plugin_swe_serena__insert_after_symbol     8        60
+detail:
+  DENIED:Agent                                            1
+  DENIED:Bash-other                                      30
+  DENIED:Bash-search                                      4
+  DENIED:Edit                                             2
+  DENIED:mcp:wp-cli                                       2
+  DENIED:serena-edit/other                                2
+  DENIED:serena-memory                                    3
+  ERR:Agent                                               1
+  ERR:Bash-other                                         71
+  ERR:Bash-read                                           2
+  ERR:Bash-search                                        11
+  ERR:Edit                                                3
+  ERR:Read                                               12
+  ERR:mcp:browser-devtools                                8
+  ERR:mcp:wp-cli                                          5
+  ERR:serena-edit/other                                   9
+  ERR:serena-memory                                       5
+  ERR:serena-search                                       1
+  ERR:serena-symbol-read                                  1
+  Read-ext:(none):calls                                  11
+  Read-ext:(none):chars                               2,503 tok
+  Read-ext:.conf:calls                                    1
+  Read-ext:.conf:chars                                  775 tok
+  Read-ext:.css:calls                                    13
+  Read-ext:.css:chars                                 6,595 tok
+  Read-ext:.feature:calls                                 2
+  Read-ext:.feature:chars                             1,048 tok
+  Read-ext:.js:calls                                     18
+  Read-ext:.js:chars                                 17,406 tok
+  Read-ext:.log:calls                                     1
+  Read-ext:.log:chars                                 4,228 tok
+  Read-ext:.md:calls                                     48
+  Read-ext:.md:chars                                 84,760 tok
+  Read-ext:.output:calls                                  7
+  Read-ext:.output:chars                              1,972 tok
+  Read-ext:.php:calls                                   115
+  Read-ext:.php:chars                               105,966 tok
+  Read-ext:.png:calls                                     8
+  Read-ext:.png:chars                                    29 tok
+  Read-ext:.py:calls                                     43
+  Read-ext:.py:chars                                124,701 tok
+  Read-ext:.ts:calls                                     56
+  Read-ext:.ts:chars                                105,078 tok
+  Read-ext:.txt:calls                                     1
+  Read-ext:.txt:chars                                14,116 tok
+  Read-ext:.xml:calls                                     2
+  Read-ext:.xml:chars                                   333 tok
+  Read-full:calls                                       127
+  Read-full:chars                                   349,601 tok
+  Read-over10k-tok:calls                                 10
+  Read-over10k-tok:chars                            129,539 tok
+  Read-windowed:calls                                   199
+  Read-windowed:chars                               119,915 tok
+  S:find_referencing_symbols:calls                        6
+  S:find_referencing_symbols:chars                    1,513 tok
+  S:find_referencing_symbols:empty_or_err                 2
+  S:find_symbol+body:calls                              164
+  S:find_symbol+body:chars                           99,299 tok
+  S:find_symbol:calls                                   193
+  S:find_symbol:chars                               108,742 tok
+  S:find_symbol:empty_or_err                              2
+  S:get_symbols_overview:calls                           41
+  S:get_symbols_overview:chars                        9,064 tok
+  S:get_symbols_overview:empty_or_err                     1
+  S:search_for_pattern:calls                             81
+  S:search_for_pattern:chars                         40,617 tok
+  S:search_for_pattern:empty_or_err                      25
+
+=== ALL  (63 transcripts, 2939 API calls)
+usage: in=6,045 cache_create=11,340,249 cache_read=550,407,791 out=720,055 | total_in=561,754,085
+group                   calls    res_tok     avg     carry_tok  err
+serena-memory             571  1,087,994   1,905    66,494,057    8
+Read                      346    477,801   1,380    19,379,958   13
+Bash-read                 228    200,390     878    10,400,333    5
+serena-symbol-read        246    121,892     495     9,943,843    1
+Bash-other                672    282,738     420     9,296,473   80
+Bash-search               388    142,212     366     6,078,012   13
+mcp:browser-devtools      184     64,456     350     4,003,441   11
+serena-search              91     44,509     489     2,157,139    3
+mcp:wp-cli                108     31,997     296     1,828,978    6
+Agent                      60     19,385     323     1,733,315    2
+serena-edit/other          87      7,714      88     1,048,248    9
+Edit                      338     14,562      43       610,627    8
+mcp:jira                   12      2,670     222       534,104    1
+WebSearch                   9      6,328     703       326,569    0
+swe-wm                     99      2,579      26       324,332    0
+WebFetch                   13     11,963     920       241,033    0
+AskUserQuestion            31      3,176     102       236,818    0
+SendMessage                51      2,599      50       209,361    0
+Write                      32      1,652      51        42,039    0
+ListAgents                  3        553     184        32,984    0
+TaskStop                    5        238      47        17,149    1
+Workflow                    1        339     339        14,259    0
+Monitor                     2        151      75         7,380    0
+Skill                       7         62       8         3,949    0
+Artifact                    1        409     409         1,639    0
+ToolSearch                108          0       0             0    0
+hooks (calls, est tok):
+  UserPromptSubmit                                115    19,779
+  PostToolUse:mcp__plugin_swe_serena__read_memory   109    11,773
+  PostToolUse:Bash                                229    11,666
+  PreToolUse:Bash                                1044     7,830
+  PostToolUse:mcp__plugin_swe_serena__search_memories_by_front_matter     5     6,520
+  PostToolUse:mcp__browser-devtools__execute       22     2,672
+  PreToolUse:Edit                                 332     2,473
+  PostToolUse:Edit                                 51     2,300
+  SessionStart                                      8     1,836
+  PostToolUse:mcp__wp-cli__wp_cli                  27     1,532
+  PostToolUse:mcp__plugin_swe_serena__search_memories_by_name     9     1,491
+  PostToolUse:Write                                16     1,098
+  PostToolUse:mcp__plugin_swe_serena__edit_memory    29     1,032
+  PostToolUse:Read                                 11     1,031
+  PostToolUse:mcp__plugin_swe_serena__write_memory     7       832
+  PostToolUse:Agent                                58       620
+  PostToolUse:mcp__plugin_swe_serena__replace_content    14       540
+  PostToolUse:mcp__plugin_swe_serena__search_for_pattern    15       445
+  BLOCK:Stop                                        3       400
+  PreToolUse:mcp__plugin_swe_serena__replace_symbol_body    50       374
+  PreToolUse:Write                                 32       234
+  PostToolUse:mcp__plugin_swe_serena__get_symbols_overview     3       176
+  PostToolUse:mcp__jira__jira_add-comment           1       153
+  PostToolUse:mcp__browser-devtools__navigation_go-to     1       153
+  PostToolUse:Artifact                              1       153
+  PreToolUse:mcp__plugin_swe_serena__replace_content    21       152
+  PostToolUse:mcp__browser-devtools__scenario-run     3       140
+  PostToolUse:mcp__plugin_swe_serena__find_symbol     2        81
+  PreToolUse:mcp__plugin_swe_serena__insert_after_symbol     8        60
+  PostToolUse:TaskStop                              3        47
+  PostToolUse:mcp__plugin_swe_serena__replace_symbol_body     2        26
+  PostToolUse:ListAgents                            1        16
+  PostToolUse:Workflow                              1        10
+  PostToolUse:mcp__plugin_swe_serena__list_memories     1         4
+detail:
+  DENIED:Agent                                            2
+  DENIED:Bash-other                                      34
+  DENIED:Bash-read                                        2
+  DENIED:Bash-search                                      4
+  DENIED:Edit                                             7
+  DENIED:mcp:jira                                         1
+  DENIED:mcp:wp-cli                                       2
+  DENIED:serena-edit/other                                2
+  DENIED:serena-memory                                    5
+  DENIED:serena-search                                    2
+  ERR:Agent                                               2
+  ERR:Bash-other                                         80
+  ERR:Bash-read                                           5
+  ERR:Bash-search                                        13
+  ERR:Edit                                                8
+  ERR:Read                                               13
+  ERR:TaskStop                                            1
+  ERR:mcp:browser-devtools                               11
+  ERR:mcp:jira                                            1
+  ERR:mcp:wp-cli                                          6
+  ERR:serena-edit/other                                   9
+  ERR:serena-memory                                       8
+  ERR:serena-search                                       3
+  ERR:serena-symbol-read                                  1
+  Read-ext:(none):calls                                  11
+  Read-ext:(none):chars                               2,503 tok
+  Read-ext:.conf:calls                                    1
+  Read-ext:.conf:chars                                  775 tok
+  Read-ext:.css:calls                                    13
+  Read-ext:.css:chars                                 6,595 tok
+  Read-ext:.feature:calls                                 2
+  Read-ext:.feature:chars                             1,048 tok
+  Read-ext:.js:calls                                     18
+  Read-ext:.js:chars                                 17,406 tok
+  Read-ext:.json:calls                                    1
+  Read-ext:.json:chars                                1,294 tok
+  Read-ext:.log:calls                                     1
+  Read-ext:.log:chars                                 4,228 tok
+  Read-ext:.md:calls                                     49
+  Read-ext:.md:chars                                 85,334 tok
+  Read-ext:.output:calls                                  7
+  Read-ext:.output:chars                              1,972 tok
+  Read-ext:.php:calls                                   116
+  Read-ext:.php:chars                               106,620 tok
+  Read-ext:.png:calls                                    22
+  Read-ext:.png:chars                                    56 tok
+  Read-ext:.py:calls                                     44
+  Read-ext:.py:chars                                126,478 tok
+  Read-ext:.scss:calls                                    1
+  Read-ext:.scss:chars                                2,828 tok
+  Read-ext:.ts:calls                                     57
+  Read-ext:.ts:chars                                106,210 tok
+  Read-ext:.txt:calls                                     1
+  Read-ext:.txt:chars                                14,116 tok
+  Read-ext:.xml:calls                                     2
+  Read-ext:.xml:chars                                   333 tok
+  Read-full:calls                                       145
+  Read-full:chars                                   356,181 tok
+  Read-over10k-tok:calls                                 10
+  Read-over10k-tok:chars                            129,539 tok
+  Read-windowed:calls                                   201
+  Read-windowed:chars                               121,620 tok
+  S:find_referencing_symbols:calls                        6
+  S:find_referencing_symbols:chars                    1,513 tok
+  S:find_referencing_symbols:empty_or_err                 2
+  S:find_symbol+body:calls                              167
+  S:find_symbol+body:chars                          101,712 tok
+  S:find_symbol:calls                                   196
+  S:find_symbol:chars                               111,155 tok
+  S:find_symbol:empty_or_err                              2
+  S:get_symbols_overview:calls                           44
+  S:get_symbols_overview:chars                        9,223 tok
+  S:get_symbols_overview:empty_or_err                     1
+  S:search_for_pattern:calls                             91
+  S:search_for_pattern:chars                         44,509 tok
+  S:search_for_pattern:empty_or_err                      27

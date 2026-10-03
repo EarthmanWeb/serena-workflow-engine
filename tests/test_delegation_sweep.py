@@ -262,19 +262,21 @@ class RequiredReadingTests(DelegationSweepTestCase):
 
 
 # ──────────────────────────────────────────────────────────────────
-# required_reading_block
+# required_reading_block (full_read, digest)
 # ──────────────────────────────────────────────────────────────────
 
 class RequiredReadingBlockTests(DelegationSweepTestCase):
     def test_empty_names_returns_empty_string(self):
-        self.assertEqual(delegation_sweep.required_reading_block([], self.project_root), "")
-        self.assertEqual(delegation_sweep.required_reading_block(None, self.project_root), "")
+        self.assertEqual(
+            delegation_sweep.required_reading_block([], [], self.project_root), "")
+        self.assertEqual(
+            delegation_sweep.required_reading_block(None, None, self.project_root), "")
 
     def test_block_format_with_read_memory_lines(self):
         _write(os.path.join(self.project_root, ".serena", "memory", "feature",
                              "FEATURE_X.md"), "---\nname: X\n---\nbody")
         block = delegation_sweep.required_reading_block(
-            ["feature/FEATURE_X"], self.project_root)
+            ["feature/FEATURE_X"], [], self.project_root)
         self.assertIn("[swe-required-reading]", block)
         self.assertIn('read_memory("feature/FEATURE_X")', block)
 
@@ -283,14 +285,14 @@ class RequiredReadingBlockTests(DelegationSweepTestCase):
                              "FEATURE_X.md"),
                "---\nname: X\nobligations:\n  - Do the thing\n---\nbody")
         block = delegation_sweep.required_reading_block(
-            ["feature/FEATURE_X"], self.project_root)
+            ["feature/FEATURE_X"], [], self.project_root)
         self.assertIn("• Do the thing", block)
 
     def test_no_obligations_no_bullet_lines(self):
         _write(os.path.join(self.project_root, ".serena", "memory", "feature",
                              "FEATURE_Y.md"), "---\nname: Y\nobligations: []\n---\nbody")
         block = delegation_sweep.required_reading_block(
-            ["feature/FEATURE_Y"], self.project_root)
+            ["feature/FEATURE_Y"], [], self.project_root)
         self.assertIn('read_memory("feature/FEATURE_Y")', block)
         self.assertNotIn("•", block)
 
@@ -300,9 +302,135 @@ class RequiredReadingBlockTests(DelegationSweepTestCase):
         _write(os.path.join(self.project_root, ".serena", "memory", "feature",
                              "FEATURE_B.md"), "---\nname: B\n---\nbody")
         block = delegation_sweep.required_reading_block(
-            ["feature/FEATURE_A", "feature/FEATURE_B"], self.project_root)
+            ["feature/FEATURE_A", "feature/FEATURE_B"], [], self.project_root)
         self.assertIn('read_memory("feature/FEATURE_A")', block)
         self.assertIn('read_memory("feature/FEATURE_B")', block)
+
+    def test_digest_names_get_inline_summary_not_read_memory(self):
+        _write(os.path.join(self.project_root, ".serena", "memory", "dom",
+                             "DOM_X.md"),
+               "---\nname: X\nobligations:\n  - Do the thing\n---\nbody")
+        block = delegation_sweep.required_reading_block(
+            [], ["dom/DOM_X"], self.project_root)
+        self.assertNotIn('read_memory("dom/DOM_X")', block)
+        self.assertIn("dom/DOM_X: Do the thing", block)
+
+    def test_digest_falls_back_to_description_without_obligations(self):
+        _write(os.path.join(self.project_root, ".serena", "memory", "dom",
+                             "DOM_Y.md"),
+               "---\nname: Y\ndescription: What Y covers.\nobligations: []\n---\nbody")
+        block = delegation_sweep.required_reading_block(
+            [], ["dom/DOM_Y"], self.project_root)
+        self.assertIn("dom/DOM_Y: What Y covers.", block)
+
+    def test_digest_block_tells_subagent_not_to_reread(self):
+        _write(os.path.join(self.project_root, ".serena", "memory", "dom",
+                             "DOM_Z.md"), "---\nname: Z\n---\nbody")
+        block = delegation_sweep.required_reading_block(
+            [], ["dom/DOM_Z"], self.project_root)
+        self.assertIn("required knowledge", block.lower())
+        self.assertIn("do not", block.lower().replace("not read_memory", "do not read_memory"))
+
+    def test_full_read_and_digest_both_present_in_one_block(self):
+        _write(os.path.join(self.project_root, ".serena", "memory", "feature",
+                             "FEATURE_X.md"), "---\nname: X\n---\nbody")
+        _write(os.path.join(self.project_root, ".serena", "memory", "dom",
+                             "DOM_Y.md"), "---\nname: Y\n---\nbody")
+        block = delegation_sweep.required_reading_block(
+            ["feature/FEATURE_X"], ["dom/DOM_Y"], self.project_root)
+        self.assertIn('read_memory("feature/FEATURE_X")', block)
+        self.assertIn("dom/DOM_Y", block)
+        self.assertNotIn('read_memory("dom/DOM_Y")', block)
+
+
+# ──────────────────────────────────────────────────────────────────
+# read_description
+# ──────────────────────────────────────────────────────────────────
+
+class ReadDescriptionTests(DelegationSweepTestCase):
+    def test_description_extracted(self):
+        _write(os.path.join(self.project_root, ".serena", "memory", "dom",
+                             "DOM_X.md"),
+               "---\nname: X\ndescription: Covers the X domain.\n---\nbody")
+        self.assertEqual(
+            delegation_sweep.read_description("dom/DOM_X", self.project_root),
+            "Covers the X domain.")
+
+    def test_missing_memory_returns_empty(self):
+        self.assertEqual(
+            delegation_sweep.read_description("dom/DOM_NOPE", self.project_root), "")
+
+    def test_no_description_returns_empty(self):
+        _write(os.path.join(self.project_root, ".serena", "memory", "dom",
+                             "DOM_Y.md"), "---\nname: Y\n---\nbody")
+        self.assertEqual(
+            delegation_sweep.read_description("dom/DOM_Y", self.project_root), "")
+
+
+# ──────────────────────────────────────────────────────────────────
+# required_reading_split — FULL-READ (paths: glob match) vs DIGEST
+# ──────────────────────────────────────────────────────────────────
+
+class RequiredReadingSplitTests(DelegationSweepTestCase):
+    def test_path_matched_doc_is_full_read(self):
+        _write(os.path.join(self.project_root, ".serena", "memory", "feature",
+                             "FEATURE_X.md"),
+               '---\nname: X\npaths:\n  - "hooks/**/*.py"\n---\nbody')
+        full_read, digest = delegation_sweep.required_reading_split(
+            "Fix hooks/pre/foo.py", "", self.project_root)
+        self.assertIn("feature/FEATURE_X", full_read)
+        self.assertNotIn("feature/FEATURE_X", digest)
+
+    def test_wm_memory_is_digest_not_full_read(self):
+        wm = "- **Memories loaded**: dom/DOM_X\n"
+        full_read, digest = delegation_sweep.required_reading_split(
+            "Implement X.", wm, self.project_root)
+        self.assertIn("dom/DOM_X", digest)
+        self.assertNotIn("dom/DOM_X", full_read)
+
+    def test_test_work_doc_is_digest_not_full_read(self):
+        _write(os.path.join(self.project_root, ".serena", "memory", "feature",
+                             "FEATURE_TESTS.md"), "# tests")
+        full_read, digest = delegation_sweep.required_reading_split(
+            "Fix tests/test_foo.py", "", self.project_root)
+        self.assertIn("feature/FEATURE_TESTS", digest)
+        self.assertNotIn("feature/FEATURE_TESTS", full_read)
+
+    def test_full_read_capped_at_three(self):
+        for letter in "ABCDE":
+            _write(os.path.join(self.project_root, ".serena", "memory", "feature",
+                                 f"FEATURE_{letter}.md"),
+                   f'---\nname: {letter}\npaths:\n  - "src/{letter.lower()}/**"\n---\nbody')
+        prompt = "Fix src/a/x.py src/b/x.py src/c/x.py src/d/x.py src/e/x.py"
+        full_read, digest = delegation_sweep.required_reading_split(
+            prompt, "", self.project_root, full_cap=3)
+        self.assertEqual(len(full_read), 3)
+
+    def test_path_matches_beyond_cap_fall_through_to_digest(self):
+        for letter in "ABCDE":
+            _write(os.path.join(self.project_root, ".serena", "memory", "feature",
+                                 f"FEATURE_{letter}.md"),
+                   f'---\nname: {letter}\npaths:\n  - "src/{letter.lower()}/**"\n---\nbody')
+        prompt = "Fix src/a/x.py src/b/x.py src/c/x.py src/d/x.py src/e/x.py"
+        full_read, digest = delegation_sweep.required_reading_split(
+            prompt, "", self.project_root, full_cap=3)
+        overflow = [n for n in ("feature/FEATURE_D", "feature/FEATURE_E")
+                    if n not in full_read]
+        for name in overflow:
+            self.assertIn(name, digest)
+
+    def test_combined_cap_respected(self):
+        wm_lines = ", ".join(f"dom/DOM_{i}" for i in range(20))
+        wm = f"- **Memories loaded**: {wm_lines}\n"
+        full_read, digest = delegation_sweep.required_reading_split(
+            "Implement X.", wm, self.project_root, full_cap=3, cap=8)
+        self.assertEqual(len(full_read) + len(digest), 8)
+
+    def test_no_matches_both_empty(self):
+        full_read, digest = delegation_sweep.required_reading_split(
+            "Implement X.", "", self.project_root)
+        self.assertEqual(full_read, [])
+        self.assertEqual(digest, [])
 
 
 if __name__ == "__main__":

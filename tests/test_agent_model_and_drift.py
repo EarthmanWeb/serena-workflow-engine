@@ -687,9 +687,11 @@ class TestAgentModelGateMain(unittest.TestCase):
             agent_gate.STEERING_CLAUSE_MARKER,
             hook_out.get("updatedInput", {}).get("prompt", ""))
 
-    def test_prompt_naming_test_file_without_sweep_auto_injects_and_allows(self):
-        # A missing sweep allows the call: the gate adds the "Required
-        # reading:" section itself.
+    def test_prompt_naming_test_file_without_sweep_digest_only_no_autoinject(self):
+        # FEATURE_TESTS is a DIGEST-only source (test-work heuristic, not a
+        # paths:-glob edit-target match) — it never causes the "Required
+        # reading:" auto-inject/deny-avoidance path, only an inline digest
+        # line in the [swe-required-reading] block.
         result = self._run_main({
             "tool_name": "Agent",
             "tool_input": {
@@ -702,13 +704,12 @@ class TestAgentModelGateMain(unittest.TestCase):
         })
         hook_out = result.get("hookSpecificOutput", {})
         self.assertEqual(hook_out.get("permissionDecision"), "allow")
-        self.assertIn("[sweep-gate]", hook_out.get("permissionDecisionReason", ""))
         updated_prompt = hook_out.get("updatedInput", {}).get("prompt", "")
-        self.assertIn("Required reading:", updated_prompt)
-        self.assertIn('read_memory("feature/FEATURE_TESTS")', updated_prompt)
+        self.assertNotIn('read_memory("feature/FEATURE_TESTS")', updated_prompt)
         self.assertIn("[swe-required-reading]", updated_prompt)
+        self.assertIn("feature/FEATURE_TESTS", updated_prompt)
 
-    def test_prompt_naming_test_file_with_sweep_allows_and_injects_block(self):
+    def test_prompt_naming_test_file_with_sweep_allows_and_injects_digest(self):
         result = self._run_main({
             "tool_name": "Agent",
             "tool_input": {
@@ -724,6 +725,11 @@ class TestAgentModelGateMain(unittest.TestCase):
         self.assertEqual(hook_out.get("permissionDecision"), "allow")
         updated_prompt = hook_out.get("updatedInput", {}).get("prompt", "")
         self.assertIn("[swe-required-reading]", updated_prompt)
+        # The orchestrator already wrote its own read_memory() line for
+        # FEATURE_TESTS directly in the prompt body — that line survives
+        # verbatim; the gate does not strip it. The auto-generated block
+        # itself only ever digests this name (it is DIGEST-only), so no
+        # second read_memory(...) line for it is added by the gate.
         self.assertIn('read_memory("feature/FEATURE_TESTS")', updated_prompt)
 
     def test_sweep_exempt_tag_skips_sweep_gate(self):
@@ -1355,15 +1361,16 @@ class TestWeightedDriftMain(unittest.TestCase):
             return [e for e in (json.loads(l) for l in f if l.strip())
                     if e.get("type") == etype]
 
-    def test_reads_count_at_half_weight(self):
+    def test_reads_count_at_zero_weight(self):
+        # QW2: the 0.5 class was dropped — reads/searches/inspection/MCP now
+        # weight 0 and never trip the advisory, no matter how many.
         sid = "aa000001"
-        for _ in range(11):
+        for _ in range(20):
             ctx = self._run(sid, "Read", {"file_path": "/x.py"})
-        self.assertNotIn("Orchestrator drift", ctx)  # 5.5
+        self.assertNotIn("Orchestrator drift", ctx)
         ctx = self._run(sid, "Grep", {"pattern": "x"})
-        self.assertIn("Orchestrator drift", ctx)      # 6
-        self.assertIn("weighted task-work 6", ctx)
-        self.assertEqual(stream.count_task_work_since_delegation(self._path(sid)), 6.0)
+        self.assertNotIn("Orchestrator drift", ctx)
+        self.assertEqual(stream.count_task_work_since_delegation(self._path(sid)), 0.0)
 
     def test_edits_count_at_full_weight(self):
         sid = "aa000002"
@@ -1373,12 +1380,12 @@ class TestWeightedDriftMain(unittest.TestCase):
         ctx = self._run(sid, "Write")
         self.assertIn("Orchestrator drift", ctx)
 
-    def test_non_delegation_mcp_and_inspection_bash_low_weight(self):
+    def test_non_delegation_mcp_and_inspection_bash_zero_weight(self):
         sid = "aa000003"
         self._run(sid, "mcp__jira__get_issue")
         self._run(sid, "mcp__plugin_swe_serena__find_symbol")
         self._run(sid, "Bash", {"command": "grep -rn x src/"})
-        self.assertEqual(stream.count_task_work_since_delegation(self._path(sid)), 1.5)
+        self.assertEqual(stream.count_task_work_since_delegation(self._path(sid)), 0.0)
 
     def test_exempt_tools_log_nothing(self):
         sid = "aa000004"
@@ -1430,22 +1437,22 @@ class TestDriftWeight(unittest.TestCase):
     def test_mutating_bash_full(self):
         self.assertEqual(drift_hook.drift_weight("Bash", {"command": "rm x"}), 1.0)
 
-    def test_inspection_bash_low(self):
-        self.assertEqual(drift_hook.drift_weight("Bash", {"command": "cat x"}), 0.5)
+    def test_inspection_bash_zero(self):
+        self.assertEqual(drift_hook.drift_weight("Bash", {"command": "cat x"}), 0.0)
 
-    def test_read_grep_glob_low(self):
+    def test_read_grep_glob_zero(self):
         for tool in ("Read", "Grep", "Glob"):
-            self.assertEqual(drift_hook.drift_weight(tool, {}), 0.5)
+            self.assertEqual(drift_hook.drift_weight(tool, {}), 0.0)
 
-    def test_serena_edit_full_serena_read_low(self):
+    def test_serena_edit_full_serena_read_zero(self):
         self.assertEqual(drift_hook.drift_weight(
             "mcp__serena__replace_symbol_body", {}), 1.0)
         self.assertEqual(drift_hook.drift_weight(
-            "mcp__plugin_swe_serena__search_for_pattern", {}), 0.5)
+            "mcp__plugin_swe_serena__search_for_pattern", {}), 0.0)
 
-    def test_other_mcp_low(self):
+    def test_other_mcp_zero(self):
         self.assertEqual(drift_hook.drift_weight(
-            "mcp__chrome-devtools__take_snapshot", {}), 0.5)
+            "mcp__chrome-devtools__take_snapshot", {}), 0.0)
 
     def test_workflow_machinery_exempt(self):
         for tool in ("mcp__serena__read_memory",

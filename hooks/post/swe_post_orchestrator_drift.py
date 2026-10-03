@@ -5,9 +5,11 @@ Sums WEIGHTED direct task-work calls made by the MAIN agent since the last
 background delegation in this session (see drift_weight):
   - FULL_WEIGHT (1.0): Edit/Write/NotebookEdit/MultiEdit, Serena edit tools,
     mutating Bash, foreground Agent/Task.
-  - LOW_WEIGHT (0.5): Read/Grep/Glob/WebFetch and every other built-in,
+  - LOW_WEIGHT (0.0): Read/Grep/Glob/WebFetch and every other built-in,
     verification/inspection Bash (bash_is_verification), and every
-    non-delegation MCP tool (Serena read/symbol tools, jira, browser, wp-cli…).
+    non-delegation MCP tool (Serena read/symbol tools, jira, browser, wp-cli…)
+    — the 0.5 class was dropped (read-heavy research work was the main
+    false-positive driving hard blocks; see DRIFT_THRESHOLD comment).
   - EXEMPT (0, nothing logged): workflow machinery — Serena memory tools,
     swe-wm MCP tools, ToolSearch, AskUserQuestion, TodoWrite, Skill,
     SendMessage.
@@ -108,10 +110,13 @@ except ImportError as e:
 DRIFT_THRESHOLD = 6
 
 # Per-call drift weights (see module docstring / drift_weight).
+# Measured motivation: after reads/MCP were weighted 0.5, hard blocks went
+# 2 -> 446 per era while delegation (Agent calls) stayed flat 184 -> 186 —
+# pure friction from read-heavy research work; the 0.5 class is dropped.
 FULL_WEIGHT = 1.0
-LOW_WEIGHT = 0.5
+LOW_WEIGHT = 0.0
 
-WEIGHT_LEGEND = "edits/writes/mutating Bash = 1, reads/searches/inspection/MCP = 0.5"
+WEIGHT_LEGEND = "edits/writes/mutating Bash = 1, reads/searches/inspection/MCP = 0"
 
 # Workflow machinery that must never trip the brake — weight 0, no event.
 DRIFT_EXEMPT_TOOL_NAMES = frozenset({

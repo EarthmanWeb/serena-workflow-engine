@@ -1,0 +1,5037 @@
+{
+ "98d1f1e2": {
+  "main": {
+   "path": "/Users/webdev/.claude/projects/-Users-webdev-LocalSites-convenely-convenely-scaffold-base/98d1f1e2-53ea-45a8-9d5c-c20970f95f5f.jsonl",
+   "api_calls": 225,
+   "usage": {
+    "input_tokens": 450,
+    "cache_creation_input_tokens": 452049,
+    "cache_read_input_tokens": 62995030,
+    "output_tokens": 138544
+   },
+   "tools": {
+    "ToolSearch": {
+     "calls": 8,
+     "chars": 0,
+     "carry": 0.0,
+     "err": 0
+    },
+    "serena-memory": {
+     "calls": 57,
+     "chars": 216931,
+     "carry": 8094862.5,
+     "err": 3
+    },
+    "swe-wm": {
+     "calls": 34,
+     "chars": 3810,
+     "carry": 123695.25,
+     "err": 0
+    },
+    "mcp:wp-cli": {
+     "calls": 21,
+     "chars": 20397,
+     "carry": 369810.0,
+     "err": 0
+    },
+    "serena-search": {
+     "calls": 7,
+     "chars": 8911,
+     "carry": 367922.0,
+     "err": 1
+    },
+    "Bash-search": {
+     "calls": 31,
+     "chars": 40663,
+     "carry": 920107.25,
+     "err": 1
+    },
+    "AskUserQuestion": {
+     "calls": 6,
+     "chars": 1607,
+     "carry": 40494.25,
+     "err": 0
+    },
+    "Bash-read": {
+     "calls": 17,
+     "chars": 61836,
+     "carry": 2409018.75,
+     "err": 1
+    },
+    "Bash-other": {
+     "calls": 29,
+     "chars": 13597,
+     "carry": 314060.75,
+     "err": 2
+    },
+    "Agent": {
+     "calls": 14,
+     "chars": 15274,
+     "carry": 404215.5,
+     "err": 0
+    },
+    "SendMessage": {
+     "calls": 11,
+     "chars": 2282,
+     "carry": 42755.0,
+     "err": 0
+    },
+    "Skill": {
+     "calls": 1,
+     "chars": 44,
+     "carry": 1419.0,
+     "err": 0
+    },
+    "TaskStop": {
+     "calls": 2,
+     "chars": 372,
+     "carry": 5579.0,
+     "err": 0
+    },
+    "serena-symbol-read": {
+     "calls": 5,
+     "chars": 9185,
+     "carry": 100897.0,
+     "err": 0
+    },
+    "serena-edit/other": {
+     "calls": 1,
+     "chars": 2,
+     "carry": 9.5,
+     "err": 0
+    }
+   },
+   "hooks": {
+    "SessionStart": [
+     1,
+     918
+    ],
+    "UserPromptSubmit": [
+     34,
+     23472
+    ],
+    "PostToolUse:mcp__plugin_swe_serena__read_memory": [
+     30,
+     13942
+    ],
+    "PostToolUse:mcp__plugin_swe_serena__search_memories_by_front_matter": [
+     2,
+     16540
+    ],
+    "PostToolUse:mcp__wp-cli__wp_cli": [
+     21,
+     2994
+    ],
+    "PostToolUse:mcp__plugin_swe_serena__search_for_pattern": [
+     12,
+     1109
+    ],
+    "PostToolUse:Bash": [
+     73,
+     9377
+    ],
+    "PostToolUse:mcp__plugin_swe_serena__list_memories": [
+     1,
+     18
+    ],
+    "PostToolUse:Agent": [
+     14,
+     574
+    ],
+    "PostToolUse:mcp__plugin_swe_serena__edit_memory": [
+     19,
+     2596
+    ],
+    "PostToolUse:mcp__plugin_swe_serena__search_memories_by_name": [
+     4,
+     3750
+    ],
+    "PostToolUse:mcp__plugin_swe_serena__write_memory": [
+     4,
+     1312
+    ],
+    "PostToolUse:TaskStop": [
+     2,
+     126
+    ],
+    "PostToolUse:mcp__plugin_swe_serena__get_symbols_overview": [
+     3,
+     705
+    ],
+    "PostToolUse:mcp__plugin_swe_serena__find_symbol": [
+     2,
+     325
+    ],
+    "PreToolUse:mcp__plugin_swe_serena__replace_symbol_body": [
+     1,
+     27
+    ],
+    "PostToolUse:mcp__plugin_swe_serena__replace_symbol_body": [
+     2,
+     105
+    ]
+   },
+   "detail": {
+    "S:search_for_pattern:calls": 7,
+    "S:search_for_pattern:chars": 8911,
+    "S:search_for_pattern:empty_or_err": 2,
+    "ERR:Bash-read": 1,
+    "ERR:serena-memory": 3,
+    "ERR:Bash-other": 2,
+    "DENIED:Bash-other": 1,
+    "ERR:Bash-search": 1,
+    "ERR:serena-search": 1,
+    "DENIED:serena-search": 1,
+    "S:get_symbols_overview:calls": 3,
+    "S:get_symbols_overview:chars": 638,
+    "S:find_symbol:calls": 2,
+    "S:find_symbol:chars": 8547,
+    "S:find_symbol+body:calls": 2,
+    "S:find_symbol+body:chars": 8547,
+    "DENIED:serena-memory": 2
+   }
+  },
+  "subs": [
+   {
+    "path": "/Users/webdev/.claude/projects/-Users-webdev-LocalSites-convenely-convenely-scaffold-base/98d1f1e2-53ea-45a8-9d5c-c20970f95f5f/subagents/agent-a04967ca4c0b6a44f.jsonl",
+    "api_calls": 7,
+    "usage": {
+     "input_tokens": 14,
+     "cache_creation_input_tokens": 95569,
+     "cache_read_input_tokens": 496013,
+     "output_tokens": 39
+    },
+    "tools": {
+     "ToolSearch": {
+      "calls": 1,
+      "chars": 0,
+      "carry": 0.0,
+      "err": 0
+     },
+     "serena-memory": {
+      "calls": 11,
+      "chars": 63545,
+      "carry": 79431.25,
+      "err": 0
+     },
+     "Read": {
+      "calls": 1,
+      "chars": 3101,
+      "carry": 3101.0,
+      "err": 0
+     },
+     "Bash-other": {
+      "calls": 4,
+      "chars": 1346,
+      "carry": 632.5,
+      "err": 1
+     }
+    },
+    "hooks": {
+     "PreToolUse:Bash": [
+      4,
+      120
+     ]
+    },
+    "detail": {
+     "Read-full:calls": 1,
+     "Read-full:chars": 3101,
+     "Read-ext:.conf:chars": 3101,
+     "Read-ext:.conf:calls": 1,
+     "ERR:Bash-other": 1
+    }
+   },
+   {
+    "path": "/Users/webdev/.claude/projects/-Users-webdev-LocalSites-convenely-convenely-scaffold-base/98d1f1e2-53ea-45a8-9d5c-c20970f95f5f/subagents/agent-a360fe83d93bc5fa9.jsonl",
+    "api_calls": 0,
+    "usage": {},
+    "tools": {},
+    "hooks": {},
+    "detail": {}
+   },
+   {
+    "path": "/Users/webdev/.claude/projects/-Users-webdev-LocalSites-convenely-convenely-scaffold-base/98d1f1e2-53ea-45a8-9d5c-c20970f95f5f/subagents/agent-a39a867d7b6b4420f.jsonl",
+    "api_calls": 18,
+    "usage": {
+     "input_tokens": 90,
+     "cache_creation_input_tokens": 54759,
+     "cache_read_input_tokens": 835563,
+     "output_tokens": 492
+    },
+    "tools": {
+     "ToolSearch": {
+      "calls": 1,
+      "chars": 0,
+      "carry": 0.0,
+      "err": 0
+     },
+     "serena-memory": {
+      "calls": 5,
+      "chars": 21792,
+      "carry": 87168.0,
+      "err": 0
+     },
+     "mcp:wp-cli": {
+      "calls": 15,
+      "chars": 13044,
+      "carry": 26250.5,
+      "err": 1
+     }
+    },
+    "hooks": {},
+    "detail": {
+     "ERR:mcp:wp-cli": 1,
+     "DENIED:mcp:wp-cli": 1
+    }
+   },
+   {
+    "path": "/Users/webdev/.claude/projects/-Users-webdev-LocalSites-convenely-convenely-scaffold-base/98d1f1e2-53ea-45a8-9d5c-c20970f95f5f/subagents/agent-a3dd45281a06bba59.jsonl",
+    "api_calls": 112,
+    "usage": {
+     "input_tokens": 224,
+     "cache_creation_input_tokens": 243636,
+     "cache_read_input_tokens": 21467677,
+     "output_tokens": 8265
+    },
+    "tools": {
+     "ToolSearch": {
+      "calls": 3,
+      "chars": 0,
+      "carry": 0.0,
+      "err": 0
+     },
+     "serena-memory": {
+      "calls": 13,
+      "chars": 102843,
+      "carry": 2828182.5,
+      "err": 0
+     },
+     "Bash-other": {
+      "calls": 38,
+      "chars": 20063,
+      "carry": 283997.5,
+      "err": 14
+     },
+     "Bash-search": {
+      "calls": 8,
+      "chars": 7565,
+      "carry": 177953.5,
+      "err": 0
+     },
+     "serena-symbol-read": {
+      "calls": 26,
+      "chars": 68517,
+      "carry": 1576190.5,
+      "err": 0
+     },
+     "Read": {
+      "calls": 21,
+      "chars": 39851,
+      "carry": 709887.75,
+      "err": 0
+     },
+     "Bash-read": {
+      "calls": 8,
+      "chars": 2215,
+      "carry": 12262.75,
+      "err": 0
+     },
+     "mcp:wp-cli": {
+      "calls": 5,
+      "chars": 2309,
+      "carry": 28921.25,
+      "err": 1
+     },
+     "Monitor": {
+      "calls": 2,
+      "chars": 606,
+      "carry": 7380.25,
+      "err": 0
+     },
+     "Edit": {
+      "calls": 14,
+      "chars": 2958,
+      "carry": 38713.25,
+      "err": 1
+     },
+     "Write": {
+      "calls": 1,
+      "chars": 200,
+      "carry": 3800.0,
+      "err": 0
+     },
+     "serena-edit/other": {
+      "calls": 7,
+      "chars": 14,
+      "carry": 163.0,
+      "err": 0
+     }
+    },
+    "hooks": {
+     "PreToolUse:Bash": [
+      53,
+      1590
+     ],
+     "PreToolUse:Edit": [
+      13,
+      390
+     ],
+     "PreToolUse:Write": [
+      1,
+      30
+     ],
+     "PreToolUse:mcp__plugin_swe_serena__replace_symbol_body": [
+      6,
+      180
+     ],
+     "PreToolUse:mcp__plugin_swe_serena__insert_after_symbol": [
+      1,
+      30
+     ]
+    },
+    "detail": {
+     "ERR:Bash-other": 14,
+     "S:get_symbols_overview:calls": 4,
+     "S:get_symbols_overview:chars": 8179,
+     "S:find_symbol:calls": 21,
+     "S:find_symbol:chars": 55847,
+     "S:find_symbol+body:calls": 21,
+     "S:find_symbol+body:chars": 55847,
+     "Read-windowed:calls": 18,
+     "Read-windowed:chars": 36613,
+     "Read-ext:.php:chars": 30177,
+     "Read-ext:.php:calls": 13,
+     "S:find_referencing_symbols:calls": 1,
+     "S:find_referencing_symbols:chars": 4491,
+     "Read-ext:.css:chars": 1785,
+     "Read-ext:.css:calls": 1,
+     "Read-full:calls": 3,
+     "Read-full:chars": 3238,
+     "DENIED:Bash-other": 7,
+     "ERR:Edit": 1,
+     "Read-ext:.output:chars": 7889,
+     "Read-ext:.output:calls": 7,
+     "ERR:mcp:wp-cli": 1,
+     "DENIED:mcp:wp-cli": 1
+    }
+   },
+   {
+    "path": "/Users/webdev/.claude/projects/-Users-webdev-LocalSites-convenely-convenely-scaffold-base/98d1f1e2-53ea-45a8-9d5c-c20970f95f5f/subagents/agent-a5b2c693762636f5c.jsonl",
+    "api_calls": 11,
+    "usage": {
+     "input_tokens": 22,
+     "cache_creation_input_tokens": 139938,
+     "cache_read_input_tokens": 1295626,
+     "output_tokens": 75
+    },
+    "tools": {
+     "ToolSearch": {
+      "calls": 1,
+      "chars": 0,
+      "carry": 0.0,
+      "err": 0
+     },
+     "serena-memory": {
+      "calls": 14,
+      "chars": 115829,
+      "carry": 260615.25,
+      "err": 0
+     },
+     "serena-symbol-read": {
+      "calls": 7,
+      "chars": 10301,
+      "carry": 11119.0,
+      "err": 0
+     },
+     "serena-search": {
+      "calls": 11,
+      "chars": 28533,
+      "carry": 36312.25,
+      "err": 0
+     },
+     "Read": {
+      "calls": 4,
+      "chars": 36900,
+      "carry": 52382.25,
+      "err": 0
+     }
+    },
+    "hooks": {},
+    "detail": {
+     "S:get_symbols_overview:calls": 1,
+     "S:get_symbols_overview:chars": 3138,
+     "S:search_for_pattern:calls": 11,
+     "S:search_for_pattern:chars": 28533,
+     "S:search_for_pattern:empty_or_err": 3,
+     "Read-full:calls": 2,
+     "Read-full:chars": 30378,
+     "Read-ext:.php:chars": 36900,
+     "Read-ext:.php:calls": 4,
+     "S:find_symbol:calls": 6,
+     "S:find_symbol:chars": 7163,
+     "S:find_symbol+body:calls": 5,
+     "S:find_symbol+body:chars": 6130,
+     "S:find_symbol:empty_or_err": 1,
+     "Read-windowed:calls": 2,
+     "Read-windowed:chars": 6522
+    }
+   },
+   {
+    "path": "/Users/webdev/.claude/projects/-Users-webdev-LocalSites-convenely-convenely-scaffold-base/98d1f1e2-53ea-45a8-9d5c-c20970f95f5f/subagents/agent-a61d0bc19f60bb40a.jsonl",
+    "api_calls": 31,
+    "usage": {
+     "input_tokens": 62,
+     "cache_creation_input_tokens": 105040,
+     "cache_read_input_tokens": 3093067,
+     "output_tokens": 2224
+    },
+    "tools": {
+     "ToolSearch": {
+      "calls": 4,
+      "chars": 0,
+      "carry": 0.0,
+      "err": 0
+     },
+     "serena-memory": {
+      "calls": 7,
+      "chars": 51618,
+      "carry": 374230.5,
+      "err": 0
+     },
+     "Bash-read": {
+      "calls": 3,
+      "chars": 4732,
+      "carry": 23782.75,
+      "err": 0
+     },
+     "Bash-search": {
+      "calls": 6,
+      "chars": 945,
+      "carry": 5863.25,
+      "err": 0
+     },
+     "Read": {
+      "calls": 6,
+      "chars": 15392,
+      "carry": 91796.5,
+      "err": 1
+     },
+     "Edit": {
+      "calls": 6,
+      "chars": 808,
+      "carry": 3083.75,
+      "err": 0
+     },
+     "Bash-other": {
+      "calls": 6,
+      "chars": 3295,
+      "carry": 7747.75,
+      "err": 3
+     },
+     "mcp:wp-cli": {
+      "calls": 1,
+      "chars": 641,
+      "carry": 641.0,
+      "err": 0
+     },
+     "mcp:browser-devtools": {
+      "calls": 3,
+      "chars": 120,
+      "carry": 70.0,
+      "err": 3
+     }
+    },
+    "hooks": {
+     "PreToolUse:Bash": [
+      15,
+      450
+     ],
+     "PreToolUse:Edit": [
+      6,
+      180
+     ]
+    },
+    "detail": {
+     "Read-windowed:calls": 5,
+     "Read-windowed:chars": 14978,
+     "Read-ext:.css:chars": 6684,
+     "Read-ext:.css:calls": 3,
+     "Read-full:calls": 1,
+     "Read-full:chars": 414,
+     "Read-ext:(none):chars": 414,
+     "Read-ext:(none):calls": 1,
+     "ERR:Read": 1,
+     "Read-ext:.js:chars": 8294,
+     "Read-ext:.js:calls": 2,
+     "ERR:Bash-other": 3,
+     "DENIED:Bash-other": 1,
+     "ERR:mcp:browser-devtools": 3
+    }
+   },
+   {
+    "path": "/Users/webdev/.claude/projects/-Users-webdev-LocalSites-convenely-convenely-scaffold-base/98d1f1e2-53ea-45a8-9d5c-c20970f95f5f/subagents/agent-a786b92b327676883.jsonl",
+    "api_calls": 127,
+    "usage": {
+     "input_tokens": 254,
+     "cache_creation_input_tokens": 284994,
+     "cache_read_input_tokens": 28483860,
+     "output_tokens": 20181
+    },
+    "tools": {
+     "ToolSearch": {
+      "calls": 3,
+      "chars": 0,
+      "carry": 0.0,
+      "err": 0
+     },
+     "serena-memory": {
+      "calls": 14,
+      "chars": 132013,
+      "carry": 4125406.25,
+      "err": 0
+     },
+     "serena-search": {
+      "calls": 16,
+      "chars": 38863,
+      "carry": 638855.5,
+      "err": 0
+     },
+     "serena-symbol-read": {
+      "calls": 49,
+      "chars": 136176,
+      "carry": 3123493.75,
+      "err": 0
+     },
+     "serena-edit/other": {
+      "calls": 23,
+      "chars": 1196,
+      "carry": 30075.25,
+      "err": 3
+     },
+     "Bash-other": {
+      "calls": 30,
+      "chars": 11818,
+      "carry": 71201.25,
+      "err": 4
+     },
+     "Read": {
+      "calls": 18,
+      "chars": 37098,
+      "carry": 362289.75,
+      "err": 1
+     },
+     "Edit": {
+      "calls": 10,
+      "chars": 1709,
+      "carry": 16582.5,
+      "err": 1
+     },
+     "SendMessage": {
+      "calls": 3,
+      "chars": 246,
+      "carry": 2378.0,
+      "err": 0
+     }
+    },
+    "hooks": {
+     "PreToolUse:mcp__plugin_swe_serena__replace_content": [
+      5,
+      150
+     ],
+     "PreToolUse:mcp__plugin_swe_serena__replace_symbol_body": [
+      13,
+      390
+     ],
+     "PreToolUse:Bash": [
+      30,
+      900
+     ],
+     "PreToolUse:Edit": [
+      10,
+      300
+     ]
+    },
+    "detail": {
+     "S:search_for_pattern:calls": 16,
+     "S:search_for_pattern:chars": 38863,
+     "S:find_symbol:calls": 37,
+     "S:find_symbol:chars": 120093,
+     "S:find_symbol+body:calls": 31,
+     "S:find_symbol+body:chars": 111660,
+     "S:get_symbols_overview:calls": 8,
+     "S:get_symbols_overview:chars": 14523,
+     "ERR:serena-edit/other": 3,
+     "S:search_for_pattern:empty_or_err": 2,
+     "ERR:Bash-other": 4,
+     "Read-windowed:calls": 17,
+     "Read-windowed:chars": 36654,
+     "Read-ext:.php:chars": 36654,
+     "Read-ext:.php:calls": 17,
+     "S:find_referencing_symbols:calls": 4,
+     "S:find_referencing_symbols:chars": 1560,
+     "S:find_referencing_symbols:empty_or_err": 1,
+     "ERR:Edit": 1,
+     "DENIED:Edit": 1,
+     "Read-full:calls": 1,
+     "Read-full:chars": 444,
+     "Read-ext:(none):chars": 444,
+     "Read-ext:(none):calls": 1,
+     "ERR:Read": 1
+    }
+   },
+   {
+    "path": "/Users/webdev/.claude/projects/-Users-webdev-LocalSites-convenely-convenely-scaffold-base/98d1f1e2-53ea-45a8-9d5c-c20970f95f5f/subagents/agent-a80c2e873dc25e625.jsonl",
+    "api_calls": 94,
+    "usage": {
+     "input_tokens": 188,
+     "cache_creation_input_tokens": 215370,
+     "cache_read_input_tokens": 16861758,
+     "output_tokens": 7072
+    },
+    "tools": {
+     "ToolSearch": {
+      "calls": 4,
+      "chars": 0,
+      "carry": 0.0,
+      "err": 0
+     },
+     "serena-memory": {
+      "calls": 12,
+      "chars": 85529,
+      "carry": 1967167.0,
+      "err": 0
+     },
+     "Bash-read": {
+      "calls": 2,
+      "chars": 531,
+      "carry": 12033.75,
+      "err": 0
+     },
+     "Bash-other": {
+      "calls": 11,
+      "chars": 4256,
+      "carry": 47787.5,
+      "err": 1
+     },
+     "Read": {
+      "calls": 13,
+      "chars": 36841,
+      "carry": 746882.75,
+      "err": 2
+     },
+     "Bash-search": {
+      "calls": 6,
+      "chars": 4775,
+      "carry": 101943.5,
+      "err": 0
+     },
+     "mcp:wp-cli": {
+      "calls": 16,
+      "chars": 10086,
+      "carry": 191995.75,
+      "err": 0
+     },
+     "mcp:browser-devtools": {
+      "calls": 52,
+      "chars": 73698,
+      "carry": 871688.5,
+      "err": 0
+     },
+     "Edit": {
+      "calls": 5,
+      "chars": 713,
+      "carry": 9665.75,
+      "err": 0
+     },
+     "Agent": {
+      "calls": 1,
+      "chars": 603,
+      "carry": 753.75,
+      "err": 1
+     }
+    },
+    "hooks": {
+     "PreToolUse:Bash": [
+      19,
+      570
+     ],
+     "PreToolUse:Edit": [
+      5,
+      150
+     ]
+    },
+    "detail": {
+     "Read-full:calls": 4,
+     "Read-full:chars": 20085,
+     "Read-ext:.js:chars": 23851,
+     "Read-ext:.js:calls": 5,
+     "Read-windowed:calls": 9,
+     "Read-windowed:chars": 16756,
+     "Read-ext:.css:chars": 5700,
+     "Read-ext:.css:calls": 4,
+     "Read-ext:.php:chars": 6449,
+     "Read-ext:.php:calls": 1,
+     "Read-ext:(none):chars": 841,
+     "Read-ext:(none):calls": 2,
+     "ERR:Read": 2,
+     "Read-ext:.png:chars": 0,
+     "Read-ext:.png:calls": 1,
+     "ERR:Agent": 1,
+     "DENIED:Agent": 1,
+     "ERR:Bash-other": 1,
+     "DENIED:Bash-other": 1
+    }
+   },
+   {
+    "path": "/Users/webdev/.claude/projects/-Users-webdev-LocalSites-convenely-convenely-scaffold-base/98d1f1e2-53ea-45a8-9d5c-c20970f95f5f/subagents/agent-a9270dff35dd3d259.jsonl",
+    "api_calls": 6,
+    "usage": {
+     "input_tokens": 12,
+     "cache_creation_input_tokens": 82570,
+     "cache_read_input_tokens": 430451,
+     "output_tokens": 3452
+    },
+    "tools": {
+     "ToolSearch": {
+      "calls": 1,
+      "chars": 0,
+      "carry": 0.0,
+      "err": 0
+     },
+     "serena-memory": {
+      "calls": 9,
+      "chars": 54437,
+      "carry": 54437.0,
+      "err": 0
+     },
+     "serena-search": {
+      "calls": 4,
+      "chars": 11496,
+      "carry": 5839.0,
+      "err": 0
+     },
+     "Read": {
+      "calls": 2,
+      "chars": 21222,
+      "carry": 13012.75,
+      "err": 0
+     }
+    },
+    "hooks": {},
+    "detail": {
+     "S:search_for_pattern:calls": 4,
+     "S:search_for_pattern:chars": 11496,
+     "Read-full:calls": 2,
+     "Read-full:chars": 21222,
+     "Read-ext:.php:chars": 21222,
+     "Read-ext:.php:calls": 2
+    }
+   },
+   {
+    "path": "/Users/webdev/.claude/projects/-Users-webdev-LocalSites-convenely-convenely-scaffold-base/98d1f1e2-53ea-45a8-9d5c-c20970f95f5f/subagents/agent-a93166c102fd4c5ce.jsonl",
+    "api_calls": 33,
+    "usage": {
+     "input_tokens": 66,
+     "cache_creation_input_tokens": 161379,
+     "cache_read_input_tokens": 4922205,
+     "output_tokens": 1448
+    },
+    "tools": {
+     "ToolSearch": {
+      "calls": 1,
+      "chars": 0,
+      "carry": 0.0,
+      "err": 0
+     },
+     "serena-memory": {
+      "calls": 11,
+      "chars": 98732,
+      "carry": 765173.0,
+      "err": 0
+     },
+     "serena-search": {
+      "calls": 7,
+      "chars": 51062,
+      "carry": 280091.75,
+      "err": 0
+     },
+     "serena-symbol-read": {
+      "calls": 9,
+      "chars": 10294,
+      "carry": 65069.0,
+      "err": 0
+     },
+     "Read": {
+      "calls": 10,
+      "chars": 38260,
+      "carry": 222210.0,
+      "err": 0
+     },
+     "Bash-other": {
+      "calls": 9,
+      "chars": 5577,
+      "carry": 13094.5,
+      "err": 1
+     },
+     "Bash-search": {
+      "calls": 3,
+      "chars": 5365,
+      "carry": 27081.25,
+      "err": 0
+     },
+     "Write": {
+      "calls": 1,
+      "chars": 210,
+      "carry": 682.5,
+      "err": 0
+     },
+     "Edit": {
+      "calls": 1,
+      "chars": 143,
+      "carry": 429.0,
+      "err": 0
+     },
+     "serena-edit/other": {
+      "calls": 5,
+      "chars": 10,
+      "carry": 18.5,
+      "err": 0
+     }
+    },
+    "hooks": {
+     "PreToolUse:Bash": [
+      12,
+      360
+     ],
+     "PreToolUse:Write": [
+      1,
+      30
+     ],
+     "PreToolUse:Edit": [
+      1,
+      30
+     ],
+     "PreToolUse:mcp__plugin_swe_serena__insert_after_symbol": [
+      1,
+      30
+     ],
+     "PreToolUse:mcp__plugin_swe_serena__replace_content": [
+      4,
+      120
+     ]
+    },
+    "detail": {
+     "S:search_for_pattern:calls": 7,
+     "S:search_for_pattern:chars": 51062,
+     "S:search_for_pattern:empty_or_err": 1,
+     "S:find_symbol:calls": 8,
+     "S:find_symbol:chars": 10260,
+     "S:find_symbol+body:calls": 6,
+     "S:find_symbol+body:chars": 6130,
+     "S:get_symbols_overview:calls": 1,
+     "S:get_symbols_overview:chars": 34,
+     "Read-windowed:calls": 7,
+     "Read-windowed:chars": 28996,
+     "Read-ext:.php:chars": 37560,
+     "Read-ext:.php:calls": 9,
+     "ERR:Bash-other": 1,
+     "DENIED:Bash-other": 1,
+     "Read-full:calls": 3,
+     "Read-full:chars": 9264,
+     "Read-ext:.xml:chars": 700,
+     "Read-ext:.xml:calls": 1
+    }
+   },
+   {
+    "path": "/Users/webdev/.claude/projects/-Users-webdev-LocalSites-convenely-convenely-scaffold-base/98d1f1e2-53ea-45a8-9d5c-c20970f95f5f/subagents/agent-ab9cb4c6f93603cf1.jsonl",
+    "api_calls": 34,
+    "usage": {
+     "input_tokens": 68,
+     "cache_creation_input_tokens": 116842,
+     "cache_read_input_tokens": 4008019,
+     "output_tokens": 2878
+    },
+    "tools": {
+     "ToolSearch": {
+      "calls": 2,
+      "chars": 0,
+      "carry": 0.0,
+      "err": 0
+     },
+     "serena-memory": {
+      "calls": 11,
+      "chars": 91167,
+      "carry": 729336.0,
+      "err": 0
+     },
+     "serena-symbol-read": {
+      "calls": 8,
+      "chars": 7539,
+      "carry": 53662.0,
+      "err": 0
+     },
+     "serena-search": {
+      "calls": 4,
+      "chars": 579,
+      "carry": 4407.5,
+      "err": 1
+     },
+     "Read": {
+      "calls": 5,
+      "chars": 5613,
+      "carry": 38827.75,
+      "err": 0
+     },
+     "Write": {
+      "calls": 1,
+      "chars": 192,
+      "carry": 1248.0,
+      "err": 0
+     },
+     "Bash-other": {
+      "calls": 9,
+      "chars": 6223,
+      "carry": 30897.25,
+      "err": 3
+     },
+     "serena-edit/other": {
+      "calls": 4,
+      "chars": 8,
+      "carry": 41.0,
+      "err": 0
+     },
+     "Edit": {
+      "calls": 1,
+      "chars": 187,
+      "carry": 748.0,
+      "err": 0
+     },
+     "Bash-read": {
+      "calls": 1,
+      "chars": 763,
+      "carry": 1907.5,
+      "err": 0
+     },
+     "mcp:wp-cli": {
+      "calls": 5,
+      "chars": 3827,
+      "carry": 5305.25,
+      "err": 0
+     },
+     "mcp:browser-devtools": {
+      "calls": 4,
+      "chars": 160,
+      "carry": 140.0,
+      "err": 4
+     }
+    },
+    "hooks": {
+     "PreToolUse:Write": [
+      1,
+      30
+     ],
+     "PreToolUse:Bash": [
+      10,
+      300
+     ],
+     "PreToolUse:mcp__plugin_swe_serena__replace_symbol_body": [
+      2,
+      60
+     ],
+     "PreToolUse:mcp__plugin_swe_serena__insert_after_symbol": [
+      2,
+      60
+     ],
+     "PreToolUse:Edit": [
+      1,
+      30
+     ]
+    },
+    "detail": {
+     "S:get_symbols_overview:calls": 2,
+     "S:get_symbols_overview:chars": 814,
+     "S:search_for_pattern:calls": 4,
+     "S:search_for_pattern:chars": 579,
+     "S:search_for_pattern:empty_or_err": 3,
+     "ERR:serena-search": 1,
+     "S:find_symbol:calls": 6,
+     "S:find_symbol:chars": 6725,
+     "S:find_symbol+body:calls": 6,
+     "S:find_symbol+body:chars": 6725,
+     "Read-full:calls": 4,
+     "Read-full:chars": 4912,
+     "Read-ext:.php:chars": 4277,
+     "Read-ext:.php:calls": 3,
+     "Read-windowed:calls": 1,
+     "Read-windowed:chars": 701,
+     "Read-ext:.css:chars": 701,
+     "Read-ext:.css:calls": 1,
+     "Read-ext:.xml:chars": 635,
+     "Read-ext:.xml:calls": 1,
+     "ERR:Bash-other": 3,
+     "DENIED:Bash-other": 1,
+     "ERR:mcp:browser-devtools": 4
+    }
+   },
+   {
+    "path": "/Users/webdev/.claude/projects/-Users-webdev-LocalSites-convenely-convenely-scaffold-base/98d1f1e2-53ea-45a8-9d5c-c20970f95f5f/subagents/agent-abd074233e96a7ded.jsonl",
+    "api_calls": 114,
+    "usage": {
+     "input_tokens": 228,
+     "cache_creation_input_tokens": 255642,
+     "cache_read_input_tokens": 25005513,
+     "output_tokens": 8777
+    },
+    "tools": {
+     "ToolSearch": {
+      "calls": 2,
+      "chars": 0,
+      "carry": 0.0,
+      "err": 0
+     },
+     "serena-memory": {
+      "calls": 14,
+      "chars": 101729,
+      "carry": 2848412.0,
+      "err": 0
+     },
+     "serena-symbol-read": {
+      "calls": 34,
+      "chars": 92447,
+      "carry": 2282697.25,
+      "err": 0
+     },
+     "serena-search": {
+      "calls": 12,
+      "chars": 4011,
+      "carry": 90086.5,
+      "err": 0
+     },
+     "Bash-search": {
+      "calls": 4,
+      "chars": 1328,
+      "carry": 25577.5,
+      "err": 0
+     },
+     "Bash-read": {
+      "calls": 3,
+      "chars": 7092,
+      "carry": 186350.0,
+      "err": 0
+     },
+     "Read": {
+      "calls": 17,
+      "chars": 72582,
+      "carry": 1697515.5,
+      "err": 0
+     },
+     "Edit": {
+      "calls": 17,
+      "chars": 2923,
+      "carry": 50782.0,
+      "err": 0
+     },
+     "Bash-other": {
+      "calls": 36,
+      "chars": 21145,
+      "carry": 295185.25,
+      "err": 9
+     },
+     "serena-edit/other": {
+      "calls": 8,
+      "chars": 16,
+      "carry": 248.0,
+      "err": 0
+     },
+     "mcp:wp-cli": {
+      "calls": 6,
+      "chars": 3876,
+      "carry": 7589.5,
+      "err": 0
+     }
+    },
+    "hooks": {
+     "PreToolUse:Bash": [
+      43,
+      1290
+     ],
+     "PreToolUse:Edit": [
+      17,
+      510
+     ],
+     "PreToolUse:mcp__plugin_swe_serena__replace_symbol_body": [
+      5,
+      150
+     ],
+     "PreToolUse:mcp__plugin_swe_serena__insert_after_symbol": [
+      3,
+      90
+     ]
+    },
+    "detail": {
+     "S:get_symbols_overview:calls": 7,
+     "S:get_symbols_overview:chars": 8686,
+     "S:find_symbol:calls": 27,
+     "S:find_symbol:chars": 83761,
+     "S:find_symbol+body:calls": 26,
+     "S:find_symbol+body:chars": 83284,
+     "S:search_for_pattern:calls": 12,
+     "S:search_for_pattern:chars": 4011,
+     "Read-full:calls": 8,
+     "Read-full:chars": 62796,
+     "Read-ext:.php:chars": 68992,
+     "Read-ext:.php:calls": 15,
+     "S:search_for_pattern:empty_or_err": 8,
+     "Read-windowed:calls": 9,
+     "Read-windowed:chars": 9786,
+     "ERR:Bash-other": 9,
+     "DENIED:Bash-other": 3,
+     "Read-ext:.md:chars": 3590,
+     "Read-ext:.md:calls": 2
+    }
+   },
+   {
+    "path": "/Users/webdev/.claude/projects/-Users-webdev-LocalSites-convenely-convenely-scaffold-base/98d1f1e2-53ea-45a8-9d5c-c20970f95f5f/subagents/agent-aed246f63cf0dade4.jsonl",
+    "api_calls": 10,
+    "usage": {
+     "input_tokens": 20,
+     "cache_creation_input_tokens": 84494,
+     "cache_read_input_tokens": 828585,
+     "output_tokens": 4192
+    },
+    "tools": {
+     "ToolSearch": {
+      "calls": 1,
+      "chars": 0,
+      "carry": 0.0,
+      "err": 0
+     },
+     "serena-memory": {
+      "calls": 8,
+      "chars": 53125,
+      "carry": 106250.0,
+      "err": 0
+     },
+     "Bash-search": {
+      "calls": 3,
+      "chars": 2093,
+      "carry": 3405.75,
+      "err": 0
+     },
+     "Read": {
+      "calls": 2,
+      "chars": 15119,
+      "carry": 22678.5,
+      "err": 0
+     },
+     "WebSearch": {
+      "calls": 6,
+      "chars": 15244,
+      "carry": 10933.5,
+      "err": 0
+     },
+     "WebFetch": {
+      "calls": 3,
+      "chars": 3308,
+      "carry": 1804.75,
+      "err": 0
+     }
+    },
+    "hooks": {
+     "PreToolUse:Bash": [
+      3,
+      90
+     ]
+    },
+    "detail": {
+     "Read-windowed:calls": 2,
+     "Read-windowed:chars": 15119,
+     "Read-ext:.js:chars": 8715,
+     "Read-ext:.js:calls": 1,
+     "Read-ext:.php:chars": 6404,
+     "Read-ext:.php:calls": 1
+    }
+   },
+   {
+    "path": "/Users/webdev/.claude/projects/-Users-webdev-LocalSites-convenely-convenely-scaffold-base/98d1f1e2-53ea-45a8-9d5c-c20970f95f5f/subagents/agent-afbf5923b17253175.jsonl",
+    "api_calls": 74,
+    "usage": {
+     "input_tokens": 148,
+     "cache_creation_input_tokens": 248508,
+     "cache_read_input_tokens": 14561719,
+     "output_tokens": 10004
+    },
+    "tools": {
+     "ToolSearch": {
+      "calls": 1,
+      "chars": 0,
+      "carry": 0.0,
+      "err": 0
+     },
+     "serena-memory": {
+      "calls": 11,
+      "chars": 119095,
+      "carry": 2026599.0,
+      "err": 0
+     },
+     "Bash-other": {
+      "calls": 23,
+      "chars": 19863,
+      "carry": 125903.75,
+      "err": 2
+     },
+     "Bash-search": {
+      "calls": 16,
+      "chars": 47718,
+      "carry": 645933.25,
+      "err": 0
+     },
+     "Bash-read": {
+      "calls": 23,
+      "chars": 71380,
+      "carry": 951189.0,
+      "err": 1
+     },
+     "Write": {
+      "calls": 5,
+      "chars": 1004,
+      "carry": 10369.25,
+      "err": 0
+     },
+     "Read": {
+      "calls": 1,
+      "chars": 1788,
+      "carry": 11175.0,
+      "err": 0
+     },
+     "mcp:wp-cli": {
+      "calls": 4,
+      "chars": 6966,
+      "carry": 26877.75,
+      "err": 0
+     }
+    },
+    "hooks": {
+     "PreToolUse:Bash": [
+      62,
+      1860
+     ],
+     "PreToolUse:Write": [
+      5,
+      150
+     ]
+    },
+    "detail": {
+     "ERR:Bash-read": 1,
+     "ERR:Bash-other": 2,
+     "DENIED:Bash-other": 2,
+     "Read-windowed:calls": 1,
+     "Read-windowed:chars": 1788,
+     "Read-ext:.php:chars": 1788,
+     "Read-ext:.php:calls": 1
+    }
+   }
+  ]
+ },
+ "a7a51833": {
+  "main": {
+   "path": "/Users/webdev/.claude/projects/-Users-webdev-LocalSites-convenely-convenely-scaffold-base/a7a51833-a9cc-48ec-9c67-b32639fe61b5.jsonl",
+   "api_calls": 194,
+   "usage": {
+    "input_tokens": 409,
+    "cache_creation_input_tokens": 392895,
+    "cache_read_input_tokens": 47606475,
+    "output_tokens": 101670
+   },
+   "tools": {
+    "ToolSearch": {
+     "calls": 8,
+     "chars": 0,
+     "carry": 0.0,
+     "err": 0
+    },
+    "serena-memory": {
+     "calls": 20,
+     "chars": 140448,
+     "carry": 4914551.25,
+     "err": 0
+    },
+    "swe-wm": {
+     "calls": 15,
+     "chars": 2803,
+     "carry": 121558.25,
+     "err": 0
+    },
+    "Bash-search": {
+     "calls": 15,
+     "chars": 14861,
+     "carry": 493279.5,
+     "err": 0
+    },
+    "Bash-read": {
+     "calls": 8,
+     "chars": 29274,
+     "carry": 936814.25,
+     "err": 1
+    },
+    "mcp:browser-devtools": {
+     "calls": 15,
+     "chars": 8868,
+     "carry": 350172.75,
+     "err": 1
+    },
+    "Edit": {
+     "calls": 22,
+     "chars": 4266,
+     "carry": 116459.0,
+     "err": 4
+    },
+    "Bash-other": {
+     "calls": 35,
+     "chars": 70778,
+     "carry": 1012797.5,
+     "err": 5
+    },
+    "Read": {
+     "calls": 8,
+     "chars": 4527,
+     "carry": 80354.25,
+     "err": 0
+    },
+    "serena-search": {
+     "calls": 2,
+     "chars": 4937,
+     "carry": 149578.5,
+     "err": 1
+    },
+    "Agent": {
+     "calls": 22,
+     "chars": 36666,
+     "carry": 878641.0,
+     "err": 1
+    },
+    "AskUserQuestion": {
+     "calls": 4,
+     "chars": 955,
+     "carry": 17676.5,
+     "err": 0
+    },
+    "SendMessage": {
+     "calls": 20,
+     "chars": 4469,
+     "carry": 94448.5,
+     "err": 0
+    },
+    "ListAgents": {
+     "calls": 1,
+     "chars": 960,
+     "carry": 5760.0,
+     "err": 0
+    },
+    "mcp:wp-cli": {
+     "calls": 1,
+     "chars": 686,
+     "carry": 2401.0,
+     "err": 0
+    },
+    "Skill": {
+     "calls": 1,
+     "chars": 42,
+     "carry": 52.5,
+     "err": 0
+    }
+   },
+   "hooks": {
+    "SessionStart": [
+     1,
+     918
+    ],
+    "UserPromptSubmit": [
+     24,
+     15942
+    ],
+    "PostToolUse:mcp__plugin_swe_serena__read_memory": [
+     15,
+     10080
+    ],
+    "PostToolUse:Bash": [
+     52,
+     13628
+    ],
+    "PostToolUse:mcp__browser-devtools__execute": [
+     11,
+     3945
+    ],
+    "PostToolUse:mcp__browser-devtools__scenario-run": [
+     3,
+     560
+    ],
+    "PreToolUse:Edit": [
+     18,
+     486
+    ],
+    "PostToolUse:Edit": [
+     37,
+     5389
+    ],
+    "PostToolUse:Read": [
+     8,
+     2286
+    ],
+    "PostToolUse:Agent": [
+     21,
+     966
+    ],
+    "PostToolUse:mcp__plugin_swe_serena__edit_memory": [
+     7,
+     1232
+    ],
+    "PostToolUse:mcp__plugin_swe_serena__search_for_pattern": [
+     2,
+     643
+    ],
+    "PostToolUse:mcp__plugin_swe_serena__search_memories_by_name": [
+     1,
+     569
+    ],
+    "PostToolUse:ListAgents": [
+     1,
+     65
+    ],
+    "BLOCK:Stop": [
+     1,
+     183
+    ],
+    "PostToolUse:mcp__wp-cli__wp_cli": [
+     1,
+     74
+    ]
+   },
+   "detail": {
+    "ERR:Edit": 4,
+    "DENIED:Edit": 4,
+    "ERR:Bash-other": 5,
+    "DENIED:Bash-other": 3,
+    "Read-full:calls": 7,
+    "Read-full:chars": 0,
+    "Read-ext:.png:chars": 0,
+    "Read-ext:.png:calls": 7,
+    "S:search_for_pattern:calls": 2,
+    "S:search_for_pattern:chars": 4937,
+    "ERR:serena-search": 1,
+    "DENIED:serena-search": 1,
+    "ERR:Agent": 1,
+    "DENIED:Agent": 1,
+    "ERR:mcp:browser-devtools": 1,
+    "ERR:Bash-read": 1,
+    "DENIED:Bash-read": 1,
+    "Read-windowed:calls": 1,
+    "Read-windowed:chars": 4527,
+    "Read-ext:.ts:chars": 4527,
+    "Read-ext:.ts:calls": 1
+   }
+  },
+  "subs": [
+   {
+    "path": "/Users/webdev/.claude/projects/-Users-webdev-LocalSites-convenely-convenely-scaffold-base/a7a51833-a9cc-48ec-9c67-b32639fe61b5/subagents/agent-a0391604f2e1a9e75.jsonl",
+    "api_calls": 15,
+    "usage": {
+     "input_tokens": 53,
+     "cache_creation_input_tokens": 51737,
+     "cache_read_input_tokens": 873378,
+     "output_tokens": 308
+    },
+    "tools": {
+     "ToolSearch": {
+      "calls": 1,
+      "chars": 0,
+      "carry": 0.0,
+      "err": 0
+     },
+     "serena-memory": {
+      "calls": 4,
+      "chars": 60647,
+      "carry": 197102.75,
+      "err": 0
+     },
+     "Bash-other": {
+      "calls": 4,
+      "chars": 10586,
+      "carry": 27370.25,
+      "err": 0
+     },
+     "Bash-search": {
+      "calls": 3,
+      "chars": 766,
+      "carry": 1209.5,
+      "err": 0
+     },
+     "Bash-read": {
+      "calls": 3,
+      "chars": 1116,
+      "carry": 1441.5,
+      "err": 0
+     },
+     "Read": {
+      "calls": 2,
+      "chars": 5719,
+      "carry": 12557.5,
+      "err": 0
+     }
+    },
+    "hooks": {
+     "PreToolUse:Bash": [
+      10,
+      300
+     ]
+    },
+    "detail": {
+     "Read-windowed:calls": 2,
+     "Read-windowed:chars": 5719,
+     "Read-ext:.ts:chars": 5719,
+     "Read-ext:.ts:calls": 2
+    }
+   },
+   {
+    "path": "/Users/webdev/.claude/projects/-Users-webdev-LocalSites-convenely-convenely-scaffold-base/a7a51833-a9cc-48ec-9c67-b32639fe61b5/subagents/agent-a0ceff7058538e408.jsonl",
+    "api_calls": 70,
+    "usage": {
+     "input_tokens": 140,
+     "cache_creation_input_tokens": 199109,
+     "cache_read_input_tokens": 12250843,
+     "output_tokens": 4456
+    },
+    "tools": {
+     "ToolSearch": {
+      "calls": 2,
+      "chars": 0,
+      "carry": 0.0,
+      "err": 0
+     },
+     "serena-memory": {
+      "calls": 7,
+      "chars": 87296,
+      "carry": 1484032.0,
+      "err": 0
+     },
+     "Bash-other": {
+      "calls": 11,
+      "chars": 15495,
+      "carry": 83687.5,
+      "err": 2
+     },
+     "Bash-search": {
+      "calls": 6,
+      "chars": 1458,
+      "carry": 12734.75,
+      "err": 0
+     },
+     "serena-symbol-read": {
+      "calls": 47,
+      "chars": 63983,
+      "carry": 882419.25,
+      "err": 1
+     },
+     "Bash-read": {
+      "calls": 3,
+      "chars": 9531,
+      "carry": 137013.25,
+      "err": 0
+     },
+     "Read": {
+      "calls": 18,
+      "chars": 73806,
+      "carry": 898146.75,
+      "err": 1
+     },
+     "serena-edit/other": {
+      "calls": 12,
+      "chars": 935,
+      "carry": 9852.25,
+      "err": 2
+     },
+     "Edit": {
+      "calls": 13,
+      "chars": 2147,
+      "carry": 11174.0,
+      "err": 0
+     }
+    },
+    "hooks": {
+     "PreToolUse:Bash": [
+      20,
+      600
+     ],
+     "PreToolUse:mcp__plugin_swe_serena__replace_symbol_body": [
+      10,
+      300
+     ],
+     "PreToolUse:Edit": [
+      13,
+      390
+     ]
+    },
+    "detail": {
+     "S:get_symbols_overview:calls": 8,
+     "S:get_symbols_overview:chars": 398,
+     "S:get_symbols_overview:empty_or_err": 1,
+     "ERR:serena-symbol-read": 1,
+     "S:find_symbol:calls": 39,
+     "S:find_symbol:chars": 63585,
+     "S:find_symbol+body:calls": 32,
+     "S:find_symbol+body:chars": 56746,
+     "Read-full:calls": 9,
+     "Read-full:chars": 59600,
+     "Read-ext:.js:chars": 5980,
+     "Read-ext:.js:calls": 1,
+     "Read-ext:.php:chars": 67367,
+     "Read-ext:.php:calls": 16,
+     "Read-windowed:calls": 9,
+     "Read-windowed:chars": 14206,
+     "Read-ext:(none):chars": 459,
+     "Read-ext:(none):calls": 1,
+     "ERR:Read": 1,
+     "ERR:serena-edit/other": 2,
+     "DENIED:serena-edit/other": 1,
+     "ERR:Bash-other": 2
+    }
+   },
+   {
+    "path": "/Users/webdev/.claude/projects/-Users-webdev-LocalSites-convenely-convenely-scaffold-base/a7a51833-a9cc-48ec-9c67-b32639fe61b5/subagents/agent-a101d0359a4ca7054.jsonl",
+    "api_calls": 15,
+    "usage": {
+     "input_tokens": 53,
+     "cache_creation_input_tokens": 66861,
+     "cache_read_input_tokens": 972899,
+     "output_tokens": 1034
+    },
+    "tools": {
+     "ToolSearch": {
+      "calls": 1,
+      "chars": 0,
+      "carry": 0.0,
+      "err": 0
+     },
+     "serena-memory": {
+      "calls": 7,
+      "chars": 87296,
+      "carry": 283712.0,
+      "err": 0
+     },
+     "Bash-search": {
+      "calls": 2,
+      "chars": 5957,
+      "carry": 15896.5,
+      "err": 0
+     },
+     "Bash-read": {
+      "calls": 2,
+      "chars": 1731,
+      "carry": 3910.25,
+      "err": 0
+     },
+     "Bash-other": {
+      "calls": 5,
+      "chars": 3601,
+      "carry": 4629.0,
+      "err": 2
+     },
+     "Read": {
+      "calls": 2,
+      "chars": 17952,
+      "carry": 5525.0,
+      "err": 0
+     }
+    },
+    "hooks": {
+     "PreToolUse:Bash": [
+      9,
+      270
+     ]
+    },
+    "detail": {
+     "ERR:Bash-other": 2,
+     "Read-windowed:calls": 1,
+     "Read-windowed:chars": 1037,
+     "Read-ext:.ts:chars": 1037,
+     "Read-ext:.ts:calls": 1,
+     "Read-full:calls": 1,
+     "Read-full:chars": 16915,
+     "Read-ext:.log:chars": 16915,
+     "Read-ext:.log:calls": 1
+    }
+   },
+   {
+    "path": "/Users/webdev/.claude/projects/-Users-webdev-LocalSites-convenely-convenely-scaffold-base/a7a51833-a9cc-48ec-9c67-b32639fe61b5/subagents/agent-a1daad012fcdd116b.jsonl",
+    "api_calls": 24,
+    "usage": {
+     "input_tokens": 48,
+     "cache_creation_input_tokens": 148949,
+     "cache_read_input_tokens": 3125949,
+     "output_tokens": 1418
+    },
+    "tools": {
+     "ToolSearch": {
+      "calls": 1,
+      "chars": 0,
+      "carry": 0.0,
+      "err": 0
+     },
+     "serena-memory": {
+      "calls": 7,
+      "chars": 87296,
+      "carry": 480128.0,
+      "err": 0
+     },
+     "Bash-search": {
+      "calls": 8,
+      "chars": 33856,
+      "carry": 137663.25,
+      "err": 0
+     },
+     "Bash-read": {
+      "calls": 4,
+      "chars": 19785,
+      "carry": 88119.75,
+      "err": 0
+     },
+     "Read": {
+      "calls": 1,
+      "chars": 51648,
+      "carry": 245328.0,
+      "err": 0
+     },
+     "Bash-other": {
+      "calls": 7,
+      "chars": 9462,
+      "carry": 12927.0,
+      "err": 1
+     },
+     "Write": {
+      "calls": 1,
+      "chars": 235,
+      "carry": 293.75,
+      "err": 0
+     },
+     "Edit": {
+      "calls": 1,
+      "chars": 365,
+      "carry": 365.0,
+      "err": 0
+     }
+    },
+    "hooks": {
+     "PreToolUse:Bash": [
+      19,
+      570
+     ],
+     "PreToolUse:Write": [
+      1,
+      30
+     ],
+     "PostToolUse:Write": [
+      1,
+      491
+     ],
+     "PreToolUse:Edit": [
+      1,
+      30
+     ]
+    },
+    "detail": {
+     "Read-full:calls": 1,
+     "Read-full:chars": 51648,
+     "Read-ext:.ts:chars": 51648,
+     "Read-ext:.ts:calls": 1,
+     "Read-over10k-tok:calls": 1,
+     "Read-over10k-tok:chars": 51648,
+     "ERR:Bash-other": 1,
+     "DENIED:Bash-other": 1
+    }
+   },
+   {
+    "path": "/Users/webdev/.claude/projects/-Users-webdev-LocalSites-convenely-convenely-scaffold-base/a7a51833-a9cc-48ec-9c67-b32639fe61b5/subagents/agent-a407f976de955e8d5.jsonl",
+    "api_calls": 163,
+    "usage": {
+     "input_tokens": 326,
+     "cache_creation_input_tokens": 679827,
+     "cache_read_input_tokens": 34829008,
+     "output_tokens": 15738
+    },
+    "tools": {
+     "ToolSearch": {
+      "calls": 2,
+      "chars": 0,
+      "carry": 0.0,
+      "err": 0
+     },
+     "Bash-other": {
+      "calls": 25,
+      "chars": 56261,
+      "carry": 2084262.5,
+      "err": 3
+     },
+     "serena-memory": {
+      "calls": 6,
+      "chars": 77845,
+      "carry": 3133261.25,
+      "err": 0
+     },
+     "Read": {
+      "calls": 39,
+      "chars": 171855,
+      "carry": 3633746.75,
+      "err": 2
+     },
+     "Edit": {
+      "calls": 37,
+      "chars": 6013,
+      "carry": 105336.25,
+      "err": 0
+     },
+     "Bash-search": {
+      "calls": 44,
+      "chars": 34144,
+      "carry": 737501.0,
+      "err": 0
+     },
+     "Bash-read": {
+      "calls": 17,
+      "chars": 60545,
+      "carry": 1768697.25,
+      "err": 0
+     }
+    },
+    "hooks": {
+     "PreToolUse:Bash": [
+      86,
+      2580
+     ],
+     "PreToolUse:Edit": [
+      37,
+      1110
+     ],
+     "PostToolUse:Edit": [
+      2,
+      982
+     ]
+    },
+    "detail": {
+     "Read-windowed:calls": 35,
+     "Read-windowed:chars": 67518,
+     "Read-ext:.ts:chars": 157037,
+     "Read-ext:.ts:calls": 28,
+     "Read-full:calls": 4,
+     "Read-full:chars": 104337,
+     "Read-over10k-tok:calls": 2,
+     "Read-over10k-tok:chars": 103435,
+     "Read-ext:.css:chars": 1238,
+     "Read-ext:.css:calls": 1,
+     "Read-ext:.php:chars": 12678,
+     "Read-ext:.php:calls": 8,
+     "ERR:Bash-other": 3,
+     "DENIED:Bash-other": 1,
+     "Read-ext:(none):chars": 902,
+     "Read-ext:(none):calls": 2,
+     "ERR:Read": 2
+    }
+   },
+   {
+    "path": "/Users/webdev/.claude/projects/-Users-webdev-LocalSites-convenely-convenely-scaffold-base/a7a51833-a9cc-48ec-9c67-b32639fe61b5/subagents/agent-a5ae20626d27c9da9.jsonl",
+    "api_calls": 48,
+    "usage": {
+     "input_tokens": 96,
+     "cache_creation_input_tokens": 128614,
+     "cache_read_input_tokens": 5977960,
+     "output_tokens": 3868
+    },
+    "tools": {
+     "ToolSearch": {
+      "calls": 6,
+      "chars": 0,
+      "carry": 0.0,
+      "err": 0
+     },
+     "serena-memory": {
+      "calls": 6,
+      "chars": 77845,
+      "carry": 895217.5,
+      "err": 0
+     },
+     "Read": {
+      "calls": 3,
+      "chars": 15692,
+      "carry": 176535.0,
+      "err": 0
+     },
+     "serena-symbol-read": {
+      "calls": 2,
+      "chars": 2058,
+      "carry": 22638.0,
+      "err": 0
+     },
+     "serena-search": {
+      "calls": 1,
+      "chars": 2044,
+      "carry": 21462.0,
+      "err": 0
+     },
+     "Edit": {
+      "calls": 2,
+      "chars": 428,
+      "carry": 4333.5,
+      "err": 0
+     },
+     "Bash-other": {
+      "calls": 3,
+      "chars": 1162,
+      "carry": 11101.5,
+      "err": 0
+     },
+     "mcp:browser-devtools": {
+      "calls": 23,
+      "chars": 25174,
+      "carry": 131572.5,
+      "err": 0
+     },
+     "Bash-search": {
+      "calls": 3,
+      "chars": 3290,
+      "carry": 10010.75,
+      "err": 0
+     },
+     "Bash-read": {
+      "calls": 3,
+      "chars": 3666,
+      "carry": 7318.25,
+      "err": 0
+     },
+     "mcp:wp-cli": {
+      "calls": 3,
+      "chars": 1566,
+      "carry": 1584.5,
+      "err": 0
+     }
+    },
+    "hooks": {
+     "PreToolUse:Edit": [
+      2,
+      60
+     ],
+     "PostToolUse:Edit": [
+      1,
+      491
+     ],
+     "PreToolUse:Bash": [
+      9,
+      270
+     ]
+    },
+    "detail": {
+     "Read-full:calls": 3,
+     "Read-full:chars": 15692,
+     "Read-ext:.php:chars": 15692,
+     "Read-ext:.php:calls": 1,
+     "S:find_symbol:calls": 2,
+     "S:find_symbol:chars": 2058,
+     "S:find_symbol+body:calls": 2,
+     "S:find_symbol+body:chars": 2058,
+     "S:search_for_pattern:calls": 1,
+     "S:search_for_pattern:chars": 2044,
+     "Read-ext:.png:chars": 0,
+     "Read-ext:.png:calls": 2
+    }
+   },
+   {
+    "path": "/Users/webdev/.claude/projects/-Users-webdev-LocalSites-convenely-convenely-scaffold-base/a7a51833-a9cc-48ec-9c67-b32639fe61b5/subagents/agent-a6b41ac219787ae6f.jsonl",
+    "api_calls": 6,
+    "usage": {
+     "input_tokens": 12,
+     "cache_creation_input_tokens": 93629,
+     "cache_read_input_tokens": 461833,
+     "output_tokens": 179
+    },
+    "tools": {
+     "ToolSearch": {
+      "calls": 1,
+      "chars": 0,
+      "carry": 0.0,
+      "err": 0
+     },
+     "serena-memory": {
+      "calls": 12,
+      "chars": 80541,
+      "carry": 79783.0,
+      "err": 3
+     },
+     "serena-search": {
+      "calls": 2,
+      "chars": 549,
+      "carry": 411.75,
+      "err": 0
+     }
+    },
+    "hooks": {
+     "PostToolUse:mcp__plugin_swe_serena__write_memory": [
+      3,
+      2018
+     ]
+    },
+    "detail": {
+     "S:search_for_pattern:calls": 2,
+     "S:search_for_pattern:chars": 549,
+     "ERR:serena-memory": 3,
+     "DENIED:serena-memory": 3
+    }
+   },
+   {
+    "path": "/Users/webdev/.claude/projects/-Users-webdev-LocalSites-convenely-convenely-scaffold-base/a7a51833-a9cc-48ec-9c67-b32639fe61b5/subagents/agent-a806c53f32c2a86ed.jsonl",
+    "api_calls": 39,
+    "usage": {
+     "input_tokens": 78,
+     "cache_creation_input_tokens": 120480,
+     "cache_read_input_tokens": 4727500,
+     "output_tokens": 3031
+    },
+    "tools": {
+     "ToolSearch": {
+      "calls": 2,
+      "chars": 0,
+      "carry": 0.0,
+      "err": 0
+     },
+     "serena-memory": {
+      "calls": 6,
+      "chars": 77845,
+      "carry": 720066.25,
+      "err": 0
+     },
+     "serena-symbol-read": {
+      "calls": 21,
+      "chars": 23789,
+      "carry": 191513.0,
+      "err": 0
+     },
+     "Bash-other": {
+      "calls": 10,
+      "chars": 9845,
+      "carry": 45379.0,
+      "err": 1
+     },
+     "Bash-search": {
+      "calls": 8,
+      "chars": 4960,
+      "carry": 35625.5,
+      "err": 0
+     },
+     "Read": {
+      "calls": 7,
+      "chars": 11326,
+      "carry": 63980.25,
+      "err": 1
+     },
+     "serena-edit/other": {
+      "calls": 1,
+      "chars": 472,
+      "carry": 2832.0,
+      "err": 1
+     },
+     "Edit": {
+      "calls": 10,
+      "chars": 1566,
+      "carry": 6502.75,
+      "err": 0
+     }
+    },
+    "hooks": {
+     "PreToolUse:Bash": [
+      18,
+      540
+     ],
+     "PreToolUse:mcp__plugin_swe_serena__replace_content": [
+      1,
+      30
+     ],
+     "PreToolUse:Edit": [
+      10,
+      300
+     ],
+     "PostToolUse:Edit": [
+      1,
+      491
+     ]
+    },
+    "detail": {
+     "S:get_symbols_overview:calls": 4,
+     "S:get_symbols_overview:chars": 144,
+     "S:find_symbol:calls": 17,
+     "S:find_symbol:chars": 23645,
+     "S:find_symbol+body:calls": 11,
+     "S:find_symbol+body:chars": 18838,
+     "Read-windowed:calls": 6,
+     "Read-windowed:chars": 10881,
+     "Read-ext:.php:chars": 10881,
+     "Read-ext:.php:calls": 6,
+     "Read-full:calls": 1,
+     "Read-full:chars": 445,
+     "Read-ext:(none):chars": 445,
+     "Read-ext:(none):calls": 1,
+     "ERR:Read": 1,
+     "ERR:serena-edit/other": 1,
+     "ERR:Bash-other": 1,
+     "DENIED:Bash-other": 1
+    }
+   },
+   {
+    "path": "/Users/webdev/.claude/projects/-Users-webdev-LocalSites-convenely-convenely-scaffold-base/a7a51833-a9cc-48ec-9c67-b32639fe61b5/subagents/agent-a825bafaf69665f62.jsonl",
+    "api_calls": 12,
+    "usage": {
+     "input_tokens": 24,
+     "cache_creation_input_tokens": 103326,
+     "cache_read_input_tokens": 1219951,
+     "output_tokens": 716
+    },
+    "tools": {
+     "ToolSearch": {
+      "calls": 1,
+      "chars": 0,
+      "carry": 0.0,
+      "err": 0
+     },
+     "serena-memory": {
+      "calls": 7,
+      "chars": 87296,
+      "carry": 218240.0,
+      "err": 0
+     },
+     "Bash-other": {
+      "calls": 4,
+      "chars": 17883,
+      "carry": 44490.0,
+      "err": 0
+     },
+     "Bash-read": {
+      "calls": 2,
+      "chars": 288,
+      "carry": 312.0,
+      "err": 0
+     },
+     "Bash-search": {
+      "calls": 2,
+      "chars": 3117,
+      "carry": 4143.25,
+      "err": 0
+     },
+     "Read": {
+      "calls": 3,
+      "chars": 15391,
+      "carry": 27409.25,
+      "err": 0
+     },
+     "Edit": {
+      "calls": 1,
+      "chars": 152,
+      "carry": 190.0,
+      "err": 0
+     }
+    },
+    "hooks": {
+     "PreToolUse:Bash": [
+      8,
+      240
+     ],
+     "PreToolUse:Edit": [
+      1,
+      30
+     ]
+    },
+    "detail": {
+     "Read-windowed:calls": 3,
+     "Read-windowed:chars": 15391,
+     "Read-ext:.ts:chars": 15391,
+     "Read-ext:.ts:calls": 3
+    }
+   },
+   {
+    "path": "/Users/webdev/.claude/projects/-Users-webdev-LocalSites-convenely-convenely-scaffold-base/a7a51833-a9cc-48ec-9c67-b32639fe61b5/subagents/agent-a9cb530178b622dfb.jsonl",
+    "api_calls": 17,
+    "usage": {
+     "input_tokens": 55,
+     "cache_creation_input_tokens": 84943,
+     "cache_read_input_tokens": 1160743,
+     "output_tokens": 750
+    },
+    "tools": {
+     "ToolSearch": {
+      "calls": 1,
+      "chars": 0,
+      "carry": 0.0,
+      "err": 0
+     },
+     "serena-memory": {
+      "calls": 7,
+      "chars": 87296,
+      "carry": 327360.0,
+      "err": 0
+     },
+     "Bash-other": {
+      "calls": 5,
+      "chars": 16527,
+      "carry": 56878.5,
+      "err": 1
+     },
+     "Bash-search": {
+      "calls": 6,
+      "chars": 8114,
+      "carry": 17663.5,
+      "err": 0
+     },
+     "Bash-read": {
+      "calls": 3,
+      "chars": 12930,
+      "carry": 5602.5,
+      "err": 0
+     }
+    },
+    "hooks": {
+     "PreToolUse:Bash": [
+      14,
+      420
+     ]
+    },
+    "detail": {
+     "ERR:Bash-other": 1,
+     "DENIED:Bash-other": 1
+    }
+   },
+   {
+    "path": "/Users/webdev/.claude/projects/-Users-webdev-LocalSites-convenely-convenely-scaffold-base/a7a51833-a9cc-48ec-9c67-b32639fe61b5/subagents/agent-a9ef93cff8328176e.jsonl",
+    "api_calls": 26,
+    "usage": {
+     "input_tokens": 52,
+     "cache_creation_input_tokens": 101831,
+     "cache_read_input_tokens": 2774257,
+     "output_tokens": 2571
+    },
+    "tools": {
+     "ToolSearch": {
+      "calls": 1,
+      "chars": 0,
+      "carry": 0.0,
+      "err": 0
+     },
+     "serena-memory": {
+      "calls": 6,
+      "chars": 77845,
+      "carry": 467070.0,
+      "err": 0
+     },
+     "Bash-read": {
+      "calls": 4,
+      "chars": 22376,
+      "carry": 117731.0,
+      "err": 0
+     },
+     "Bash-other": {
+      "calls": 4,
+      "chars": 9273,
+      "carry": 46171.25,
+      "err": 0
+     },
+     "Bash-search": {
+      "calls": 2,
+      "chars": 200,
+      "carry": 876.0,
+      "err": 0
+     },
+     "Edit": {
+      "calls": 11,
+      "chars": 1870,
+      "carry": 5466.25,
+      "err": 0
+     },
+     "Read": {
+      "calls": 2,
+      "chars": 4195,
+      "carry": 12976.75,
+      "err": 0
+     }
+    },
+    "hooks": {
+     "PreToolUse:Bash": [
+      10,
+      300
+     ],
+     "PreToolUse:Edit": [
+      11,
+      330
+     ],
+     "PostToolUse:Edit": [
+      1,
+      491
+     ]
+    },
+    "detail": {
+     "Read-full:calls": 1,
+     "Read-full:chars": 3538,
+     "Read-ext:.feature:chars": 4195,
+     "Read-ext:.feature:calls": 2,
+     "Read-windowed:calls": 1,
+     "Read-windowed:chars": 657
+    }
+   },
+   {
+    "path": "/Users/webdev/.claude/projects/-Users-webdev-LocalSites-convenely-convenely-scaffold-base/a7a51833-a9cc-48ec-9c67-b32639fe61b5/subagents/agent-aaf2ae262b5eb0c3f.jsonl",
+    "api_calls": 72,
+    "usage": {
+     "input_tokens": 144,
+     "cache_creation_input_tokens": 192351,
+     "cache_read_input_tokens": 11962595,
+     "output_tokens": 9991
+    },
+    "tools": {
+     "ToolSearch": {
+      "calls": 1,
+      "chars": 0,
+      "carry": 0.0,
+      "err": 0
+     },
+     "serena-memory": {
+      "calls": 7,
+      "chars": 87296,
+      "carry": 1527680.0,
+      "err": 0
+     },
+     "Bash-other": {
+      "calls": 9,
+      "chars": 47144,
+      "carry": 538078.75,
+      "err": 0
+     },
+     "Read": {
+      "calls": 11,
+      "chars": 100516,
+      "carry": 1380055.75,
+      "err": 1
+     },
+     "Bash-search": {
+      "calls": 7,
+      "chars": 11202,
+      "carry": 62743.75,
+      "err": 0
+     },
+     "Edit": {
+      "calls": 37,
+      "chars": 5809,
+      "carry": 54950.0,
+      "err": 0
+     },
+     "Bash-read": {
+      "calls": 5,
+      "chars": 8453,
+      "carry": 4457.25,
+      "err": 0
+     }
+    },
+    "hooks": {
+     "PreToolUse:Bash": [
+      21,
+      630
+     ],
+     "PreToolUse:Edit": [
+      37,
+      1110
+     ]
+    },
+    "detail": {
+     "Read-full:calls": 2,
+     "Read-full:chars": 58838,
+     "Read-ext:.ts:chars": 100074,
+     "Read-ext:.ts:calls": 10,
+     "Read-over10k-tok:calls": 1,
+     "Read-over10k-tok:chars": 58396,
+     "Read-windowed:calls": 9,
+     "Read-windowed:chars": 41678,
+     "Read-ext:(none):chars": 442,
+     "Read-ext:(none):calls": 1,
+     "ERR:Read": 1
+    }
+   },
+   {
+    "path": "/Users/webdev/.claude/projects/-Users-webdev-LocalSites-convenely-convenely-scaffold-base/a7a51833-a9cc-48ec-9c67-b32639fe61b5/subagents/agent-ab605fbcb96c0d7e4.jsonl",
+    "api_calls": 32,
+    "usage": {
+     "input_tokens": 64,
+     "cache_creation_input_tokens": 134632,
+     "cache_read_input_tokens": 3829888,
+     "output_tokens": 1790
+    },
+    "tools": {
+     "ToolSearch": {
+      "calls": 1,
+      "chars": 0,
+      "carry": 0.0,
+      "err": 0
+     },
+     "serena-memory": {
+      "calls": 7,
+      "chars": 87296,
+      "carry": 654720.0,
+      "err": 0
+     },
+     "Bash-search": {
+      "calls": 9,
+      "chars": 22301,
+      "carry": 116733.25,
+      "err": 0
+     },
+     "Bash-read": {
+      "calls": 11,
+      "chars": 53572,
+      "carry": 254473.25,
+      "err": 0
+     },
+     "Bash-other": {
+      "calls": 9,
+      "chars": 7951,
+      "carry": 23971.75,
+      "err": 0
+     }
+    },
+    "hooks": {
+     "PreToolUse:Bash": [
+      29,
+      870
+     ]
+    },
+    "detail": {}
+   },
+   {
+    "path": "/Users/webdev/.claude/projects/-Users-webdev-LocalSites-convenely-convenely-scaffold-base/a7a51833-a9cc-48ec-9c67-b32639fe61b5/subagents/agent-ac5b0f3252236afb4.jsonl",
+    "api_calls": 60,
+    "usage": {
+     "input_tokens": 120,
+     "cache_creation_input_tokens": 176460,
+     "cache_read_input_tokens": 8793835,
+     "output_tokens": 3173
+    },
+    "tools": {
+     "ToolSearch": {
+      "calls": 3,
+      "chars": 0,
+      "carry": 0.0,
+      "err": 0
+     },
+     "serena-memory": {
+      "calls": 7,
+      "chars": 87296,
+      "carry": 1258479.25,
+      "err": 0
+     },
+     "Bash-search": {
+      "calls": 21,
+      "chars": 27441,
+      "carry": 251552.0,
+      "err": 3
+     },
+     "Bash-read": {
+      "calls": 12,
+      "chars": 75873,
+      "carry": 723905.75,
+      "err": 0
+     },
+     "Bash-other": {
+      "calls": 13,
+      "chars": 15983,
+      "carry": 71061.0,
+      "err": 3
+     },
+     "mcp:wp-cli": {
+      "calls": 8,
+      "chars": 23501,
+      "carry": 293931.5,
+      "err": 1
+     },
+     "Read": {
+      "calls": 2,
+      "chars": 118,
+      "carry": 501.5,
+      "err": 1
+     }
+    },
+    "hooks": {
+     "PreToolUse:Bash": [
+      46,
+      1380
+     ]
+    },
+    "detail": {
+     "ERR:Bash-other": 3,
+     "DENIED:Bash-other": 2,
+     "ERR:mcp:wp-cli": 1,
+     "ERR:Bash-search": 3,
+     "Read-full:calls": 2,
+     "Read-full:chars": 118,
+     "Read-ext:.png:chars": 118,
+     "Read-ext:.png:calls": 2,
+     "ERR:Read": 1
+    }
+   },
+   {
+    "path": "/Users/webdev/.claude/projects/-Users-webdev-LocalSites-convenely-convenely-scaffold-base/a7a51833-a9cc-48ec-9c67-b32639fe61b5/subagents/agent-ac7b6fa28b5e3e1dd.jsonl",
+    "api_calls": 14,
+    "usage": {
+     "input_tokens": 28,
+     "cache_creation_input_tokens": 111024,
+     "cache_read_input_tokens": 1285785,
+     "output_tokens": 2164
+    },
+    "tools": {
+     "ToolSearch": {
+      "calls": 2,
+      "chars": 0,
+      "carry": 0.0,
+      "err": 0
+     },
+     "serena-memory": {
+      "calls": 7,
+      "chars": 87296,
+      "carry": 261888.0,
+      "err": 0
+     },
+     "Bash-search": {
+      "calls": 2,
+      "chars": 5793,
+      "carry": 15586.75,
+      "err": 1
+     },
+     "Read": {
+      "calls": 2,
+      "chars": 6610,
+      "carry": 16525.0,
+      "err": 0
+     },
+     "Bash-other": {
+      "calls": 4,
+      "chars": 1268,
+      "carry": 1263.5,
+      "err": 1
+     },
+     "mcp:wp-cli": {
+      "calls": 2,
+      "chars": 1354,
+      "carry": 1843.75,
+      "err": 1
+     },
+     "Edit": {
+      "calls": 1,
+      "chars": 152,
+      "carry": 152.0,
+      "err": 0
+     }
+    },
+    "hooks": {
+     "PreToolUse:Bash": [
+      6,
+      180
+     ],
+     "PreToolUse:Edit": [
+      1,
+      30
+     ]
+    },
+    "detail": {
+     "Read-windowed:calls": 2,
+     "Read-windowed:chars": 6610,
+     "Read-ext:.ts:chars": 6610,
+     "Read-ext:.ts:calls": 2,
+     "ERR:Bash-search": 1,
+     "DENIED:Bash-search": 1,
+     "ERR:Bash-other": 1,
+     "DENIED:Bash-other": 1,
+     "ERR:mcp:wp-cli": 1
+    }
+   },
+   {
+    "path": "/Users/webdev/.claude/projects/-Users-webdev-LocalSites-convenely-convenely-scaffold-base/a7a51833-a9cc-48ec-9c67-b32639fe61b5/subagents/agent-aca233fa9d36eba63.jsonl",
+    "api_calls": 32,
+    "usage": {
+     "input_tokens": 64,
+     "cache_creation_input_tokens": 126723,
+     "cache_read_input_tokens": 3791043,
+     "output_tokens": 1608
+    },
+    "tools": {
+     "ToolSearch": {
+      "calls": 2,
+      "chars": 0,
+      "carry": 0.0,
+      "err": 0
+     },
+     "serena-memory": {
+      "calls": 7,
+      "chars": 87296,
+      "carry": 654720.0,
+      "err": 0
+     },
+     "Bash-search": {
+      "calls": 5,
+      "chars": 19638,
+      "carry": 121134.25,
+      "err": 0
+     },
+     "Bash-read": {
+      "calls": 8,
+      "chars": 38609,
+      "carry": 215138.0,
+      "err": 0
+     },
+     "Bash-other": {
+      "calls": 11,
+      "chars": 5983,
+      "carry": 17315.75,
+      "err": 3
+     },
+     "mcp:wp-cli": {
+      "calls": 4,
+      "chars": 2689,
+      "carry": 2612.5,
+      "err": 1
+     }
+    },
+    "hooks": {
+     "PreToolUse:Bash": [
+      24,
+      720
+     ]
+    },
+    "detail": {
+     "ERR:Bash-other": 3,
+     "DENIED:Bash-other": 1,
+     "ERR:mcp:wp-cli": 1
+    }
+   },
+   {
+    "path": "/Users/webdev/.claude/projects/-Users-webdev-LocalSites-convenely-convenely-scaffold-base/a7a51833-a9cc-48ec-9c67-b32639fe61b5/subagents/agent-ae2b9394773990933.jsonl",
+    "api_calls": 147,
+    "usage": {
+     "input_tokens": 294,
+     "cache_creation_input_tokens": 245934,
+     "cache_read_input_tokens": 29175940,
+     "output_tokens": 13794
+    },
+    "tools": {
+     "ToolSearch": {
+      "calls": 4,
+      "chars": 0,
+      "carry": 0.0,
+      "err": 0
+     },
+     "serena-memory": {
+      "calls": 7,
+      "chars": 86795,
+      "carry": 3146318.75,
+      "err": 0
+     },
+     "serena-edit/other": {
+      "calls": 18,
+      "chars": 28189,
+      "carry": 1004708.5,
+      "err": 3
+     },
+     "Read": {
+      "calls": 25,
+      "chars": 46043,
+      "carry": 1218428.25,
+      "err": 0
+     },
+     "serena-symbol-read": {
+      "calls": 36,
+      "chars": 61625,
+      "carry": 1592011.0,
+      "err": 0
+     },
+     "serena-search": {
+      "calls": 17,
+      "chars": 24187,
+      "carry": 503257.5,
+      "err": 0
+     },
+     "Bash-other": {
+      "calls": 20,
+      "chars": 11995,
+      "carry": 188341.75,
+      "err": 2
+     },
+     "Edit": {
+      "calls": 20,
+      "chars": 3337,
+      "carry": 58569.0,
+      "err": 1
+     },
+     "Bash-read": {
+      "calls": 1,
+      "chars": 3686,
+      "carry": 101365.0,
+      "err": 0
+     },
+     "Bash-search": {
+      "calls": 2,
+      "chars": 1318,
+      "carry": 26387.75,
+      "err": 0
+     },
+     "mcp:browser-devtools": {
+      "calls": 21,
+      "chars": 13334,
+      "carry": 83748.0,
+      "err": 1
+     }
+    },
+    "hooks": {
+     "PreToolUse:mcp__plugin_swe_serena__replace_content": [
+      4,
+      120
+     ],
+     "PreToolUse:mcp__plugin_swe_serena__replace_symbol_body": [
+      13,
+      390
+     ],
+     "PreToolUse:Bash": [
+      23,
+      690
+     ],
+     "PreToolUse:Edit": [
+      20,
+      600
+     ]
+    },
+    "detail": {
+     "Read-full:calls": 9,
+     "Read-full:chars": 32691,
+     "Read-ext:.php:chars": 25969,
+     "Read-ext:.php:calls": 13,
+     "ERR:serena-edit/other": 3,
+     "S:find_referencing_symbols:calls": 1,
+     "S:find_referencing_symbols:chars": 2,
+     "S:find_referencing_symbols:empty_or_err": 1,
+     "S:search_for_pattern:calls": 17,
+     "S:search_for_pattern:chars": 24187,
+     "S:find_symbol:calls": 29,
+     "S:find_symbol:chars": 61282,
+     "S:find_symbol+body:calls": 23,
+     "S:find_symbol+body:chars": 49230,
+     "Read-ext:.css:chars": 5443,
+     "Read-ext:.css:calls": 2,
+     "S:get_symbols_overview:calls": 6,
+     "S:get_symbols_overview:chars": 341,
+     "Read-windowed:calls": 16,
+     "Read-windowed:chars": 13352,
+     "ERR:Bash-other": 2,
+     "Read-ext:.js:chars": 14631,
+     "Read-ext:.js:calls": 7,
+     "DENIED:serena-edit/other": 1,
+     "S:find_symbol:empty_or_err": 1,
+     "DENIED:Bash-other": 1,
+     "S:search_for_pattern:empty_or_err": 3,
+     "Read-ext:.png:chars": 0,
+     "Read-ext:.png:calls": 3,
+     "ERR:mcp:browser-devtools": 1,
+     "ERR:Edit": 1,
+     "DENIED:Edit": 1
+    }
+   },
+   {
+    "path": "/Users/webdev/.claude/projects/-Users-webdev-LocalSites-convenely-convenely-scaffold-base/a7a51833-a9cc-48ec-9c67-b32639fe61b5/subagents/agent-ae9abb6f9c0087a53.jsonl",
+    "api_calls": 62,
+    "usage": {
+     "input_tokens": 124,
+     "cache_creation_input_tokens": 177785,
+     "cache_read_input_tokens": 9895410,
+     "output_tokens": 3915
+    },
+    "tools": {
+     "ToolSearch": {
+      "calls": 1,
+      "chars": 0,
+      "carry": 0.0,
+      "err": 0
+     },
+     "serena-memory": {
+      "calls": 7,
+      "chars": 87296,
+      "carry": 1309440.0,
+      "err": 0
+     },
+     "Bash-other": {
+      "calls": 13,
+      "chars": 28677,
+      "carry": 267722.0,
+      "err": 1
+     },
+     "Read": {
+      "calls": 9,
+      "chars": 82798,
+      "carry": 1106302.75,
+      "err": 0
+     },
+     "Bash-search": {
+      "calls": 8,
+      "chars": 19623,
+      "carry": 101648.75,
+      "err": 0
+     },
+     "Edit": {
+      "calls": 26,
+      "chars": 4082,
+      "carry": 38582.75,
+      "err": 0
+     },
+     "Bash-read": {
+      "calls": 3,
+      "chars": 4656,
+      "carry": 12254.0,
+      "err": 0
+     }
+    },
+    "hooks": {
+     "PreToolUse:Bash": [
+      24,
+      720
+     ],
+     "PreToolUse:Edit": [
+      26,
+      780
+     ],
+     "PostToolUse:Edit": [
+      1,
+      491
+     ]
+    },
+    "detail": {
+     "Read-full:calls": 1,
+     "Read-full:chars": 51783,
+     "Read-ext:.ts:chars": 82798,
+     "Read-ext:.ts:calls": 9,
+     "Read-over10k-tok:calls": 1,
+     "Read-over10k-tok:chars": 51783,
+     "Read-windowed:calls": 8,
+     "Read-windowed:chars": 31015,
+     "ERR:Bash-other": 1
+    }
+   },
+   {
+    "path": "/Users/webdev/.claude/projects/-Users-webdev-LocalSites-convenely-convenely-scaffold-base/a7a51833-a9cc-48ec-9c67-b32639fe61b5/subagents/agent-af005c201ad805978.jsonl",
+    "api_calls": 9,
+    "usage": {
+     "input_tokens": 31,
+     "cache_creation_input_tokens": 54204,
+     "cache_read_input_tokens": 505918,
+     "output_tokens": 659
+    },
+    "tools": {
+     "ToolSearch": {
+      "calls": 1,
+      "chars": 0,
+      "carry": 0.0,
+      "err": 0
+     },
+     "serena-memory": {
+      "calls": 6,
+      "chars": 83693,
+      "carry": 146462.75,
+      "err": 0
+     },
+     "Bash-other": {
+      "calls": 2,
+      "chars": 427,
+      "carry": 114.25,
+      "err": 1
+     },
+     "Bash-search": {
+      "calls": 2,
+      "chars": 1290,
+      "carry": 1408.0,
+      "err": 0
+     },
+     "Bash-read": {
+      "calls": 1,
+      "chars": 2445,
+      "carry": 1833.75,
+      "err": 0
+     }
+    },
+    "hooks": {
+     "PreToolUse:Bash": [
+      5,
+      150
+     ]
+    },
+    "detail": {
+     "ERR:Bash-other": 1,
+     "DENIED:Bash-other": 1
+    }
+   },
+   {
+    "path": "/Users/webdev/.claude/projects/-Users-webdev-LocalSites-convenely-convenely-scaffold-base/a7a51833-a9cc-48ec-9c67-b32639fe61b5/subagents/agent-af485bca409321e83.jsonl",
+    "api_calls": 19,
+    "usage": {
+     "input_tokens": 38,
+     "cache_creation_input_tokens": 115896,
+     "cache_read_input_tokens": 1488496,
+     "output_tokens": 5443
+    },
+    "tools": {
+     "ToolSearch": {
+      "calls": 1,
+      "chars": 0,
+      "carry": 0.0,
+      "err": 0
+     },
+     "serena-memory": {
+      "calls": 6,
+      "chars": 77344,
+      "carry": 328712.0,
+      "err": 0
+     },
+     "Bash-search": {
+      "calls": 19,
+      "chars": 48407,
+      "carry": 80406.0,
+      "err": 1
+     },
+     "Read": {
+      "calls": 8,
+      "chars": 53840,
+      "carry": 148059.75,
+      "err": 0
+     },
+     "Bash-read": {
+      "calls": 2,
+      "chars": 3326,
+      "carry": 2710.5,
+      "err": 1
+     }
+    },
+    "hooks": {
+     "PreToolUse:Bash": [
+      21,
+      630
+     ]
+    },
+    "detail": {
+     "Read-full:calls": 6,
+     "Read-full:chars": 47586,
+     "Read-ext:.php:chars": 40855,
+     "Read-ext:.php:calls": 5,
+     "Read-windowed:calls": 2,
+     "Read-windowed:chars": 6254,
+     "ERR:Bash-read": 1,
+     "Read-ext:.js:chars": 8153,
+     "Read-ext:.js:calls": 2,
+     "Read-ext:.css:chars": 4832,
+     "Read-ext:.css:calls": 1,
+     "ERR:Bash-search": 1
+    }
+   },
+   {
+    "path": "/Users/webdev/.claude/projects/-Users-webdev-LocalSites-convenely-convenely-scaffold-base/a7a51833-a9cc-48ec-9c67-b32639fe61b5/subagents/agent-af53f471d07bee58a.jsonl",
+    "api_calls": 19,
+    "usage": {
+     "input_tokens": 38,
+     "cache_creation_input_tokens": 60765,
+     "cache_read_input_tokens": 1355521,
+     "output_tokens": 2545
+    },
+    "tools": {
+     "Bash-search": {
+      "calls": 2,
+      "chars": 1182,
+      "carry": 5319.0,
+      "err": 0
+     },
+     "Bash-other": {
+      "calls": 15,
+      "chars": 7069,
+      "carry": 19277.25,
+      "err": 1
+     },
+     "serena-memory": {
+      "calls": 1,
+      "chars": 1040,
+      "carry": 4160.0,
+      "err": 0
+     },
+     "Read": {
+      "calls": 2,
+      "chars": 6066,
+      "carry": 20031.5,
+      "err": 0
+     },
+     "Edit": {
+      "calls": 5,
+      "chars": 869,
+      "carry": 2956.25,
+      "err": 0
+     }
+    },
+    "hooks": {
+     "PreToolUse:Bash": [
+      17,
+      510
+     ],
+     "PreToolUse:Edit": [
+      5,
+      150
+     ]
+    },
+    "detail": {
+     "Read-full:calls": 1,
+     "Read-full:chars": 4373,
+     "Read-ext:(none):chars": 6066,
+     "Read-ext:(none):calls": 2,
+     "ERR:Bash-other": 1,
+     "DENIED:Bash-other": 1,
+     "Read-windowed:calls": 1,
+     "Read-windowed:chars": 1693
+    }
+   }
+  ]
+ },
+ "afc906c4": {
+  "main": {
+   "path": "/Users/webdev/.claude/projects/-Users-webdev-LocalSites-sps-sps-wpms-master/afc906c4-a928-4674-9ca2-e40fbf84107c.jsonl",
+   "api_calls": 211,
+   "usage": {
+    "input_tokens": 415,
+    "cache_creation_input_tokens": 418804,
+    "cache_read_input_tokens": 58750257,
+    "output_tokens": 110774
+   },
+   "tools": {
+    "ToolSearch": {
+     "calls": 12,
+     "chars": 0,
+     "carry": 0.0,
+     "err": 0
+    },
+    "serena-memory": {
+     "calls": 37,
+     "chars": 214070,
+     "carry": 8734252.0,
+     "err": 0
+    },
+    "mcp:jira": {
+     "calls": 12,
+     "chars": 10681,
+     "carry": 534104.0,
+     "err": 1
+    },
+    "swe-wm": {
+     "calls": 13,
+     "chars": 600,
+     "carry": 22054.5,
+     "err": 0
+    },
+    "Read": {
+     "calls": 8,
+     "chars": 14034,
+     "carry": 148513.25,
+     "err": 1
+    },
+    "Bash-search": {
+     "calls": 25,
+     "chars": 22545,
+     "carry": 578520.0,
+     "err": 1
+    },
+    "Bash-read": {
+     "calls": 13,
+     "chars": 24669,
+     "carry": 788090.75,
+     "err": 0
+    },
+    "AskUserQuestion": {
+     "calls": 7,
+     "chars": 3345,
+     "carry": 107857.5,
+     "err": 0
+    },
+    "mcp:wp-cli": {
+     "calls": 17,
+     "chars": 37049,
+     "carry": 869213.75,
+     "err": 1
+    },
+    "serena-edit/other": {
+     "calls": 7,
+     "chars": 14,
+     "carry": 279.0,
+     "err": 0
+    },
+    "mcp:browser-devtools": {
+     "calls": 37,
+     "chars": 60551,
+     "carry": 2220331.25,
+     "err": 2
+    },
+    "Bash-other": {
+     "calls": 23,
+     "chars": 22474,
+     "carry": 656590.25,
+     "err": 1
+    },
+    "ListAgents": {
+     "calls": 1,
+     "chars": 620,
+     "carry": 22010.0,
+     "err": 0
+    },
+    "SendMessage": {
+     "calls": 8,
+     "chars": 2082,
+     "carry": 61985.5,
+     "err": 0
+    },
+    "Agent": {
+     "calls": 4,
+     "chars": 4308,
+     "carry": 126816.75,
+     "err": 0
+    },
+    "TaskStop": {
+     "calls": 3,
+     "chars": 580,
+     "carry": 11570.25,
+     "err": 1
+    },
+    "WebSearch": {
+     "calls": 3,
+     "chars": 10069,
+     "carry": 315635.5,
+     "err": 0
+    },
+    "WebFetch": {
+     "calls": 4,
+     "chars": 4410,
+     "carry": 136660.25,
+     "err": 0
+    },
+    "Write": {
+     "calls": 1,
+     "chars": 208,
+     "carry": 5304.0,
+     "err": 0
+    },
+    "Edit": {
+     "calls": 2,
+     "chars": 348,
+     "carry": 4355.75,
+     "err": 0
+    }
+   },
+   "hooks": {
+    "SessionStart": [
+     2,
+     1836
+    ],
+    "UserPromptSubmit": [
+     28,
+     19129
+    ],
+    "PostToolUse:mcp__plugin_swe_serena__read_memory": [
+     33,
+     12611
+    ],
+    "PostToolUse:Bash": [
+     59,
+     13282
+    ],
+    "PostToolUse:mcp__plugin_swe_serena__search_memories_by_front_matter": [
+     1,
+     4588
+    ],
+    "PreToolUse:mcp__plugin_swe_serena__replace_content": [
+     7,
+     189
+    ],
+    "PostToolUse:mcp__plugin_swe_serena__replace_content": [
+     14,
+     2162
+    ],
+    "PostToolUse:Agent": [
+     4,
+     164
+    ],
+    "BLOCK:Stop": [
+     1,
+     736
+    ],
+    "PreToolUse:Write": [
+     1,
+     27
+    ],
+    "PostToolUse:Write": [
+     2,
+     48
+    ],
+    "PreToolUse:Edit": [
+     2,
+     54
+    ],
+    "PostToolUse:Edit": [
+     4,
+     771
+    ],
+    "PostToolUse:mcp__plugin_swe_serena__edit_memory": [
+     3,
+     302
+    ],
+    "PostToolUse:TaskStop": [
+     1,
+     63
+    ],
+    "PostToolUse:mcp__wp-cli__wp_cli": [
+     5,
+     3062
+    ],
+    "PostToolUse:mcp__browser-devtools__execute": [
+     11,
+     6746
+    ],
+    "PostToolUse:mcp__jira__jira_add-comment": [
+     1,
+     614
+    ],
+    "PostToolUse:Read": [
+     1,
+     614
+    ]
+   },
+   "detail": {
+    "ERR:mcp:jira": 1,
+    "DENIED:mcp:jira": 1,
+    "Read-full:calls": 8,
+    "Read-full:chars": 14034,
+    "Read-ext:.png:chars": 106,
+    "Read-ext:.png:calls": 6,
+    "ERR:Read": 1,
+    "ERR:Bash-search": 1,
+    "Read-ext:.php:chars": 2615,
+    "Read-ext:.php:calls": 1,
+    "ERR:mcp:browser-devtools": 2,
+    "ERR:Bash-other": 1,
+    "ERR:TaskStop": 1,
+    "Read-ext:.scss:chars": 11313,
+    "Read-ext:.scss:calls": 1,
+    "ERR:mcp:wp-cli": 1
+   }
+  },
+  "subs": [
+   {
+    "path": "/Users/webdev/.claude/projects/-Users-webdev-LocalSites-sps-sps-wpms-master/afc906c4-a928-4674-9ca2-e40fbf84107c/subagents/agent-a4682c9be8b6cc44d.jsonl",
+    "api_calls": 46,
+    "usage": {
+     "input_tokens": 94,
+     "cache_creation_input_tokens": 188530,
+     "cache_read_input_tokens": 5748468,
+     "output_tokens": 1829
+    },
+    "tools": {
+     "ToolSearch": {
+      "calls": 2,
+      "chars": 0,
+      "carry": 0.0,
+      "err": 0
+     },
+     "serena-memory": {
+      "calls": 8,
+      "chars": 71582,
+      "carry": 787402.0,
+      "err": 0
+     },
+     "Bash-read": {
+      "calls": 3,
+      "chars": 10660,
+      "carry": 88388.25,
+      "err": 0
+     },
+     "mcp:browser-devtools": {
+      "calls": 28,
+      "chars": 74324,
+      "carry": 342528.75,
+      "err": 0
+     },
+     "Write": {
+      "calls": 7,
+      "chars": 1549,
+      "carry": 8399.0,
+      "err": 0
+     },
+     "Bash-other": {
+      "calls": 3,
+      "chars": 4463,
+      "carry": 17475.75,
+      "err": 0
+     }
+    },
+    "hooks": {
+     "PreToolUse:Bash": [
+      6,
+      180
+     ],
+     "PreToolUse:Write": [
+      7,
+      210
+     ]
+    },
+    "detail": {}
+   },
+   {
+    "path": "/Users/webdev/.claude/projects/-Users-webdev-LocalSites-sps-sps-wpms-master/afc906c4-a928-4674-9ca2-e40fbf84107c/subagents/agent-ac208774498777878.jsonl",
+    "api_calls": 23,
+    "usage": {
+     "input_tokens": 46,
+     "cache_creation_input_tokens": 394553,
+     "cache_read_input_tokens": 2255075,
+     "output_tokens": 3329
+    },
+    "tools": {
+     "ToolSearch": {
+      "calls": 3,
+      "chars": 0,
+      "carry": 0.0,
+      "err": 0
+     },
+     "serena-memory": {
+      "calls": 8,
+      "chars": 69262,
+      "carry": 363625.5,
+      "err": 0
+     },
+     "Bash-other": {
+      "calls": 12,
+      "chars": 43570,
+      "carry": 138810.75,
+      "err": 5
+     },
+     "Bash-search": {
+      "calls": 2,
+      "chars": 678,
+      "carry": 1949.25,
+      "err": 2
+     },
+     "Read": {
+      "calls": 2,
+      "chars": 40621,
+      "carry": 156904.0,
+      "err": 0
+     }
+    },
+    "hooks": {
+     "PreToolUse:Bash": [
+      14,
+      420
+     ]
+    },
+    "detail": {
+     "ERR:Bash-other": 5,
+     "ERR:Bash-search": 2,
+     "DENIED:Bash-search": 2,
+     "Read-full:calls": 1,
+     "Read-full:chars": 37831,
+     "Read-ext:.md:chars": 40621,
+     "Read-ext:.md:calls": 2,
+     "Read-windowed:calls": 1,
+     "Read-windowed:chars": 2790
+    }
+   },
+   {
+    "path": "/Users/webdev/.claude/projects/-Users-webdev-LocalSites-sps-sps-wpms-master/afc906c4-a928-4674-9ca2-e40fbf84107c/subagents/agent-ad4c1d020ee841966.jsonl",
+    "api_calls": 1,
+    "usage": {
+     "input_tokens": 2,
+     "cache_creation_input_tokens": 48484,
+     "cache_read_input_tokens": 0,
+     "output_tokens": 113
+    },
+    "tools": {
+     "ToolSearch": {
+      "calls": 1,
+      "chars": 0,
+      "carry": 0.0,
+      "err": 0
+     }
+    },
+    "hooks": {},
+    "detail": {}
+   },
+   {
+    "path": "/Users/webdev/.claude/projects/-Users-webdev-LocalSites-sps-sps-wpms-master/afc906c4-a928-4674-9ca2-e40fbf84107c/subagents/agent-add4b95a8c55bc4f3.jsonl",
+    "api_calls": 32,
+    "usage": {
+     "input_tokens": 64,
+     "cache_creation_input_tokens": 135680,
+     "cache_read_input_tokens": 3067823,
+     "output_tokens": 2034
+    },
+    "tools": {
+     "ToolSearch": {
+      "calls": 1,
+      "chars": 0,
+      "carry": 0.0,
+      "err": 0
+     },
+     "serena-memory": {
+      "calls": 8,
+      "chars": 41740,
+      "carry": 313050.0,
+      "err": 0
+     },
+     "Bash-other": {
+      "calls": 29,
+      "chars": 110345,
+      "carry": 408066.25,
+      "err": 2
+     }
+    },
+    "hooks": {
+     "PreToolUse:Bash": [
+      29,
+      870
+     ]
+    },
+    "detail": {
+     "ERR:Bash-other": 2
+    }
+   }
+  ]
+ },
+ "b54039c8": {
+  "main": {
+   "path": "/Users/webdev/.claude/projects/-Users-webdev-LocalSites-projects-serena-workflow-engine/b54039c8-40fc-4c01-972a-af2787f983b3.jsonl",
+   "api_calls": 139,
+   "usage": {
+    "input_tokens": 286,
+    "cache_creation_input_tokens": 1688116,
+    "cache_read_input_tokens": 39934612,
+    "output_tokens": 111964
+   },
+   "tools": {
+    "serena-memory": {
+     "calls": 31,
+     "chars": 171351,
+     "carry": 4703091.25,
+     "err": 0
+    },
+    "swe-wm": {
+     "calls": 30,
+     "chars": 2762,
+     "carry": 54686.25,
+     "err": 0
+    },
+    "serena-symbol-read": {
+     "calls": 1,
+     "chars": 1106,
+     "carry": 36221.5,
+     "err": 0
+    },
+    "Bash-other": {
+     "calls": 10,
+     "chars": 8934,
+     "carry": 115958.0,
+     "err": 0
+    },
+    "serena-search": {
+     "calls": 1,
+     "chars": 1719,
+     "carry": 55437.75,
+     "err": 0
+    },
+    "Skill": {
+     "calls": 3,
+     "chars": 106,
+     "carry": 2296.0,
+     "err": 0
+    },
+    "Bash-read": {
+     "calls": 5,
+     "chars": 17041,
+     "carry": 335295.5,
+     "err": 1
+    },
+    "Bash-search": {
+     "calls": 7,
+     "chars": 23092,
+     "carry": 579960.25,
+     "err": 0
+    },
+    "AskUserQuestion": {
+     "calls": 13,
+     "chars": 6126,
+     "carry": 67934.25,
+     "err": 0
+    },
+    "Agent": {
+     "calls": 19,
+     "chars": 20691,
+     "carry": 322888.5,
+     "err": 0
+    },
+    "WebFetch": {
+     "calls": 1,
+     "chars": 2229,
+     "carry": 52381.5,
+     "err": 0
+    },
+    "Read": {
+     "calls": 2,
+     "chars": 7472,
+     "carry": 122388.5,
+     "err": 0
+    },
+    "Edit": {
+     "calls": 3,
+     "chars": 907,
+     "carry": 6001.5,
+     "err": 1
+    },
+    "SendMessage": {
+     "calls": 4,
+     "chars": 691,
+     "carry": 7275.25,
+     "err": 0
+    },
+    "Workflow": {
+     "calls": 1,
+     "chars": 1358,
+     "carry": 14259.0,
+     "err": 0
+    },
+    "ListAgents": {
+     "calls": 1,
+     "chars": 632,
+     "carry": 5214.0,
+     "err": 0
+    }
+   },
+   "hooks": {
+    "SessionStart": [
+     3,
+     2754
+    ],
+    "UserPromptSubmit": [
+     20,
+     15548
+    ],
+    "PostToolUse:mcp__plugin_swe_serena__read_memory": [
+     26,
+     7909
+    ],
+    "PostToolUse:mcp__plugin_swe_serena__search_memories_by_name": [
+     4,
+     1647
+    ],
+    "PostToolUse:mcp__plugin_swe_serena__search_memories_by_front_matter": [
+     1,
+     1026
+    ],
+    "PostToolUse:Bash": [
+     21,
+     911
+    ],
+    "PostToolUse:mcp__plugin_swe_serena__search_for_pattern": [
+     1,
+     29
+    ],
+    "PostToolUse:Agent": [
+     19,
+     779
+    ],
+    "PreToolUse:Edit": [
+     2,
+     54
+    ],
+    "PostToolUse:Edit": [
+     4,
+     96
+    ],
+    "BLOCK:Stop": [
+     1,
+     682
+    ],
+    "PostToolUse:Workflow": [
+     1,
+     41
+    ]
+   },
+   "detail": {
+    "S:find_symbol:calls": 1,
+    "S:find_symbol:chars": 1106,
+    "S:find_symbol+body:calls": 1,
+    "S:find_symbol+body:chars": 1106,
+    "S:search_for_pattern:calls": 1,
+    "S:search_for_pattern:chars": 1719,
+    "ERR:Bash-read": 1,
+    "DENIED:Bash-read": 1,
+    "Read-full:calls": 1,
+    "Read-full:chars": 5179,
+    "Read-ext:.json:chars": 5179,
+    "Read-ext:.json:calls": 1,
+    "Read-windowed:calls": 1,
+    "Read-windowed:chars": 2293,
+    "Read-ext:.md:chars": 2293,
+    "Read-ext:.md:calls": 1,
+    "ERR:Edit": 1,
+    "DENIED:Edit": 1
+   }
+  },
+  "subs": [
+   {
+    "path": "/Users/webdev/.claude/projects/-Users-webdev-LocalSites-projects-serena-workflow-engine/b54039c8-40fc-4c01-972a-af2787f983b3/subagents/agent-a03edfa401da4eb5c.jsonl",
+    "api_calls": 2,
+    "usage": {
+     "input_tokens": 4,
+     "cache_creation_input_tokens": 57297,
+     "cache_read_input_tokens": 53020,
+     "output_tokens": 12
+    },
+    "tools": {
+     "Bash-other": {
+      "calls": 1,
+      "chars": 3490,
+      "carry": 872.5,
+      "err": 0
+     },
+     "Read": {
+      "calls": 1,
+      "chars": 3321,
+      "carry": 830.25,
+      "err": 0
+     },
+     "serena-memory": {
+      "calls": 2,
+      "chars": 3906,
+      "carry": 0.0,
+      "err": 1
+     }
+    },
+    "hooks": {
+     "PreToolUse:Bash": [
+      1,
+      30
+     ]
+    },
+    "detail": {
+     "Read-full:calls": 1,
+     "Read-full:chars": 3321,
+     "Read-ext:.py:chars": 3321,
+     "Read-ext:.py:calls": 1,
+     "ERR:serena-memory": 1
+    }
+   },
+   {
+    "path": "/Users/webdev/.claude/projects/-Users-webdev-LocalSites-projects-serena-workflow-engine/b54039c8-40fc-4c01-972a-af2787f983b3/subagents/agent-a174453362f3fd184.jsonl",
+    "api_calls": 23,
+    "usage": {
+     "input_tokens": 46,
+     "cache_creation_input_tokens": 93361,
+     "cache_read_input_tokens": 2989437,
+     "output_tokens": 1878
+    },
+    "tools": {
+     "ToolSearch": {
+      "calls": 1,
+      "chars": 0,
+      "carry": 0.0,
+      "err": 0
+     },
+     "Bash-other": {
+      "calls": 11,
+      "chars": 3891,
+      "carry": 11946.5,
+      "err": 0
+     },
+     "serena-memory": {
+      "calls": 8,
+      "chars": 39316,
+      "carry": 206409.0,
+      "err": 0
+     },
+     "Read": {
+      "calls": 6,
+      "chars": 101874,
+      "carry": 414340.5,
+      "err": 0
+     },
+     "Edit": {
+      "calls": 4,
+      "chars": 604,
+      "carry": 1737.0,
+      "err": 0
+     },
+     "Bash-search": {
+      "calls": 6,
+      "chars": 7285,
+      "carry": 20256.25,
+      "err": 0
+     },
+     "Bash-read": {
+      "calls": 1,
+      "chars": 2040,
+      "carry": 510.0,
+      "err": 0
+     }
+    },
+    "hooks": {
+     "PreToolUse:Bash": [
+      18,
+      540
+     ],
+     "PreToolUse:Edit": [
+      4,
+      120
+     ]
+    },
+    "detail": {
+     "Read-full:calls": 2,
+     "Read-full:chars": 86018,
+     "Read-ext:.py:chars": 97208,
+     "Read-ext:.py:calls": 4,
+     "Read-over10k-tok:calls": 2,
+     "Read-over10k-tok:chars": 86018,
+     "Read-windowed:calls": 4,
+     "Read-windowed:chars": 15856,
+     "Read-ext:.md:chars": 4666,
+     "Read-ext:.md:calls": 2
+    }
+   },
+   {
+    "path": "/Users/webdev/.claude/projects/-Users-webdev-LocalSites-projects-serena-workflow-engine/b54039c8-40fc-4c01-972a-af2787f983b3/subagents/agent-a299dc1be8270de8c.jsonl",
+    "api_calls": 32,
+    "usage": {
+     "input_tokens": 64,
+     "cache_creation_input_tokens": 147640,
+     "cache_read_input_tokens": 4106809,
+     "output_tokens": 3067
+    },
+    "tools": {
+     "serena-memory": {
+      "calls": 10,
+      "chars": 46806,
+      "carry": 361976.5,
+      "err": 0
+     },
+     "Read": {
+      "calls": 6,
+      "chars": 58609,
+      "carry": 429786.25,
+      "err": 0
+     },
+     "Bash-search": {
+      "calls": 10,
+      "chars": 688,
+      "carry": 3642.75,
+      "err": 1
+     },
+     "Edit": {
+      "calls": 7,
+      "chars": 1249,
+      "carry": 5753.0,
+      "err": 0
+     },
+     "Bash-other": {
+      "calls": 10,
+      "chars": 14076,
+      "carry": 32932.5,
+      "err": 0
+     }
+    },
+    "hooks": {
+     "PreToolUse:Bash": [
+      20,
+      600
+     ],
+     "PreToolUse:Edit": [
+      7,
+      210
+     ]
+    },
+    "detail": {
+     "Read-full:calls": 4,
+     "Read-full:chars": 54179,
+     "Read-ext:.py:chars": 58609,
+     "Read-ext:.py:calls": 6,
+     "Read-windowed:calls": 2,
+     "Read-windowed:chars": 4430,
+     "ERR:Bash-search": 1
+    }
+   },
+   {
+    "path": "/Users/webdev/.claude/projects/-Users-webdev-LocalSites-projects-serena-workflow-engine/b54039c8-40fc-4c01-972a-af2787f983b3/subagents/agent-a38f1dbcbe60703dc.jsonl",
+    "api_calls": 10,
+    "usage": {
+     "input_tokens": 20,
+     "cache_creation_input_tokens": 104489,
+     "cache_read_input_tokens": 810165,
+     "output_tokens": 3544
+    },
+    "tools": {
+     "serena-memory": {
+      "calls": 8,
+      "chars": 50284,
+      "carry": 113139.0,
+      "err": 0
+     },
+     "Bash-other": {
+      "calls": 10,
+      "chars": 18539,
+      "carry": 28284.25,
+      "err": 0
+     },
+     "Bash-read": {
+      "calls": 6,
+      "chars": 13132,
+      "carry": 21191.75,
+      "err": 0
+     },
+     "Read": {
+      "calls": 4,
+      "chars": 20743,
+      "carry": 36300.25,
+      "err": 0
+     },
+     "Bash-search": {
+      "calls": 3,
+      "chars": 1238,
+      "carry": 1525.75,
+      "err": 0
+     }
+    },
+    "hooks": {
+     "PreToolUse:Bash": [
+      19,
+      570
+     ]
+    },
+    "detail": {
+     "Read-full:calls": 3,
+     "Read-full:chars": 15319,
+     "Read-ext:.md:chars": 20743,
+     "Read-ext:.md:calls": 4,
+     "Read-windowed:calls": 1,
+     "Read-windowed:chars": 5424
+    }
+   },
+   {
+    "path": "/Users/webdev/.claude/projects/-Users-webdev-LocalSites-projects-serena-workflow-engine/b54039c8-40fc-4c01-972a-af2787f983b3/subagents/agent-a3b8f1fce833f373b.jsonl",
+    "api_calls": 15,
+    "usage": {
+     "input_tokens": 30,
+     "cache_creation_input_tokens": 57886,
+     "cache_read_input_tokens": 1555708,
+     "output_tokens": 2129
+    },
+    "tools": {
+     "Read": {
+      "calls": 2,
+      "chars": 29157,
+      "carry": 96733.5,
+      "err": 0
+     },
+     "serena-memory": {
+      "calls": 1,
+      "chars": 5356,
+      "carry": 18746.0,
+      "err": 0
+     },
+     "Bash-read": {
+      "calls": 1,
+      "chars": 48,
+      "carry": 156.0,
+      "err": 0
+     },
+     "serena-search": {
+      "calls": 3,
+      "chars": 6,
+      "carry": 19.0,
+      "err": 0
+     },
+     "Bash-search": {
+      "calls": 3,
+      "chars": 4946,
+      "carry": 14666.75,
+      "err": 0
+     },
+     "Write": {
+      "calls": 4,
+      "chars": 797,
+      "carry": 1391.5,
+      "err": 0
+     },
+     "Edit": {
+      "calls": 2,
+      "chars": 414,
+      "carry": 879.75,
+      "err": 0
+     },
+     "Bash-other": {
+      "calls": 2,
+      "chars": 507,
+      "carry": 453.5,
+      "err": 0
+     }
+    },
+    "hooks": {
+     "PreToolUse:Bash": [
+      6,
+      180
+     ],
+     "PreToolUse:Write": [
+      4,
+      120
+     ],
+     "PreToolUse:Edit": [
+      2,
+      60
+     ]
+    },
+    "detail": {
+     "Read-full:calls": 1,
+     "Read-full:chars": 27385,
+     "Read-ext:.md:chars": 29157,
+     "Read-ext:.md:calls": 2,
+     "S:search_for_pattern:calls": 3,
+     "S:search_for_pattern:chars": 6,
+     "S:search_for_pattern:empty_or_err": 3,
+     "Read-windowed:calls": 1,
+     "Read-windowed:chars": 1772
+    }
+   },
+   {
+    "path": "/Users/webdev/.claude/projects/-Users-webdev-LocalSites-projects-serena-workflow-engine/b54039c8-40fc-4c01-972a-af2787f983b3/subagents/agent-a4599a242d9703041.jsonl",
+    "api_calls": 12,
+    "usage": {
+     "input_tokens": 24,
+     "cache_creation_input_tokens": 47156,
+     "cache_read_input_tokens": 1194378,
+     "output_tokens": 749
+    },
+    "tools": {
+     "serena-memory": {
+      "calls": 1,
+      "chars": 5356,
+      "carry": 14729.0,
+      "err": 0
+     },
+     "Read": {
+      "calls": 4,
+      "chars": 44198,
+      "carry": 117027.0,
+      "err": 0
+     },
+     "Bash-search": {
+      "calls": 1,
+      "chars": 1239,
+      "carry": 3097.5,
+      "err": 0
+     },
+     "Bash-read": {
+      "calls": 1,
+      "chars": 2581,
+      "carry": 5162.0,
+      "err": 0
+     },
+     "Edit": {
+      "calls": 2,
+      "chars": 399,
+      "carry": 649.0,
+      "err": 0
+     },
+     "Bash-other": {
+      "calls": 5,
+      "chars": 1411,
+      "carry": 1000.75,
+      "err": 0
+     }
+    },
+    "hooks": {
+     "PreToolUse:Bash": [
+      7,
+      210
+     ],
+     "PreToolUse:Edit": [
+      2,
+      60
+     ]
+    },
+    "detail": {
+     "Read-full:calls": 2,
+     "Read-full:chars": 35163,
+     "Read-ext:.md:chars": 35163,
+     "Read-ext:.md:calls": 2,
+     "Read-windowed:calls": 2,
+     "Read-windowed:chars": 9035,
+     "Read-ext:.py:chars": 9035,
+     "Read-ext:.py:calls": 2
+    }
+   },
+   {
+    "path": "/Users/webdev/.claude/projects/-Users-webdev-LocalSites-projects-serena-workflow-engine/b54039c8-40fc-4c01-972a-af2787f983b3/subagents/agent-a46f8809421313e3a.jsonl",
+    "api_calls": 34,
+    "usage": {
+     "input_tokens": 68,
+     "cache_creation_input_tokens": 162676,
+     "cache_read_input_tokens": 4419761,
+     "output_tokens": 4464
+    },
+    "tools": {
+     "ToolSearch": {
+      "calls": 1,
+      "chars": 0,
+      "carry": 0.0,
+      "err": 0
+     },
+     "serena-memory": {
+      "calls": 8,
+      "chars": 36078,
+      "carry": 288624.0,
+      "err": 0
+     },
+     "Read": {
+      "calls": 8,
+      "chars": 53830,
+      "carry": 388305.75,
+      "err": 0
+     },
+     "Bash-search": {
+      "calls": 11,
+      "chars": 12622,
+      "carry": 69246.0,
+      "err": 0
+     },
+     "Bash-read": {
+      "calls": 3,
+      "chars": 23405,
+      "carry": 144679.5,
+      "err": 0
+     },
+     "Edit": {
+      "calls": 12,
+      "chars": 2031,
+      "carry": 7908.0,
+      "err": 0
+     },
+     "Bash-other": {
+      "calls": 9,
+      "chars": 24068,
+      "carry": 27041.5,
+      "err": 0
+     }
+    },
+    "hooks": {
+     "PreToolUse:Bash": [
+      23,
+      690
+     ],
+     "PreToolUse:Edit": [
+      12,
+      360
+     ]
+    },
+    "detail": {
+     "Read-full:calls": 3,
+     "Read-full:chars": 37378,
+     "Read-ext:.py:chars": 53830,
+     "Read-ext:.py:calls": 8,
+     "Read-windowed:calls": 5,
+     "Read-windowed:chars": 16452
+    }
+   },
+   {
+    "path": "/Users/webdev/.claude/projects/-Users-webdev-LocalSites-projects-serena-workflow-engine/b54039c8-40fc-4c01-972a-af2787f983b3/subagents/agent-a484aef3d43732de4.jsonl",
+    "api_calls": 8,
+    "usage": {
+     "input_tokens": 16,
+     "cache_creation_input_tokens": 110065,
+     "cache_read_input_tokens": 560122,
+     "output_tokens": 5442
+    },
+    "tools": {
+     "Bash-other": {
+      "calls": 8,
+      "chars": 29434,
+      "carry": 32451.75,
+      "err": 0
+     },
+     "serena-memory": {
+      "calls": 8,
+      "chars": 36524,
+      "carry": 54786.0,
+      "err": 0
+     },
+     "Bash-read": {
+      "calls": 6,
+      "chars": 57901,
+      "carry": 42597.75,
+      "err": 0
+     },
+     "Bash-search": {
+      "calls": 1,
+      "chars": 2994,
+      "carry": 2994.0,
+      "err": 0
+     }
+    },
+    "hooks": {
+     "PreToolUse:Bash": [
+      15,
+      450
+     ]
+    },
+    "detail": {}
+   },
+   {
+    "path": "/Users/webdev/.claude/projects/-Users-webdev-LocalSites-projects-serena-workflow-engine/b54039c8-40fc-4c01-972a-af2787f983b3/subagents/agent-a4c51a7b05c1772f2.jsonl",
+    "api_calls": 16,
+    "usage": {
+     "input_tokens": 32,
+     "cache_creation_input_tokens": 63878,
+     "cache_read_input_tokens": 1765414,
+     "output_tokens": 2979
+    },
+    "tools": {
+     "ToolSearch": {
+      "calls": 1,
+      "chars": 0,
+      "carry": 0.0,
+      "err": 0
+     },
+     "serena-memory": {
+      "calls": 8,
+      "chars": 36078,
+      "carry": 126273.0,
+      "err": 0
+     },
+     "Read": {
+      "calls": 7,
+      "chars": 43819,
+      "carry": 142411.75,
+      "err": 0
+     },
+     "Edit": {
+      "calls": 13,
+      "chars": 2478,
+      "carry": 3971.75,
+      "err": 0
+     },
+     "Bash-other": {
+      "calls": 2,
+      "chars": 523,
+      "carry": 138.5,
+      "err": 0
+     }
+    },
+    "hooks": {
+     "PreToolUse:Edit": [
+      13,
+      390
+     ],
+     "PreToolUse:Bash": [
+      2,
+      60
+     ]
+    },
+    "detail": {
+     "Read-full:calls": 7,
+     "Read-full:chars": 43819,
+     "Read-ext:.md:chars": 43819,
+     "Read-ext:.md:calls": 7
+    }
+   },
+   {
+    "path": "/Users/webdev/.claude/projects/-Users-webdev-LocalSites-projects-serena-workflow-engine/b54039c8-40fc-4c01-972a-af2787f983b3/subagents/agent-a507ad001cba3cf82.jsonl",
+    "api_calls": 50,
+    "usage": {
+     "input_tokens": 100,
+     "cache_creation_input_tokens": 212252,
+     "cache_read_input_tokens": 7415430,
+     "output_tokens": 2189
+    },
+    "tools": {
+     "serena-memory": {
+      "calls": 6,
+      "chars": 29408,
+      "carry": 360248.0,
+      "err": 0
+     },
+     "Bash-other": {
+      "calls": 27,
+      "chars": 131518,
+      "carry": 924068.25,
+      "err": 1
+     },
+     "Bash-read": {
+      "calls": 5,
+      "chars": 31015,
+      "carry": 280618.75,
+      "err": 0
+     },
+     "Bash-search": {
+      "calls": 18,
+      "chars": 31327,
+      "carry": 171535.5,
+      "err": 1
+     }
+    },
+    "hooks": {
+     "PreToolUse:Bash": [
+      50,
+      1500
+     ]
+    },
+    "detail": {
+     "ERR:Bash-search": 1,
+     "ERR:Bash-other": 1,
+     "DENIED:Bash-other": 1
+    }
+   },
+   {
+    "path": "/Users/webdev/.claude/projects/-Users-webdev-LocalSites-projects-serena-workflow-engine/b54039c8-40fc-4c01-972a-af2787f983b3/subagents/agent-a570e8c88f27ece8c.jsonl",
+    "api_calls": 8,
+    "usage": {
+     "input_tokens": 16,
+     "cache_creation_input_tokens": 47087,
+     "cache_read_input_tokens": 767873,
+     "output_tokens": 2499
+    },
+    "tools": {
+     "Read": {
+      "calls": 2,
+      "chars": 29362,
+      "carry": 48515.75,
+      "err": 0
+     },
+     "Bash-search": {
+      "calls": 3,
+      "chars": 10751,
+      "carry": 18805.25,
+      "err": 0
+     },
+     "Bash-other": {
+      "calls": 3,
+      "chars": 629,
+      "carry": 431.5,
+      "err": 0
+     },
+     "Write": {
+      "calls": 3,
+      "chars": 594,
+      "carry": 692.5,
+      "err": 0
+     }
+    },
+    "hooks": {
+     "PreToolUse:Bash": [
+      6,
+      180
+     ],
+     "PreToolUse:Write": [
+      3,
+      90
+     ],
+     "PostToolUse:Write": [
+      1,
+      491
+     ]
+    },
+    "detail": {
+     "Read-full:calls": 2,
+     "Read-full:chars": 29362,
+     "Read-ext:.md:chars": 29362,
+     "Read-ext:.md:calls": 2
+    }
+   },
+   {
+    "path": "/Users/webdev/.claude/projects/-Users-webdev-LocalSites-projects-serena-workflow-engine/b54039c8-40fc-4c01-972a-af2787f983b3/subagents/agent-a740ad5be2b791bc7.jsonl",
+    "api_calls": 34,
+    "usage": {
+     "input_tokens": 68,
+     "cache_creation_input_tokens": 180517,
+     "cache_read_input_tokens": 4954576,
+     "output_tokens": 6454
+    },
+    "tools": {
+     "serena-memory": {
+      "calls": 10,
+      "chars": 79523,
+      "carry": 656064.75,
+      "err": 0
+     },
+     "Bash-read": {
+      "calls": 12,
+      "chars": 64767,
+      "carry": 397004.5,
+      "err": 0
+     },
+     "Bash-search": {
+      "calls": 6,
+      "chars": 21254,
+      "carry": 118396.0,
+      "err": 0
+     },
+     "Bash-other": {
+      "calls": 13,
+      "chars": 20418,
+      "carry": 100894.5,
+      "err": 0
+     },
+     "Edit": {
+      "calls": 2,
+      "chars": 256,
+      "carry": 1408.0,
+      "err": 0
+     }
+    },
+    "hooks": {
+     "PreToolUse:Bash": [
+      31,
+      930
+     ],
+     "PreToolUse:Edit": [
+      2,
+      60
+     ]
+    },
+    "detail": {}
+   },
+   {
+    "path": "/Users/webdev/.claude/projects/-Users-webdev-LocalSites-projects-serena-workflow-engine/b54039c8-40fc-4c01-972a-af2787f983b3/subagents/agent-a86d592e142eddd58.jsonl",
+    "api_calls": 6,
+    "usage": {
+     "input_tokens": 22,
+     "cache_creation_input_tokens": 43563,
+     "cache_read_input_tokens": 159156,
+     "output_tokens": 295
+    },
+    "tools": {
+     "ToolSearch": {
+      "calls": 2,
+      "chars": 0,
+      "carry": 0.0,
+      "err": 0
+     },
+     "serena-memory": {
+      "calls": 7,
+      "chars": 35036,
+      "carry": 26277.0,
+      "err": 0
+     },
+     "Bash-other": {
+      "calls": 4,
+      "chars": 11173,
+      "carry": 2945.5,
+      "err": 0
+     }
+    },
+    "hooks": {
+     "PreToolUse:Bash": [
+      4,
+      120
+     ]
+    },
+    "detail": {}
+   },
+   {
+    "path": "/Users/webdev/.claude/projects/-Users-webdev-LocalSites-projects-serena-workflow-engine/b54039c8-40fc-4c01-972a-af2787f983b3/subagents/agent-a90c6746a001ffcb8.jsonl",
+    "api_calls": 38,
+    "usage": {
+     "input_tokens": 76,
+     "cache_creation_input_tokens": 180895,
+     "cache_read_input_tokens": 5597507,
+     "output_tokens": 6903
+    },
+    "tools": {
+     "serena-memory": {
+      "calls": 9,
+      "chars": 48027,
+      "carry": 444249.75,
+      "err": 0
+     },
+     "Bash-other": {
+      "calls": 33,
+      "chars": 107403,
+      "carry": 786346.25,
+      "err": 1
+     },
+     "Bash-read": {
+      "calls": 1,
+      "chars": 3021,
+      "carry": 17370.75,
+      "err": 0
+     },
+     "Read": {
+      "calls": 2,
+      "chars": 4331,
+      "carry": 11910.25,
+      "err": 0
+     },
+     "Edit": {
+      "calls": 1,
+      "chars": 348,
+      "carry": 696.0,
+      "err": 0
+     }
+    },
+    "hooks": {
+     "PreToolUse:Bash": [
+      34,
+      1020
+     ],
+     "PreToolUse:Edit": [
+      1,
+      30
+     ]
+    },
+    "detail": {
+     "Read-windowed:calls": 2,
+     "Read-windowed:chars": 4331,
+     "Read-ext:.md:chars": 4331,
+     "Read-ext:.md:calls": 2,
+     "ERR:Bash-other": 1
+    }
+   },
+   {
+    "path": "/Users/webdev/.claude/projects/-Users-webdev-LocalSites-projects-serena-workflow-engine/b54039c8-40fc-4c01-972a-af2787f983b3/subagents/agent-abc1be655ab03c15d.jsonl",
+    "api_calls": 52,
+    "usage": {
+     "input_tokens": 104,
+     "cache_creation_input_tokens": 134112,
+     "cache_read_input_tokens": 8266101,
+     "output_tokens": 5990
+    },
+    "tools": {
+     "ToolSearch": {
+      "calls": 1,
+      "chars": 0,
+      "carry": 0.0,
+      "err": 0
+     },
+     "serena-memory": {
+      "calls": 6,
+      "chars": 30276,
+      "carry": 378450.0,
+      "err": 0
+     },
+     "Read": {
+      "calls": 15,
+      "chars": 122460,
+      "carry": 1314700.25,
+      "err": 0
+     },
+     "Bash-search": {
+      "calls": 15,
+      "chars": 29115,
+      "carry": 187097.75,
+      "err": 1
+     },
+     "Bash-read": {
+      "calls": 2,
+      "chars": 5378,
+      "carry": 61847.0,
+      "err": 0
+     },
+     "serena-symbol-read": {
+      "calls": 1,
+      "chars": 550,
+      "carry": 5912.5,
+      "err": 0
+     },
+     "serena-edit/other": {
+      "calls": 1,
+      "chars": 2,
+      "carry": 21.0,
+      "err": 0
+     },
+     "Write": {
+      "calls": 2,
+      "chars": 365,
+      "carry": 3696.75,
+      "err": 0
+     },
+     "Edit": {
+      "calls": 14,
+      "chars": 2409,
+      "carry": 12613.5,
+      "err": 0
+     },
+     "Bash-other": {
+      "calls": 4,
+      "chars": 1486,
+      "carry": 1677.75,
+      "err": 1
+     },
+     "serena-search": {
+      "calls": 1,
+      "chars": 966,
+      "carry": 2898.0,
+      "err": 0
+     },
+     "SendMessage": {
+      "calls": 1,
+      "chars": 82,
+      "carry": 20.5,
+      "err": 0
+     }
+    },
+    "hooks": {
+     "PreToolUse:Bash": [
+      21,
+      630
+     ],
+     "PreToolUse:mcp__plugin_swe_serena__insert_after_symbol": [
+      1,
+      30
+     ],
+     "PreToolUse:Write": [
+      2,
+      60
+     ],
+     "PreToolUse:Edit": [
+      14,
+      420
+     ]
+    },
+    "detail": {
+     "Read-full:calls": 7,
+     "Read-full:chars": 100991,
+     "Read-ext:.py:chars": 93148,
+     "Read-ext:.py:calls": 10,
+     "Read-over10k-tok:calls": 1,
+     "Read-over10k-tok:chars": 49623,
+     "Read-ext:.md:chars": 29312,
+     "Read-ext:.md:calls": 5,
+     "Read-windowed:calls": 8,
+     "Read-windowed:chars": 21469,
+     "S:find_symbol:calls": 1,
+     "S:find_symbol:chars": 550,
+     "S:find_symbol+body:calls": 1,
+     "S:find_symbol+body:chars": 550,
+     "S:search_for_pattern:calls": 1,
+     "S:search_for_pattern:chars": 966,
+     "ERR:Bash-search": 1,
+     "ERR:Bash-other": 1,
+     "DENIED:Bash-other": 1
+    }
+   },
+   {
+    "path": "/Users/webdev/.claude/projects/-Users-webdev-LocalSites-projects-serena-workflow-engine/b54039c8-40fc-4c01-972a-af2787f983b3/subagents/agent-abd189e4c22852199.jsonl",
+    "api_calls": 8,
+    "usage": {
+     "input_tokens": 16,
+     "cache_creation_input_tokens": 122038,
+     "cache_read_input_tokens": 704133,
+     "output_tokens": 2492
+    },
+    "tools": {
+     "ToolSearch": {
+      "calls": 1,
+      "chars": 0,
+      "carry": 0.0,
+      "err": 0
+     },
+     "serena-memory": {
+      "calls": 8,
+      "chars": 36524,
+      "carry": 54786.0,
+      "err": 0
+     },
+     "Bash-other": {
+      "calls": 10,
+      "chars": 50637,
+      "carry": 43389.75,
+      "err": 0
+     },
+     "Bash-read": {
+      "calls": 1,
+      "chars": 50,
+      "carry": 25.0,
+      "err": 0
+     }
+    },
+    "hooks": {
+     "PreToolUse:Bash": [
+      11,
+      330
+     ]
+    },
+    "detail": {}
+   },
+   {
+    "path": "/Users/webdev/.claude/projects/-Users-webdev-LocalSites-projects-serena-workflow-engine/b54039c8-40fc-4c01-972a-af2787f983b3/subagents/agent-ad616550ffe38004a.jsonl",
+    "api_calls": 45,
+    "usage": {
+     "input_tokens": 90,
+     "cache_creation_input_tokens": 218511,
+     "cache_read_input_tokens": 7984915,
+     "output_tokens": 5933
+    },
+    "tools": {
+     "ToolSearch": {
+      "calls": 1,
+      "chars": 0,
+      "carry": 0.0,
+      "err": 0
+     },
+     "serena-memory": {
+      "calls": 8,
+      "chars": 41740,
+      "carry": 448705.0,
+      "err": 0
+     },
+     "Read": {
+      "calls": 7,
+      "chars": 163431,
+      "carry": 1692033.0,
+      "err": 0
+     },
+     "Bash-search": {
+      "calls": 9,
+      "chars": 6302,
+      "carry": 32106.75,
+      "err": 0
+     },
+     "Bash-read": {
+      "calls": 10,
+      "chars": 22461,
+      "carry": 144420.0,
+      "err": 0
+     },
+     "Edit": {
+      "calls": 16,
+      "chars": 2810,
+      "carry": 15616.25,
+      "err": 0
+     },
+     "Bash-other": {
+      "calls": 11,
+      "chars": 29399,
+      "carry": 108071.0,
+      "err": 1
+     },
+     "SendMessage": {
+      "calls": 1,
+      "chars": 82,
+      "carry": 20.5,
+      "err": 0
+     }
+    },
+    "hooks": {
+     "PreToolUse:Bash": [
+      30,
+      900
+     ],
+     "PreToolUse:Edit": [
+      16,
+      480
+     ]
+    },
+    "detail": {
+     "Read-full:calls": 6,
+     "Read-full:chars": 161805,
+     "Read-ext:.py:chars": 150341,
+     "Read-ext:.py:calls": 6,
+     "Read-over10k-tok:calls": 1,
+     "Read-over10k-tok:chars": 60788,
+     "Read-ext:.md:chars": 13090,
+     "Read-ext:.md:calls": 1,
+     "Read-windowed:calls": 1,
+     "Read-windowed:chars": 1626,
+     "ERR:Bash-other": 1,
+     "DENIED:Bash-other": 1
+    }
+   },
+   {
+    "path": "/Users/webdev/.claude/projects/-Users-webdev-LocalSites-projects-serena-workflow-engine/b54039c8-40fc-4c01-972a-af2787f983b3/subagents/agent-ad91980d136a31e58.jsonl",
+    "api_calls": 46,
+    "usage": {
+     "input_tokens": 92,
+     "cache_creation_input_tokens": 139844,
+     "cache_read_input_tokens": 7609825,
+     "output_tokens": 2971
+    },
+    "tools": {
+     "Read": {
+      "calls": 23,
+      "chars": 118504,
+      "carry": 1145491.75,
+      "err": 2
+     },
+     "ToolSearch": {
+      "calls": 1,
+      "chars": 0,
+      "carry": 0.0,
+      "err": 0
+     },
+     "serena-memory": {
+      "calls": 11,
+      "chars": 67583,
+      "carry": 691089.0,
+      "err": 1
+     },
+     "Bash-search": {
+      "calls": 11,
+      "chars": 5570,
+      "carry": 49131.0,
+      "err": 1
+     },
+     "Edit": {
+      "calls": 20,
+      "chars": 3500,
+      "carry": 23996.75,
+      "err": 0
+     },
+     "SendMessage": {
+      "calls": 2,
+      "chars": 164,
+      "carry": 328.0,
+      "err": 0
+     },
+     "serena-search": {
+      "calls": 3,
+      "chars": 173,
+      "carry": 560.25,
+      "err": 0
+     },
+     "Bash-other": {
+      "calls": 12,
+      "chars": 16463,
+      "carry": 33082.25,
+      "err": 0
+     }
+    },
+    "hooks": {
+     "PreToolUse:Bash": [
+      23,
+      690
+     ],
+     "PreToolUse:Edit": [
+      20,
+      600
+     ]
+    },
+    "detail": {
+     "Read-full:calls": 17,
+     "Read-full:chars": 105953,
+     "Read-ext:.md:chars": 85189,
+     "Read-ext:.md:calls": 17,
+     "ERR:Read": 2,
+     "Read-windowed:calls": 6,
+     "Read-windowed:chars": 12551,
+     "Read-ext:.py:chars": 33315,
+     "Read-ext:.py:calls": 6,
+     "ERR:serena-memory": 1,
+     "ERR:Bash-search": 1,
+     "DENIED:Bash-search": 1,
+     "S:search_for_pattern:calls": 3,
+     "S:search_for_pattern:chars": 173,
+     "S:search_for_pattern:empty_or_err": 2
+    }
+   },
+   {
+    "path": "/Users/webdev/.claude/projects/-Users-webdev-LocalSites-projects-serena-workflow-engine/b54039c8-40fc-4c01-972a-af2787f983b3/subagents/agent-afa02ffb0de202c4d.jsonl",
+    "api_calls": 8,
+    "usage": {
+     "input_tokens": 16,
+     "cache_creation_input_tokens": 75399,
+     "cache_read_input_tokens": 358866,
+     "output_tokens": 2415
+    },
+    "tools": {
+     "WebFetch": {
+      "calls": 5,
+      "chars": 37906,
+      "carry": 50186.75,
+      "err": 0
+     },
+     "Bash-read": {
+      "calls": 2,
+      "chars": 9693,
+      "carry": 4631.25,
+      "err": 0
+     },
+     "Read": {
+      "calls": 1,
+      "chars": 56465,
+      "carry": 56465.0,
+      "err": 0
+     },
+     "Bash-other": {
+      "calls": 2,
+      "chars": 9736,
+      "carry": 4875.75,
+      "err": 0
+     }
+    },
+    "hooks": {
+     "PreToolUse:Bash": [
+      4,
+      120
+     ]
+    },
+    "detail": {
+     "Read-full:calls": 1,
+     "Read-full:chars": 56465,
+     "Read-ext:.txt:chars": 56465,
+     "Read-ext:.txt:calls": 1,
+     "Read-over10k-tok:calls": 1,
+     "Read-over10k-tok:chars": 56465
+    }
+   }
+  ]
+ },
+ "6751cf81": {
+  "main": {
+   "path": "/Users/webdev/.claude/projects/-Users-webdev-LocalSites-convenely-convenely-scaffold-base/6751cf81-0d97-4404-b8c2-ec5e2036641d.jsonl",
+   "api_calls": 49,
+   "usage": {
+    "input_tokens": 97,
+    "cache_creation_input_tokens": 158651,
+    "cache_read_input_tokens": 6028047,
+    "output_tokens": 39143
+   },
+   "tools": {
+    "ToolSearch": {
+     "calls": 4,
+     "chars": 0,
+     "carry": 0.0,
+     "err": 0
+    },
+    "serena-memory": {
+     "calls": 6,
+     "chars": 45621,
+     "carry": 507709.75,
+     "err": 0
+    },
+    "swe-wm": {
+     "calls": 7,
+     "chars": 341,
+     "carry": 2337.75,
+     "err": 0
+    },
+    "Bash-read": {
+     "calls": 7,
+     "chars": 13290,
+     "carry": 88702.75,
+     "err": 0
+    },
+    "Bash-search": {
+     "calls": 4,
+     "chars": 7835,
+     "carry": 67693.0,
+     "err": 0
+    },
+    "Write": {
+     "calls": 6,
+     "chars": 1255,
+     "carry": 6161.75,
+     "err": 0
+    },
+    "Bash-other": {
+     "calls": 14,
+     "chars": 11813,
+     "carry": 71320.25,
+     "err": 1
+    },
+    "Read": {
+     "calls": 2,
+     "chars": 7105,
+     "carry": 39077.5,
+     "err": 0
+    },
+    "AskUserQuestion": {
+     "calls": 1,
+     "chars": 672,
+     "carry": 2856.0,
+     "err": 0
+    },
+    "Skill": {
+     "calls": 2,
+     "chars": 56,
+     "carry": 182.0,
+     "err": 0
+    },
+    "mcp:browser-devtools": {
+     "calls": 1,
+     "chars": 1595,
+     "carry": 3190.0,
+     "err": 0
+    },
+    "Artifact": {
+     "calls": 1,
+     "chars": 1639,
+     "carry": 1639.0,
+     "err": 0
+    },
+    "SendMessage": {
+     "calls": 1,
+     "chars": 300,
+     "carry": 150.0,
+     "err": 0
+    }
+   },
+   "hooks": {
+    "SessionStart": [
+     1,
+     918
+    ],
+    "UserPromptSubmit": [
+     9,
+     5026
+    ],
+    "PostToolUse:mcp__plugin_swe_serena__read_memory": [
+     5,
+     2551
+    ],
+    "PostToolUse:mcp__plugin_swe_serena__search_memories_by_front_matter": [
+     1,
+     3929
+    ],
+    "PostToolUse:Bash": [
+     24,
+     9468
+    ],
+    "PreToolUse:Write": [
+     6,
+     162
+    ],
+    "PostToolUse:Write": [
+     12,
+     3364
+    ],
+    "PostToolUse:Read": [
+     2,
+     1226
+    ],
+    "PostToolUse:mcp__browser-devtools__navigation_go-to": [
+     1,
+     614
+    ],
+    "PostToolUse:Artifact": [
+     1,
+     614
+    ]
+   },
+   "detail": {
+    "ERR:Bash-other": 1,
+    "Read-full:calls": 2,
+    "Read-full:chars": 7105,
+    "Read-ext:.py:chars": 7105,
+    "Read-ext:.py:calls": 1,
+    "Read-ext:.png:chars": 0,
+    "Read-ext:.png:calls": 1
+   }
+  },
+  "subs": []
+ }
+}
