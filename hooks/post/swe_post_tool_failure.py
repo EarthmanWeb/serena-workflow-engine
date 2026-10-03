@@ -24,11 +24,22 @@ Responsibilities:
      exit to PostToolUseFailure, never to PostToolUse (see
      swe_post_orchestrator_drift.py's module docstring for the matching
      agent_ok side, logged there on PostToolUse success).
+  7. Browser-repro-first gate (core.browser_repro): a Bash E2E (Playwright)
+     command that CRASHES (nonzero exit reaching this hook) logs 'e2e_fail'
+     — the half of failure detection that happens here. The other half (an
+     E2E run redirected to a log file, exit-0 at the shell level but "N
+     failed" in its captured output) is detected on the PostToolUse side
+     instead (swe_post_doc_claims.py) since a redirected run never reaches
+     this hook. swe_pre_browser_repro_gate.py denies further E2E Bash runs
+     and E2E rerun-delegation (Agent/Task) until a later 'browser_repro'
+     event (swe_post_browser_repro.py) proves the failing flow was observed
+     in mcp__browser-devtools__*.
 """
 
 import os
 import sys
 import json
+import hashlib
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import swe_hooks.bootstrap  # noqa: E402
 
@@ -40,6 +51,7 @@ try:
     from swe_hooks.core.doc_claims import (
         find_wm_claims, claim_in_args, stream_has_event_key)
     from swe_hooks.core.scope_guard import classify_kind
+    from swe_hooks.core.browser_repro import is_e2e_command
 except ImportError as e:
     swe_hooks.bootstrap.import_error_exit(e, "PostToolUseFailure")
 
@@ -294,6 +306,26 @@ def main():
         error_summary = str(tool_error)[:200] if tool_error else ''
         append_event(stream_path, 'tool_failure',
                      name=tool_name, s=session_id, err=error_summary)
+
+        # Browser-repro-first gate (core.browser_repro): a FAILED Bash E2E
+        # (Playwright) run records 'e2e_fail' — this is the exit!=0 half of
+        # failure detection (a crashed/killed playwright invocation reaches
+        # PostToolUseFailure directly). The exit-0-but-"N failed"-in-output
+        # half (a run redirected to a log, `... ; echo exit $?`) is caught on
+        # the PostToolUse side instead (swe_post_doc_claims.py), since a
+        # redirected run never reaches THIS hook. needs_browser_repro() then
+        # reads whichever 'e2e_fail' landed last against the last
+        # 'browser_repro' event.
+        if tool_name == 'Bash':
+            command = str((tool_input or {}).get('command', ''))
+            if is_e2e_command(command):
+                cmd_hash = hashlib.sha256(
+                    command.strip().encode('utf-8')).hexdigest()[:16]
+                e2e_fail_kwargs = {'s': session_id, 'cmd_hash': cmd_hash}
+                e2e_agent_id = get_agent_id(input_data)
+                if e2e_agent_id:
+                    e2e_fail_kwargs['agent'] = e2e_agent_id
+                append_event(stream_path, 'e2e_fail', **e2e_fail_kwargs)
 
         # Scope-guard: a spawned agent's failed call (edit/test/bash —
         # core.scope_guard.classify_kind) extends that kind's consecutive-

@@ -112,6 +112,16 @@
             "timeout": 10
           }
         ]
+      },
+      {
+        "matcher": "Bash|Agent|Task",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/pre/swe_pre_browser_repro_gate.py",
+            "timeout": 10
+          }
+        ]
       }
     ],
     "PostToolUse": [
@@ -191,6 +201,16 @@
           {
             "type": "command",
             "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/post/swe_post_doc_claims.py",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "mcp__browser-devtools__.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/post/swe_post_browser_repro.py",
             "timeout": 5
           }
         ]

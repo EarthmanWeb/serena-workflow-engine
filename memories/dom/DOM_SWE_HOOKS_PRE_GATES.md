@@ -8,6 +8,7 @@ obligations:
   - `swe_pre_memory_index_gate.py` HARD-DENIES spec/report/research/project links into MEMORY.md and any dom/ref/dev/feature memory write with no `obligations:` field.
   - `swe_pre_bash_test_gate.py` gates ONLY the main agent on TEST docs for detected test-runner commands; subagent TEST-doc reading is enforced at delegation time via `[sweep-gate]`.
   - `swe_pre_question_consent_gate.py` DENIES `AskUserQuestion` while `blanket_consent` is set in WM, except in `WF_DONE`; `auto_approve: true` never denies it.
+  - `swe_pre_browser_repro_gate.py` DENIES Bash E2E reruns and Agent/Task E2E rerun-delegation once an `e2e_fail` stream event has no later `browser_repro` event — for both main agent and spawned agents. `BROWSER_REPRO_NA=1` in the Bash command escapes a genuinely non-browser (pure REST/CLI) spec; no escape exists for the Agent/Task path.
 metadata:
   type: domain
 ---
@@ -57,3 +58,13 @@ Deny questions while `blanket_consent` is set in WM (override tag for destructiv
 - ALLOW in `WF_DONE` regardless of consent — the completion round asks every `— deferred: chose <X>` Open Decisions entry queued under consent. State read via `StateManager(cwd, session_id).get_current_state()`.
 - Deny message instructs: pick the most logical option, act, record `- [ ] <decision> — options: A | B — deferred: chose <A>` in WM `## Open Decisions`.
 - Flag lifetime = ONE task: `core.session.clear_blanket_consent(cwd, session_id)` rewrites both flags to `false` (atomic tmp + `os.replace`); `StateManager.transition_to` calls it on WF_CLASSIFY re-entry from a later state (see `mem:dom/DOM_SWE_STATE_MACHINE` Transition Side-Effects).
+
+## `swe_pre_browser_repro_gate.py` — PreToolUse (Bash, Agent|Task)
+
+Browser-repro-first gate (incident 2026-10-02: 4+ rerun cycles on unverified theories after an E2E failure, never reproduced in the browser). Pure helpers in `core/browser_repro.py`.
+
+- `core.browser_repro.needs_browser_repro(events)` reads the WHOLE session stream: True iff the last `e2e_fail` event is AFTER the last `browser_repro` event (either event may carry any `agent` — a repro from ANY agent satisfies the requirement for everyone).
+- `e2e_fail` is recorded from TWO places — a crashed (nonzero-exit) E2E Bash command reaches `swe_post_tool_failure.py` (PostToolUseFailure); an E2E run redirected to a log (`... ; echo exit $?`, exit 0 at the shell level) is caught instead by `swe_post_doc_claims.py` (PostToolUse: Bash) reading the captured output for `core.browser_repro.is_failed_e2e_output` (a `\d+ failed` summary or a nonzero `exit N` marker). The doc-claims hook records `e2e_fail` for a spawned agent too (checked BEFORE that hook's own orchestrator-WM-only early return).
+- `browser_repro` is recorded by `swe_post_browser_repro.py` (PostToolUse: `mcp__browser-devtools__.*`) on any ACTUAL repro-step tool (`core.browser_repro.is_browser_repro_tool`: navigation_*/interaction_*/a11y_*/content_*/o11y_*/scenario-run/execute) — NOT the scenario-catalog tools (scenario-list/-search/-add/-delete/-update).
+- Deny check 1 (Bash): `core.browser_repro.is_e2e_command(command)` (playwright test / run-test-single.sh / `npm run *:t` / `npm run demo1[:project]` — the last two are the Convenely plugin-repo runners) AND `needs_browser_repro` → deny, UNLESS the command carries `BROWSER_REPRO_NA=1` (asserts a non-browser pure REST/CLI spec).
+- Deny check 2 (Agent|Task): `core.browser_repro.is_e2e_delegation(prompt)` (mentions playwright/`.spec.ts`/run-test-single/demo1:t/npm run demo1) AND `needs_browser_repro` → deny. No escape prefix on this path — a genuinely non-browser rerun goes through Bash with `BROWSER_REPRO_NA=1`, not through a delegated agent swapping the requirement.
