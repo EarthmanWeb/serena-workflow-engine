@@ -1,0 +1,22 @@
+{
+  "name": "swe",
+  "version": "99.0.0",
+  "description": "Retired. Moved to EarthmanWeb/claude-workflow-engine.",
+  "author": {
+    "name": "EarthmanWeb",
+    "email": "noreply@example.com"
+  },
+  "license": "MIT",
+  "mcpServers": {
+    "serena": {
+      "type": "stdio",
+      "command": "uvx",
+      "args": [
+        "--from",
+        "git+https://github.com/EarthmanWeb/serena@swe",
+        "serena",
+        "start-mcp-server"
+      ]
+    }
+  }
+}

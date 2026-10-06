@@ -1,0 +1,16 @@
+{
+  "description": "Retired plugin: one-time cleanup of old cached versions",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/tombstone_cleanup.py\"",
+            "timeout": 60
+          }
+        ]
+      }
+    ]
+  }
+}
